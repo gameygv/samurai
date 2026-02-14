@@ -2,11 +2,13 @@ import React from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { 
   LayoutDashboard, Brain, Activity, Settings as SettingsIcon, Database, LogOut, 
-  Users, FileText, UserCircle, Shield, GraduationCap
+  Users, FileText, UserCircle, Shield, GraduationCap, Zap, MessageSquare, 
+  GitBranch, Link as LinkIcon, BarChart3
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui/button';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -31,18 +33,43 @@ const Layout = ({ children }: LayoutProps) => {
     navigate('/login');
   };
 
-  const menuItems = [
-    { icon: LayoutDashboard, label: 'Dashboard', path: '/' },
-    { icon: Brain, label: 'Cerebro (Prompts)', path: '/brain' },
-    { icon: GraduationCap, label: 'Aprendizaje IA', path: '/learning' },
-    { icon: Database, label: 'Base de Conocimiento', path: '/knowledge' },
-    { icon: Activity, label: 'Actividad', path: '/activity' },
-  ];
-
-  const adminItems = [
-    { icon: SettingsIcon, label: 'Ajustes', path: '/settings' },
-    { icon: Users, label: 'Usuarios', path: '/users' },
-    { icon: FileText, label: 'Logs Sistema', path: '/logs' },
+  const menuGroups = [
+    {
+      title: "PRINCIPAL",
+      items: [
+        { icon: LayoutDashboard, label: 'Dashboard', path: '/' },
+      ]
+    },
+    {
+      title: "SAMURAI AI",
+      items: [
+        { icon: Brain, label: 'Cerebro (Core)', path: '/brain' },
+        { icon: GitBranch, label: 'Prompts & Versiones', path: '/brain?tab=part5' }, // Shortcut a tab
+      ]
+    },
+    {
+      title: "BITÁCORA",
+      items: [
+        { icon: GraduationCap, label: 'Aprendizaje IA', path: '/learning' },
+        { icon: Database, label: 'Base Conocimiento', path: '/knowledge' },
+      ]
+    },
+    {
+      title: "GESTIÓN",
+      items: [
+        { icon: Users, label: 'Usuarios', path: '/users' },
+        { icon: MessageSquare, label: 'Leads & Chats', path: '/leads' }, // Nueva página
+        { icon: Activity, label: 'Actividad', path: '/activity' },
+        { icon: FileText, label: 'Logs Sistema', path: '/logs' },
+      ]
+    },
+    {
+      title: "CONFIGURACIÓN",
+      items: [
+        { icon: LinkIcon, label: 'Integraciones', path: '/settings?tab=webhooks' },
+        { icon: SettingsIcon, label: 'API Keys', path: '/settings?tab=secrets' },
+      ]
+    }
   ];
 
   return (
@@ -53,67 +80,51 @@ const Layout = ({ children }: LayoutProps) => {
           <div className="w-8 h-8 rounded-full bg-red-600 flex items-center justify-center text-white font-bold shadow-lg shadow-red-900/50">
             侍
           </div>
-          <span className="font-bold text-xl tracking-tight">SAMURAI v5.2</span>
+          <span className="font-bold text-xl tracking-tight">SAMURAI v6.0</span>
         </div>
 
-        <nav className="flex-1 px-4 space-y-2 mt-4">
-          <div className="px-2 text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
-            Operaciones
-          </div>
-          {menuItems.map((item) => {
-            const Icon = item.icon;
-            const isActive = location.pathname === item.path;
-            
-            return (
-              <Link
-                key={item.path}
-                to={item.path}
-                className={cn(
-                  "flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200",
-                  isActive 
-                    ? "bg-red-600/10 text-red-500 border border-red-600/20" 
-                    : "text-slate-400 hover:bg-slate-800 hover:text-white"
-                )}
-              >
-                <Icon className="w-5 h-5" />
-                <span className="font-medium">{item.label}</span>
-              </Link>
-            );
-          })}
-
-          {isAdmin && (
-            <>
-              <div className="px-2 text-xs font-semibold text-slate-500 uppercase tracking-wider mt-6 mb-2">
-                Administración
+        <ScrollArea className="flex-1 px-4">
+          <div className="space-y-6 py-2">
+            {menuGroups.map((group, i) => (
+              <div key={i}>
+                <h4 className="mb-2 px-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                  {group.title}
+                </h4>
+                <div className="space-y-1">
+                  {group.items.map((item) => {
+                    const Icon = item.icon;
+                    // Check if path matches or if query param matches for tabs
+                    const isActive = location.pathname === item.path.split('?')[0];
+                    
+                    return (
+                      <Link
+                        key={item.path}
+                        to={item.path}
+                        className={cn(
+                          "flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-all duration-200",
+                          isActive 
+                            ? "bg-red-600/10 text-red-500 font-medium" 
+                            : "text-slate-400 hover:bg-slate-800 hover:text-white"
+                        )}
+                      >
+                        <Icon className="w-4 h-4" />
+                        <span>{item.label}</span>
+                      </Link>
+                    );
+                  })}
+                </div>
               </div>
-              {adminItems.map((item) => {
-                const Icon = item.icon;
-                const isActive = location.pathname === item.path;
-                
-                return (
-                  <Link
-                    key={item.path}
-                    to={item.path}
-                    className={cn(
-                      "flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200",
-                      isActive 
-                        ? "bg-indigo-600/10 text-indigo-400 border border-indigo-600/20" 
-                        : "text-slate-400 hover:bg-slate-800 hover:text-white"
-                    )}
-                  >
-                    <Icon className="w-5 h-5" />
-                    <span className="font-medium">{item.label}</span>
-                  </Link>
-                );
-              })}
-            </>
-          )}
-        </nav>
+            ))}
+          </div>
+        </ScrollArea>
 
         <div className="p-4 border-t border-slate-800">
-           <div className="flex items-center gap-3 px-2 py-2 mb-2">
+           <div className="flex items-center gap-2 px-2 py-1 mb-1">
               <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
               <span className="text-xs text-slate-400 font-mono">SYSTEM: ONLINE</span>
+           </div>
+           <div className="text-[10px] text-slate-600 px-2 font-mono">
+              v6.0.0-beta
            </div>
         </div>
       </aside>
@@ -122,7 +133,7 @@ const Layout = ({ children }: LayoutProps) => {
       <main className="flex-1 overflow-auto flex flex-col">
         <header className="h-16 border-b border-slate-800 bg-slate-900/30 backdrop-blur-md flex items-center px-8 justify-between sticky top-0 z-10">
           <h2 className="text-lg font-medium text-slate-200">
-            {menuItems.concat(adminItems).find(i => i.path === location.pathname)?.label || 'Panel'}
+            Panel de Control
           </h2>
           
           <div className="flex items-center gap-4">
@@ -149,18 +160,10 @@ const Layout = ({ children }: LayoutProps) => {
                   <UserCircle className="mr-2 h-4 w-4" />
                   <span>Mi Perfil</span>
                 </DropdownMenuItem>
-                {isAdmin && (
-                   <DropdownMenuItem className="focus:bg-slate-800 focus:text-white cursor-pointer" onClick={() => navigate('/settings')}>
-                    <SettingsIcon className="mr-2 h-4 w-4" />
-                    <span>Ajustes</span>
-                  </DropdownMenuItem>
-                )}
-                {isAdmin && (
-                   <DropdownMenuItem className="focus:bg-slate-800 focus:text-white cursor-pointer" onClick={() => navigate('/logs')}>
-                    <Shield className="mr-2 h-4 w-4" />
-                    <span>Auditoría</span>
-                  </DropdownMenuItem>
-                )}
+                <DropdownMenuItem className="focus:bg-slate-800 focus:text-white cursor-pointer" onClick={() => navigate('/settings')}>
+                  <SettingsIcon className="mr-2 h-4 w-4" />
+                  <span>Configuración API</span>
+                </DropdownMenuItem>
                 <DropdownMenuSeparator className="bg-slate-800" />
                 <DropdownMenuItem className="text-red-500 focus:bg-red-500/10 focus:text-red-500 cursor-pointer" onClick={handleLogout}>
                   <LogOut className="mr-2 h-4 w-4" />
