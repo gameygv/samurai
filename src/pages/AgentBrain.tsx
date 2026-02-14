@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
-import { Save, Bot, Sparkles, AlertTriangle, ScrollText, Code, Hammer, GitBranch, MapPin, PauseCircle, CreditCard, CalendarClock, Database, History, MessageSquare } from 'lucide-react';
+import { Save, Bot, Sparkles, AlertTriangle, ScrollText, Code, Hammer, GitBranch, MapPin, PauseCircle, CreditCard, CalendarClock, Database, History, MessageSquare, Gift } from 'lucide-react';
 import { toast } from 'sonner';
 
 const DEFAULT_CORE_PROMPT = `# 🏯 IDENTIDAD: EL SAMURÁI DEL EQUIPO
@@ -363,6 +363,57 @@ Precio: $4,500 o 4 cuotas de $1,125.
 ¿Te gustaría conocer el programa completo o 
 hablar primero sobre qué esperas conseguir?"`;
 
+const DEFAULT_RECOMMENDATIONS_PROMPT = `### SELECTOR DE PLAN DE CUOTAS (Según perfil + contexto)
+
+IF Perfil = PRAGMÁTICO:
+  Ofrecer: "4 cuotas de $1,125 sin interés"
+  Énfasis: "Divide el gasto en 4 meses"
+  Frecuencia: Mensual (más común para pragmáticos)
+
+IF Perfil = EMOCIONAL:
+  Ofrecer: "2 cuotas de $2,250"
+  Énfasis: "Mitad ahora, mitad cuando llegues transformado"
+  Frecuencia: Flexible (más comprensión)
+
+IF Cliente está enojado:
+  Ofrecer: Descuento 10% si paga todo ahora
+  Énfasis: "Te liberas de recordatorios"
+  Tono: "Para hacerlo fácil"
+
+IF Cliente en promesa de pago 48+ horas:
+  Ofrecer: Descuento pareja (15% si trae a alguien)
+  Énfasis: "Comparte la transformación"
+  Tono: "Multiplicar el impacto"
+
+---
+
+### SELECTOR DE PROMO (Según contexto conversación)
+
+IF Cliente pregunta precio:
+  Mostrar: Promo con descuentos/numeros
+  Imagen: Infografía de precios
+
+IF Cliente pregunta beneficios:
+  Mostrar: Promo con testimonios
+  Imagen: Foto de grupo transformado
+
+IF Cliente pregunta certificado:
+  Mostrar: Promo con autoridad (Geoffrey, maestros)
+  Imagen: Certificado real
+
+IF Cliente dice "voy con pareja":
+  Mostrar: OFERTA ESPECIAL PAREJA
+  Descuento: 15% a ambos
+  Mensaje: "¡Qué genial compartan esto!"
+
+IF Cliente es de Región Sur:
+  Mostrar: Promo Coyoacán/CDMX
+  Énfasis: Sedes cercanas
+
+IF Cliente es de Región Norte:
+  Mostrar: Promo Querétaro/Monterrey
+  Énfasis: Viajes con menos distancia`;
+
 const DEFAULT_ROUTING_PROMPT = `### PROTOCOLO 1: RUTEO REGIONAL
 Detecta ubicación → Asigna a agente correcto
 
@@ -522,6 +573,7 @@ const AgentBrain = () => {
   const [dataInjectionPrompt, setDataInjectionPrompt] = useState(DEFAULT_DATA_INJECTION_PROMPT);
   const [memoryPrompt, setMemoryPrompt] = useState(DEFAULT_MEMORY_PROMPT);
   const [tonePrompt, setTonePrompt] = useState(DEFAULT_TONE_PROMPT);
+  const [recommendationsPrompt, setRecommendationsPrompt] = useState(DEFAULT_RECOMMENDATIONS_PROMPT);
   const [routingPrompt, setRoutingPrompt] = useState(DEFAULT_ROUTING_PROMPT);
   const [paymentPrompt, setPaymentPrompt] = useState(DEFAULT_PAYMENT_PROMPT);
   const [promisePrompt, setPromisePrompt] = useState(DEFAULT_PROMISE_PROMPT);
@@ -758,14 +810,35 @@ const AgentBrain = () => {
                     </CardContent>
                   </Card>
 
-                   {/* 2.4 Ruteo */}
+                  {/* 2.4 Recomendaciones Personalizadas */}
+                   <Card className="bg-slate-900 border-slate-800 shadow-xl">
+                    <CardHeader className="border-b border-slate-800 pb-4">
+                      <CardTitle className="text-white flex items-center gap-2 text-lg">
+                        <div className="w-8 h-8 rounded bg-amber-500/10 flex items-center justify-center text-amber-500">
+                          <Gift className="w-5 h-5" />
+                        </div>
+                        2.4 Recomendaciones Personalizadas
+                      </CardTitle>
+                      <CardDescription>Selector inteligente de promociones y planes de cuotas.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="pt-4">
+                      <Textarea 
+                        value={recommendationsPrompt}
+                        onChange={(e) => setRecommendationsPrompt(e.target.value)}
+                        className="min-h-[400px] bg-slate-950/50 border-slate-800 font-mono text-sm text-slate-300 focus:border-amber-500/50 focus:ring-amber-500/20 resize-none p-4 leading-relaxed custom-scrollbar"
+                        placeholder="Define aquí las recomendaciones..."
+                      />
+                    </CardContent>
+                  </Card>
+
+                   {/* 2.5 Ruteo */}
                    <Card className="bg-slate-900 border-slate-800 shadow-xl">
                     <CardHeader className="border-b border-slate-800 pb-4">
                       <CardTitle className="text-white flex items-center gap-2 text-lg">
                         <div className="w-8 h-8 rounded bg-purple-500/10 flex items-center justify-center text-purple-500">
                           <MapPin className="w-5 h-5" />
                         </div>
-                        2.4 Protocolo de Ruteo Regional
+                        2.5 Protocolo de Ruteo Regional
                       </CardTitle>
                       <CardDescription>Lógica de asignación de leads a Anahí (Centro-Sur) o Edith (Bajío-Norte).</CardDescription>
                     </CardHeader>
@@ -779,14 +852,14 @@ const AgentBrain = () => {
                     </CardContent>
                   </Card>
 
-                   {/* 2.5 Validación de Pagos */}
+                   {/* 2.6 Validación de Pagos */}
                    <Card className="bg-slate-900 border-slate-800 shadow-xl">
                     <CardHeader className="border-b border-slate-800 pb-4">
                       <CardTitle className="text-white flex items-center gap-2 text-lg">
                         <div className="w-8 h-8 rounded bg-emerald-500/10 flex items-center justify-center text-emerald-500">
                           <CreditCard className="w-5 h-5" />
                         </div>
-                        2.5 Validación de Pagos (Visión)
+                        2.6 Validación de Pagos (Visión)
                       </CardTitle>
                       <CardDescription>Análisis automático de comprobantes bancarios mediante IA.</CardDescription>
                     </CardHeader>
@@ -800,14 +873,14 @@ const AgentBrain = () => {
                     </CardContent>
                   </Card>
 
-                  {/* 2.6 Seguimiento de Promesa */}
+                  {/* 2.7 Seguimiento de Promesa */}
                    <Card className="bg-slate-900 border-slate-800 shadow-xl">
                     <CardHeader className="border-b border-slate-800 pb-4">
                       <CardTitle className="text-white flex items-center gap-2 text-lg">
                         <div className="w-8 h-8 rounded bg-pink-500/10 flex items-center justify-center text-pink-500">
                           <CalendarClock className="w-5 h-5" />
                         </div>
-                        2.6 Protocolo de Seguimiento (Promesa de Pago)
+                        2.7 Protocolo de Seguimiento (Promesa de Pago)
                       </CardTitle>
                       <CardDescription>Automatización de recordatorios y re-engagement.</CardDescription>
                     </CardHeader>
