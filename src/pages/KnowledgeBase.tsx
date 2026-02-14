@@ -13,7 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { 
   Search, FileText, Upload, BookOpen, FileCode, 
-  ExternalLink, Plus, MoreVertical, File, Loader2, Trash2, Edit
+  ExternalLink, File, Loader2, Trash2, Download, AlertCircle
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { logActivity } from '@/utils/logger';
@@ -25,6 +25,8 @@ const KnowledgeBase = () => {
   const [loading, setLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [activeCategory, setActiveCategory] = useState('all');
+  const [uploading, setUploading] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   
   // Form state
   const [formData, setFormData] = useState({
@@ -33,7 +35,8 @@ const KnowledgeBase = () => {
     category: 'Productos',
     external_link: '',
     description: '',
-    content: ''
+    content: '',
+    uploadMode: 'file' // 'file' o 'link'
   });
 
   useEffect(() => {
@@ -58,16 +61,75 @@ const KnowledgeBase = () => {
     }
   };
 
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      setSelectedFile(file);
+      
+      // Auto-detectar tipo de archivo
+      const extension = file.name.split('.').pop()?.toUpperCase();
+      if (extension) {
+        setFormData(prev => ({ ...prev, type: extension }));
+      }
+      
+      // Auto-llenar título si está vacío
+      if (!formData.title) {
+        setFormData(prev => ({ ...prev, title: file.name.replace(/\.[^/.]+$/, "") }));
+      }
+    }
+  };
+
+  const uploadFile = async (file: File): Promise<{ path: string; url: string }> => {
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+    const filePath = `${user?.id}/${fileName}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from('knowledge-files')
+      .upload(filePath, file);
+
+    if (uploadError) throw uploadError;
+
+    const { data: urlData } = supabase.storage
+      .from('knowledge-files')
+      .getPublicUrl(filePath);
+
+    return { path: filePath, url: urlData.publicUrl };
+  };
+
   const handleCreateDocument = async (e: React.FormEvent) => {
     e.preventDefault();
+    setUploading(true);
     
     try {
+      let fileUrl = '';
+      let filePath = '';
+      let fileSize = 'N/A';
+
+      // Si es modo archivo, subir a Storage
+      if (formData.uploadMode === 'file' && selectedFile) {
+        const uploadResult = await uploadFile(selectedFile);
+        fileUrl = uploadResult.url;
+        filePath = uploadResult.path;
+        fileSize = `${(selectedFile.size / 1024).toFixed(2)} KB`;
+      } else if (formData.uploadMode === 'link') {
+        fileUrl = formData.external_link;
+        fileSize = 'Link';
+      }
+
       const { error } = await supabase
         .from('knowledge_documents')
         .insert({
-          ...formData,
-          created_by: user?.id,
-          size: formData.external_link ? 'Link' : 'N/A'
+          title: formData.title,
+          type: formData.type,
+          category: formData.category,
+          file_url: fileUrl,
+          file_path: filePath,
+          external_link: formData.uploadMode === 'link' ? formData.external_link : null,
+          size: fileSize,
+          description: formData.description,
+          content: formData.content,
+          created_by: user?.id
         });
 
       if (error) throw error;
@@ -87,19 +149,32 @@ const KnowledgeBase = () => {
         category: 'Productos',
         external_link: '',
         description: '',
-        content: ''
+        content: '',
+        uploadMode: 'file'
       });
+      setSelectedFile(null);
       fetchDocuments();
     } catch (error: any) {
       console.error('Error creating document:', error);
-      toast.error('Error al crear documento');
+      toast.error(`Error: ${error.message}`);
+    } finally {
+      setUploading(false);
     }
   };
 
-  const handleDeleteDocument = async (id: string, title: string) => {
+  const handleDeleteDocument = async (id: string, title: string, filePath?: string) => {
     if (!confirm(`¿Eliminar "${title}"?`)) return;
 
     try {
+      // Si tiene archivo en storage, eliminarlo primero
+      if (filePath) {
+        const { error: storageError } = await supabase.storage
+          .from('knowledge-files')
+          .remove([filePath]);
+        
+        if (storageError) console.error('Error deleting file:', storageError);
+      }
+
       const { error } = await supabase
         .from('knowledge_documents')
         .delete()
@@ -120,6 +195,10 @@ const KnowledgeBase = () => {
       console.error('Error deleting document:', error);
       toast.error('Error al eliminar');
     }
+  };
+
+  const handleDownload = (url: string, title: string) => {
+    window.open(url, '_blank');
   };
 
   const filteredDocs = documents.filter(doc => {
@@ -162,11 +241,79 @@ const KnowledgeBase = () => {
               <DialogHeader>
                 <DialogTitle>Añadir Nuevo Documento</DialogTitle>
                 <DialogDescription className="text-slate-400">
-                  Agrega un recurso que el Samurai podrá consultar.
+                  Sube un archivo o agrega un link externo.
                 </DialogDescription>
               </DialogHeader>
               
               <form onSubmit={handleCreateDocument} className="space-y-4 pt-4">
+                
+                {/* Modo de Upload */}
+                <div className="flex gap-2 p-1 bg-slate-950 rounded-lg border border-slate-800">
+                  <Button
+                    type="button"
+                    variant={formData.uploadMode === 'file' ? 'default' : 'ghost'}
+                    className={`flex-1 ${formData.uploadMode === 'file' ? 'bg-indigo-600' : ''}`}
+                    onClick={() => setFormData({...formData, uploadMode: 'file'})}
+                  >
+                    <Upload className="w-4 h-4 mr-2" />
+                    Subir Archivo
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={formData.uploadMode === 'link' ? 'default' : 'ghost'}
+                    className={`flex-1 ${formData.uploadMode === 'link' ? 'bg-indigo-600' : ''}`}
+                    onClick={() => setFormData({...formData, uploadMode: 'link'})}
+                  >
+                    <ExternalLink className="w-4 h-4 mr-2" />
+                    Link Externo
+                  </Button>
+                </div>
+
+                {/* Upload de Archivo */}
+                {formData.uploadMode === 'file' && (
+                  <div className="space-y-2">
+                    <Label>Seleccionar Archivo</Label>
+                    <div className="border-2 border-dashed border-slate-700 rounded-lg p-6 text-center hover:border-indigo-500 transition-colors cursor-pointer">
+                      <input
+                        type="file"
+                        onChange={handleFileChange}
+                        className="hidden"
+                        id="file-upload"
+                        accept=".pdf,.doc,.docx,.txt,.csv,.xlsx"
+                      />
+                      <label htmlFor="file-upload" className="cursor-pointer">
+                        {selectedFile ? (
+                          <div className="flex items-center justify-center gap-2 text-green-400">
+                            <File className="w-5 h-5" />
+                            <span className="font-medium">{selectedFile.name}</span>
+                            <span className="text-xs text-slate-500">({(selectedFile.size / 1024).toFixed(2)} KB)</span>
+                          </div>
+                        ) : (
+                          <div className="text-slate-400">
+                            <Upload className="w-8 h-8 mx-auto mb-2" />
+                            <p className="text-sm">Click para seleccionar archivo</p>
+                            <p className="text-xs text-slate-600 mt-1">PDF, DOC, TXT, CSV, XLSX</p>
+                          </div>
+                        )}
+                      </label>
+                    </div>
+                  </div>
+                )}
+
+                {/* Link Externo */}
+                {formData.uploadMode === 'link' && (
+                  <div className="space-y-2">
+                    <Label>URL del Recurso</Label>
+                    <Input 
+                      value={formData.external_link}
+                      onChange={e => setFormData({...formData, external_link: e.target.value})}
+                      className="bg-slate-950 border-slate-800"
+                      placeholder="https://notion.so/... o https://docs.google.com/..."
+                      required={formData.uploadMode === 'link'}
+                    />
+                  </div>
+                )}
+
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>Título del Documento</Label>
@@ -180,47 +327,20 @@ const KnowledgeBase = () => {
                   </div>
                   
                   <div className="space-y-2">
-                    <Label>Tipo</Label>
-                    <Select value={formData.type} onValueChange={v => setFormData({...formData, type: v})}>
+                    <Label>Categoría</Label>
+                    <Select value={formData.category} onValueChange={v => setFormData({...formData, category: v})}>
                       <SelectTrigger className="bg-slate-950 border-slate-800">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent className="bg-slate-900 border-slate-800 text-white">
-                        <SelectItem value="PDF">PDF</SelectItem>
-                        <SelectItem value="DOC">DOC</SelectItem>
-                        <SelectItem value="TXT">TXT</SelectItem>
-                        <SelectItem value="NOTION">Notion</SelectItem>
-                        <SelectItem value="SHEET">Google Sheet</SelectItem>
-                        <SelectItem value="LINK">Link Externo</SelectItem>
+                        <SelectItem value="Productos">Productos</SelectItem>
+                        <SelectItem value="Ventas">Ventas</SelectItem>
+                        <SelectItem value="Legal">Legal</SelectItem>
+                        <SelectItem value="Logística">Logística</SelectItem>
+                        <SelectItem value="Soporte">Soporte</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Categoría</Label>
-                  <Select value={formData.category} onValueChange={v => setFormData({...formData, category: v})}>
-                    <SelectTrigger className="bg-slate-950 border-slate-800">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent className="bg-slate-900 border-slate-800 text-white">
-                      <SelectItem value="Productos">Productos</SelectItem>
-                      <SelectItem value="Ventas">Ventas</SelectItem>
-                      <SelectItem value="Legal">Legal</SelectItem>
-                      <SelectItem value="Logística">Logística</SelectItem>
-                      <SelectItem value="Soporte">Soporte</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Link / URL</Label>
-                  <Input 
-                    value={formData.external_link}
-                    onChange={e => setFormData({...formData, external_link: e.target.value})}
-                    className="bg-slate-950 border-slate-800"
-                    placeholder="https://..."
-                  />
                 </div>
 
                 <div className="space-y-2">
@@ -244,11 +364,31 @@ const KnowledgeBase = () => {
                 </div>
 
                 <DialogFooter>
-                  <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)} className="border-slate-700">
+                  <Button 
+                    type="button" 
+                    variant="outline" 
+                    onClick={() => {
+                      setIsDialogOpen(false);
+                      setSelectedFile(null);
+                    }} 
+                    className="border-slate-700"
+                    disabled={uploading}
+                  >
                     Cancelar
                   </Button>
-                  <Button type="submit" className="bg-indigo-600 hover:bg-indigo-700">
-                    Guardar Documento
+                  <Button 
+                    type="submit" 
+                    className="bg-indigo-600 hover:bg-indigo-700"
+                    disabled={uploading || (formData.uploadMode === 'file' && !selectedFile)}
+                  >
+                    {uploading ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Subiendo...
+                      </>
+                    ) : (
+                      'Guardar Documento'
+                    )}
                   </Button>
                 </DialogFooter>
               </form>
@@ -272,7 +412,7 @@ const KnowledgeBase = () => {
           <Card className="bg-slate-900 border-slate-800 flex items-center justify-center">
              <div className="text-center">
                 <span className="text-3xl font-bold text-white block">{documents.length}</span>
-                <span className="text-xs text-slate-500 uppercase tracking-wider">Documentos Activos</span>
+                <span className="text-xs text-slate-500 uppercase tracking-wider">Documentos</span>
              </div>
           </Card>
         </div>
@@ -302,10 +442,20 @@ const KnowledgeBase = () => {
               <div className="flex justify-center items-center h-64">
                 <Loader2 className="w-8 h-8 animate-spin text-indigo-500" />
               </div>
+            ) : filteredDocs.length === 0 ? (
+              <Card className="bg-slate-900/50 border-slate-800 border-dashed">
+                <CardContent className="flex flex-col items-center justify-center py-12">
+                  <AlertCircle className="w-12 h-12 text-slate-600 mb-4" />
+                  <p className="text-slate-500 text-center">
+                    No hay documentos aún. <br />
+                    <span className="text-slate-600">Sube el primer recurso para comenzar.</span>
+                  </p>
+                </CardContent>
+              </Card>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {filteredDocs.map((doc) => (
-                  <Card key={doc.id} className="bg-slate-900 border-slate-800 hover:border-slate-700 transition-all group cursor-pointer">
+                  <Card key={doc.id} className="bg-slate-900 border-slate-800 hover:border-slate-700 transition-all group">
                     <CardHeader className="flex flex-row items-start justify-between pb-2">
                       <div className="w-10 h-10 rounded bg-slate-800 flex items-center justify-center text-slate-400 group-hover:text-white group-hover:bg-indigo-600 transition-colors">
                         {doc.type === 'PDF' && <FileText className="w-5 h-5" />}
@@ -313,14 +463,26 @@ const KnowledgeBase = () => {
                         {doc.type === 'TXT' && <FileCode className="w-5 h-5" />}
                         {(doc.type === 'NOTION' || doc.type === 'SHEET' || doc.type === 'LINK') && <ExternalLink className="w-5 h-5" />}
                       </div>
-                      <Button 
-                        variant="ghost" 
-                        size="icon" 
-                        className="h-8 w-8 text-slate-500 hover:text-red-500"
-                        onClick={() => handleDeleteDocument(doc.id, doc.title)}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
+                      <div className="flex gap-1">
+                        {doc.file_url && (
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="h-8 w-8 text-slate-500 hover:text-indigo-400"
+                            onClick={() => handleDownload(doc.file_url, doc.title)}
+                          >
+                            <Download className="w-4 h-4" />
+                          </Button>
+                        )}
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="h-8 w-8 text-slate-500 hover:text-red-500"
+                          onClick={() => handleDeleteDocument(doc.id, doc.title, doc.file_path)}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
                     </CardHeader>
                     <CardContent className="pb-2">
                       <CardTitle className="text-base text-white mb-2 leading-tight">{doc.title}</CardTitle>
@@ -338,12 +500,6 @@ const KnowledgeBase = () => {
                     </CardFooter>
                   </Card>
                 ))}
-                
-                {filteredDocs.length === 0 && !loading && (
-                  <div className="col-span-full text-center py-12 text-slate-500">
-                    No se encontraron documentos. Añade el primero.
-                  </div>
-                )}
               </div>
             )}
           </TabsContent>
