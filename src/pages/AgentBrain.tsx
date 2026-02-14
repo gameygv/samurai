@@ -841,6 +841,145 @@ TRIGGERS AUTOMÁTICOS:
 └─ IF ENOJADO → Escalar + Siesta`} 
                            />
                         </div>
+                        <div className="col-span-2">
+                           <Label className="text-xs text-pink-400 mb-1 block">Recomendaciones (Flujo & Ofertas)</Label>
+                           <Textarea 
+                              className="bg-slate-950 border-slate-800 text-slate-400 text-xs min-h-[400px]" 
+                              defaultValue={`FLUJO VENTAS OPTIMIZADO (Estado → Acción → Oferta):
+
+FASE 1: ENTRADA (Cliente abre chat)
+├─ Saludo: Nombre Geoffrey, presenta DYAD
+├─ Pregunta abierta: "¿Qué te trae hoy?"
+├─ Objetivo: Detectar estado emocional inicial
+└─ Kommo: Tag "Lead_Nuevo", Status "Conversacion_Inicial"
+
+FASE 2: DETECCIÓN (Primeros 2-3 mensajes)
+├─ IA detecta: Estado emocional + Perfil
+├─ Confianza: Score 0-100%
+├─ Acción: Customizar respuesta según estado
+├─ Kommo: Tag estado, Update priority
+└─ Supabase: Log detección + confidence
+
+FASE 3: AMPLIFICACIÓN (Según estado)
+
+   SI CURIOSO:
+   ├─ Ampliar información
+   ├─ Datos de Geoffrey + maestros
+   ├─ Testimonios de impacto
+   ├─ Presión suave
+   └─ CTA: "¿Apartas lugar?"
+
+   SI PRAGMÁTICO:
+   ├─ Números claros: $4,500 total
+   ├─ Opción 1: Pago completo
+   ├─ Opción 2: 4 cuotas de $1,125
+   ├─ Opción 3: 6 cuotas de $750
+   ├─ CTA: "¿Cuál te late?"
+   └─ Urgencia: "Últimos 3 lugares"
+
+   SI EMOCIONAL:
+   ├─ Conectar con transformación
+   ├─ Compartir testimonios video
+   ├─ Validar deseo de cambio
+   ├─ Presión media
+   └─ CTA: "¿Quieres empezar?"
+
+   SI FRUSTRADO:
+   ├─ Validar objeción
+   ├─ Bajar ritmo
+   ├─ Ofrecer cuotas (mejor alternativa)
+   ├─ Mostrar desglose
+   └─ CTA: "¿Te late así?"
+
+   SI ENOJADO:
+   ├─ Pausar venta
+   ├─ Disculpa genuina
+   ├─ Validación
+   ├─ Escalar a Anahí/Edith
+   └─ Modo Siesta (+10 min)
+
+FASE 4: OBJECIONES COMUNES
+
+   Objeción: "Es muy caro"
+   ├─ Validar: "Es inversión, lo entiendo"
+   ├─ Reframe: "¿Qué vale tu transformación?"
+   ├─ Solución: Ofrecerle cuotas
+   ├─ Urgencia: "Otros ya comenzaron"
+   └─ Estado: FRUSTRADO
+
+   Objeción: "No tengo tiempo"
+   ├─ Validar: "Tiempo es valioso, lo sé"
+   ├─ Reframe: "¿Cuánto tiempo para transformar tu vida?"
+   ├─ Solución: Flexible, a tu ritmo
+   ├─ Urgencia: "Pero no esperes más"
+   └─ Estado: PRAGMÁTICO
+
+   Objeción: "No sé si funciona"
+   ├─ Validar: "Dudas son normales"
+   ├─ Solución: Testimonios + Geoffrey autoridad
+   ├─ Oferta: Garantía satisfacción
+   ├─ Urgencia: Media
+   └─ Estado: CURIOSO o EMOCIONAL
+
+   Objeción: "Dejarme responder"
+   ├─ Validar: "Claro, sin prisa"
+   ├─ Acción: Schedule TIMER +24h
+   ├─ Mensaje: "¿Ya decidiste?"
+   ├─ Próxima: Oferta + Urgencia
+   └─ Estado: PROMESA_PAGO
+
+FASE 5: CIERRE O ESCALA
+
+   Cierre Exitoso:
+   ├─ Cliente dice "Sí"
+   ├─ Kommo: Move Inscrito
+   ├─ Pedir comprobante pago (Ojo de Halcón)
+   ├─ Mensaje bienvenida
+   └─ Supabase: Log conversión
+
+   Cierre Pendiente (Promesa):
+   ├─ Cliente: "Mañana te pago"
+   ├─ IA: Confirmar fecha + horario
+   ├─ Schedule TIMER 1 (+24h)
+   ├─ Kommo: Status "Promesa_Pago"
+   └─ Supabase: Log promesa + timer
+
+   Escalación:
+   ├─ Cliente está ENOJADO
+   ├─ IA PARA venta
+   ├─ Modo Siesta activado
+   ├─ Anahí/Edith reciben alerta
+   └─ Kommo: Priority ALTA
+
+OFERTAS DINÁMICAS (Según estado + contexto):
+
+   PRAGMÁTICO + No menciona precio:
+   └─ Mostrar todas opciones de cuotas
+
+   PRAGMÁTICO + Menciona "caro":
+   └─ Ofrecer 6 cuotas (mejor acceso)
+
+   EMOCIONAL + 3+ días en funnel:
+   └─ Testimonios video + urgencia
+
+   FRUSTRA + Promesa próximo día:
+   └─ TIMER 1 (+24h) con promo descuento
+
+   CURIOSO + 5+ mensajes:
+   └─ CTA directo: "¿Apartas lugar?"
+
+   ENOJADO + Cualquier contexto:
+   └─ ESCALAR, NO VENDER
+
+MÉTRICAS TRACKING:
+├─ Estado detectado: ¿Correcto?
+├─ Acción ejecutada: ¿Apropiada?
+├─ Oferta aceptada: ¿Sí/No?
+├─ Tiempo respuesta: < 2 min
+├─ Satisfacción: Cliente feedback
+└─ Conversión: Lead → Inscrito`} 
+                           />
+                        </div>
                      </div>
                   </CardContent>
                 </Card>
