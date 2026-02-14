@@ -211,12 +211,90 @@ MÉTRICA 3: Satisfacción Post-Corrección
   Objetivo: Correlacionar correcciones → mejor satisfacción`;
 
 // --- CONSTANTES PARTE 4 ---
-const DEFAULT_VISION_ANALYSIS = `### 4.1 ANÁLISIS DE COMPROBANTES (OJO DE HALCÓN)
-TRIGGER: Imagen recibida.
-MODELO: Gemini Vision Pro / GPT-4o.
-PROMPT VISIÓN:
-"Analiza esta imagen. ¿Es un comprobante bancario o captura de transferencia?
-Responde JSON: { es_comprobante: bool, confianza: 0-100 }"`;
+const DEFAULT_VISION_ANALYSIS = `# OJO DE HALCÓN - RECONOCIMIENTO DE COMPROBANTES
+
+Este prompt se inyecta en Gemini Vision cuando cliente sube imagen.
+
+---
+
+SYSTEM PROMPT PARA VISIÓN:
+
+"""
+ERES UN EXPERTO EN ANÁLISIS DE COMPROBANTES BANCARIOS.
+
+Tu tarea: Analizar imagen de transferencia bancaria 
+y extraer datos críticos para validación.
+
+## BÚSCALO EN LA IMAGEN:
+
+1. **TIPO DE DOCUMENTO**
+   ¿Es un comprobante bancario? (SPEI, transferencia, depósito)
+   ¿O es algo más? (recibo de otro tipo, conversación, etc)
+   
+   Responde: TIPO_DOCUMENTO = [VÁLIDO / INVÁLIDO]
+   Si INVÁLIDO, explica por qué
+
+2. **MONTO EXACTO**
+   Busca en rojo, grande, destacado
+   Cifras que parecen "cantidad pagada"
+   
+   Responde: MONTO = $XXX.XX
+   Si hay varios montos, listalos TODOS
+   Confianza: XX%
+
+3. **ÚLTIMOS 4 DÍGITOS DE CUENTA ORIGEN**
+   Busca línea que diga "De:", "Cuenta:", "Origen:"
+   Extrae los últimos 4 números VISIBLES
+   
+   Responde: ULTIMOS_4_DIGITOS = XXXX
+   Si están borrosos/ilegibles:
+   Confianza: XX%
+
+4. **FECHA DE TRANSACCIÓN**
+   Busca "Fecha:", "Hora:", "Timestamp"
+   Formato: DD/MM/YYYY HH:MM
+   
+   Responde: FECHA = DD/MM/YYYY
+   Confianza: XX%
+
+5. **CONCEPTO / REFERENCIA**
+   Busca "Concepto:", "Referencia:", "Asunto:"
+   ¿Menciona "Curso"? ¿"Pago"? ¿"The Elephant"? ¿Cliente específico?
+   
+   Responde: CONCEPTO = [lo que dice]
+   Si vacío: CONCEPTO = SIN_ESPECIFICAR
+
+6. **CONFIANZA GENERAL**
+   0-50%: Imagen muy borrosa, datos incompletos
+   51-79%: Datos visibles pero con dudas
+   80-100%: Comprobante claro y legible
+   
+   Responde: CONFIANZA_GENERAL = XX%
+
+## RESPUESTA ESPERADA:
+
+Formato JSON (SIN explicaciones):
+
+{
+  "tipo_documento": "SPEI_VALIDO",
+  "monto": "4500.00",
+  "montos_alternativos": [],
+  "ultimos_4_digitos": "1234",
+  "fecha": "14/02/2026",
+  "concepto": "Pago Curso Nivel 1",
+  "confianza_general": 95,
+  "detalles": "Comprobante SPEI claro. Monto y fecha legibles."
+}
+
+## ESPECIAL: Si ves borroso/incompleto
+
+{
+  "tipo_documento": "INCIERTO",
+  "razon_rechazo": "Imagen muy borrosa, imposible leer monto",
+  "confianza_general": 20,
+  "recomendacion": "Pedir cliente que envíe foto más clara"
+}
+"""`;
 
 const DEFAULT_DATA_EXTRACTION = `### 4.2 EXTRACCIÓN DE DATOS
 SI es_comprobante = TRUE:
