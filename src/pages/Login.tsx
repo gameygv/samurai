@@ -1,70 +1,78 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
-import { Loader2, ShieldCheck, AlertCircle, User } from 'lucide-react';
+import { Loader2, ShieldCheck, AlertCircle, User, Wifi, WifiOff } from 'lucide-react';
 import { toast } from 'sonner';
-// import { logActivity } from '@/utils/logger'; // Comentado temporalmente para debug
 
 const Login = () => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [dbStatus, setDbStatus] = useState<'checking' | 'ok' | 'error'>('checking');
   const navigate = useNavigate();
+
+  // Test de conexión al montar
+  useEffect(() => {
+    checkDbConnection();
+  }, []);
+
+  const checkDbConnection = async () => {
+    try {
+      // Intentamos una query simple que no requiera auth
+      const { error } = await supabase.from('profiles').select('count', { count: 'exact', head: true });
+      
+      if (error && error.code !== 'PGRST116') { // PGRST116 es "no rows", que cuenta como conexión exitosa
+         console.warn("Health check failed:", error);
+         if (error.message.includes("schema")) {
+            setDbStatus('error');
+         } else {
+            // Si es otro error (ej. 401), al menos la DB respondió
+            setDbStatus('ok');
+         }
+      } else {
+         setDbStatus('ok');
+      }
+    } catch (err) {
+      console.error("Connection error:", err);
+      setDbStatus('error');
+    }
+  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
-    // Construir email interno para Supabase Auth
     const email = `${username.toLowerCase().trim()}@samurai.local`;
 
     try {
-      console.log("Intentando login con:", email);
+      console.log("Login attempt:", email);
       
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
 
-      if (error) {
-        console.error("Error devuelto por signInWithPassword:", error);
-        throw error;
-      }
+      if (error) throw error;
 
       if (data.user) {
-        console.log("Login exitoso. Usuario:", data.user.id);
-        
-        // --- DEBUG: LOG DESACTIVADO TEMPORALMENTE ---
-        // El error "querying schema" suele venir de aquí si PostgREST falla.
-        /* 
-        await logActivity({
-          action: 'LOGIN',
-          resource: 'AUTH',
-          description: `Login exitoso: ${username}`,
-          status: 'OK',
-          metadata: { userId: data.user.id }
-        });
-        */
-        
         toast.success(`Bienvenido, ${username}`);
         navigate('/');
       }
     } catch (error: any) {
-      console.error("Excepción capturada en Login:", error);
+      console.error("Login Error:", error);
       let msg = error.message;
-      if (error.message && error.message.includes("Invalid login credentials")) {
+      
+      if (msg.includes("Invalid login credentials")) {
         msg = "Usuario o contraseña incorrectos";
-      }
-      // Si es error de esquema, mostrar mensaje más claro
-      if (error.message && error.message.includes("querying schema")) {
-        msg = "Error de conexión con la base de datos (PostgREST Schema). Intenta reiniciar el servicio.";
+      } else if (msg.includes("querying schema")) {
+        msg = "ERROR CRÍTICO: La API no puede leer el esquema de la base de datos.";
       }
       
-      toast.error(msg);
+      toast.error(msg, { duration: 5000 });
     } finally {
       setLoading(false);
     }
@@ -83,6 +91,16 @@ const Login = () => {
           </CardDescription>
         </CardHeader>
         <CardContent>
+          {dbStatus === 'error' && (
+            <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-md flex items-start gap-3">
+              <WifiOff className="w-5 h-5 text-red-500 mt-0.5" />
+              <div className="text-xs text-red-400">
+                <p className="font-bold">Error de Conexión Detectado</p>
+                <p>La API no responde correctamente. Ejecuta el script <code>FIX_CONNECTION.sql</code> en Supabase y luego reinicia la página.</p>
+              </div>
+            </div>
+          )}
+
           <form onSubmit={handleLogin} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="username" className="text-slate-300">Usuario</Label>
@@ -121,7 +139,7 @@ const Login = () => {
               {loading ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Verificando...
+                  Conectando...
                 </>
               ) : (
                 <>
@@ -132,11 +150,16 @@ const Login = () => {
             </Button>
           </form>
         </CardContent>
-        <CardFooter className="flex justify-center border-t border-slate-800 pt-4">
+        <CardFooter className="flex justify-between border-t border-slate-800 pt-4">
           <p className="text-xs text-slate-500 flex items-center gap-2">
             <AlertCircle className="w-3 h-3" />
-            Sistema monitoreado. IP registrada.
+            IP Registrada
           </p>
+          <div className="flex items-center gap-2">
+             {dbStatus === 'checking' && <span className="text-xs text-yellow-500 flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin"/> Verificando API...</span>}
+             {dbStatus === 'ok' && <span className="text-xs text-green-500 flex items-center gap-1"><Wifi className="w-3 h-3"/> API Online</span>}
+             {dbStatus === 'error' && <span className="text-xs text-red-500 flex items-center gap-1"><WifiOff className="w-3 h-3"/> API Error</span>}
+          </div>
         </CardFooter>
       </Card>
     </div>
