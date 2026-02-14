@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
-import { Save, Bot, Sparkles, AlertTriangle, ScrollText, Code, Hammer, GitBranch, MapPin, PauseCircle, CreditCard, CalendarClock, Database } from 'lucide-react';
+import { Save, Bot, Sparkles, AlertTriangle, ScrollText, Code, Hammer, GitBranch, MapPin, PauseCircle, CreditCard, CalendarClock, Database, History } from 'lucide-react';
 import { toast } from 'sonner';
 
 const DEFAULT_CORE_PROMPT = `# 🏯 IDENTIDAD: EL SAMURÁI DEL EQUIPO
@@ -217,6 +217,50 @@ Promo activa para este cliente:
 {{promo_disponible}}
 """`;
 
+const DEFAULT_MEMORY_PROMPT = `### SI CLIENTE ESTÁ EN KOMMO:
+  ✅ Fetch contexto de Supabase
+  ✅ Saludo personalizado: "¡Qué alegría volverte a ver!"
+  ✅ Referencia a último tema: "Hace {{X}} días hablamos sobre {{tema}}"
+  ✅ Continúa conversación natural
+
+### SI CLIENTE NO ESTÁ EN MEMORIA (Primer contacto):
+  1. Crea registro en Kommo INMEDIATO
+  2. Crea registro en Supabase clientes TABLE
+  3. Inicializa campos:
+     - nombre = TBD (preguntar en chat)
+     - ciudad = TBD (detectar por código área)
+     - perfil_psicologico = TBD (detectar durante conversación)
+     - intereses = []
+     - fecha_primer_contacto = NOW()
+  4. Saludo estándar: "Es un gusto saludarte, soy el Samurái..."
+
+### DETECCIÓN AUTOMÁTICA DE PERFIL PSICOLÓGICO
+
+Durante cada mensaje, analiza:
+
+PRAGMÁTICO:
+  Señales: "cuánto cuesta", "qué está incluido", 
+           "timeline", "especificaciones técnicas"
+  Tono de respuesta: Directo, datos, sin emoción
+  Trigger: Si 3+ preguntas data-driven = marcar como pragmático
+
+EMOCIONAL:
+  Señales: "necesito sanar", "transformación", 
+           "estoy perdido", "necesito ayuda"
+  Tono de respuesta: Cálido, validación, storytelling
+  Trigger: Si emociones + busca cambio de vida = marcar como emocional
+
+TÉCNICO:
+  Señales: "cómo funciona exactamente", 
+           "qué metodología", "estudios", "investigación"
+  Tono de respuesta: Detalle metodológico, referencias, autoridad
+  Trigger: Si busca entender "por qué" = marcar como técnico
+
+DESPUÉS DE DETECTAR:
+  - Update custom field Kommo: Perfil_Psicologico
+  - Update tabla clientes Supabase
+  - Usar este perfil para selector de promos & frases`;
+
 const DEFAULT_ROUTING_PROMPT = `### PROTOCOLO 1: RUTEO REGIONAL
 Detecta ubicación → Asigna a agente correcto
 
@@ -374,6 +418,7 @@ const AgentBrain = () => {
   const [technicalPrompt, setTechnicalPrompt] = useState(DEFAULT_TECHNICAL_PROMPT);
   const [behaviorPrompt, setBehaviorPrompt] = useState(DEFAULT_BEHAVIOR_PROMPT);
   const [dataInjectionPrompt, setDataInjectionPrompt] = useState(DEFAULT_DATA_INJECTION_PROMPT);
+  const [memoryPrompt, setMemoryPrompt] = useState(DEFAULT_MEMORY_PROMPT);
   const [routingPrompt, setRoutingPrompt] = useState(DEFAULT_ROUTING_PROMPT);
   const [paymentPrompt, setPaymentPrompt] = useState(DEFAULT_PAYMENT_PROMPT);
   const [promisePrompt, setPromisePrompt] = useState(DEFAULT_PROMISE_PROMPT);
@@ -568,14 +613,35 @@ const AgentBrain = () => {
                     </CardContent>
                   </Card>
 
-                   {/* 2.2 Ruteo */}
+                   {/* 2.2 Memoria Histórica */}
+                   <Card className="bg-slate-900 border-slate-800 shadow-xl">
+                    <CardHeader className="border-b border-slate-800 pb-4">
+                      <CardTitle className="text-white flex items-center gap-2 text-lg">
+                        <div className="w-8 h-8 rounded bg-teal-500/10 flex items-center justify-center text-teal-500">
+                          <History className="w-5 h-5" />
+                        </div>
+                        2.2 Memoria Histórica y Perfilado
+                      </CardTitle>
+                      <CardDescription>Reconocimiento de clientes retornantes y detección de perfil psicológico.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="pt-4">
+                      <Textarea 
+                        value={memoryPrompt}
+                        onChange={(e) => setMemoryPrompt(e.target.value)}
+                        className="min-h-[400px] bg-slate-950/50 border-slate-800 font-mono text-sm text-slate-300 focus:border-teal-500/50 focus:ring-teal-500/20 resize-none p-4 leading-relaxed custom-scrollbar"
+                        placeholder="Define aquí la lógica de memoria..."
+                      />
+                    </CardContent>
+                  </Card>
+
+                   {/* 2.3 Ruteo */}
                    <Card className="bg-slate-900 border-slate-800 shadow-xl">
                     <CardHeader className="border-b border-slate-800 pb-4">
                       <CardTitle className="text-white flex items-center gap-2 text-lg">
                         <div className="w-8 h-8 rounded bg-purple-500/10 flex items-center justify-center text-purple-500">
                           <MapPin className="w-5 h-5" />
                         </div>
-                        2.2 Protocolo de Ruteo Regional
+                        2.3 Protocolo de Ruteo Regional
                       </CardTitle>
                       <CardDescription>Lógica de asignación de leads a Anahí (Centro-Sur) o Edith (Bajío-Norte).</CardDescription>
                     </CardHeader>
@@ -589,14 +655,14 @@ const AgentBrain = () => {
                     </CardContent>
                   </Card>
 
-                   {/* 2.3 Validación de Pagos */}
+                   {/* 2.4 Validación de Pagos */}
                    <Card className="bg-slate-900 border-slate-800 shadow-xl">
                     <CardHeader className="border-b border-slate-800 pb-4">
                       <CardTitle className="text-white flex items-center gap-2 text-lg">
                         <div className="w-8 h-8 rounded bg-emerald-500/10 flex items-center justify-center text-emerald-500">
                           <CreditCard className="w-5 h-5" />
                         </div>
-                        2.3 Validación de Pagos (Visión)
+                        2.4 Validación de Pagos (Visión)
                       </CardTitle>
                       <CardDescription>Análisis automático de comprobantes bancarios mediante IA.</CardDescription>
                     </CardHeader>
@@ -610,14 +676,14 @@ const AgentBrain = () => {
                     </CardContent>
                   </Card>
 
-                  {/* 2.4 Seguimiento de Promesa */}
+                  {/* 2.5 Seguimiento de Promesa */}
                    <Card className="bg-slate-900 border-slate-800 shadow-xl">
                     <CardHeader className="border-b border-slate-800 pb-4">
                       <CardTitle className="text-white flex items-center gap-2 text-lg">
                         <div className="w-8 h-8 rounded bg-pink-500/10 flex items-center justify-center text-pink-500">
                           <CalendarClock className="w-5 h-5" />
                         </div>
-                        2.4 Protocolo de Seguimiento (Promesa de Pago)
+                        2.5 Protocolo de Seguimiento (Promesa de Pago)
                       </CardTitle>
                       <CardDescription>Automatización de recordatorios y re-engagement.</CardDescription>
                     </CardHeader>
@@ -647,12 +713,12 @@ const AgentBrain = () => {
                          <p className="text-xs text-slate-500">Ciudad de origen para ruteo</p>
                       </div>
                       <div className="p-3 rounded bg-slate-950 border border-slate-800 group hover:border-slate-700 transition-colors cursor-pointer">
-                         <code className="text-xs font-mono text-cyan-400 block mb-1">{`{{cliente.perfil}}`}</code>
+                         <code className="text-xs font-mono text-teal-400 block mb-1">{`{{cliente.perfil}}`}</code>
                          <p className="text-xs text-slate-500">Perfil psicológico (ej: explorador)</p>
                       </div>
                       <div className="p-3 rounded bg-slate-950 border border-slate-800 group hover:border-slate-700 transition-colors cursor-pointer">
-                         <code className="text-xs font-mono text-cyan-400 block mb-1">{`{{promo_disponible}}`}</code>
-                         <p className="text-xs text-slate-500">Promoción activa para este usuario</p>
+                         <code className="text-xs font-mono text-teal-400 block mb-1">{`{{historial_chat}}`}</code>
+                         <p className="text-xs text-slate-500">Resumen de últimos 5 mensajes</p>
                       </div>
                     </CardContent>
                   </Card>
