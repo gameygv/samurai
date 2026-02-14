@@ -7,6 +7,8 @@ import { AuthProvider, useAuth } from "@/context/AuthContext";
 import Index from "./pages/Index";
 import AgentBrain from "./pages/AgentBrain";
 import LearningLog from "./pages/LearningLog";
+import KnowledgeBase from "./pages/KnowledgeBase";
+import Activity from "./pages/Activity";
 import NotFound from "./pages/NotFound";
 import Login from "./pages/Login";
 import UsersPage from "./pages/Users";
@@ -50,6 +52,8 @@ const App = () => (
             <Route path="/" element={<PrivateRoute><Index /></PrivateRoute>} />
             <Route path="/brain" element={<PrivateRoute><AgentBrain /></PrivateRoute>} />
             <Route path="/learning" element={<PrivateRoute><LearningLog /></PrivateRoute>} />
+            <Route path="/knowledge" element={<PrivateRoute><KnowledgeBase /></PrivateRoute>} />
+            <Route path="/activity" element={<PrivateRoute><Activity /></PrivateRoute>} />
             <Route path="/users" element={<PrivateRoute><UsersPage /></PrivateRoute>} />
             <Route path="/logs" element={<PrivateRoute><Logs /></PrivateRoute>} />
             <Route path="/profile" element={<PrivateRoute><Profile /></PrivateRoute>} />
