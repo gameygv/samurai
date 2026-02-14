@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
-import { Save, Bot, Sparkles, AlertTriangle, ScrollText, Code, Hammer, GitBranch, MapPin, PauseCircle, CreditCard } from 'lucide-react';
+import { Save, Bot, Sparkles, AlertTriangle, ScrollText, Code, Hammer, GitBranch, MapPin, PauseCircle, CreditCard, CalendarClock } from 'lucide-react';
 import { toast } from 'sonner';
 
 const DEFAULT_CORE_PROMPT = `# 🏯 IDENTIDAD: EL SAMURÁI DEL EQUIPO
@@ -198,6 +198,65 @@ ACCIÓN SI NO DETECTA CLARO (confidence < 80%):
   3. Si falla 3 veces: Notifica humano
      "No detecté comprobante claro. Revisar manual."`;
 
+const DEFAULT_PROMISE_PROMPT = `TRIGGER: Cliente expresa compromiso de pago futuro
+
+KOMMO UPDATE:
+  - Status: "Promesa_Pago"
+  - Tag: "#promesa_pago"
+  - Custom Field: "Fecha_Promesa_Pago" = [fecha del cliente]
+  - Counter: recordatorios = 0
+
+ACCIÓN INMEDIATA (IA):
+  Mensaje: "Perfecto, {{nombre}}. He anotado tu lugar reservado. 
+            Te estaré esperando {{fecha_promesa}}.
+            Si tienes dudas, aquí estoy. 🤝"
+
+TIMER 1 - DESPUÉS 24 HORAS (Acción: PROMO + Beneficio):
+  Trigger: Cliente no ha pagado en 24h
+  Mensaje: "[PROMOCIÓN ESPECIAL]
+            {{nombre}}, te tenía un descuento especial para hoy.
+            {{promo_nombre}}: [descripción]
+            Link: [imagen + link]"
+  
+  Meta: Despertar interés con oferta tiempo-limitada
+
+TIMER 2 - DESPUÉS 48-72 HORAS (Acción: DATOS DE INTERÉS):
+  If Timer 1 response = positivo:
+    Mensaje: "¡Excelente! Mira algunos beneficios que otros no saben:
+              • Desayuno y comida INCLUIDOS (ahorras $500+)
+              • Hospedaje en Amatlán de Quetzalcóatl
+              • La metodología respaldada por 12 años Geoffrey
+              • Certificado después del curso"
+    Meta: Reforzar valor, no solo precio
+  
+  If Timer 1 response = silencio/negativo:
+    Mensaje: "Hola {{nombre}}, ¿todo bien? 
+              Solo quería recordarte que tu lugar está apartado 
+              y tienes hasta {{fecha_límite}} para confirmar. 
+              ¿Hay algo que te preocupe?"
+    Meta: Identificar objeción real
+
+TIMER 3 - DESPUÉS X HORAS (Acción: TESTIMONIOS + ÚLTIMO LLAMADO):
+  If Timers 1 & 2 = sin respuesta significativa:
+    Mensaje: "[TESTIMONIOS DE TRANSFORMACIÓN]
+              Mira lo que otros clientes como tú experimentaron:
+              {{testimonio_video_o_texto}}
+              
+              Solo quedan {{lugares_restantes}} lugares para {{fecha_curso}}.
+              ¿Quieres asegurar el tuyo?"
+    Meta: Urgencia + Prueba social + Último empujón
+
+SI NO RESPONDE ACCIÓN 3:
+  ✋ PAUSA AUTOMÁTICA
+  - IA CESA de enviar recordatorios
+  - Tag en Kommo: "Sin_Respuesta_Promesa"
+  - Flag: Espera intervención MANUAL de Anahí/Edith
+  
+  🔧 PENDIENTE: 
+     Automatización futura para "ciclo de recuperación de 30 días"
+     (Plan: Re-engagement automático después 1 semana, 
+            movimiento a "Perdido" después 30 días)`;
+
 const DEFAULT_CORRECTION_PROMPT = `### PROTOCOLO 3: INTERVENCIÓN HUMANA (MODO SIESTA)
 
 TRIGGER: Humano (Anahí/Edith) envía mensaje
@@ -225,6 +284,7 @@ const AgentBrain = () => {
   const [behaviorPrompt, setBehaviorPrompt] = useState(DEFAULT_BEHAVIOR_PROMPT);
   const [routingPrompt, setRoutingPrompt] = useState(DEFAULT_ROUTING_PROMPT);
   const [paymentPrompt, setPaymentPrompt] = useState(DEFAULT_PAYMENT_PROMPT);
+  const [promisePrompt, setPromisePrompt] = useState(DEFAULT_PROMISE_PROMPT);
   const [correctionPrompt, setCorrectionPrompt] = useState(DEFAULT_CORRECTION_PROMPT);
 
   const handleSave = () => {
@@ -436,6 +496,27 @@ const AgentBrain = () => {
                       />
                     </CardContent>
                   </Card>
+
+                  {/* 2.3 Seguimiento de Promesa */}
+                   <Card className="bg-slate-900 border-slate-800 shadow-xl">
+                    <CardHeader className="border-b border-slate-800 pb-4">
+                      <CardTitle className="text-white flex items-center gap-2 text-lg">
+                        <div className="w-8 h-8 rounded bg-pink-500/10 flex items-center justify-center text-pink-500">
+                          <CalendarClock className="w-5 h-5" />
+                        </div>
+                        2.3 Protocolo de Seguimiento (Promesa de Pago)
+                      </CardTitle>
+                      <CardDescription>Automatización de recordatorios y re-engagement.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="pt-4">
+                      <Textarea 
+                        value={promisePrompt}
+                        onChange={(e) => setPromisePrompt(e.target.value)}
+                        className="min-h-[400px] bg-slate-950/50 border-slate-800 font-mono text-sm text-slate-300 focus:border-pink-500/50 focus:ring-pink-500/20 resize-none p-4 leading-relaxed custom-scrollbar"
+                        placeholder="Define aquí el seguimiento..."
+                      />
+                    </CardContent>
+                  </Card>
                 </div>
 
                  <div className="space-y-6">
@@ -459,6 +540,10 @@ const AgentBrain = () => {
                       <div className="p-3 rounded bg-slate-950 border border-slate-800 group hover:border-slate-700 transition-colors cursor-pointer">
                          <code className="text-xs font-mono text-emerald-400 block mb-1">{`{{extracted_amount}}`}</code>
                          <p className="text-xs text-slate-500">Monto extraído de la imagen</p>
+                      </div>
+                      <div className="p-3 rounded bg-slate-950 border border-slate-800 group hover:border-slate-700 transition-colors cursor-pointer">
+                         <code className="text-xs font-mono text-pink-400 block mb-1">{`{{fecha_promesa}}`}</code>
+                         <p className="text-xs text-slate-500">Fecha compromiso del cliente</p>
                       </div>
                     </CardContent>
                   </Card>
