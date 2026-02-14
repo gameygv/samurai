@@ -14,7 +14,7 @@ import {
   Save, Bot, Sparkles, AlertTriangle, Eye, Hammer, ScrollText, 
   ShieldAlert, Database, History, MessageSquare, Gift, RefreshCw, Server, 
   CheckCircle2, ScanEye, CheckCheck, ListTodo, Zap, GitBranch, FlaskConical, 
-  Play, Archive, RotateCcw, BarChart3, Check, Loader2
+  Play, Archive, RotateCcw, BarChart3, Check, Loader2, Copy
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { logActivity } from '@/utils/logger';
@@ -39,14 +39,25 @@ const DEFAULTS = {
   'prompt_post_validation': `### 4.3 ACCIÓN POST-VALIDACIÓN...`
 };
 
+// Datos simulados para versiones si no hay en DB
+const DEMO_VERSIONS = [
+  { id: "v2.0", version_numero: "v2.0", created_at: new Date().toISOString(), status: "Active", performance: "58%", user: "Gamey", content: DEFAULTS['prompt_core'] },
+  { id: "v1.1", version_numero: "v1.1", created_at: new Date(Date.now() - 86400000).toISOString(), status: "Archive", performance: "42%", user: "Gamey", content: "# 🏯 IDENTIDAD: EL SAMURÁI (v1.1 Legacy)\nEsta es una versión anterior..." },
+  { id: "v1.0", version_numero: "v1.0", created_at: new Date(Date.now() - 172800000).toISOString(), status: "Draft", performance: "-", user: "System", content: "# 🏯 IDENTIDAD: EL SAMURÁI (v1.0 Alpha)\nVersión inicial..." },
+];
+
 const AgentBrain = () => {
   const [prompts, setPrompts] = useState<Record<string, string>>(DEFAULTS);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
 
-  // States Part 5
-  const [activeVersion, setActiveVersion] = useState("v2.0");
+  // States Part 5 (Versionado)
+  const [historyVersions, setHistoryVersions] = useState<any[]>(DEMO_VERSIONS);
+  const [activeVersionId, setActiveVersionId] = useState<string>("live");
+  const [editorContent, setEditorContent] = useState("");
+  
+  // Test Runner
   const [testInput, setTestInput] = useState("");
   const [contextToggles, setContextToggles] = useState({
     history: true,
@@ -54,17 +65,18 @@ const AgentBrain = () => {
     geoffrey: true,
     corrections: false
   });
-  
-  // Versions
-  const versions = [
-    { id: "v1.0", date: "18/02 09:00", status: "Draft", performance: "-", user: "System" },
-    { id: "v1.1", date: "18/02 14:30", status: "Archive", performance: "42%", user: "Gamey" },
-    { id: "v2.0", date: "20/02 16:45", status: "Active", performance: "58%", user: "Gamey" },
-  ];
 
   useEffect(() => {
     fetchPrompts();
+    fetchHistory();
   }, []);
+
+  // Sincronizar editor con prompt actual cuando carga
+  useEffect(() => {
+    if (activeVersionId === 'live') {
+        setEditorContent(prompts['prompt_core'] || '');
+    }
+  }, [prompts, activeVersionId]);
 
   const fetchPrompts = async () => {
     setLoading(true);
@@ -78,10 +90,31 @@ const AgentBrain = () => {
       data.forEach((item: any) => {
         dbPrompts[item.key] = item.value;
       });
-      // Merge con defaults para asegurar que no falte nada
       setPrompts(prev => ({ ...prev, ...dbPrompts }));
     }
     setLoading(false);
+  };
+
+  const fetchHistory = async () => {
+    // Intentar buscar versiones reales
+    const { data } = await supabase
+        .from('versiones_prompts_aprendidas')
+        .select('*')
+        .order('created_at', { ascending: false });
+    
+    if (data && data.length > 0) {
+        // Mapear a formato UI
+        const mapped = data.map(v => ({
+            id: v.version_id,
+            version_numero: v.version_numero,
+            created_at: v.created_at,
+            status: 'Archive', // Asumimos archivo por defecto
+            performance: v.test_accuracy_nuevo ? `${v.test_accuracy_nuevo}%` : '-',
+            user: 'System',
+            content: v.contenido_nuevo
+        }));
+        setHistoryVersions(mapped);
+    }
   };
 
   const handlePromptChange = (key: string, value: string) => {
@@ -117,23 +150,63 @@ const AgentBrain = () => {
     }
   };
 
+  const handleSelectVersion = (version: any) => {
+      setActiveVersionId(version.id);
+      setEditorContent(version.content || "");
+      toast.info(`Visualizando versión ${version.version_numero}`);
+  };
+
+  const handleRestore = async () => {
+      if (activeVersionId === 'live') return;
+
+      if (!confirm('¿Estás seguro de restaurar esta versión? Sobrescribirá el prompt actual.')) return;
+
+      setSaving(true);
+      try {
+          // 1. Update DB
+          const { error } = await supabase.from('app_config').upsert({
+              key: 'prompt_core',
+              value: editorContent,
+              category: 'PROMPT',
+              updated_at: new Date().toISOString()
+          });
+
+          if (error) throw error;
+
+          // 2. Update Local State
+          handlePromptChange('prompt_core', editorContent);
+          
+          await logActivity({
+              action: 'UPDATE',
+              resource: 'BRAIN',
+              description: `Restaurada versión histórica ID: ${activeVersionId}`,
+              status: 'OK'
+          });
+
+          toast.success('Versión restaurada correctamente. Ahora es la versión LIVE.');
+          setActiveVersionId('live');
+
+      } catch (err: any) {
+          toast.error(err.message);
+      } finally {
+          setSaving(false);
+      }
+  };
+
   const handleRunTest = async () => {
     if (!testInput) return toast.warning('Escribe un input para probar');
     setTesting(true);
     
-    // Llamar al webhook de Make configurado
     const success = await triggerMakeWebhook('webhook_make_test', {
       input: testInput,
-      version: activeVersion,
+      version: activeVersionId,
       context: contextToggles,
-      // Enviamos el prompt core actual para que Make lo use dinámicamente si está configurado así
-      current_core_prompt: prompts['prompt_core']
+      current_core_prompt: editorContent // Enviamos lo que se ve en el editor
     });
 
     if (success) {
-      toast.success('Test enviado a Make.com. Revisa los logs o la consola de Make.');
+      toast.success('Test enviado a Make.com.');
     }
-    
     setTesting(false);
   };
 
@@ -248,18 +321,31 @@ const AgentBrain = () => {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {versions.map((v) => (
-                          <TableRow key={v.id} className="border-slate-800 hover:bg-slate-800/50 cursor-pointer" onClick={() => setActiveVersion(v.id)}>
+                         <TableRow 
+                            className={`border-slate-800 hover:bg-slate-800/50 cursor-pointer ${activeVersionId === 'live' ? 'bg-indigo-500/10' : ''}`}
+                            onClick={() => {
+                                setActiveVersionId('live');
+                                setEditorContent(prompts['prompt_core'] || '');
+                            }}
+                         >
+                            <TableCell className="font-mono font-medium text-white">LIVE</TableCell>
+                            <TableCell><Badge className="bg-green-500/20 text-green-400">Actual</Badge></TableCell>
+                            <TableCell className="text-right text-xs text-slate-400">-</TableCell>
+                         </TableRow>
+                        {historyVersions.map((v) => (
+                          <TableRow 
+                            key={v.id} 
+                            className={`border-slate-800 hover:bg-slate-800/50 cursor-pointer ${activeVersionId === v.id ? 'bg-indigo-500/10' : ''}`}
+                            onClick={() => handleSelectVersion(v)}
+                          >
                             <TableCell className="font-mono font-medium text-slate-300">
                               <div className="flex flex-col">
-                                <span>{v.id}</span>
-                                <span className="text-[10px] text-slate-500">{v.date}</span>
+                                <span>{v.version_numero}</span>
+                                <span className="text-[10px] text-slate-500">{new Date(v.created_at).toLocaleDateString()}</span>
                               </div>
                             </TableCell>
                             <TableCell>
-                              {v.status === 'Active' && <Badge className="bg-green-500/20 text-green-400 border-green-500/50">Active</Badge>}
-                              {v.status === 'Draft' && <Badge variant="outline" className="text-slate-400 border-slate-600">Draft</Badge>}
-                              {v.status === 'Archive' && <Badge variant="secondary" className="bg-slate-800 text-slate-500">Archive</Badge>}
+                              <Badge variant="secondary" className="bg-slate-800 text-slate-500">Archive</Badge>
                             </TableCell>
                             <TableCell className="text-right text-slate-400 font-mono text-xs">{v.performance}</TableCell>
                           </TableRow>
@@ -271,9 +357,6 @@ const AgentBrain = () => {
                     <Button variant="outline" size="sm" className="w-full border-slate-700 hover:bg-slate-800 text-slate-300">
                       <BarChart3 className="w-3 h-3 mr-2" /> Comparar
                     </Button>
-                    <Button size="sm" className="w-full bg-indigo-600 hover:bg-indigo-700">
-                      <GitBranch className="w-3 h-3 mr-2" /> Fork New
-                    </Button>
                   </CardFooter>
                 </Card>
 
@@ -284,7 +367,9 @@ const AgentBrain = () => {
                       <FlaskConical className="w-4 h-4 text-purple-400" />
                       Test Runner (Make)
                     </CardTitle>
-                    <CardDescription>Prueba {activeVersion} antes de activar.</CardDescription>
+                    <CardDescription>
+                        Prueba con versión: <span className="text-indigo-400 font-mono">{activeVersionId === 'live' ? 'LIVE' : activeVersionId}</span>
+                    </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
                     <div className="space-y-2">
@@ -302,15 +387,6 @@ const AgentBrain = () => {
                       <p className="text-sm text-slate-400 italic">
                         {testing ? "Ejecutando webhook en Make..." : "Esperando ejecución..."}
                       </p>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-2 text-xs font-mono text-slate-500">
-                       <div className="flex justify-between">
-                         <span>Webhook:</span>
-                         <span className={testing ? "text-yellow-400" : "text-slate-300"}>
-                            {testing ? "SENDING..." : "IDLE"}
-                         </span>
-                       </div>
                     </div>
                   </CardContent>
                   <CardFooter>
@@ -333,63 +409,73 @@ const AgentBrain = () => {
                     </div>
                     <div>
                       <h3 className="text-white font-medium flex items-center gap-2">
-                        Editando: <span className="text-indigo-400 font-mono">{activeVersion}</span>
-                        {activeVersion === 'v2.0' && <Badge className="bg-green-500/20 text-green-400 text-[10px] h-5">Live</Badge>}
+                        Visualizando: <span className="text-indigo-400 font-mono">{activeVersionId === 'live' ? 'VERSION ACTUAL (LIVE)' : `VERSION HISTÓRICA`}</span>
                       </h3>
-                      <p className="text-xs text-slate-400">Edición en tiempo real sobre app_config</p>
+                      <p className="text-xs text-slate-400">
+                        {activeVersionId === 'live' 
+                           ? "Cualquier cambio aquí se guardará directamente en producción al dar 'Guardar Todo'." 
+                           : "Estás viendo una versión antigua. Puedes restaurarla para que sea la Live."}
+                      </p>
                     </div>
                   </div>
                   <div className="flex gap-2">
-                     <Button variant="ghost" size="sm" className="text-slate-400 hover:text-white">
-                        <RotateCcw className="w-4 h-4" />
+                     <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        className="text-slate-400 hover:text-white"
+                        onClick={() => {
+                            if(activeVersionId !== 'live') {
+                                navigator.clipboard.writeText(editorContent);
+                                toast.success('Contenido copiado');
+                            }
+                        }}
+                     >
+                        <Copy className="w-4 h-4" />
                      </Button>
-                     <Button variant="outline" size="sm" className="border-slate-700 text-slate-300 hover:bg-slate-800">
-                        <Archive className="w-4 h-4 mr-2" /> Draft
-                     </Button>
-                     <Button size="sm" className="bg-green-600 hover:bg-green-700">
-                        <Check className="w-4 h-4 mr-2" /> Activar
-                     </Button>
+                     
+                     {activeVersionId !== 'live' && (
+                        <Button 
+                            size="sm" 
+                            className="bg-green-600 hover:bg-green-700"
+                            onClick={handleRestore}
+                            disabled={saving}
+                        >
+                            {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Check className="w-4 h-4 mr-2" />}
+                            Restaurar esta Versión
+                        </Button>
+                     )}
+                     
+                     {activeVersionId === 'live' && (
+                         <Badge variant="outline" className="border-green-500 text-green-500">
+                             EDICIÓN ACTIVA
+                         </Badge>
+                     )}
                   </div>
                 </div>
 
-                {/* SECCIÓN 1: ADN CORE */}
+                {/* SECCIÓN 1: EDITOR */}
                 <Card className="bg-slate-900 border-slate-800">
                   <CardHeader className="pb-2">
-                     <CardTitle className="text-sm text-slate-400 uppercase tracking-wider font-semibold">Sección 1: ADN Core (Live)</CardTitle>
+                     <CardTitle className="text-sm text-slate-400 uppercase tracking-wider font-semibold">
+                        {activeVersionId === 'live' ? 'Contenido ADN Core (Editable)' : 'Contenido Archivado (Solo Lectura)'}
+                     </CardTitle>
                   </CardHeader>
                   <CardContent>
                      <Textarea 
-                        className="bg-slate-950 border-slate-800 text-slate-300 font-mono text-sm min-h-[500px]"
-                        value={prompts['prompt_core']}
-                        onChange={(e) => handlePromptChange('prompt_core', e.target.value)}
+                        className={`bg-slate-950 border-slate-800 text-slate-300 font-mono text-sm min-h-[500px] ${activeVersionId !== 'live' ? 'opacity-80' : ''}`}
+                        value={editorContent}
+                        onChange={(e) => {
+                            setEditorContent(e.target.value);
+                            // Si estamos en live, actualizamos el state global también para que el botón Guardar Todo funcione
+                            if (activeVersionId === 'live') {
+                                handlePromptChange('prompt_core', e.target.value);
+                            }
+                        }}
+                        readOnly={activeVersionId !== 'live'}
                      />
                   </CardContent>
                 </Card>
 
-                {/* SECCIÓN 2: CONTEXTO DINÁMICO */}
-                <Card className="bg-slate-900 border-slate-800">
-                  <CardHeader className="pb-2">
-                     <CardTitle className="text-sm text-slate-400 uppercase tracking-wider font-semibold">Sección 2: Contexto Dinámico</CardTitle>
-                  </CardHeader>
-                  <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                     <div className="flex items-center justify-between p-3 bg-slate-950 rounded border border-slate-800">
-                        <Label className="text-slate-300 cursor-pointer" htmlFor="toggle-hist">Incluir Historial (5 msgs)</Label>
-                        <Switch id="toggle-hist" checked={contextToggles.history} onCheckedChange={(c) => setContextToggles(p => ({...p, history: c}))} />
-                     </div>
-                     <div className="flex items-center justify-between p-3 bg-slate-950 rounded border border-slate-800">
-                        <Label className="text-slate-300 cursor-pointer" htmlFor="toggle-emo">Estado Emocional</Label>
-                        <Switch id="toggle-emo" checked={contextToggles.emotional} onCheckedChange={(c) => setContextToggles(p => ({...p, emotional: c}))} />
-                     </div>
-                     <div className="flex items-center justify-between p-3 bg-slate-950 rounded border border-slate-800">
-                        <Label className="text-slate-300 cursor-pointer" htmlFor="toggle-geo">Frases Geoffrey</Label>
-                        <Switch id="toggle-geo" checked={contextToggles.geoffrey} onCheckedChange={(c) => setContextToggles(p => ({...p, geoffrey: c}))} />
-                     </div>
-                     <div className="flex items-center justify-between p-3 bg-slate-950 rounded border border-slate-800">
-                        <Label className="text-slate-300 cursor-pointer" htmlFor="toggle-corr">Correcciones (7 días)</Label>
-                        <Switch id="toggle-corr" checked={contextToggles.corrections} onCheckedChange={(c) => setContextToggles(p => ({...p, corrections: c}))} />
-                     </div>
-                  </CardContent>
-                </Card>
               </div>
 
             </div>
