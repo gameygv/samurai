@@ -1,22 +1,35 @@
 -- =================================================================
--- REPARACIÓN DE PERMISOS Y ESQUEMA
+-- REPARACIÓN MAESTRA DE PERMISOS Y RUTAS (Auth + Public)
 -- =================================================================
 
--- 1. Garantizar acceso al esquema public para los roles de API
-GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
+BEGIN;
 
--- 2. Dar permisos sobre todas las tablas actuales
-GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated, service_role;
-GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated, service_role;
-GRANT ALL ON ALL ROUTINES IN SCHEMA public TO anon, authenticated, service_role;
+-- 1. Asegurar acceso de USO a los esquemas críticos
+GRANT USAGE ON SCHEMA public TO postgres, anon, authenticated, service_role;
+GRANT USAGE ON SCHEMA auth TO postgres, anon, authenticated, service_role;
+GRANT USAGE ON SCHEMA extensions TO postgres, anon, authenticated, service_role;
 
--- 3. Configurar permisos por defecto para futuras tablas
-ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated, service_role;
-ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authenticated, service_role;
-ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON ROUTINES TO anon, authenticated, service_role;
+-- 2. CONFIGURACIÓN CRÍTICA: search_path
+-- Esto asegura que cuando Auth ejecuta triggers o consultas, sepa dónde buscar.
+ALTER ROLE authenticator SET search_path = public, auth, extensions;
+ALTER ROLE service_role SET search_path = public, auth, extensions;
+ALTER ROLE supabase_auth_admin SET search_path = public, auth, extensions;
+ALTER ROLE postgres SET search_path = public, auth, extensions;
 
--- 4. Asegurar que las extensiones necesarias estén en public o accesibles
-CREATE EXTENSION IF NOT EXISTS pgcrypto SCHEMA public;
+-- También configuramos la base de datos por defecto
+ALTER DATABASE postgres SET search_path = public, auth, extensions;
 
--- 5. Recargar la caché de PostgREST (API)
+-- 3. Permisos explícitos en esquema PUBLIC (para triggers de perfiles)
+GRANT ALL ON ALL TABLES IN SCHEMA public TO postgres, anon, authenticated, service_role;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO postgres, anon, authenticated, service_role;
+GRANT ALL ON ALL ROUTINES IN SCHEMA public TO postgres, anon, authenticated, service_role;
+
+-- 4. Permisos explícitos en esquema AUTH (para login)
+GRANT SELECT ON TABLE auth.users TO service_role;
+GRANT ALL ON ALL TABLES IN SCHEMA auth TO supabase_auth_admin;
+
+COMMIT;
+
+-- 5. Forzar recarga de configuración en PostgREST
+NOTIFY pgrst, 'reload config';
 NOTIFY pgrst, 'reload schema';

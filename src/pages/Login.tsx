@@ -22,15 +22,13 @@ const Login = () => {
 
   const checkDbConnection = async () => {
     try {
-      // Intentamos una query simple que no requiera auth
       const { error } = await supabase.from('profiles').select('count', { count: 'exact', head: true });
       
-      if (error && error.code !== 'PGRST116') { // PGRST116 es "no rows", que cuenta como conexión exitosa
+      if (error && error.code !== 'PGRST116') {
          console.warn("Health check failed:", error);
          if (error.message.includes("schema")) {
             setDbStatus('error');
          } else {
-            // Si es otro error (ej. 401), al menos la DB respondió
             setDbStatus('ok');
          }
       } else {
@@ -68,9 +66,9 @@ const Login = () => {
       
       if (msg.includes("Invalid login credentials")) {
         msg = "Usuario o contraseña incorrectos";
-      } else if (msg.includes("querying schema")) {
-        msg = "ERROR CRÍTICO: La API no puede leer el esquema de la base de datos.";
       }
+      
+      // Ya NO enmascaramos el error de "querying schema" para ver el detalle real si persiste
       
       toast.error(msg, { duration: 5000 });
     } finally {
@@ -96,7 +94,7 @@ const Login = () => {
               <WifiOff className="w-5 h-5 text-red-500 mt-0.5" />
               <div className="text-xs text-red-400">
                 <p className="font-bold">Error de Conexión Detectado</p>
-                <p>La API no responde correctamente. Ejecuta el script <code>FIX_CONNECTION.sql</code> en Supabase y luego reinicia la página.</p>
+                <p>La API no responde correctamente. Ejecuta el script <code>FIX_PERMISSIONS.sql</code> en Supabase y luego reinicia la página.</p>
               </div>
             </div>
           )}
