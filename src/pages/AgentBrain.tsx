@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
-import { Save, Bot, Sparkles, AlertTriangle, ScrollText, Code, Hammer, GitBranch, MapPin, PauseCircle } from 'lucide-react';
+import { Save, Bot, Sparkles, AlertTriangle, ScrollText, Code, Hammer, GitBranch, MapPin, PauseCircle, CreditCard } from 'lucide-react';
 import { toast } from 'sonner';
 
 const DEFAULT_CORE_PROMPT = `# 🏯 IDENTIDAD: EL SAMURÁI DEL EQUIPO
@@ -150,6 +150,54 @@ ACCIÓN KOMMO:
   - Tag: "region_{{region}}"
   - Notify assigned agent`;
 
+const DEFAULT_PAYMENT_PROMPT = `TRIGGER: Imagen detectada en chat (Kommo attachment)
+
+ANÁLISIS AUTOMÁTICO (Gemini Vision):
+  1. ¿Es documento bancario? (Sí/No)
+  2. Extrae: Monto exacto
+  3. Extrae: Últimos 4 dígitos de tarjeta/cuenta
+  4. Extrae: Fecha de transacción
+  5. Extrae: Concepto (ej: "Pago Curso")
+  6. Calcula: Confidence score (0-100%)
+
+VALIDACIÓN:
+  ✅ Monto == Precio inscripción exacto
+  ✅ Últimos 4 dígitos == Campo Kommo exacto
+  ✅ Fecha está en rango válido (hoy ± 2 días)
+  = MATCH DETECTADO
+
+ACCIÓN SI DETECTA MATCH (confidence > 80%):
+  1. Mensaje cliente: 
+     "¡Excelente! He detectado tu comprobante. 
+      En un momento el equipo validará el ingreso 
+      para darte la bienvenida oficial 🎉"
+  
+  2. Notificación Anahí/Edith:
+     "⚠️ COMPROBANTE DETECTADO
+      Cliente: [Nombre]
+      Monto: $[XXXX]
+      Últimos 4: XXXX
+      Confianza: [XX%]
+      👉 Haz clic para validar"
+  
+  3. Kommo:
+     - Update custom field: Comprobante_Detectado = TRUE
+     - Move to stage: "Verificación de Pago"
+     - Create task: "Validar transferencia"
+     - Tag: "comprobante_pendiente"
+  
+  4. IA pausa: Espera validación humana (no presuma nada)
+
+ACCIÓN SI NO DETECTA CLARO (confidence < 80%):
+  1. Mensaje cliente: 
+     "¿Podrías enviar una imagen más clara del comprobante? 
+      Necesito ver el monto y la fecha bien"
+  
+  2. Reintento automático cada 30 seg hasta 3 veces
+  
+  3. Si falla 3 veces: Notifica humano
+     "No detecté comprobante claro. Revisar manual."`;
+
 const DEFAULT_CORRECTION_PROMPT = `### PROTOCOLO 3: INTERVENCIÓN HUMANA (MODO SIESTA)
 
 TRIGGER: Humano (Anahí/Edith) envía mensaje
@@ -176,6 +224,7 @@ const AgentBrain = () => {
   const [technicalPrompt, setTechnicalPrompt] = useState(DEFAULT_TECHNICAL_PROMPT);
   const [behaviorPrompt, setBehaviorPrompt] = useState(DEFAULT_BEHAVIOR_PROMPT);
   const [routingPrompt, setRoutingPrompt] = useState(DEFAULT_ROUTING_PROMPT);
+  const [paymentPrompt, setPaymentPrompt] = useState(DEFAULT_PAYMENT_PROMPT);
   const [correctionPrompt, setCorrectionPrompt] = useState(DEFAULT_CORRECTION_PROMPT);
 
   const handleSave = () => {
@@ -345,7 +394,8 @@ const AgentBrain = () => {
 
           <TabsContent value="context" className="mt-6 space-y-6 animate-in fade-in-50 duration-500">
              <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-                <div className="xl:col-span-2">
+                <div className="xl:col-span-2 space-y-6">
+                   {/* 2.1 Ruteo */}
                    <Card className="bg-slate-900 border-slate-800 shadow-xl">
                     <CardHeader className="border-b border-slate-800 pb-4">
                       <CardTitle className="text-white flex items-center gap-2 text-lg">
@@ -365,11 +415,33 @@ const AgentBrain = () => {
                       />
                     </CardContent>
                   </Card>
+
+                   {/* 2.2 Validación de Pagos */}
+                   <Card className="bg-slate-900 border-slate-800 shadow-xl">
+                    <CardHeader className="border-b border-slate-800 pb-4">
+                      <CardTitle className="text-white flex items-center gap-2 text-lg">
+                        <div className="w-8 h-8 rounded bg-emerald-500/10 flex items-center justify-center text-emerald-500">
+                          <CreditCard className="w-5 h-5" />
+                        </div>
+                        2.2 Validación de Pagos (Visión)
+                      </CardTitle>
+                      <CardDescription>Análisis automático de comprobantes bancarios mediante IA.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="pt-4">
+                      <Textarea 
+                        value={paymentPrompt}
+                        onChange={(e) => setPaymentPrompt(e.target.value)}
+                        className="min-h-[400px] bg-slate-950/50 border-slate-800 font-mono text-sm text-slate-300 focus:border-emerald-500/50 focus:ring-emerald-500/20 resize-none p-4 leading-relaxed custom-scrollbar"
+                        placeholder="Define aquí la validación de pagos..."
+                      />
+                    </CardContent>
+                  </Card>
                 </div>
+
                  <div className="space-y-6">
                    <Card className="bg-slate-900/50 border-slate-800">
                     <CardHeader>
-                      <CardTitle className="text-sm text-slate-300">Variables de Ruteo</CardTitle>
+                      <CardTitle className="text-sm text-slate-300">Variables de Contexto</CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-3">
                       <div className="p-3 rounded bg-slate-950 border border-slate-800 group hover:border-slate-700 transition-colors cursor-pointer">
@@ -379,6 +451,14 @@ const AgentBrain = () => {
                       <div className="p-3 rounded bg-slate-950 border border-slate-800 group hover:border-slate-700 transition-colors cursor-pointer">
                          <code className="text-xs font-mono text-purple-400 block mb-1">{`{{phone_area_code}}`}</code>
                          <p className="text-xs text-slate-500">Código de área del teléfono (LADA)</p>
+                      </div>
+                       <div className="p-3 rounded bg-slate-950 border border-slate-800 group hover:border-slate-700 transition-colors cursor-pointer">
+                         <code className="text-xs font-mono text-emerald-400 block mb-1">{`{{payment_confidence}}`}</code>
+                         <p className="text-xs text-slate-500">Nivel de confianza de lectura (0-100%)</p>
+                      </div>
+                      <div className="p-3 rounded bg-slate-950 border border-slate-800 group hover:border-slate-700 transition-colors cursor-pointer">
+                         <code className="text-xs font-mono text-emerald-400 block mb-1">{`{{extracted_amount}}`}</code>
+                         <p className="text-xs text-slate-500">Monto extraído de la imagen</p>
                       </div>
                     </CardContent>
                   </Card>
