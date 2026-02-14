@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
-import { Save, Bot, Sparkles, AlertTriangle, ScrollText, Code, Hammer, GitBranch, MapPin, PauseCircle, CreditCard, CalendarClock, Database, History } from 'lucide-react';
+import { Save, Bot, Sparkles, AlertTriangle, ScrollText, Code, Hammer, GitBranch, MapPin, PauseCircle, CreditCard, CalendarClock, Database, History, MessageSquare } from 'lucide-react';
 import { toast } from 'sonner';
 
 const DEFAULT_CORE_PROMPT = `# 🏯 IDENTIDAD: EL SAMURÁI DEL EQUIPO
@@ -261,6 +261,108 @@ DESPUÉS DE DETECTAR:
   - Update tabla clientes Supabase
   - Usar este perfil para selector de promos & frases`;
 
+const DEFAULT_TONE_PROMPT = `### IF Perfil = PRAGMÁTICO
+
+ESTRUCTURA DE RESPUESTA:
+1. Dato directo (sin introducción)
+2. Especificaciones clave
+3. Precio/opciones
+4. CTA específica
+
+EJEMPLOS:
+❌ "Me encantaría compartirte la experiencia transformadora 
+       de nuestro Nivel 1..."
+✅ "Nivel 1: $4,500 | 24h | Hospedaje + comida incluida | 
+    Certificado | 4 cuotas disponibles"
+
+PROHIBIDO:
+- Metáforas espirituales excesivas
+- Storytelling largo
+- Emocionalidad
+
+PERMITIDO:
+- Números, datos, tablas
+- Comparativas de valor
+- ROI ("ahorras $500 en comidas")
+
+---
+
+### IF Perfil = EMOCIONAL
+
+ESTRUCTURA DE RESPUESTA:
+1. Validación/empatía
+2. Storytelling (cómo otros se transformaron)
+3. Beneficios intangibles (paz, sanación)
+4. CTA suave (pregunta abierta)
+
+EJEMPLOS:
+❌ "Precio: $4,500. Modalidades de pago disponibles."
+✅ "Entiendo que buscar transformación es un paso valiente. 
+    Muchos llegaron aquí como tú, en búsqueda de paz. 
+    El sonido tiene ese poder sanador. ¿Te gustaría 
+    saber cómo otros lo vivieron?"
+
+PROHIBIDO:
+- Ser frío o técnico
+- Énfasis solo en precio
+- Data sin contexto emocional
+
+PERMITIDO:
+- Validación de sentimientos
+- Testimonios y historias
+- Metáforas sobre transformación
+- Preguntas abiertas
+
+---
+
+### IF Perfil = TÉCNICO
+
+ESTRUCTURA DE RESPUESTA:
+1. Metodología fundamentada
+2. Referencias a expertos (Mitch Nur, Frank Perry, Geoffrey)
+3. Datos científicos (si aplica)
+4. Detalles de certificación/validación
+5. CTA basada en conocimiento ("¿quieres profundizar?")
+
+EJEMPLOS:
+❌ "Es hermoso, aprenderás mucho."
+✅ "Nivel 1 se fundamenta en la investigación de Geoffrey 
+    sobre los parciales de los cuencos (Frank Perry). 
+    Certificación válida conforme a la escuela 9 Ways. 
+    Abarcas 12 formas antiguas de tocar. 
+    ¿Quieres ver el curriculum completo?"
+
+PROHIBIDO:
+- Oversimplificar la metodología
+- Hacer afirmaciones sin fuente
+- Ser demasiado casual
+
+PERMITIDO:
+- Citar maestros internacionales
+- Explicar "por qué" funciona
+- Ofrecer documentación técnica
+- Preguntas profundas
+
+---
+
+### IF Perfil = EQUILIBRADO
+
+ESTRUCTURA:
+Mezcla balanceada de datos + empatía + metodología
+
+EJEMPLOS:
+"Nivel 1 es una experiencia de 24 horas donde:
+- Aprendes la metodología científica de Geoffrey 
+  (basada en 12 años de investigación)
+- Experimentas la transformación personal
+- Obtienes certificado válido
+- Todo incluye hospedaje y comida en Amatlán
+
+Precio: $4,500 o 4 cuotas de $1,125.
+
+¿Te gustaría conocer el programa completo o 
+hablar primero sobre qué esperas conseguir?"`;
+
 const DEFAULT_ROUTING_PROMPT = `### PROTOCOLO 1: RUTEO REGIONAL
 Detecta ubicación → Asigna a agente correcto
 
@@ -419,6 +521,7 @@ const AgentBrain = () => {
   const [behaviorPrompt, setBehaviorPrompt] = useState(DEFAULT_BEHAVIOR_PROMPT);
   const [dataInjectionPrompt, setDataInjectionPrompt] = useState(DEFAULT_DATA_INJECTION_PROMPT);
   const [memoryPrompt, setMemoryPrompt] = useState(DEFAULT_MEMORY_PROMPT);
+  const [tonePrompt, setTonePrompt] = useState(DEFAULT_TONE_PROMPT);
   const [routingPrompt, setRoutingPrompt] = useState(DEFAULT_ROUTING_PROMPT);
   const [paymentPrompt, setPaymentPrompt] = useState(DEFAULT_PAYMENT_PROMPT);
   const [promisePrompt, setPromisePrompt] = useState(DEFAULT_PROMISE_PROMPT);
@@ -634,14 +737,35 @@ const AgentBrain = () => {
                     </CardContent>
                   </Card>
 
-                   {/* 2.3 Ruteo */}
+                   {/* 2.3 Tono Adaptativo */}
+                   <Card className="bg-slate-900 border-slate-800 shadow-xl">
+                    <CardHeader className="border-b border-slate-800 pb-4">
+                      <CardTitle className="text-white flex items-center gap-2 text-lg">
+                        <div className="w-8 h-8 rounded bg-indigo-500/10 flex items-center justify-center text-indigo-500">
+                          <MessageSquare className="w-5 h-5" />
+                        </div>
+                        2.3 Tono Adaptativo por Perfil
+                      </CardTitle>
+                      <CardDescription>Ajuste dinámico de lenguaje según perfil (Pragmático, Emocional, Técnico).</CardDescription>
+                    </CardHeader>
+                    <CardContent className="pt-4">
+                      <Textarea 
+                        value={tonePrompt}
+                        onChange={(e) => setTonePrompt(e.target.value)}
+                        className="min-h-[400px] bg-slate-950/50 border-slate-800 font-mono text-sm text-slate-300 focus:border-indigo-500/50 focus:ring-indigo-500/20 resize-none p-4 leading-relaxed custom-scrollbar"
+                        placeholder="Define aquí el tono adaptativo..."
+                      />
+                    </CardContent>
+                  </Card>
+
+                   {/* 2.4 Ruteo */}
                    <Card className="bg-slate-900 border-slate-800 shadow-xl">
                     <CardHeader className="border-b border-slate-800 pb-4">
                       <CardTitle className="text-white flex items-center gap-2 text-lg">
                         <div className="w-8 h-8 rounded bg-purple-500/10 flex items-center justify-center text-purple-500">
                           <MapPin className="w-5 h-5" />
                         </div>
-                        2.3 Protocolo de Ruteo Regional
+                        2.4 Protocolo de Ruteo Regional
                       </CardTitle>
                       <CardDescription>Lógica de asignación de leads a Anahí (Centro-Sur) o Edith (Bajío-Norte).</CardDescription>
                     </CardHeader>
@@ -655,14 +779,14 @@ const AgentBrain = () => {
                     </CardContent>
                   </Card>
 
-                   {/* 2.4 Validación de Pagos */}
+                   {/* 2.5 Validación de Pagos */}
                    <Card className="bg-slate-900 border-slate-800 shadow-xl">
                     <CardHeader className="border-b border-slate-800 pb-4">
                       <CardTitle className="text-white flex items-center gap-2 text-lg">
                         <div className="w-8 h-8 rounded bg-emerald-500/10 flex items-center justify-center text-emerald-500">
                           <CreditCard className="w-5 h-5" />
                         </div>
-                        2.4 Validación de Pagos (Visión)
+                        2.5 Validación de Pagos (Visión)
                       </CardTitle>
                       <CardDescription>Análisis automático de comprobantes bancarios mediante IA.</CardDescription>
                     </CardHeader>
@@ -676,14 +800,14 @@ const AgentBrain = () => {
                     </CardContent>
                   </Card>
 
-                  {/* 2.5 Seguimiento de Promesa */}
+                  {/* 2.6 Seguimiento de Promesa */}
                    <Card className="bg-slate-900 border-slate-800 shadow-xl">
                     <CardHeader className="border-b border-slate-800 pb-4">
                       <CardTitle className="text-white flex items-center gap-2 text-lg">
                         <div className="w-8 h-8 rounded bg-pink-500/10 flex items-center justify-center text-pink-500">
                           <CalendarClock className="w-5 h-5" />
                         </div>
-                        2.5 Protocolo de Seguimiento (Promesa de Pago)
+                        2.6 Protocolo de Seguimiento (Promesa de Pago)
                       </CardTitle>
                       <CardDescription>Automatización de recordatorios y re-engagement.</CardDescription>
                     </CardHeader>
