@@ -165,11 +165,50 @@ ELSE
 → Log: "✅ Corrección aplicada exitosamente"
 → Update clientes tabla: última_respuesta_correcta = NOW()`;
 
-const DEFAULT_VALIDATION_IMPROVEMENT = `### 3.4 VALIDACIÓN DE MEJORA
-Periodicamente (Cron Job):
-- Evaluar tasa de reincidencia de errores por categoría.
-- Si una corrección se aplica exitosamente 5 veces sin nuevo #CORREGIRIA:
-  - Promover a "Regla Permanente" en el Prompt Base (1.3).`;
+const DEFAULT_VALIDATION_IMPROVEMENT = `### TRACKING DE IMPACTO
+
+MÉTRICA 1: Aplicación de Correcciones (SQL)
+--------
+SELECT 
+  categoria_error,
+  COUNT(*) as total_errores,
+  SUM(CASE WHEN aplicada = TRUE THEN 1 ELSE 0 END) as aplicadas,
+  ROUND(100 * SUM(CASE WHEN aplicada = TRUE THEN 1 ELSE 0 END) / 
+        COUNT(*), 2) as porcentaje_aplicacion
+FROM aprendizaje_errores
+WHERE fecha_correccion > NOW() - INTERVAL 7 days
+GROUP BY categoria_error;
+
+RESULTADO ESPERADO:
+┌────────────────────────┬───────────────┬────────────┬──────────┐
+│ categoria_error        │ total_errores │ aplicadas  │ %        │
+├────────────────────────┼───────────────┼────────────┼──────────┤
+│ TONE                   │ 5             │ 5          │ 100%     │
+│ INFO_FALTANTE          │ 3             │ 3          │ 100%     │
+│ CIERRE_FALLIDO         │ 2             │ 1          │ 50%      │
+│ OTRO                   │ 1             │ 0          │ 0%       │
+└────────────────────────┴───────────────┴────────────┴──────────┘
+
+MÉTRICA 2: Reincidencia
+--------
+SELECT 
+  cliente_id,
+  COUNT(DISTINCT categoria_error) as tipos_errores,
+  COUNT(*) as total_errores,
+  COUNT(DISTINCT DATE(fecha_correccion)) as dias_con_errores
+FROM aprendizaje_errores
+GROUP BY cliente_id
+HAVING COUNT(*) > 1
+ORDER BY total_errores DESC;
+
+META: Que reincidencia baje a 10% después 1 semana
+
+MÉTRICA 3: Satisfacción Post-Corrección
+--------
+🔧 PENDIENTE: Implementar survey post-chat
+  "¿Qué tal tu experiencia con el Samurái?" (1-5)
+  Comparar: Respuestas sin corrección vs con corrección
+  Objetivo: Correlacionar correcciones → mejor satisfacción`;
 
 // --- CONSTANTES PARTE 4 ---
 const DEFAULT_VISION_ANALYSIS = `### 4.1 ANÁLISIS DE COMPROBANTES (OJO DE HALCÓN)
