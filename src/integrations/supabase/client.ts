@@ -5,11 +5,11 @@ const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 console.log("--- SUPABASE DEBUG ---");
 console.log("URL:", SUPABASE_URL ? "Configurada" : "FALTANTE");
-console.log("KEY:", SUPABASE_ANON_KEY ? "Configurada" : "FALTANTE");
 
-// Si faltan las credenciales, usamos valores vacíos para provocar un error claro en lugar de conectar a placeholder
-// Esto ayuda a diagnosticar mejor el problema en el Login
-export const supabase = createClient(
-  SUPABASE_URL || '', 
-  SUPABASE_ANON_KEY || ''
-);
+// IMPORTANTE: createClient lanza un error si la URL está vacía.
+// Usamos un placeholder si no hay configuración para evitar que la app se rompa (White Screen of Death).
+// Esto permite que la UI de Login muestre el error de conexión amigablemente.
+const url = SUPABASE_URL || 'https://placeholder.supabase.co';
+const key = SUPABASE_ANON_KEY || 'placeholder';
+
+export const supabase = createClient(url, key);
