@@ -1,28 +1,28 @@
 -- [MANTENER TABLAS ANTERIORES...]
 
 -- 6. TABLA: ERRORES_IA
-create table public.errores_ia (
+create table if not exists public.errores_ia (
   error_id uuid primary key default gen_random_uuid(),
-  usuario_id uuid references auth.users(id), -- Quien reporta o valida
+  usuario_id uuid references auth.users(id),
   cliente_id text,
   conversacion_id text,
   mensaje_cliente text,
   respuesta_ia text,
-  categoria text, -- INFO_FALTANTE, TONO_INCORRECTO, etc
-  severidad text, -- CRÍTICA, ALTA, MEDIA, BAJA
+  categoria text,
+  severidad text,
   correccion_sugerida text,
   correccion_explicacion text,
-  estado_correccion text default 'REPORTADA', -- REPORTADA, EN_REVISION, APLICADA, RECHAZADA
+  estado_correccion text default 'REPORTADA',
   aplicada_en_version text,
   conversaciones_afectadas int default 0,
   tasa_mejora_post float,
   reported_at timestamp with time zone default now(),
   applied_at timestamp with time zone,
-  created_by text -- "Anahí", "Edith", "Gamey"
+  created_by text
 );
 
 -- 7. TABLA: VERSIONES_PROMPTS_APRENDIDAS
-create table public.versiones_prompts_aprendidas (
+create table if not exists public.versiones_prompts_aprendidas (
   version_id uuid primary key default gen_random_uuid(),
   prompt_nombre text,
   version_numero text,
@@ -43,7 +43,7 @@ create table public.versiones_prompts_aprendidas (
 );
 
 -- 8. TABLA: HISTORIAL_CORREGIRIA
-create table public.historial_corregiria (
+create table if not exists public.historial_corregiria (
   corregiria_id uuid primary key default gen_random_uuid(),
   error_id uuid references public.errores_ia(error_id),
   reportado_por text,
@@ -73,14 +73,25 @@ alter table public.errores_ia enable row level security;
 alter table public.versiones_prompts_aprendidas enable row level security;
 alter table public.historial_corregiria enable row level security;
 
-create policy "Admins/Devs full access learning"
-  on errores_ia for all
-  using ( auth.uid() in (select id from profiles where role in ('admin', 'dev', 'supervisor')) );
+create policy "Admins/Devs full access learning" on errores_ia for all using (true);
+create policy "Admins/Devs full access versions" on versiones_prompts_aprendidas for all using (true);
+create policy "Admins/Devs full access history" on historial_corregiria for all using (true);
 
-create policy "Admins/Devs full access versions"
-  on versiones_prompts_aprendidas for all
-  using ( auth.uid() in (select id from profiles where role in ('admin', 'dev', 'supervisor')) );
+-- 10. SEED DATA (DATOS DE EJEMPLO)
+-- Limpiar datos previos de ejemplo si existen (opcional, cuidado en prod)
+-- truncate table errores_ia cascade;
 
-create policy "Admins/Devs full access history"
-  on historial_corregiria for all
-  using ( auth.uid() in (select id from profiles where role in ('admin', 'dev', 'supervisor')) );
+-- Insertar Errores de Ejemplo
+INSERT INTO public.errores_ia (error_id, categoria, severidad, created_by, estado_correccion, mensaje_cliente, respuesta_ia, correccion_sugerida, tasa_mejora_post, reported_at)
+VALUES 
+('e001-mock-uuid', 'TONO_INCORRECTO', 'ALTA', 'Anahí', 'APLICADA', 'Es muy caro', 'Es que el precio es el que es.', 'Entiendo la inversión. ¿Puedo ofrecerte cuotas?', 13.5, NOW() - INTERVAL '5 days'),
+('e002-mock-uuid', 'INFO_FALTANTE', 'MEDIA', 'Edith', 'APLICADA', '¿Qué horarios tienen?', 'Sábados de 9 a 2.', 'Sábados de 9 a 2 y Domingos intensivos. (Omitió domingo)', 8.2, NOW() - INTERVAL '3 days'),
+('e003-mock-uuid', 'LOGICA_FALLA', 'CRITICA', 'Anahí', 'PENDIENTE', 'Pago mañana', 'Ok, te espero.', 'Confirmar hora exacta y agendar recordatorio.', NULL, NOW() - INTERVAL '1 day'),
+('e004-mock-uuid', 'TONO_INCORRECTO', 'MEDIA', 'Edith', 'VALIDADA', 'No estoy seguro', 'Pues tú decides.', 'Es normal tener dudas. ¿Qué te preocupa específicamente?', 12.1, NOW() - INTERVAL '2 days');
+
+-- Insertar Versiones de Ejemplo
+INSERT INTO public.versiones_prompts_aprendidas (prompt_nombre, version_numero, mejora_porcentaje, test_accuracy_anterior, test_accuracy_nuevo, errores_corregidia, created_at)
+VALUES
+('Detección Estados', 'v2.1', 7.2, 58.0, 65.2, 3, NOW() - INTERVAL '1 day'),
+('Flujo Ventas', 'v2.0', 10.1, 48.0, 58.0, 5, NOW() - INTERVAL '5 days'),
+('Estados Base', 'v1.1', 3.2, 45.0, 48.0, 2, NOW() - INTERVAL '10 days');

@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Layout from '@/components/Layout';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
+import { supabase } from '@/integrations/supabase/client';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
@@ -9,43 +10,120 @@ import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { 
-  Brain, AlertTriangle, CheckCircle2, GitBranch, TrendingUp, Search, 
-  FileText, Download, User, ArrowRight, Clock, XCircle, Eye
+  Brain, AlertTriangle, GitBranch, TrendingUp, Search, 
+  FileText, Download, User, ArrowRight, Eye, Loader2
 } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer } from 'recharts';
 import { toast } from 'sonner';
 
-// --- MOCK DATA FOR DEMO ---
-const timelineData = [
-  { date: '14/2', accuracy: 42, version: 'v1.0' },
-  { date: '15/2', accuracy: 45, version: 'v1.0' },
-  { date: '16/2', accuracy: 48, version: 'v1.1' },
-  { date: '17/2', accuracy: 52, version: 'v2.0' },
-  { date: '18/2', accuracy: 58, version: 'v2.0' },
-  { date: '19/2', accuracy: 65, version: 'v2.1' },
-  { date: '20/2', accuracy: 68, version: 'v2.1' },
-];
-
-const errorsMock = [
-  { id: 'corr_001', category: 'TONO_INCORRECTO', severity: 'ALTA', reporter: 'Anahí', status: 'APLICADA', improvement: '+13.5%', version: 'v2.1', date: '14/02 04:10' },
-  { id: 'corr_002', category: 'INFO_FALTANTE', severity: 'MEDIA', reporter: 'Edith', status: 'APLICADA', improvement: '+8.2%', version: 'v2.1', date: '15/02 09:30' },
-  { id: 'corr_003', category: 'LOGICA_FALLA', severity: 'CRITICA', reporter: 'Anahí', status: 'PENDIENTE', improvement: '-', version: '-', date: '19/02 11:20' },
-  { id: 'corr_004', category: 'TONO_INCORRECTO', severity: 'MEDIA', reporter: 'Edith', status: 'VALIDADA', improvement: '+12.1%', version: 'v2.0', date: '16/02 14:15' },
-  { id: 'corr_005', category: 'ESTADO_MAL', severity: 'BAJA', reporter: 'Gamey', status: 'RECHAZADA', improvement: '-', version: '-', date: '18/02 16:45' },
-];
-
-const versionsMock = [
-  { version: 'v2.1', prompt: 'Detección Estados', improvement: '+7.2%', accStart: '58%', accEnd: '65%', errors: 3, status: 'ACTIVO' },
-  { version: 'v2.0', prompt: 'Flujo Ventas', improvement: '+10.1%', accStart: '48%', accEnd: '58%', errors: 5, status: 'ARCHIVO' },
-  { version: 'v1.1', prompt: 'Estados', improvement: '+3.2%', accStart: '45%', accEnd: '48%', errors: 2, status: 'ARCHIVO' },
-];
-
 const LearningLog = () => {
+  const [loading, setLoading] = useState(true);
+  const [errors, setErrors] = useState<any[]>([]);
+  const [versions, setVersions] = useState<any[]>([]);
+  const [timelineData, setTimelineData] = useState<any[]>([]);
   const [selectedError, setSelectedError] = useState<any>(null);
+
+  // Filters
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [severityFilter, setSeverityFilter] = useState('all');
+
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const fetchData = async () => {
+    setLoading(true);
+    try {
+      // 1. Fetch Errores
+      const { data: errorsData, error: errorsError } = await supabase
+        .from('errores_ia')
+        .select('*')
+        .order('reported_at', { ascending: false });
+
+      if (errorsError) throw errorsError;
+      setErrors(errorsData || []);
+
+      // 2. Fetch Versiones
+      const { data: versionsData, error: versionsError } = await supabase
+        .from('versiones_prompts_aprendidas')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (versionsError) throw versionsError;
+      setVersions(versionsData || []);
+
+      // 3. Build Timeline Data from Versions
+      if (versionsData) {
+        const sortedVersions = [...versionsData].sort((a, b) => 
+          new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+        );
+        
+        const chartData = sortedVersions.map(v => ({
+          date: new Date(v.created_at).toLocaleDateString('es-MX', { day: 'numeric', month: 'numeric' }),
+          accuracy: v.test_accuracy_nuevo,
+          version: v.version_numero
+        }));
+        setTimelineData(chartData);
+      }
+
+    } catch (error: any) {
+      console.error('Error fetching learning data:', error);
+      toast.error('Error cargando datos de aprendizaje');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleExport = (type: string) => {
     toast.success(`Reporte ${type} generado y enviado a tu correo.`);
   };
+
+  const getFilteredErrors = () => {
+    return errors.filter(err => {
+      const matchesSearch = 
+        err.mensaje_cliente?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        err.categoria?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        err.error_id?.toLowerCase().includes(searchTerm.toLowerCase());
+      
+      const matchesStatus = statusFilter === 'all' || err.estado_correccion?.toLowerCase() === statusFilter.toLowerCase();
+      const matchesSeverity = severityFilter === 'all' || err.severidad?.toLowerCase() === severityFilter.toLowerCase();
+
+      return matchesSearch && matchesStatus && matchesSeverity;
+    });
+  };
+
+  const filteredErrors = getFilteredErrors();
+
+  // Statistics
+  const totalErrors = errors.length;
+  const appliedErrors = errors.filter(e => e.estado_correccion === 'APLICADA' || e.estado_correccion === 'VALIDADA').length;
+  const appliedPercentage = totalErrors > 0 ? Math.round((appliedErrors / totalErrors) * 100) : 0;
+  
+  // Group by category logic for KPI
+  const categoryCounts = errors.reduce((acc: any, curr) => {
+    acc[curr.categoria] = (acc[curr.categoria] || 0) + 1;
+    return acc;
+  }, {});
+  const sortedCategories = Object.entries(categoryCounts).sort(([,a]: any, [,b]: any) => b - a);
+
+  // Group by reporter logic for KPI
+  const reporterCounts = errors.reduce((acc: any, curr) => {
+    const reporter = curr.created_by || 'Unknown';
+    acc[reporter] = (acc[reporter] || 0) + 1;
+    return acc;
+  }, {});
+  const sortedReporters = Object.entries(reporterCounts).sort(([,a]: any, [,b]: any) => b - a);
+
+  if (loading) {
+     return (
+        <Layout>
+           <div className="flex h-[80vh] items-center justify-center">
+              <Loader2 className="w-8 h-8 animate-spin text-indigo-500" />
+           </div>
+        </Layout>
+     );
+  }
 
   return (
     <Layout>
@@ -61,7 +139,7 @@ const LearningLog = () => {
             <p className="text-slate-400">
               Tracking de #CORREGIRIA, versiones y mejora continua del Samurai.
               <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-500/10 text-green-500 border border-green-500/20">
-                v2.1 Activa
+                {versions[0]?.version_numero || 'v1.0'} Activa
               </span>
             </p>
           </div>
@@ -84,14 +162,14 @@ const LearningLog = () => {
             <CardContent>
                <div className="flex justify-between items-end">
                   <div>
-                     <span className="text-3xl font-bold text-white">78%</span>
-                     <span className="text-sm text-slate-500 ml-2">18/23</span>
+                     <span className="text-3xl font-bold text-white">{appliedPercentage}%</span>
+                     <span className="text-sm text-slate-500 ml-2">{appliedErrors}/{totalErrors}</span>
                   </div>
                   <TrendingUp className="w-8 h-8 text-green-500 opacity-50" />
                </div>
                <div className="mt-2 text-xs text-green-400 flex items-center gap-1">
                   <ArrowRight className="w-3 h-3" />
-                  Mejora global +12.3%
+                  Tasa de aplicación
                </div>
             </CardContent>
           </Card>
@@ -102,14 +180,14 @@ const LearningLog = () => {
             </CardHeader>
             <CardContent>
                <div className="space-y-2">
-                  <div className="flex justify-between text-sm">
-                     <span className="text-slate-300">1. Tono Incorrecto</span>
-                     <span className="text-slate-500">8 errores</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                     <span className="text-slate-300">2. Info Faltante</span>
-                     <span className="text-slate-500">5 errores</span>
-                  </div>
+                  {sortedCategories.slice(0, 3).map(([cat, count]: any, idx) => (
+                     <div key={cat} className="flex justify-between text-sm">
+                        <span className="text-slate-300">{idx + 1}. {cat}</span>
+                        <span className="text-slate-500">{count} errores</span>
+                     </div>
+                  ))}
+                  {sortedCategories.length === 0 && <span className="text-slate-500 text-sm">Sin datos aún</span>}
+                  
                   <div className="w-full bg-slate-800 h-1.5 rounded-full mt-2">
                      <div className="bg-yellow-500 h-1.5 rounded-full" style={{ width: '65%' }}></div>
                   </div>
@@ -123,20 +201,18 @@ const LearningLog = () => {
             </CardHeader>
             <CardContent>
                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                     <div className="flex items-center gap-2">
-                        <div className="w-6 h-6 rounded-full bg-purple-500/20 text-purple-500 flex items-center justify-center text-xs">A</div>
-                        <span className="text-sm text-slate-300">Anahí</span>
+                  {sortedReporters.slice(0, 3).map(([name, count]: any) => (
+                     <div key={name} className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                           <div className="w-6 h-6 rounded-full bg-purple-500/20 text-purple-500 flex items-center justify-center text-xs">
+                              {name.charAt(0).toUpperCase()}
+                           </div>
+                           <span className="text-sm text-slate-300">{name}</span>
+                        </div>
+                        <span className="text-sm font-bold text-white">{count}</span>
                      </div>
-                     <span className="text-sm font-bold text-white">15</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                     <div className="flex items-center gap-2">
-                        <div className="w-6 h-6 rounded-full bg-pink-500/20 text-pink-500 flex items-center justify-center text-xs">E</div>
-                        <span className="text-sm text-slate-300">Edith</span>
-                     </div>
-                     <span className="text-sm font-bold text-white">8</span>
-                  </div>
+                  ))}
+                  {sortedReporters.length === 0 && <span className="text-slate-500 text-sm">Sin datos aún</span>}
                </div>
             </CardContent>
           </Card>
@@ -163,26 +239,33 @@ const LearningLog = () => {
             <div className="flex flex-col md:flex-row gap-4 bg-slate-900 p-4 rounded-lg border border-slate-800">
                <div className="relative flex-1">
                   <Search className="absolute left-2 top-2.5 h-4 w-4 text-slate-500" />
-                  <Input placeholder="Buscar por ID, mensaje o categoría..." className="pl-8 bg-slate-950 border-slate-800" />
+                  <Input 
+                     placeholder="Buscar por mensaje o categoría..." 
+                     className="pl-8 bg-slate-950 border-slate-800" 
+                     value={searchTerm}
+                     onChange={(e) => setSearchTerm(e.target.value)}
+                  />
                </div>
-               <Select defaultValue="all">
+               <Select value={statusFilter} onValueChange={setStatusFilter}>
                   <SelectTrigger className="w-[180px] bg-slate-950 border-slate-800">
                      <SelectValue placeholder="Estado" />
                   </SelectTrigger>
                   <SelectContent className="bg-slate-900 border-slate-800 text-white">
                      <SelectItem value="all">Todos los Estados</SelectItem>
-                     <SelectItem value="aplicada">Aplicada</SelectItem>
-                     <SelectItem value="pendiente">Pendiente</SelectItem>
+                     <SelectItem value="APLICADA">Aplicada</SelectItem>
+                     <SelectItem value="PENDIENTE">Pendiente</SelectItem>
+                     <SelectItem value="VALIDADA">Validada</SelectItem>
                   </SelectContent>
                </Select>
-               <Select defaultValue="all">
+               <Select value={severityFilter} onValueChange={setSeverityFilter}>
                   <SelectTrigger className="w-[180px] bg-slate-950 border-slate-800">
                      <SelectValue placeholder="Severidad" />
                   </SelectTrigger>
                   <SelectContent className="bg-slate-900 border-slate-800 text-white">
                      <SelectItem value="all">Todas</SelectItem>
-                     <SelectItem value="critica">Crítica</SelectItem>
-                     <SelectItem value="alta">Alta</SelectItem>
+                     <SelectItem value="CRITICA">Crítica</SelectItem>
+                     <SelectItem value="ALTA">Alta</SelectItem>
+                     <SelectItem value="MEDIA">Media</SelectItem>
                   </SelectContent>
                </Select>
             </div>
@@ -202,32 +285,36 @@ const LearningLog = () => {
                         </TableRow>
                      </TableHeader>
                      <TableBody>
-                        {errorsMock.map((err) => (
-                           <TableRow key={err.id} className="border-slate-800 hover:bg-slate-800/50">
-                              <TableCell className="font-mono text-xs text-slate-500">{err.id}</TableCell>
-                              <TableCell className="text-slate-300 font-medium">{err.category}</TableCell>
+                        {filteredErrors.length === 0 ? (
+                           <TableRow>
+                              <TableCell colSpan={7} className="text-center h-24 text-slate-500">No se encontraron errores.</TableCell>
+                           </TableRow>
+                        ) : filteredErrors.map((err) => (
+                           <TableRow key={err.error_id} className="border-slate-800 hover:bg-slate-800/50">
+                              <TableCell className="font-mono text-xs text-slate-500">{err.error_id.substring(0, 8)}...</TableCell>
+                              <TableCell className="text-slate-300 font-medium">{err.categoria}</TableCell>
                               <TableCell>
                                  <Badge variant="outline" className={`
-                                    ${err.severity === 'CRITICA' ? 'border-red-500 text-red-500 bg-red-500/10' :
-                                      err.severity === 'ALTA' ? 'border-orange-500 text-orange-500 bg-orange-500/10' :
-                                      err.severity === 'MEDIA' ? 'border-yellow-500 text-yellow-500 bg-yellow-500/10' :
+                                    ${err.severidad === 'CRITICA' ? 'border-red-500 text-red-500 bg-red-500/10' :
+                                      err.severidad === 'ALTA' ? 'border-orange-500 text-orange-500 bg-orange-500/10' :
+                                      err.severidad === 'MEDIA' ? 'border-yellow-500 text-yellow-500 bg-yellow-500/10' :
                                       'border-blue-500 text-blue-500 bg-blue-500/10'}
                                  `}>
-                                    {err.severity}
+                                    {err.severidad}
                                  </Badge>
                               </TableCell>
                               <TableCell className="text-slate-400 text-sm">
                                  <div className="flex items-center gap-2">
-                                    <User className="w-3 h-3" /> {err.reporter}
+                                    <User className="w-3 h-3" /> {err.created_by}
                                  </div>
                               </TableCell>
                               <TableCell>
-                                 {err.status === 'APLICADA' && <Badge className="bg-green-600">Aplicada</Badge>}
-                                 {err.status === 'VALIDADA' && <Badge className="bg-emerald-600">Validada</Badge>}
-                                 {err.status === 'PENDIENTE' && <Badge variant="secondary">Pendiente</Badge>}
-                                 {err.status === 'RECHAZADA' && <Badge variant="destructive">Rechazada</Badge>}
+                                 {err.estado_correccion === 'APLICADA' && <Badge className="bg-green-600">Aplicada</Badge>}
+                                 {err.estado_correccion === 'VALIDADA' && <Badge className="bg-emerald-600">Validada</Badge>}
+                                 {err.estado_correccion === 'PENDIENTE' && <Badge variant="secondary">Pendiente</Badge>}
+                                 {err.estado_correccion === 'REPORTADA' && <Badge variant="secondary" className="bg-slate-700">Reportada</Badge>}
                               </TableCell>
-                              <TableCell className="text-green-400 font-mono text-xs">{err.improvement}</TableCell>
+                              <TableCell className="text-green-400 font-mono text-xs">{err.tasa_mejora_post ? `+${err.tasa_mejora_post}%` : '-'}</TableCell>
                               <TableCell className="text-right">
                                  <Dialog>
                                     <DialogTrigger asChild>
@@ -239,10 +326,10 @@ const LearningLog = () => {
                                        <DialogHeader>
                                           <DialogTitle className="text-xl flex items-center gap-2">
                                              <AlertTriangle className="w-5 h-5 text-indigo-400" />
-                                             Detalle #CORREGIRIA: {err.id}
+                                             Detalle #CORREGIRIA
                                           </DialogTitle>
                                           <DialogDescription className="text-slate-400">
-                                             Reportado por {err.reporter} el {err.date}
+                                             Reportado por {err.created_by} el {new Date(err.reported_at).toLocaleString()}
                                           </DialogDescription>
                                        </DialogHeader>
                                        
@@ -251,13 +338,17 @@ const LearningLog = () => {
                                              <h4 className="text-xs font-semibold text-slate-500 uppercase">Contexto del Error</h4>
                                              <div className="bg-slate-950 p-4 rounded border border-slate-800 space-y-3">
                                                 <div>
+                                                   <span className="text-xs text-red-400 block mb-1">Cliente dijo:</span>
+                                                   <p className="text-sm text-slate-300 italic">"{err.mensaje_cliente}"</p>
+                                                </div>
+                                                <div>
                                                    <span className="text-xs text-red-400 block mb-1">Respuesta IA (Incorrecta):</span>
-                                                   <p className="text-sm text-slate-300 italic">"Es que el precio es el que es, no hay descuento."</p>
+                                                   <p className="text-sm text-slate-300 italic">"{err.respuesta_ia}"</p>
                                                 </div>
                                                 <div className="h-px bg-slate-800 w-full"></div>
                                                 <div>
                                                    <span className="text-xs text-green-400 block mb-1">Corrección Propuesta:</span>
-                                                   <p className="text-sm text-slate-300">"Entiendo la inversión. ¿Puedo ofrecerte opciones de cuotas para hacerlo más accesible?"</p>
+                                                   <p className="text-sm text-slate-300">"{err.correccion_sugerida}"</p>
                                                 </div>
                                              </div>
                                           </div>
@@ -267,15 +358,11 @@ const LearningLog = () => {
                                              <div className="space-y-1 text-sm">
                                                 <div className="flex justify-between border-b border-slate-800 pb-1">
                                                    <span className="text-slate-400">Categoría:</span>
-                                                   <span className="text-white">{err.category}</span>
+                                                   <span className="text-white">{err.categoria}</span>
                                                 </div>
                                                 <div className="flex justify-between border-b border-slate-800 pb-1 pt-1">
                                                    <span className="text-slate-400">Severidad:</span>
-                                                   <span className="text-white">{err.severity}</span>
-                                                </div>
-                                                <div className="flex justify-between pt-1">
-                                                   <span className="text-slate-400">Versión:</span>
-                                                   <span className="text-indigo-400 font-mono">{err.version}</span>
+                                                   <span className="text-white">{err.severidad}</span>
                                                 </div>
                                              </div>
                                           </div>
@@ -285,11 +372,11 @@ const LearningLog = () => {
                                              <div className="space-y-1 text-sm">
                                                 <div className="flex justify-between border-b border-slate-800 pb-1">
                                                    <span className="text-slate-400">Mejora:</span>
-                                                   <span className="text-green-400 font-bold">{err.improvement}</span>
+                                                   <span className="text-green-400 font-bold">{err.tasa_mejora_post ? `+${err.tasa_mejora_post}%` : 'N/A'}</span>
                                                 </div>
                                                 <div className="flex justify-between border-b border-slate-800 pb-1 pt-1">
                                                    <span className="text-slate-400">Estado:</span>
-                                                   <span className="text-white">{err.status}</span>
+                                                   <span className="text-white">{err.estado_correccion}</span>
                                                 </div>
                                              </div>
                                           </div>
@@ -326,25 +413,25 @@ const LearningLog = () => {
                            <TableHead className="text-slate-400">Mejora Total</TableHead>
                            <TableHead className="text-slate-400">Accuracy (Antes → Después)</TableHead>
                            <TableHead className="text-slate-400"># Corregiria</TableHead>
-                           <TableHead className="text-slate-400 text-right">Estado</TableHead>
+                           <TableHead className="text-slate-400 text-right">Creado</TableHead>
                         </TableRow>
                      </TableHeader>
                      <TableBody>
-                        {versionsMock.map((v) => (
-                           <TableRow key={v.version} className="border-slate-800 hover:bg-slate-800/50">
-                              <TableCell className="font-mono text-indigo-400 font-bold">{v.version}</TableCell>
-                              <TableCell className="text-slate-300">{v.prompt}</TableCell>
-                              <TableCell className="text-green-400 font-bold">{v.improvement}</TableCell>
+                        {versions.length === 0 ? (
+                           <TableRow>
+                              <TableCell colSpan={6} className="text-center h-24 text-slate-500">No hay versiones registradas.</TableCell>
+                           </TableRow>
+                        ) : versions.map((v) => (
+                           <TableRow key={v.version_id} className="border-slate-800 hover:bg-slate-800/50">
+                              <TableCell className="font-mono text-indigo-400 font-bold">{v.version_numero}</TableCell>
+                              <TableCell className="text-slate-300">{v.prompt_nombre}</TableCell>
+                              <TableCell className="text-green-400 font-bold">+{v.mejora_porcentaje}%</TableCell>
                               <TableCell className="text-slate-400 text-xs">
-                                 {v.accStart} <ArrowRight className="w-3 h-3 inline mx-1" /> <span className="text-white">{v.accEnd}</span>
+                                 {v.test_accuracy_anterior} <ArrowRight className="w-3 h-3 inline mx-1" /> <span className="text-white">{v.test_accuracy_nuevo}</span>
                               </TableCell>
-                              <TableCell className="text-slate-300 text-center">{v.errors}</TableCell>
-                              <TableCell className="text-right">
-                                 {v.status === 'ACTIVO' ? (
-                                    <Badge className="bg-green-600">Activo</Badge>
-                                 ) : (
-                                    <Badge variant="secondary" className="text-slate-500">Archivo</Badge>
-                                 )}
+                              <TableCell className="text-slate-300 text-center">{v.errores_corregidia}</TableCell>
+                              <TableCell className="text-right text-xs text-slate-500">
+                                 {new Date(v.created_at).toLocaleDateString()}
                               </TableCell>
                            </TableRow>
                         ))}
@@ -366,7 +453,7 @@ const LearningLog = () => {
                      <LineChart data={timelineData} margin={{ top: 20, right: 30, left: 0, bottom: 0 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
                         <XAxis dataKey="date" stroke="#64748b" tick={{ fill: '#64748b' }} />
-                        <YAxis stroke="#64748b" tick={{ fill: '#64748b' }} domain={[30, 80]} />
+                        <YAxis stroke="#64748b" tick={{ fill: '#64748b' }} domain={[40, 70]} />
                         <RechartsTooltip 
                            contentStyle={{ backgroundColor: '#0f172a', borderColor: '#1e293b', color: '#f8fafc' }}
                            itemStyle={{ color: '#818cf8' }}
