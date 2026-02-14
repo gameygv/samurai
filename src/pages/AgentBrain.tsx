@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
-import { Save, Bot, Sparkles, AlertTriangle, ScrollText, Code, Hammer, GitBranch, MapPin, PauseCircle, CreditCard, CalendarClock } from 'lucide-react';
+import { Save, Bot, Sparkles, AlertTriangle, ScrollText, Code, Hammer, GitBranch, MapPin, PauseCircle, CreditCard, CalendarClock, Database } from 'lucide-react';
 import { toast } from 'sonner';
 
 const DEFAULT_CORE_PROMPT = `# 🏯 IDENTIDAD: EL SAMURÁI DEL EQUIPO
@@ -125,6 +125,97 @@ Aplicación práctica:
 - Acepta limitaciones humanas ("Déjame consultarlo con Anahí")
 - Cede control gracefully a Anahí/Edith cuando es necesario
 - Aprende de las correcciones del equipo con gratitud`;
+
+const DEFAULT_DATA_INJECTION_PROMPT = `# CONTEXTO DINÁMICO - CÓMO SE INYECTA EN CADA MENSAJE
+
+## ANTES DE GENERAR RESPUESTA
+El sistema debe hacer queries automáticas a Supabase:
+
+QUERY 1: Perfil del Cliente
+SELECT
+nombre,
+telefono,
+ciudad,
+perfil_psicologico,
+estado_emocional_actual,
+intereses,
+fecha_ultima_interaccion,
+ultimos_4_digitos,
+status_promesa_pago
+FROM clientes
+WHERE kommo_lead_id = {{lead_id}}
+LIMIT 1;
+
+QUERY 2: Últimos Mensajes (Contexto Conversación)
+SELECT
+rol,
+mensaje,
+estado_emocional,
+timestamp
+FROM conversaciones
+WHERE cliente_id = {{cliente_id}}
+ORDER BY timestamp DESC
+LIMIT 15;
+
+QUERY 3: Errores Aplicables (Si cliente ha sido corregido)
+SELECT
+categoria_error,
+input_cliente,
+correccion_humana,
+aplicada
+FROM aprendizaje_errores
+WHERE cliente_id = {{cliente_id}}
+AND aplicada = TRUE
+ORDER BY fecha_correccion DESC
+LIMIT 5;
+
+QUERY 4: Promo Activa (Según perfil + región)
+SELECT
+concepto,
+detalle_promo,
+url_imagen,
+target_perfil
+FROM promos_activas
+WHERE vigencia_fin >= TODAY()
+AND (target_perfil = 'todos'
+OR target_perfil = {{perfil_psicologico}})
+ORDER BY RANDOM() LIMIT 1;
+
+## CONSTRUCCIÓN DEL CONTEXTO PARA PROMPT
+
+CONTEXTO_CLIENTE = {
+"nombre": {{cliente.nombre}},
+"ciudad": {{cliente.ciudad}},
+"perfil_psicologico": {{cliente.perfil_psicologico}},
+"estado_emocional": {{cliente.estado_emocional_actual}},
+"intereses": {{cliente.intereses}},
+"historia_conversacion": {{últimos_15_mensajes}},
+"errores_previos_corregidos": {{errores_aplicados}},
+"promo_disponible": {{promo_activa}},
+"dias_desde_primer_contacto": {{días_transcurridos}},
+"status_promesa_pago": {{cliente.status_promesa_pago}}
+}
+
+INJECT_IN_PROMPT: {{CONTEXTO_CLIENTE}}
+
+## INSERCIÓN EN PROMPT DINÁMICO
+
+PREFIX_DINÁMICO = """
+Cliente: {{cliente.nombre}} de {{cliente.ciudad}}
+Perfil: {{cliente.perfil_psicologico}} | Emoción detectada: {{cliente.estado_emocional}}
+Intereses: {{cliente.intereses.join(', ')}}
+Última interacción hace: {{dias}} días
+Status: {{cliente.status_promesa_pago}}
+
+Contexto conversación (últimos 5 mensajes):
+{{conversacion_resumida}}
+
+Errores anteriores corregidos (aplicar en respuesta):
+{{errores_aplicados_lista}}
+
+Promo activa para este cliente:
+{{promo_disponible}}
+"""`;
 
 const DEFAULT_ROUTING_PROMPT = `### PROTOCOLO 1: RUTEO REGIONAL
 Detecta ubicación → Asigna a agente correcto
@@ -282,6 +373,7 @@ const AgentBrain = () => {
   const [corePrompt, setCorePrompt] = useState(DEFAULT_CORE_PROMPT);
   const [technicalPrompt, setTechnicalPrompt] = useState(DEFAULT_TECHNICAL_PROMPT);
   const [behaviorPrompt, setBehaviorPrompt] = useState(DEFAULT_BEHAVIOR_PROMPT);
+  const [dataInjectionPrompt, setDataInjectionPrompt] = useState(DEFAULT_DATA_INJECTION_PROMPT);
   const [routingPrompt, setRoutingPrompt] = useState(DEFAULT_ROUTING_PROMPT);
   const [paymentPrompt, setPaymentPrompt] = useState(DEFAULT_PAYMENT_PROMPT);
   const [promisePrompt, setPromisePrompt] = useState(DEFAULT_PROMISE_PROMPT);
@@ -455,14 +547,35 @@ const AgentBrain = () => {
           <TabsContent value="context" className="mt-6 space-y-6 animate-in fade-in-50 duration-500">
              <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
                 <div className="xl:col-span-2 space-y-6">
-                   {/* 2.1 Ruteo */}
+                   {/* 2.1 Inyección de Datos */}
+                   <Card className="bg-slate-900 border-slate-800 shadow-xl">
+                    <CardHeader className="border-b border-slate-800 pb-4">
+                      <CardTitle className="text-white flex items-center gap-2 text-lg">
+                        <div className="w-8 h-8 rounded bg-cyan-500/10 flex items-center justify-center text-cyan-500">
+                          <Database className="w-5 h-5" />
+                        </div>
+                        2.1 Inyección de Datos del Cliente (Supabase)
+                      </CardTitle>
+                      <CardDescription>Definición de queries y estructura de contexto dinámico.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="pt-4">
+                      <Textarea 
+                        value={dataInjectionPrompt}
+                        onChange={(e) => setDataInjectionPrompt(e.target.value)}
+                        className="min-h-[400px] bg-slate-950/50 border-slate-800 font-mono text-sm text-slate-300 focus:border-cyan-500/50 focus:ring-cyan-500/20 resize-none p-4 leading-relaxed custom-scrollbar"
+                        placeholder="Define aquí las queries de inyección..."
+                      />
+                    </CardContent>
+                  </Card>
+
+                   {/* 2.2 Ruteo */}
                    <Card className="bg-slate-900 border-slate-800 shadow-xl">
                     <CardHeader className="border-b border-slate-800 pb-4">
                       <CardTitle className="text-white flex items-center gap-2 text-lg">
                         <div className="w-8 h-8 rounded bg-purple-500/10 flex items-center justify-center text-purple-500">
                           <MapPin className="w-5 h-5" />
                         </div>
-                        2.1 Protocolo de Ruteo Regional
+                        2.2 Protocolo de Ruteo Regional
                       </CardTitle>
                       <CardDescription>Lógica de asignación de leads a Anahí (Centro-Sur) o Edith (Bajío-Norte).</CardDescription>
                     </CardHeader>
@@ -476,14 +589,14 @@ const AgentBrain = () => {
                     </CardContent>
                   </Card>
 
-                   {/* 2.2 Validación de Pagos */}
+                   {/* 2.3 Validación de Pagos */}
                    <Card className="bg-slate-900 border-slate-800 shadow-xl">
                     <CardHeader className="border-b border-slate-800 pb-4">
                       <CardTitle className="text-white flex items-center gap-2 text-lg">
                         <div className="w-8 h-8 rounded bg-emerald-500/10 flex items-center justify-center text-emerald-500">
                           <CreditCard className="w-5 h-5" />
                         </div>
-                        2.2 Validación de Pagos (Visión)
+                        2.3 Validación de Pagos (Visión)
                       </CardTitle>
                       <CardDescription>Análisis automático de comprobantes bancarios mediante IA.</CardDescription>
                     </CardHeader>
@@ -497,14 +610,14 @@ const AgentBrain = () => {
                     </CardContent>
                   </Card>
 
-                  {/* 2.3 Seguimiento de Promesa */}
+                  {/* 2.4 Seguimiento de Promesa */}
                    <Card className="bg-slate-900 border-slate-800 shadow-xl">
                     <CardHeader className="border-b border-slate-800 pb-4">
                       <CardTitle className="text-white flex items-center gap-2 text-lg">
                         <div className="w-8 h-8 rounded bg-pink-500/10 flex items-center justify-center text-pink-500">
                           <CalendarClock className="w-5 h-5" />
                         </div>
-                        2.3 Protocolo de Seguimiento (Promesa de Pago)
+                        2.4 Protocolo de Seguimiento (Promesa de Pago)
                       </CardTitle>
                       <CardDescription>Automatización de recordatorios y re-engagement.</CardDescription>
                     </CardHeader>
@@ -520,30 +633,26 @@ const AgentBrain = () => {
                 </div>
 
                  <div className="space-y-6">
-                   <Card className="bg-slate-900/50 border-slate-800">
+                   <Card className="bg-slate-900/50 border-slate-800 sticky top-6">
                     <CardHeader>
                       <CardTitle className="text-sm text-slate-300">Variables de Contexto</CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-3">
                       <div className="p-3 rounded bg-slate-950 border border-slate-800 group hover:border-slate-700 transition-colors cursor-pointer">
-                        <code className="text-xs font-mono text-purple-400 block mb-1">{`{{lead_location}}`}</code>
-                        <p className="text-xs text-slate-500">Ubicación detectada por el bot o IP</p>
+                        <code className="text-xs font-mono text-cyan-400 block mb-1">{`{{cliente.nombre}}`}</code>
+                        <p className="text-xs text-slate-500">Nombre real del cliente desde CRM</p>
                       </div>
                       <div className="p-3 rounded bg-slate-950 border border-slate-800 group hover:border-slate-700 transition-colors cursor-pointer">
-                         <code className="text-xs font-mono text-purple-400 block mb-1">{`{{phone_area_code}}`}</code>
-                         <p className="text-xs text-slate-500">Código de área del teléfono (LADA)</p>
-                      </div>
-                       <div className="p-3 rounded bg-slate-950 border border-slate-800 group hover:border-slate-700 transition-colors cursor-pointer">
-                         <code className="text-xs font-mono text-emerald-400 block mb-1">{`{{payment_confidence}}`}</code>
-                         <p className="text-xs text-slate-500">Nivel de confianza de lectura (0-100%)</p>
+                         <code className="text-xs font-mono text-cyan-400 block mb-1">{`{{cliente.ciudad}}`}</code>
+                         <p className="text-xs text-slate-500">Ciudad de origen para ruteo</p>
                       </div>
                       <div className="p-3 rounded bg-slate-950 border border-slate-800 group hover:border-slate-700 transition-colors cursor-pointer">
-                         <code className="text-xs font-mono text-emerald-400 block mb-1">{`{{extracted_amount}}`}</code>
-                         <p className="text-xs text-slate-500">Monto extraído de la imagen</p>
+                         <code className="text-xs font-mono text-cyan-400 block mb-1">{`{{cliente.perfil}}`}</code>
+                         <p className="text-xs text-slate-500">Perfil psicológico (ej: explorador)</p>
                       </div>
                       <div className="p-3 rounded bg-slate-950 border border-slate-800 group hover:border-slate-700 transition-colors cursor-pointer">
-                         <code className="text-xs font-mono text-pink-400 block mb-1">{`{{fecha_promesa}}`}</code>
-                         <p className="text-xs text-slate-500">Fecha compromiso del cliente</p>
+                         <code className="text-xs font-mono text-cyan-400 block mb-1">{`{{promo_disponible}}`}</code>
+                         <p className="text-xs text-slate-500">Promoción activa para este usuario</p>
                       </div>
                     </CardContent>
                   </Card>
