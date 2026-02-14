@@ -6,7 +6,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { MessageSquare, Search, Loader2, Phone, Mail, MapPin } from 'lucide-react';
+import { MessageSquare, Search, Loader2, Phone, Mail, MapPin, Zap } from 'lucide-react';
+import { toast } from 'sonner';
 
 const Leads = () => {
   const [leads, setLeads] = useState<any[]>([]);
@@ -15,6 +16,31 @@ const Leads = () => {
 
   useEffect(() => {
     fetchLeads();
+
+    // Real-time subscription
+    const channel = supabase
+      .channel('schema-db-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'leads',
+        },
+        (payload) => {
+          if (payload.eventType === 'INSERT') {
+            setLeads((prev) => [payload.new, ...prev]);
+            toast.info('Nuevo lead detectado!');
+          } else if (payload.eventType === 'UPDATE') {
+            setLeads((prev) => prev.map((lead) => (lead.id === payload.new.id ? payload.new : lead)));
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const fetchLeads = async () => {
@@ -22,7 +48,7 @@ const Leads = () => {
     const { data, error } = await supabase
       .from('leads')
       .select('*')
-      .order('last_message', { ascending: false });
+      .order('last_message_at', { ascending: false });
 
     if (!error && data) {
       setLeads(data);
@@ -41,7 +67,12 @@ const Leads = () => {
       <div className="max-w-6xl mx-auto space-y-6">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-             <h1 className="text-3xl font-bold text-white mb-2">Leads & Conversaciones</h1>
+             <h1 className="text-3xl font-bold text-white mb-2 flex items-center gap-2">
+                Leads & Conversaciones
+                <Badge variant="outline" className="bg-green-500/10 text-green-500 border-green-500/20 text-[10px] animate-pulse">
+                   <Zap className="w-3 h-3 mr-1" /> LIVE
+                </Badge>
+             </h1>
              <p className="text-slate-400">Monitoreo en tiempo real de interacciones vía Kommo.</p>
           </div>
           <div className="relative w-full md:w-64">
@@ -90,10 +121,10 @@ const Leads = () => {
                   </TableRow>
                 ) : (
                   filteredLeads.map((lead) => (
-                    <TableRow key={lead.lead_id} className="border-slate-800 hover:bg-slate-800/50">
+                    <TableRow key={lead.id} className="border-slate-800 hover:bg-slate-800/50 transition-colors">
                       <TableCell>
                         <div className="flex flex-col">
-                           <span className="font-bold text-slate-200">{lead.nombre}</span>
+                           <span className="font-bold text-slate-200">{lead.nombre || 'Lead Sin Nombre'}</span>
                            <div className="flex items-center gap-1 text-xs text-slate-500 mt-1">
                               <MapPin className="w-3 h-3" /> {lead.ciudad || 'N/A'}
                            </div>
@@ -120,7 +151,7 @@ const Leads = () => {
                          {lead.confidence_score ? `${lead.confidence_score}%` : '-'}
                       </TableCell>
                       <TableCell className="text-slate-400 text-sm">
-                         {lead.dias_en_funnel} días
+                         {lead.funnel_stage || 'Inicial'} <span className="text-xs text-slate-600">({lead.dias_en_funnel}d)</span>
                       </TableCell>
                       <TableCell className="text-right">
                          <Button size="sm" variant="ghost" className="text-indigo-400 hover:text-indigo-300 hover:bg-indigo-900/20">

@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { 
   LayoutDashboard, Brain, Activity, Settings as SettingsIcon, Database, LogOut, 
   Users, FileText, UserCircle, Shield, GraduationCap, Zap, MessageSquare, 
-  GitBranch, Link as LinkIcon, BarChart3
+  GitBranch, Link as LinkIcon, BarChart3, Image, Sparkles
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/context/AuthContext';
@@ -44,21 +44,23 @@ const Layout = ({ children }: LayoutProps) => {
       title: "SAMURAI AI",
       items: [
         { icon: Brain, label: 'Cerebro (Core)', path: '/brain' },
-        { icon: GitBranch, label: 'Prompts & Versiones', path: '/brain?tab=part5' }, // Shortcut a tab
+        { icon: Sparkles, label: 'Geoffrey', path: '/geoffrey' },
+        { icon: GitBranch, label: 'Prompts & Versiones', path: '/brain?tab=part5' },
       ]
     },
     {
-      title: "BITÁCORA",
+      title: "RECURSOS",
       items: [
         { icon: GraduationCap, label: 'Aprendizaje IA', path: '/learning' },
         { icon: Database, label: 'Base Conocimiento', path: '/knowledge' },
+        { icon: Image, label: 'Media Manager', path: '/media' },
       ]
     },
     {
       title: "GESTIÓN",
       items: [
         { icon: Users, label: 'Usuarios', path: '/users' },
-        { icon: MessageSquare, label: 'Leads & Chats', path: '/leads' }, // Nueva página
+        { icon: MessageSquare, label: 'Leads & Chats', path: '/leads' },
         { icon: Activity, label: 'Actividad', path: '/activity' },
         { icon: FileText, label: 'Logs Sistema', path: '/logs' },
       ]
@@ -80,7 +82,7 @@ const Layout = ({ children }: LayoutProps) => {
           <div className="w-8 h-8 rounded-full bg-red-600 flex items-center justify-center text-white font-bold shadow-lg shadow-red-900/50">
             侍
           </div>
-          <span className="font-bold text-xl tracking-tight">SAMURAI v6.0</span>
+          <span className="font-bold text-xl tracking-tight">SAMURAI v8.0</span>
         </div>
 
         <ScrollArea className="flex-1 px-4">
@@ -124,7 +126,7 @@ const Layout = ({ children }: LayoutProps) => {
               <span className="text-xs text-slate-400 font-mono">SYSTEM: ONLINE</span>
            </div>
            <div className="text-[10px] text-slate-600 px-2 font-mono">
-              v6.0.0-beta
+              v8.0.0-rc
            </div>
         </div>
       </aside>

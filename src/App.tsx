@@ -16,6 +16,8 @@ import Logs from "./pages/Logs";
 import Profile from "./pages/Profile";
 import Settings from "./pages/Settings";
 import Leads from "./pages/Leads";
+import MediaManager from "./pages/MediaManager";
+import Geoffrey from "./pages/Geoffrey";
 import { Loader2 } from "lucide-react";
 
 const queryClient = new QueryClient();
@@ -53,8 +55,10 @@ const App = () => (
             {/* Protected Routes */}
             <Route path="/" element={<PrivateRoute><Index /></PrivateRoute>} />
             <Route path="/brain" element={<PrivateRoute><AgentBrain /></PrivateRoute>} />
+            <Route path="/geoffrey" element={<PrivateRoute><Geoffrey /></PrivateRoute>} />
             <Route path="/learning" element={<PrivateRoute><LearningLog /></PrivateRoute>} />
             <Route path="/knowledge" element={<PrivateRoute><KnowledgeBase /></PrivateRoute>} />
+            <Route path="/media" element={<PrivateRoute><MediaManager /></PrivateRoute>} />
             <Route path="/activity" element={<PrivateRoute><Activity /></PrivateRoute>} />
             <Route path="/users" element={<PrivateRoute><UsersPage /></PrivateRoute>} />
             <Route path="/logs" element={<PrivateRoute><Logs /></PrivateRoute>} />
