@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
-import { Save, Bot, Sparkles, AlertTriangle, ScrollText, Code, Hammer } from 'lucide-react';
+import { Save, Bot, Sparkles, AlertTriangle, ScrollText, Code, Hammer, GitBranch, MapPin } from 'lucide-react';
 import { toast } from 'sonner';
 
 const DEFAULT_CORE_PROMPT = `# 🏯 IDENTIDAD: EL SAMURÁI DEL EQUIPO
@@ -126,10 +126,35 @@ Aplicación práctica:
 - Cede control gracefully a Anahí/Edith cuando es necesario
 - Aprende de las correcciones del equipo con gratitud`;
 
+const DEFAULT_ROUTING_PROMPT = `### PROTOCOLO 1: RUTEO REGIONAL
+Detecta ubicación → Asigna a agente correcto
+
+IF cliente menciona:
+  CDMX, Coyoacán, Puebla, Estado de México, 
+  Guerrero, Oaxaca, Chiapas, Tabasco, Yucatán
+  → Asigna a ANAHÍ (Centro-Sur)
+
+IF cliente menciona:
+  Querétaro, Guanajuato, Bajío, Monterrey, 
+  Nuevo León, Coahuila, Chihuahua, Sonora, Baja California
+  → Asigna a EDITH (Bajío-Norte)
+
+IF código de área telefónico:
+  54, 55, 56, 58 (CDMX) → ANAHÍ
+  42, 43, 46, 81, 82 (Bajío-Norte) → EDITH
+  Otros → Random assignment
+
+ACCIÓN KOMMO:
+  - Update custom field: Region_Asignada
+  - Move lead to: "Nutrición IA" stage
+  - Tag: "region_{{region}}"
+  - Notify assigned agent`;
+
 const AgentBrain = () => {
   const [corePrompt, setCorePrompt] = useState(DEFAULT_CORE_PROMPT);
   const [technicalPrompt, setTechnicalPrompt] = useState(DEFAULT_TECHNICAL_PROMPT);
   const [behaviorPrompt, setBehaviorPrompt] = useState(DEFAULT_BEHAVIOR_PROMPT);
+  const [routingPrompt, setRoutingPrompt] = useState(DEFAULT_ROUTING_PROMPT);
 
   const handleSave = () => {
     // Aquí conectaremos con Supabase más adelante
@@ -296,14 +321,47 @@ const AgentBrain = () => {
             </div>
           </TabsContent>
 
-          <TabsContent value="context">
-            <div className="flex items-center justify-center h-96 border-2 border-dashed border-slate-800 rounded-lg text-slate-500 bg-slate-900/20">
-              <div className="text-center">
-                <Sparkles className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                <h3 className="text-lg font-medium text-slate-300">Parte 2: Contexto Dinámico</h3>
-                <p className="text-sm text-slate-500 mt-2">Esperando instrucciones...</p>
-              </div>
-            </div>
+          <TabsContent value="context" className="mt-6 space-y-6 animate-in fade-in-50 duration-500">
+             <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+                <div className="xl:col-span-2">
+                   <Card className="bg-slate-900 border-slate-800 shadow-xl">
+                    <CardHeader className="border-b border-slate-800 pb-4">
+                      <CardTitle className="text-white flex items-center gap-2 text-lg">
+                        <div className="w-8 h-8 rounded bg-purple-500/10 flex items-center justify-center text-purple-500">
+                          <MapPin className="w-5 h-5" />
+                        </div>
+                        2.1 Protocolo de Ruteo Regional
+                      </CardTitle>
+                      <CardDescription>Lógica de asignación de leads a Anahí (Centro-Sur) o Edith (Bajío-Norte).</CardDescription>
+                    </CardHeader>
+                    <CardContent className="pt-4">
+                      <Textarea 
+                        value={routingPrompt}
+                        onChange={(e) => setRoutingPrompt(e.target.value)}
+                        className="min-h-[400px] bg-slate-950/50 border-slate-800 font-mono text-sm text-slate-300 focus:border-purple-500/50 focus:ring-purple-500/20 resize-none p-4 leading-relaxed custom-scrollbar"
+                        placeholder="Define aquí la lógica de ruteo..."
+                      />
+                    </CardContent>
+                  </Card>
+                </div>
+                 <div className="space-y-6">
+                   <Card className="bg-slate-900/50 border-slate-800">
+                    <CardHeader>
+                      <CardTitle className="text-sm text-slate-300">Variables de Ruteo</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      <div className="p-3 rounded bg-slate-950 border border-slate-800 group hover:border-slate-700 transition-colors cursor-pointer">
+                        <code className="text-xs font-mono text-purple-400 block mb-1">{`{{lead_location}}`}</code>
+                        <p className="text-xs text-slate-500">Ubicación detectada por el bot o IP</p>
+                      </div>
+                      <div className="p-3 rounded bg-slate-950 border border-slate-800 group hover:border-slate-700 transition-colors cursor-pointer">
+                         <code className="text-xs font-mono text-purple-400 block mb-1">{`{{phone_area_code}}`}</code>
+                         <p className="text-xs text-slate-500">Código de área del teléfono (LADA)</p>
+                      </div>
+                    </CardContent>
+                  </Card>
+                 </div>
+             </div>
           </TabsContent>
           
           <TabsContent value="correction">
