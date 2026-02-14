@@ -1,7 +1,7 @@
 import React from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { 
-  LayoutDashboard, Brain, Activity, Settings, Database, LogOut, 
+  LayoutDashboard, Brain, Activity, Settings as SettingsIcon, Database, LogOut, 
   Users, FileText, UserCircle, Shield, GraduationCap
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -40,6 +40,7 @@ const Layout = ({ children }: LayoutProps) => {
   ];
 
   const adminItems = [
+    { icon: SettingsIcon, label: 'Ajustes', path: '/settings' },
     { icon: Users, label: 'Usuarios', path: '/users' },
     { icon: FileText, label: 'Logs Sistema', path: '/logs' },
   ];
@@ -148,6 +149,12 @@ const Layout = ({ children }: LayoutProps) => {
                   <UserCircle className="mr-2 h-4 w-4" />
                   <span>Mi Perfil</span>
                 </DropdownMenuItem>
+                {isAdmin && (
+                   <DropdownMenuItem className="focus:bg-slate-800 focus:text-white cursor-pointer" onClick={() => navigate('/settings')}>
+                    <SettingsIcon className="mr-2 h-4 w-4" />
+                    <span>Ajustes</span>
+                  </DropdownMenuItem>
+                )}
                 {isAdmin && (
                    <DropdownMenuItem className="focus:bg-slate-800 focus:text-white cursor-pointer" onClick={() => navigate('/logs')}>
                     <Shield className="mr-2 h-4 w-4" />

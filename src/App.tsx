@@ -14,6 +14,7 @@ import Login from "./pages/Login";
 import UsersPage from "./pages/Users";
 import Logs from "./pages/Logs";
 import Profile from "./pages/Profile";
+import Settings from "./pages/Settings";
 import { Loader2 } from "lucide-react";
 
 const queryClient = new QueryClient();
@@ -57,6 +58,7 @@ const App = () => (
             <Route path="/users" element={<PrivateRoute><UsersPage /></PrivateRoute>} />
             <Route path="/logs" element={<PrivateRoute><Logs /></PrivateRoute>} />
             <Route path="/profile" element={<PrivateRoute><Profile /></PrivateRoute>} />
+            <Route path="/settings" element={<PrivateRoute><Settings /></PrivateRoute>} />
             
             {/* Catch-all */}
             <Route path="*" element={<NotFound />} />
