@@ -803,13 +803,43 @@ LÍMITES:
                         <Textarea className="bg-slate-950 border-slate-800 text-slate-400 text-xs h-20" defaultValue="Si dice 'mañana pago': Registrar promesa. Schedule TIMER 1 (+24h), TIMER 2 (+48h)." />
                      </div>
                      <div className="grid grid-cols-2 gap-4">
-                        <div>
+                        <div className="col-span-2">
                            <Label className="text-xs text-orange-400 mb-1 block">Detección Perfiles</Label>
-                           <Textarea className="bg-slate-950 border-slate-800 text-slate-400 text-xs h-20" defaultValue="PRAGMÁTICO, EMOCIONAL, CURIOSO, FRUSTRADO." />
-                        </div>
-                        <div>
-                           <Label className="text-xs text-pink-400 mb-1 block">Recomendaciones</Label>
-                           <Textarea className="bg-slate-950 border-slate-800 text-slate-400 text-xs h-20" defaultValue="PRAGMÁTICO + 3 días = ofrecer 6 cuotas." />
+                           <Textarea 
+                              className="bg-slate-950 border-slate-800 text-slate-400 text-xs min-h-[400px]" 
+                              defaultValue={`DETECCIÓN DE ESTADOS EMOCIONALES (5 Estados Base):
+
+1️⃣ CURIOSO (Confidence > 80%)
+   Señales: "¿Cuéntame más?", no menciona precio.
+   Acción: AMPLIAR info + Presión suave.
+   Tag: "curioso"
+
+2️⃣ PRAGMÁTICO (Confidence > 85%)
+   Señales: Precio, cuotas, lógica.
+   Acción: SER CLARO + Urgencia leve.
+   Tag: "pragmatico"
+
+3️⃣ EMOCIONAL (Confidence > 85%)
+   Señales: Transformación, cambio, vida.
+   Acción: CONECTAR + Testimonios.
+   Tag: "emocional"
+
+4️⃣ FRUSTRADO (Confidence > 85%)
+   Señales: "Es muy caro", objeciones.
+   Acción: VALIDAR + Ofrecer cuotas (4 o 6).
+   Tag: "objecion_precio"
+
+5️⃣ ENOJADO (Confidence > 90%)
+   Señales: "Timo", agresividad.
+   Acción: NO vender + DISCULPA + ESCALAR + PAUSAR.
+   Tag: "ENOJADO", Priority "ALTA"
+
+TRIGGERS AUTOMÁTICOS:
+├─ IF FRUSTRADO → Ofrecer cuotas
+├─ IF EMOCIONAL + 5 días → Testimonios
+├─ IF PRAGMÁTICO + precio mencionado → Planes
+└─ IF ENOJADO → Escalar + Siesta`} 
+                           />
                         </div>
                      </div>
                   </CardContent>
