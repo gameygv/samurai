@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Label } from '@/components/ui/label';
 import { Loader2, ShieldCheck, AlertCircle, User } from 'lucide-react';
 import { toast } from 'sonner';
-import { logActivity } from '@/utils/logger';
+// import { logActivity } from '@/utils/logger'; // Comentado temporalmente para debug
 
 const Login = () => {
   const [username, setUsername] = useState('');
@@ -23,14 +23,24 @@ const Login = () => {
     const email = `${username.toLowerCase().trim()}@samurai.local`;
 
     try {
+      console.log("Intentando login con:", email);
+      
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
 
-      if (error) throw error;
+      if (error) {
+        console.error("Error devuelto por signInWithPassword:", error);
+        throw error;
+      }
 
       if (data.user) {
+        console.log("Login exitoso. Usuario:", data.user.id);
+        
+        // --- DEBUG: LOG DESACTIVADO TEMPORALMENTE ---
+        // El error "querying schema" suele venir de aquí si PostgREST falla.
+        /* 
         await logActivity({
           action: 'LOGIN',
           resource: 'AUTH',
@@ -38,25 +48,23 @@ const Login = () => {
           status: 'OK',
           metadata: { userId: data.user.id }
         });
+        */
         
         toast.success(`Bienvenido, ${username}`);
         navigate('/');
       }
     } catch (error: any) {
-      console.error(error);
+      console.error("Excepción capturada en Login:", error);
       let msg = error.message;
-      if (error.message.includes("Invalid login credentials")) {
+      if (error.message && error.message.includes("Invalid login credentials")) {
         msg = "Usuario o contraseña incorrectos";
       }
-      toast.error(msg);
+      // Si es error de esquema, mostrar mensaje más claro
+      if (error.message && error.message.includes("querying schema")) {
+        msg = "Error de conexión con la base de datos (PostgREST Schema). Intenta reiniciar el servicio.";
+      }
       
-      await logActivity({
-        action: 'ERROR',
-        resource: 'AUTH',
-        description: `Login fallido: ${username}`,
-        status: 'ERROR',
-        metadata: { error: error.message }
-      });
+      toast.error(msg);
     } finally {
       setLoading(false);
     }
