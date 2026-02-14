@@ -104,16 +104,6 @@ const Login = () => {
                 required
               />
             </div>
-            
-            <div className="text-xs text-slate-500 bg-slate-950/50 p-3 rounded border border-slate-800/50">
-              <span className="font-semibold text-slate-400">Usuarios Default:</span>
-              <div className="grid grid-cols-2 gap-2 mt-1">
-                <div>User: <span className="text-indigo-400 font-mono">gamey</span></div>
-                <div>Pass: <span className="text-slate-400 font-mono">Febrero26</span></div>
-                <div>User: <span className="text-indigo-400 font-mono">josue</span></div>
-                <div>Pass: <span className="text-slate-400 font-mono">Febrero26</span></div>
-              </div>
-            </div>
 
             <Button 
               type="submit" 
