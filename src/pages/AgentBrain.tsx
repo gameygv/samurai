@@ -416,10 +416,18 @@ Razon: {{razon_fallo}}
 Acción requerida: Contactar manualmente"`;
 
 // --- CONSTANTES PARTE 5 ---
-const DEFAULT_PENDING_LIST = `- [ ] Conectar API de Supabase real para inyección de contexto (2.1)
-- [ ] Implementar Webhook para detectar #CORREGIRIA en Kommo (3.1)
-- [ ] Configurar bucket de almacenamiento para imágenes de comprobantes (4.1)
-- [ ] Definir reglas de "Modo Siesta" exactas en el código (Backend)`;
+const DEFAULT_PENDING_LIST = `# 📋 ÍNDICE PARTE 5 v2.0
+
+SECCIÓN 1: NUEVA ESTRUCTURA (Josué como supervisor)
+SECCIÓN 2: TIMELINE DIARIO ACELERADO (15-22 Feb)
+SECCIÓN 3: PANEL SAMURAI - CONFIGURACIÓN COMPLETA
+  └─ 3.1 Estados Emocionales (CRUD)
+  └─ 3.2 API Keys & Webhooks (Configurable)
+  └─ 3.3 Frases Geoffrey (Dynamic)
+  └─ 3.4 Prompts (Versionado)
+  └─ 3.5 Promos & Ofertas (Editable)
+SECCIÓN 4: ESCENARIOS MAKE.COM (Ready to Test)
+SECCIÓN 5: REGISTRO MASTER (Tracking en tiempo real)`;
 
 const AgentBrain = () => {
   // State hooks for all prompts
@@ -479,7 +487,7 @@ const AgentBrain = () => {
                 <Eye className="w-4 h-4 mr-2" /> Parte 4: Visión
               </TabsTrigger>
               <TabsTrigger value="part5" className="data-[state=active]:bg-slate-800 data-[state=active]:text-white whitespace-nowrap">
-                <ClipboardList className="w-4 h-4 mr-2" /> Parte 5: Pendientes
+                <ClipboardList className="w-4 h-4 mr-2" /> Parte 5: Índice v2.0
               </TabsTrigger>
             </TabsList>
           </div>
