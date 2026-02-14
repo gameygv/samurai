@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
-import { Save, Bot, Sparkles, AlertTriangle, Eye, ClipboardList, Hammer, ScrollText, ShieldAlert, Database, History, MessageSquare, Gift, RefreshCw, Server, CheckCircle2, ScanEye, FileText, CheckCheck, ListTodo } from 'lucide-react';
+import { Save, Bot, Sparkles, AlertTriangle, Eye, ClipboardList, Hammer, ScrollText, ShieldAlert, Database, History, MessageSquare, Gift, RefreshCw, Server, CheckCircle2, ScanEye, FileText, CheckCheck, ListTodo, Zap } from 'lucide-react';
 import { toast } from 'sonner';
 
 // --- CONSTANTES PARTE 1 ---
@@ -335,6 +335,86 @@ ELSE
 ⚠️ VALIDACIÓN PARCIAL - Revisar manualmente
 confidence = SCORE * 100`;
 
+const DEFAULT_POST_VALIDATION_ACTION = `### 4.3 ACCIÓN POST-VALIDACIÓN
+
+SI VALIDACIÓN EXITOSA
+---------------------
+KOMMO:
+- Move lead to stage: "Inscrito / Cerrado"
+- Update custom field: Comprobante_Validado = TRUE
+- Update custom field: Pago_Confirmado_Por = "IA"
+- Update custom field: Fecha_Confirmacion = NOW()
+- Tag: "pago_verificado"
+- Create task: "Enviar bienvenida al curso"
+
+SUPABASE:
+- Insert en tabla: registro_pagos
+  {
+    cliente_id: UUID,
+    monto: {{monto}},
+    fecha_comprobante: {{fecha}},
+    confianza: {{confidence}},
+    validado_por: "ojo_halcon",
+    timestamp: NOW()
+  }
+
+MENSAJE IA A CLIENTE:
+"🎉 ¡Excelente! Hemos confirmado tu pago de \${{monto}}.
+
+Tu lugar está 100% asegurado para {{fecha_curso}} en {{ubicacion}}.
+
+El equipo te enviará:
+✅ Instrucciones de llegada
+✅ Horario del taller
+✅ Qué llevar
+
+¡Nos vemos pronto, {{nombre}}! Este es el inicio
+de tu transformación a través del sonido. 🎵"
+
+NOTIFICACIÓN ANAHÍ/EDITH:
+"✅ PAGO CONFIRMADO
+Cliente: {{nombre}}
+Monto: \${{monto}}
+Fecha: {{fecha_comprobante}}
+Confianza: {{confidence}}%
+
+Lead automáticamente movido a 'Inscrito'.
+Bienvenida enviada."
+
+SI VALIDACIÓN FALLA
+-------------------
+KOMMO:
+- Tag: "comprobante_rechazado"
+- Create task: "Revisar comprobante con cliente"
+- Assign to: Anahí/Edith
+
+SUPABASE:
+- Insert error en tabla: validacion_fallida
+  {
+    cliente_id: UUID,
+    razon_fallo: "Monto no coincide",
+    comprobante_analisis: {{json_ojo_halcon}},
+    timestamp: NOW()
+  }
+
+MENSAJE IA A CLIENTE:
+"Hola {{nombre}}, he revisado tu comprobante pero
+veo que no coincide exactamente con lo esperado:
+
+❌ {{razon_fallo}}
+
+¿Podrías verificar y enviar de nuevo?
+O bien, {{nombre_agente}} te ayudará directamente.
+
+Gracias por tu paciencia 🙏"
+
+NOTIFICACIÓN ANAHÍ/EDITH:
+"⚠️ COMPROBANTE RECHAZADO
+Cliente: {{nombre}}
+Razon: {{razon_fallo}}
+
+Acción requerida: Contactar manualmente"`;
+
 // --- CONSTANTES PARTE 5 ---
 const DEFAULT_PENDING_LIST = `- [ ] Conectar API de Supabase real para inyección de contexto (2.1)
 - [ ] Implementar Webhook para detectar #CORREGIRIA en Kommo (3.1)
@@ -359,8 +439,8 @@ const AgentBrain = () => {
   const [validationImprovement, setValidationImprovement] = useState(DEFAULT_VALIDATION_IMPROVEMENT);
 
   const [visionAnalysis, setVisionAnalysis] = useState(DEFAULT_VISION_ANALYSIS);
-  // Removed intermediate extraction state as it is now integrated into 4.1 Output / 4.2 Validation Logic
   const [matchValidation, setMatchValidation] = useState(DEFAULT_MATCH_VALIDATION);
+  const [postValidationAction, setPostValidationAction] = useState(DEFAULT_POST_VALIDATION_ACTION);
 
   const [pendingList, setPendingList] = useState(DEFAULT_PENDING_LIST);
 
@@ -441,6 +521,7 @@ const AgentBrain = () => {
                  <PromptCard title="4.1 Análisis de Comprobantes" icon={ScanEye} color="text-sky-500" bg="bg-sky-500/10" value={visionAnalysis} onChange={setVisionAnalysis} height="h-[200px]" />
               </div>
               <PromptCard title="4.2 Validación de Match (Lógica)" icon={CheckCheck} color="text-lime-500" bg="bg-lime-500/10" value={matchValidation} onChange={setMatchValidation} />
+              <PromptCard title="4.3 Acción Post-Validación" icon={Zap} color="text-yellow-500" bg="bg-yellow-500/10" value={postValidationAction} onChange={setPostValidationAction} />
             </div>
           </TabsContent>
 
