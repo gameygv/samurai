@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
-import { Save, Bot, Sparkles, AlertTriangle, ScrollText } from 'lucide-react';
+import { Save, Bot, Sparkles, AlertTriangle, ScrollText, Code, Hammer } from 'lucide-react';
 import { toast } from 'sonner';
 
 const DEFAULT_CORE_PROMPT = `# 🏯 IDENTIDAD: EL SAMURÁI DEL EQUIPO
@@ -40,6 +40,56 @@ Tu conocimiento viene de:
 ✅ "El equipo y yo hemos visto esto cientos de veces"
 ✅ "Según la investigación que Geoffrey compartió..."
 ✅ Tono cálido, humble, con autoridad tranquila`;
+
+const DEFAULT_TECHNICAL_PROMPT = `### FÓRMULA UNIVERSAL (Aplica a TODO mensaje)
+
+┌─────────────────────────────────────────┐
+│ 1. EL SALUDO (Tono calibrado)           │
+│    - Cálido, genuino                    │
+│    - Si es primera vez: "Es un gusto    │
+│      saludarte, soy el Samurái..."      │
+│    - Si es retorno: "¡Qué alegría       │
+│      volverte a ver!"                   │
+│                                         │
+│ 2. VALIDACIÓN (Antes de resolver)       │
+│    - Refleja lo que el cliente expresó  │
+│    - "Entiendo que te interesa Nivel 1" │
+│    - "Veo que tienes dudas sobre..."    │
+│                                         │
+│ 3. INFORMACIÓN (Con autoridad)          │
+│    - Datos precisos                     │
+│    - Menciona a Geoffrey, maestros      │
+│    - Cita metodología "The Elephant"    │
+│                                         │
+│ 4. RECOMENDACIÓN (Personal)             │
+│    - "Basado en lo que me compartiste"  │
+│    - "Para alguien como tú, recomendaría│
+│                                         │
+│ 5. CIERRE CON GANCHO (Pregunta abierta) │
+│    - Nunca dejes una pregunta al aire   │
+│    - Termina siempre con CTA suave      │
+│    - "¿Te gustaría que...?"             │
+│    - "¿Prefieres que...?"               │
+└─────────────────────────────────────────┘
+
+### EJEMPLOS APLICADOS
+
+**Escenario 1: Cliente pregunta precio**
+1. Saludo: "Excelente, déjame darte esa información"
+2. Validación: "Quiero asegurarme de ofrecerte la opción que se ajuste mejor a ti"
+3. Info: "Nivel 1 es $4,500 e incluye: 24 horas de inmersión, hospedaje en Amatlán, 
+   comida, formación basada en investigación de 12 años de Geoffrey..."
+4. Recomendación: "Muchos clientes aprovechan el plan de 4 cuotas sin interés"
+5. Cierre: "¿Te gustaría que te aparte un lugar o prefieres que te explique el plan 
+   de cuotas?"
+
+**Escenario 2: Cliente está enojado**
+1. Saludo: "Veo que algo no está bien"
+2. Validación: "Tienes razón, y lo lamento mucho. Déjame ayudarte"
+3. Info: [Reconoce el problema específicamente]
+4. Recomendación: "Creo que lo mejor es que hables con [Anahí/Edith] directamente. 
+   Ella puede resolver esto mejor"
+5. Cierre: "Te la paso ahora, ¿está bien?"`;
 
 const DEFAULT_BEHAVIOR_PROMPT = `### SABIDURÍA CALMA
 Hablas con la seguridad de quien conoce la frecuencia del universo, pero con la 
@@ -78,6 +128,7 @@ Aplicación práctica:
 
 const AgentBrain = () => {
   const [corePrompt, setCorePrompt] = useState(DEFAULT_CORE_PROMPT);
+  const [technicalPrompt, setTechnicalPrompt] = useState(DEFAULT_TECHNICAL_PROMPT);
   const [behaviorPrompt, setBehaviorPrompt] = useState(DEFAULT_BEHAVIOR_PROMPT);
 
   const handleSave = () => {
@@ -87,7 +138,7 @@ const AgentBrain = () => {
 
   return (
     <Layout>
-      <div className="max-w-6xl mx-auto space-y-8">
+      <div className="max-w-6xl mx-auto space-y-8 pb-12">
         
         <div className="flex items-center justify-between">
           <div>
@@ -136,6 +187,27 @@ const AgentBrain = () => {
                       onChange={(e) => setCorePrompt(e.target.value)}
                       className="min-h-[400px] bg-slate-950/50 border-slate-800 font-mono text-sm text-slate-300 focus:border-red-500/50 focus:ring-red-500/20 resize-none p-4 leading-relaxed custom-scrollbar"
                       placeholder="Define aquí la identidad base..."
+                    />
+                  </CardContent>
+                </Card>
+
+                 {/* 1.2 Instrucciones Técnicas */}
+                 <Card className="bg-slate-900 border-slate-800 shadow-xl">
+                  <CardHeader className="border-b border-slate-800 pb-4">
+                    <CardTitle className="text-white flex items-center gap-2 text-lg">
+                      <div className="w-8 h-8 rounded bg-orange-500/10 flex items-center justify-center text-orange-500">
+                        <Hammer className="w-5 h-5" />
+                      </div>
+                      1.2 Instrucciones Técnicas (Fórmula Universal)
+                    </CardTitle>
+                    <CardDescription>Estructura obligatoria de respuesta y ejemplos aplicados.</CardDescription>
+                  </CardHeader>
+                  <CardContent className="pt-4">
+                    <Textarea 
+                      value={technicalPrompt}
+                      onChange={(e) => setTechnicalPrompt(e.target.value)}
+                      className="min-h-[400px] bg-slate-950/50 border-slate-800 font-mono text-sm text-slate-300 focus:border-orange-500/50 focus:ring-orange-500/20 resize-none p-4 leading-relaxed custom-scrollbar"
+                      placeholder="Define aquí la fórmula de respuesta..."
                     />
                   </CardContent>
                 </Card>
@@ -193,6 +265,31 @@ const AgentBrain = () => {
                       <div className="h-full bg-green-500 w-full rounded-full"></div>
                     </div>
                   </div>
+                </Card>
+
+                <Card className="bg-slate-900/50 border-slate-800 sticky top-[400px]">
+                  <CardHeader>
+                    <CardTitle className="text-sm text-slate-300">Vista Previa Estructural</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                     <div className="text-xs text-slate-500 italic">
+                        El sistema concatenará los prompts en este orden:
+                     </div>
+                     <div className="space-y-2">
+                        <div className="p-2 bg-slate-800/50 rounded border border-slate-700 text-xs text-slate-300 flex items-center gap-2">
+                            <span className="w-4 h-4 rounded-full bg-red-500/20 text-red-500 flex items-center justify-center text-[8px]">1</span>
+                            1.1 ADN Core
+                        </div>
+                        <div className="p-2 bg-slate-800/50 rounded border border-slate-700 text-xs text-slate-300 flex items-center gap-2">
+                            <span className="w-4 h-4 rounded-full bg-orange-500/20 text-orange-500 flex items-center justify-center text-[8px]">2</span>
+                            1.2 Instrucciones Técnicas
+                        </div>
+                        <div className="p-2 bg-slate-800/50 rounded border border-slate-700 text-xs text-slate-300 flex items-center gap-2">
+                            <span className="w-4 h-4 rounded-full bg-blue-500/20 text-blue-500 flex items-center justify-center text-[8px]">3</span>
+                            1.3 Protocolos
+                        </div>
+                     </div>
+                  </CardContent>
                 </Card>
               </div>
 
