@@ -2,7 +2,7 @@ import React from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { 
   LayoutDashboard, Brain, Activity, Settings, Database, LogOut, 
-  Users, FileText, UserCircle, Shield
+  Users, FileText, UserCircle, Shield, GraduationCap
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/context/AuthContext';
@@ -34,6 +34,7 @@ const Layout = ({ children }: LayoutProps) => {
   const menuItems = [
     { icon: LayoutDashboard, label: 'Dashboard', path: '/' },
     { icon: Brain, label: 'Cerebro (Prompts)', path: '/brain' },
+    { icon: GraduationCap, label: 'Aprendizaje IA', path: '/learning' },
     { icon: Database, label: 'Base de Conocimiento', path: '/knowledge' },
     { icon: Activity, label: 'Actividad', path: '/activity' },
   ];
@@ -51,7 +52,7 @@ const Layout = ({ children }: LayoutProps) => {
           <div className="w-8 h-8 rounded-full bg-red-600 flex items-center justify-center text-white font-bold shadow-lg shadow-red-900/50">
             侍
           </div>
-          <span className="font-bold text-xl tracking-tight">SAMURAI v5.1</span>
+          <span className="font-bold text-xl tracking-tight">SAMURAI v5.2</span>
         </div>
 
         <nav className="flex-1 px-4 space-y-2 mt-4">
