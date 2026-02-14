@@ -795,12 +795,161 @@ LÍMITES:
                   </CardHeader>
                   <CardContent className="space-y-4">
                      <div>
-                        <Label className="text-xs text-indigo-400 mb-1 block">Protocolo Siesta (Pausa)</Label>
-                        <Textarea className="bg-slate-950 border-slate-800 text-slate-400 text-xs h-20" defaultValue="Cuando cliente está ENOJADO + confidence > 90%, pausar 10 min. Ceder control a humano." />
+                        <Label className="text-xs text-indigo-400 mb-1 block">Protocolo Siesta & Cliente Enojado</Label>
+                        <Textarea 
+                           className="bg-slate-950 border-slate-800 text-slate-400 text-xs min-h-[250px]" 
+                           defaultValue={`PROTOCOLO 1: SIESTA (Pausar IA)
+
+CUÁNDO ACTIVAR:
+├─ Cliente está ENOJADO + confidence > 90%
+├─ Cliente dice "No me contestan" / "Esto es fraude"
+├─ Cliente solicita escalación
+└─ IA detecta crítica genuina
+
+CÓMO FUNCIONA:
+├─ Duración: 10 minutos automáticos
+├─ Mensaje IA: "Entiendo tu frustración, paso con Anahí ahora mismo"
+├─ Anahí/Edith: Toman control
+├─ IA: Monitorea en background (no responde)
+├─ Después 10 min: IA reactivada (si Anahí no escribe)
+
+ACCIONES DURANTE SIESTA:
+├─ Kommo: Tag "ENOJADO", Priority "ALTA"
+├─ Alert roja → Anahí/Edith (WhatsApp + Slack)
+├─ Supabase: Log crítica + timestamp
+├─ Sistema: Pausa prompts automáticos
+└─ Meta: Resolver con humano
+
+POST-SIESTA:
+├─ IF Anahí resolvió: Fin, cliente satisfecho
+├─ IF Cliente sigue enojado: Seguir pausa
+├─ IF Cliente calmado: IA reactivada con tono suave
+└─ Supabase: Log resolución + tiempo
+
+---
+
+PROTOCOLO 3: CLIENTE ENOJADO (Descalada)
+
+TRIGGER: Cliente menciona "timo", "engaño", "no contestan", tono agresivo
+
+PASO 1: DETECCIÓN
+├─ Confidence > 90% = ENOJADO
+├─ Estado anterior: Irrelevante
+└─ Acción urgente: Pausar venta
+
+PASO 2: RESPUESTA IA
+├─ Tono: Empático, humilde, sincero
+├─ Mensaje: "{{nombre}}, tienes razón en estar molesto. Me disculpo sinceramente."
+├─ Validación: "Tu frustración es válida y la entiendo"
+├─ Acción: "Voy a pasarte con Anahí ahora mismo para resolver esto"
+└─ NO: Seguir vendiendo, negar problema, ser defensivo
+
+PASO 3: ESCALACIÓN
+├─ Kommo: Tag "ENOJADO", Priority "ALTA"
+├─ Alert rojo → Anahí/Edith (inmediato)
+├─ Modo Siesta activado (+10 min)
+├─ IA: Deja de responder
+└─ Humano: Toma control completamente
+
+PASO 4: ANAHÍ/EDITH INTERVIENEN
+├─ Leer contexto Kommo
+├─ Responder sincero: "{{nombre}}, soy Anahí. Leí todo y tienes razón..."
+├─ Resolver: Escuchar, validar, ofrecer solución
+├─ Follow-up: "¿Esto te parece justo?"
+└─ Kommo: Log resolución
+
+PASO 5: REACTIVACIÓN IA
+├─ Después 10 min: IA se reactiva
+├─ IF Anahí sigue escribiendo: IA espera
+├─ IF Anahí paró: IA retoma tono suave
+├─ Mensaje: "Gracias por permitirme ayudarte mejor..."
+└─ Nuevo flujo: Empezar desde estado actual`} 
+                        />
                      </div>
                      <div>
-                        <Label className="text-xs text-emerald-400 mb-1 block">Protocolo Promesa Pago</Label>
-                        <Textarea className="bg-slate-950 border-slate-800 text-slate-400 text-xs h-20" defaultValue="Si dice 'mañana pago': Registrar promesa. Schedule TIMER 1 (+24h), TIMER 2 (+48h)." />
+                        <Label className="text-xs text-emerald-400 mb-1 block">Protocolo Promesa de Pago</Label>
+                        <Textarea 
+                           className="bg-slate-950 border-slate-800 text-slate-400 text-xs min-h-[250px]" 
+                           defaultValue={`PROTOCOLO 2: PROMESA DE PAGO (Timers Automáticos)
+
+CUÁNDO ACTIVAR:
+├─ Cliente dice: "Mañana te pago", "Próxima semana pago", etc
+├─ IA debe: Confirmar fecha + horario exacto
+└─ Kommo: Status "Promesa_Pago"
+
+TIMER 1: +24 horas
+├─ Acción: Enviar promo + urgencia
+├─ Mensaje: "Hola {{nombre}}, confirmamos para hoy. Descuento especial: 15% si confirmas en 2h"
+├─ Kommo: Update status
+├─ IF Cliente responde positivo:
+│  └─ Schedule TIMER 2 (+48h)
+├─ IF Cliente responde negativo o no responde:
+│  └─ Schedule TIMER 2 (+48h) con pregunta
+└─ Supabase: Log TIMER 1 resultado
+
+TIMER 2: +48 horas
+├─ Acción: Enviar beneficios + validación
+├─ Mensaje: "¿Viste los beneficios que acompañan? Hospedaje, certificado, community..."
+├─ IF Cliente responde: Continuar venta suave
+├─ IF Cliente no responde: Schedule TIMER 3
+└─ Supabase: Log TIMER 2 resultado
+
+TIMER 3: +72 horas
+├─ Acción: Último empujón
+├─ Mensaje: "{{nombre}}, solo quedan 2 lugares para este grupo. ¿Aseguras el tuyo?"
+├─ IF Cliente confirma: CIERRE
+├─ IF Cliente dice No: Pausa 7 días + manual flag
+└─ Supabase: Log final + conversión o pausa
+
+PAUSA AUTOMÁTICA (Si no paga después TIMER 3):
+├─ Tag: "Sin_Respuesta_Promesa"
+├─ Status: "En_Pausa_7_Dias"
+├─ Manual flag → Anahí/Edith revisan
+├─ Siguiente acción: +7 días si no se resolvió
+└─ Supabase: Log pausa + razón`} 
+                        />
+                     </div>
+                     <div>
+                        <Label className="text-xs text-purple-400 mb-1 block">Protocolo Ojo de Halcón (Validación)</Label>
+                        <Textarea 
+                           className="bg-slate-950 border-slate-800 text-slate-400 text-xs min-h-[250px]" 
+                           defaultValue={`PROTOCOLO 4: OJO DE HALCÓN (Validación Pago)
+
+CUÁNDO ACTIVAR:
+├─ Cliente envía screenshot transferencia SPEI
+├─ Cliente envía comprobante pago
+└─ IA debe: Validar monto + fecha + datos
+
+PROCESO:
+1. Gemini Vision analiza imagen:
+   ├─ Tipo: SPEI / Transferencia / Otro
+   ├─ Monto: ¿$4,500?
+   ├─ Últimos 4 dígitos: Capturar
+   ├─ Fecha: ¿Hoy?
+   ├─ Confianza: % (must be > 90%)
+   └─ Output: JSON estructurado
+
+2. Make.com valida:
+   ├─ Monto: $4,500 == $4,500 ✅
+   ├─ Dígitos: Match con cuenta ✅
+   ├─ Fecha: Dentro rango ✅
+   ├─ Score: (matches / total) * 100%
+   └─ Decision: VALIDADA o PENDIENTE
+
+3. Kommo Update:
+   ├─ IF VALIDADA:
+   │  ├─ Move → Inscrito
+   │  ├─ Tag: "pago_verificado"
+   │  └─ Mensaje: "🎉 ¡Bienvenido! Tu pago está confirmado..."
+   └─ IF PENDIENTE:
+      ├─ Tag: "pago_pendiente_revision"
+      └─ Manual flag → Anahí revisa
+
+4. Supabase Log:
+   ├─ registro_pagos insert
+   ├─ Timestamp, monto, confianza, método
+   └─ validado_por: "ojo_haicon"`} 
+                        />
                      </div>
                      <div className="grid grid-cols-2 gap-4">
                         <div className="col-span-2">
