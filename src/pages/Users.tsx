@@ -105,7 +105,7 @@ const UsersPage = () => {
                         value={newUserEmail} 
                         onChange={e => setNewUserEmail(e.target.value)} 
                         className="bg-slate-950 border-slate-800" 
-                        placeholder="usuario@dyad.local"
+                        placeholder="usuario@samurai.local"
                      />
                   </div>
                   <div className="space-y-2">

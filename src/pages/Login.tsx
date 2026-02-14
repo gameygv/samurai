@@ -61,7 +61,7 @@ const Login = () => {
           <div className="mx-auto w-12 h-12 rounded-full bg-red-600 flex items-center justify-center mb-2 shadow-lg shadow-red-900/50">
             <span className="text-white font-bold text-2xl">侍</span>
           </div>
-          <CardTitle className="text-2xl font-bold text-white">DYAD PANEL v5.1</CardTitle>
+          <CardTitle className="text-2xl font-bold text-white">SAMURAI PANEL v5.1</CardTitle>
           <CardDescription className="text-slate-400">
             Sistema de Inteligencia Avanzada
           </CardDescription>
@@ -73,7 +73,7 @@ const Login = () => {
               <Input
                 id="email"
                 type="email"
-                placeholder="usuario@dyad.local"
+                placeholder="usuario@samurai.local"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="bg-slate-950 border-slate-800 text-white placeholder:text-slate-600 focus:border-red-600/50 transition-colors"

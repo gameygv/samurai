@@ -110,7 +110,7 @@ const Index = () => {
             <span>TERMINAL DE SISTEMA</span>
           </div>
           <div className="p-4 space-y-1 overflow-y-auto flex-1">
-            <p><span className="text-slate-600">[INFO]</span> Inicializando interfaz gráfica Samurai v1.0...</p>
+            <p><span className="text-slate-600">[INFO]</span> Inicializando interfaz gráfica Samurai v5.1...</p>
             <p><span className="text-green-500">[OK]</span> Conexión a Supabase verificada.</p>
             <p><span className="text-blue-500">[UPDATE]</span> Nuevo módulo cargado: /brain (Gestión de Prompts)</p>
             <p><span className="text-yellow-500">[INPUT]</span> Recibido Prompt 1.1: ADN Core del Samurai.</p>
