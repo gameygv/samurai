@@ -1129,6 +1129,77 @@ MÉTRICAS TRACKING:
 └─ Conversión: Lead → Inscrito`} 
                            />
                         </div>
+                        <div className="col-span-2">
+                           <Label className="text-xs text-blue-400 mb-1 block">Protocolo Aprendizaje (#CORREGIRIA) & Resumen Global</Label>
+                           <Textarea 
+                              className="bg-slate-950 border-slate-800 text-slate-400 text-xs min-h-[400px]" 
+                              defaultValue={`PROTOCOLO 5: #CORREGIRIA (IA Aprende)
+
+CUÁNDO ANAHÍ/EDITH REPORTA ERROR:
+├─ "IA no preguntó X importante"
+├─ "IA fue muy agresivo"
+├─ "IA no entendió objeción"
+└─ Formato: "#CORREGIRIA - Descripción error"
+
+CÓMO SE CAPTURA:
+1. Anahí/Edith escribe en Kommo: "#CORREGIRIA - Ejemplo"
+2. Webhook → Make.com detecta
+3. Abre formulario automático:
+   ├─ Describe error
+   ├─ Categoría: [INFO_FALTANTE, TONO_INCORRECTO, LOGICA_FALLA, etc]
+   ├─ Corrección: [Lo que debería haber hecho]
+   └─ Submit
+
+4. Make.com guarda:
+   ├─ Google Sheet: aprendizaje_errores
+   ├─ Supabase: tabla errores_ia
+   ├─ Metadata: Usuario, fecha, categoría
+   └─ Status: aplicada = FALSE
+
+CÓMO IA APRENDE:
+1. Próxima respuesta: Query últimos errores (7 días)
+2. Construir CORRECTION_CONTEXT
+3. PREPEND a system prompt
+4. Gemini genera respuesta considerando corrección
+5. Post-check: ¿Se evitó el error?
+6. IF sí: Mark aplicada = TRUE
+7. IF no: Flag para revisión manual
+8. Supabase: Log resultado
+
+EJEMPLO:
+├─ Error: "Cliente preguntó sobre alergias, IA no preguntó"
+├─ Categoría: INFO_FALTANTE
+├─ Corrección: "Siempre preguntar: ¿Tienes alergias a sonidos?"
+├─ Next prompt context: Incluye esta pregunta
+├─ Result: IA pregunta en próxima conversación
+└─ Supabase: Log "aplicada = TRUE"
+
+---
+
+RESUMEN ACCIONES POR ESTADO:
+
+CURIOSO → Ampliar + Presión suave
+PRAGMÁTICO → Números claros + Urgencia media
+EMOCIONAL → Testimonios + Presión media
+FRUSTRADO → Validar + Ofrecer cuotas
+ENOJADO → ESCALAR + Siesta (+10min)
+
+PROMESA PAGO → TIMER 1/2/3 automáticos
+
+OJO DE HALCÓN → Validar comprobante + Kommo update
+
+#CORREGIRIA → Capturar error + IA aprende siguiente
+
+Todos loggeados en Supabase con timestamp + usuario.
+
+---
+
+**VERSIÓN:** v5  
+**FECHA:** 14 Febrero 2026  
+**ESTADO:** ✅ LISTO PARA COPIAR A DYAD  
+**CAMBIOS DESDE v4:** + Josué supervisor, + Timeline 16-23 Feb, + Panel configurable, + Escenarios, + Triggers automáticos`} 
+                           />
+                        </div>
                      </div>
                   </CardContent>
                 </Card>
