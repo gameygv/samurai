@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
-import { Save, Bot, Sparkles, AlertTriangle, ScrollText, Code, Hammer, GitBranch, MapPin } from 'lucide-react';
+import { Save, Bot, Sparkles, AlertTriangle, ScrollText, Code, Hammer, GitBranch, MapPin, PauseCircle } from 'lucide-react';
 import { toast } from 'sonner';
 
 const DEFAULT_CORE_PROMPT = `# 🏯 IDENTIDAD: EL SAMURÁI DEL EQUIPO
@@ -150,11 +150,33 @@ ACCIÓN KOMMO:
   - Tag: "region_{{region}}"
   - Notify assigned agent`;
 
+const DEFAULT_CORRECTION_PROMPT = `### PROTOCOLO 3: INTERVENCIÓN HUMANA (MODO SIESTA)
+
+TRIGGER: Humano (Anahí/Edith) envía mensaje
+ACTION:
+  1. Pausa IA automáticamente
+  2. Log: "[MODO SIESTA ACTIVADO] - Anahí interviene. IA pausa 10 min"
+  3. Update Kommo: Estado_Siesta = "ACTIVO" 
+  4. Humano: Libertad total para vender/resolver
+  5. Después de 10 min: IA se reactiva automáticamente
+     - UNLESS humano escriba "continue" → Reactivación inmediata
+     - OR humano siga escribiendo → IA espera 10 min más
+     
+EXCEPCIONES: Modo Siesta se extiende si:
+  - Humano y cliente siguen en conversación activa
+  - No hay respuesta de cliente en 15+ minutos
+  - Humano escriba una palabra clave (ej: "hasta luego")
+
+LOG AUDITORIA: 
+  - Todos los "Modo Siesta" quedan registrados
+  - Útil para analizar: ¿Cuándo es mejor que intervenga humano?`;
+
 const AgentBrain = () => {
   const [corePrompt, setCorePrompt] = useState(DEFAULT_CORE_PROMPT);
   const [technicalPrompt, setTechnicalPrompt] = useState(DEFAULT_TECHNICAL_PROMPT);
   const [behaviorPrompt, setBehaviorPrompt] = useState(DEFAULT_BEHAVIOR_PROMPT);
   const [routingPrompt, setRoutingPrompt] = useState(DEFAULT_ROUTING_PROMPT);
+  const [correctionPrompt, setCorrectionPrompt] = useState(DEFAULT_CORRECTION_PROMPT);
 
   const handleSave = () => {
     // Aquí conectaremos con Supabase más adelante
@@ -364,14 +386,47 @@ const AgentBrain = () => {
              </div>
           </TabsContent>
           
-          <TabsContent value="correction">
-            <div className="flex items-center justify-center h-96 border-2 border-dashed border-slate-800 rounded-lg text-slate-500 bg-slate-900/20">
-              <div className="text-center">
-                <AlertTriangle className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                <h3 className="text-lg font-medium text-slate-300">Parte 3: Corrección</h3>
-                <p className="text-sm text-slate-500 mt-2">Esperando instrucciones...</p>
-              </div>
-            </div>
+          <TabsContent value="correction" className="mt-6 space-y-6 animate-in fade-in-50 duration-500">
+             <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+                <div className="xl:col-span-2">
+                   <Card className="bg-slate-900 border-slate-800 shadow-xl">
+                    <CardHeader className="border-b border-slate-800 pb-4">
+                      <CardTitle className="text-white flex items-center gap-2 text-lg">
+                        <div className="w-8 h-8 rounded bg-yellow-500/10 flex items-center justify-center text-yellow-500">
+                          <PauseCircle className="w-5 h-5" />
+                        </div>
+                        3.1 Protocolo de Intervención Humana (Modo Siesta)
+                      </CardTitle>
+                      <CardDescription>Reglas para pausar la IA cuando un humano interviene.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="pt-4">
+                      <Textarea 
+                        value={correctionPrompt}
+                        onChange={(e) => setCorrectionPrompt(e.target.value)}
+                        className="min-h-[400px] bg-slate-950/50 border-slate-800 font-mono text-sm text-slate-300 focus:border-yellow-500/50 focus:ring-yellow-500/20 resize-none p-4 leading-relaxed custom-scrollbar"
+                        placeholder="Define aquí el protocolo de siesta..."
+                      />
+                    </CardContent>
+                  </Card>
+                </div>
+                 <div className="space-y-6">
+                   <Card className="bg-slate-900/50 border-slate-800">
+                    <CardHeader>
+                      <CardTitle className="text-sm text-slate-300">Variables de Control</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      <div className="p-3 rounded bg-slate-950 border border-slate-800 group hover:border-slate-700 transition-colors cursor-pointer">
+                        <code className="text-xs font-mono text-yellow-400 block mb-1">{`{{nap_status}}`}</code>
+                        <p className="text-xs text-slate-500">Estado actual: ACTIVO / INACTIVO</p>
+                      </div>
+                      <div className="p-3 rounded bg-slate-950 border border-slate-800 group hover:border-slate-700 transition-colors cursor-pointer">
+                         <code className="text-xs font-mono text-yellow-400 block mb-1">{`{{last_human_msg}}`}</code>
+                         <p className="text-xs text-slate-500">Timestamp del último mensaje humano</p>
+                      </div>
+                    </CardContent>
+                  </Card>
+                 </div>
+             </div>
           </TabsContent>
         </Tabs>
 
