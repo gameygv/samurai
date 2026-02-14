@@ -1,46 +1,28 @@
 -- =================================================================
--- REPARACIÓN PROFUNDA DE PERMISOS (NUCLEAR FIX)
+-- REPARACIÓN DE TABLA DE MIGRACIONES (Error querying schema)
 -- =================================================================
 
 BEGIN;
 
--- 1. Asegurar que el rol 'authenticator' existe y tiene permisos de paso
-DO $$ 
-BEGIN 
-  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'authenticator') THEN
-    CREATE ROLE authenticator NOINHERIT LOGIN;
-  END IF;
-END $$;
+-- 1. Crear la tabla de migraciones si no existe (A veces desaparece en deploys fallidos)
+CREATE TABLE IF NOT EXISTS auth.schema_migrations (
+    version character varying(255) NOT NULL,
+    PRIMARY KEY (version)
+);
 
-GRANT anon TO authenticator;
-GRANT authenticated TO authenticator;
-GRANT service_role TO authenticator;
+-- 2. Permisos explícitos para el admin de auth
+GRANT ALL PRIVILEGES ON TABLE auth.schema_migrations TO supabase_auth_admin;
+GRANT ALL PRIVILEGES ON TABLE auth.schema_migrations TO postgres;
+GRANT SELECT ON TABLE auth.schema_migrations TO service_role;
 
--- 2. Garantizar acceso al esquema PUBLIC
-GRANT USAGE ON SCHEMA public TO authenticator;
-GRANT USAGE ON SCHEMA public TO anon;
-GRANT USAGE ON SCHEMA public TO authenticated;
-GRANT USAGE ON SCHEMA public TO service_role;
+-- 3. Asegurar search_path correcto para el rol actual (postgres)
+SET search_path = auth, public, extensions;
 
--- 3. Garantizar acceso a TODAS las tablas actuales en public
-GRANT ALL ON ALL TABLES IN SCHEMA public TO anon;
-GRANT ALL ON ALL TABLES IN SCHEMA public TO authenticated;
-GRANT ALL ON ALL TABLES IN SCHEMA public TO service_role;
-
--- 4. Garantizar acceso a TODAS las secuencias (para IDs autoincrementables)
-GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon;
-GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO authenticated;
-GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO service_role;
-
--- 5. Configurar permisos por defecto para el futuro
-ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon;
-ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO authenticated;
-ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO service_role;
+-- 4. Re-aplicar permisos sobre todo el esquema auth por si acaso
+GRANT USAGE ON SCHEMA auth TO supabase_auth_admin;
+GRANT ALL ON ALL TABLES IN SCHEMA auth TO supabase_auth_admin;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA auth TO supabase_auth_admin;
 
 COMMIT;
-
--- 6. FORZAR recarga de caché (Truco: crear y borrar tabla)
-CREATE TABLE public._force_schema_cache_reload (id serial PRIMARY KEY);
-DROP TABLE public._force_schema_cache_reload;
 
 NOTIFY pgrst, 'reload schema';
