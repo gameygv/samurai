@@ -114,13 +114,56 @@ MAKE.COM FLOW:
      "prompt_version": "v1.2" (qué versión falló)
    }`;
 
-const DEFAULT_RELEARNING = `### 3.3 REAPRENDIZAJE AUTOMÁTICO
-ANTES de generar respuesta:
-1. Buscar en vector store: ¿Existe un error similar corregido anteriormente?
-2. Si similitud > 0.85:
-   - IGNORAR prompt base.
-   - APLICAR lógica de la corrección humana almacenada.
-   - Log: "Aplicando corrección aprendida ID #1234"`;
+const DEFAULT_RELEARNING = `### CÓMO LA IA INCORPORA LA CORRECCIÓN
+
+PASO 1: LECTURA PREVIA (Antes de generar respuesta)
+--------
+En Make.com, cuando IA está a punto de responder:
+
+// Pseudo-código Make.com
+QUERY Supabase:
+SELECT *
+FROM aprendizaje_errores
+WHERE aplicada = FALSE
+AND categoria_error IN ('TONE', 'INFO_FALTANTE', ...)
+AND fecha_correccion > NOW() - INTERVAL 7 days
+ORDER BY fecha_correccion DESC
+LIMIT 10;
+
+// Construir string de contexto
+CORRECTION_CONTEXT = "
+Correcciones recientes de Geoffrey/Tatiana/Anahí/Edith:
+...
+";
+
+PASO 2: INYECCIÓN EN PROMPT
+--------
+// Antes de enviar a Gemini, inyectar:
+
+SYSTEM_PROMPT_CON_CORRECCIONES = """
+[ADN SAMURAI - visto arriba]
+
+⚠️ CORRECCIONES RECIENTES (Aplicar SIEMPRE)
+\${CORRECTION_CONTEXT}
+
+Cuando respondas, ten estos errores en mente.
+Si el cliente pregunta algo similar, EVITA hacer lo mismo.
+
+[Resto del prompt]
+"""
+
+PASO 3: VALIDACIÓN DE APLICACIÓN
+--------
+// Después de que Gemini genera respuesta:
+
+IF respuesta_nueva contiene palabras clave de error anterior
+→ Log: "⚠️ Posible reincidencia detectada"
+→ Flag para revisión manual
+
+ELSE
+→ Mark: aplicada = TRUE en Supabase
+→ Log: "✅ Corrección aplicada exitosamente"
+→ Update clientes tabla: última_respuesta_correcta = NOW()`;
 
 const DEFAULT_VALIDATION_IMPROVEMENT = `### 3.4 VALIDACIÓN DE MEJORA
 Periodicamente (Cron Job):
