@@ -11,15 +11,13 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
-import { logActivity } from '@/utils/logger';
 
 const UsersPage = () => {
   const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   
   // New User Form State
-  const [newUserEmail, setNewUserEmail] = useState('');
-  const [newUserPassword, setNewUserPassword] = useState('');
+  const [newUsername, setNewUsername] = useState('');
   const [newUserName, setNewUserName] = useState('');
   const [newUserRole, setNewUserRole] = useState('supervisor');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -47,26 +45,14 @@ const UsersPage = () => {
     setCreating(true);
 
     try {
-      // 1. Create in Auth (Admin capability only via Supabase Edge Function usually, 
-      // but here simulating client-side creation for demo or if RLS allows)
-      // NOTE: In a real app, use supabase.auth.admin.createUser via a secure edge function.
-      // Here we assume the user is manually added or we use a workaround if enabled.
-      // For this demo, we will simulate the success message instructing to use Supabase Dashboard
-      // because client-side `signUp` creates a session, logging out the admin.
+      // NOTE: In client-side logic we can't create users without logging out.
+      // This is simulated logic or instructions.
       
-      toast.info("Para crear usuarios, por favor usa el Dashboard de Supabase > Authentication", {
-         description: "El SDK del cliente no permite crear otros usuarios sin cerrar tu sesión actual."
-      });
+      const email = `${newUsername.toLowerCase().trim()}@samurai.local`;
       
-      // LOGIC MOCK for UI
-      /*
-      await logActivity({
-         action: 'CREATE',
-         resource: 'USERS',
-         description: `Intentó crear usuario: ${newUserName}`,
-         status: 'OK'
+      toast.info("Instrucciones para crear en Supabase Dashboard:", {
+         description: `1. Auth > Users > Invite/Create\n2. Email: ${email}\n3. Pass: (temporal)\n4. Insertar fila en tabla 'profiles'.`
       });
-      */
 
     } catch (error: any) {
       toast.error(error.message);
@@ -96,17 +82,21 @@ const UsersPage = () => {
                   <DialogTitle>Crear Nuevo Usuario</DialogTitle>
                </DialogHeader>
                <form onSubmit={handleCreateUser} className="space-y-4 pt-4">
-                  <div className="p-3 bg-yellow-500/10 border border-yellow-500/20 rounded text-yellow-500 text-xs">
-                     ⚠️ Nota: Por seguridad, la creación directa está deshabilitada en el cliente. Usa el Dashboard de Supabase.
+                  <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded text-blue-400 text-xs">
+                     ℹ️ El sistema usa el dominio interno <strong>@samurai.local</strong>.
+                     Solo ingresa el nombre de usuario.
                   </div>
                   <div className="space-y-2">
-                     <Label>Email</Label>
-                     <Input 
-                        value={newUserEmail} 
-                        onChange={e => setNewUserEmail(e.target.value)} 
-                        className="bg-slate-950 border-slate-800" 
-                        placeholder="usuario@samurai.local"
-                     />
+                     <Label>Usuario</Label>
+                     <div className="flex items-center gap-2">
+                        <Input 
+                           value={newUsername} 
+                           onChange={e => setNewUsername(e.target.value)} 
+                           className="bg-slate-950 border-slate-800 flex-1" 
+                           placeholder="ej: gamey"
+                        />
+                        <span className="text-slate-500 text-sm font-mono">@samurai.local</span>
+                     </div>
                   </div>
                   <div className="space-y-2">
                      <Label>Nombre Completo</Label>
@@ -131,7 +121,7 @@ const UsersPage = () => {
                      </Select>
                   </div>
                   <Button type="submit" className="w-full bg-indigo-600" disabled={creating}>
-                     Crear Usuario
+                     Generar Instrucciones
                   </Button>
                </form>
             </DialogContent>
@@ -151,8 +141,8 @@ const UsersPage = () => {
                 <TableRow className="border-slate-800 hover:bg-slate-900">
                   <TableHead className="text-slate-400">Usuario</TableHead>
                   <TableHead className="text-slate-400">Rol</TableHead>
+                  <TableHead className="text-slate-400">Email Interno</TableHead>
                   <TableHead className="text-slate-400">Estado</TableHead>
-                  <TableHead className="text-slate-400">Creado</TableHead>
                   <TableHead className="text-slate-400 text-right">Acciones</TableHead>
                 </TableRow>
               </TableHeader>
@@ -167,8 +157,8 @@ const UsersPage = () => {
                   <TableRow key={u.id} className="border-slate-800 hover:bg-slate-800/50">
                     <TableCell>
                       <div className="flex flex-col">
-                        <span className="font-medium text-slate-200">{u.full_name || 'Sin nombre'}</span>
-                        <span className="text-xs text-slate-500">{u.username}</span>
+                        <span className="font-medium text-slate-200">{u.username || 'Sin usuario'}</span>
+                        <span className="text-xs text-slate-500">{u.full_name}</span>
                       </div>
                     </TableCell>
                     <TableCell>
@@ -180,6 +170,9 @@ const UsersPage = () => {
                         {u.role}
                       </Badge>
                     </TableCell>
+                    <TableCell className="text-xs text-slate-500 font-mono">
+                        {u.username}@samurai.local
+                    </TableCell>
                     <TableCell>
                        {u.is_active ? (
                           <span className="text-green-500 text-xs flex items-center gap-1">
@@ -188,9 +181,6 @@ const UsersPage = () => {
                        ) : (
                           <span className="text-red-500 text-xs">Inactivo</span>
                        )}
-                    </TableCell>
-                    <TableCell className="text-slate-500 text-xs">
-                       {new Date(u.created_at).toLocaleDateString()}
                     </TableCell>
                     <TableCell className="text-right">
                        <Button variant="ghost" size="sm" className="text-slate-400 hover:text-white">
