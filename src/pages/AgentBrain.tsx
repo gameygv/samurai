@@ -68,15 +68,51 @@ SI un operador humano responde a un mensaje del bot con el tag #CORREGIRIA:
 2. Capturar el texto siguiente del humano (Corrección Esperada).
 3. Iniciar proceso de vectorización de la corrección.`;
 
-const DEFAULT_ERROR_STORAGE = `### 3.2 ALMACENAMIENTO DE ERROR
-INSERT INTO aprendizaje_errores (input_usuario, output_ia, correccion_humana, categoria, fecha)
-VALUES (
-  {{last_user_msg}},
-  {{last_ai_msg}},
-  {{human_correction}},
-  'correccion_manual',
-  NOW()
-);`;
+const DEFAULT_ERROR_STORAGE = `### CUANDO SE ACTIVA #CORREGIRIA (Flujo de Datos)
+
+MAKE.COM FLOW:
+1. Detecta trigger (#CORREGIRIA o etiqueta Kommo)
+2. Extrae Metadata:
+   - ID_Lead (cliente)
+   - ID_mensaje_original (respuesta errónea de IA)
+   - Timestamp del error
+   - Nombre quien corrige (Anahí/Edith)
+
+3. Abre Formulario de Clasificación (Interfaz Humana):
+   - Input: Descripción breve del error
+   - Select: Categoría del error
+     [ ] TONE (Tono incorrecto)
+     [ ] INFO_FALTANTE (Omitió datos clave)
+     [ ] CONTEXTO_PERDIDO (Olvidó info previa)
+     [ ] RECOMENDACION_EQUIVOCADA (Mal producto/promo)
+     [ ] CIERRE_FALLIDO (No cerró con pregunta)
+     [ ] TECNICO (Dato técnico erróneo)
+     [ ] OFERTA_INCORRECTA (Precio mal)
+     [ ] OTRO
+   - Textarea: Corrección Ideal (Qué debió decir)
+
+4. GUARDADO DUAL (Auditoría + Aprendizaje):
+
+   A) GOOGLE SHEET (Para Humanos):
+   ┌─────────┬──────────┬────────────────┬──────────────┬──────────────────┐
+   │ ID_Lead │ Fecha    │ Categoria      │ Error_IA     │ Correccion       │
+   ├─────────┼──────────┼────────────────┼──────────────┼──────────────────┤
+   │ 123456  │ 2026-02  │ OFERTA_INCORR  │ "Plan de 4.." │ "Pero ofreciste"  │
+   │         │ -14      │                │              │ cuotas, repite"  │
+   └─────────┴──────────┴────────────────┴──────────────┴──────────────────┘
+
+   B) SUPABASE (Para la IA - Tabla: aprendizaje_errores):
+   {
+     "id": UUID,
+     "cliente_id": UUID (link a tabla clientes),
+     "input_cliente": "es muy caro",
+     "respuesta_error": "[Respuesta IA original]",
+     "correccion_humana": "[Lo que debería decir]",
+     "categoria_error": "TONE",
+     "aplicada": false, (flag para validación futura)
+     "fecha_correccion": NOW(),
+     "prompt_version": "v1.2" (qué versión falló)
+   }`;
 
 const DEFAULT_RELEARNING = `### 3.3 REAPRENDIZAJE AUTOMÁTICO
 ANTES de generar respuesta:
