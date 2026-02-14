@@ -296,28 +296,44 @@ Formato JSON (SIN explicaciones):
 }
 """`;
 
-const DEFAULT_DATA_EXTRACTION = `### 4.2 EXTRACCIÓN DE DATOS
-SI es_comprobante = TRUE:
-EXTRAER:
-- Monto (numérico)
-- Fecha (dd/mm/aaaa)
-- Hora
-- Banco Origen / Destino
-- Concepto/Referencia
-- Últimos 4 dígitos cuenta origen`;
+const DEFAULT_MATCH_VALIDATION = `# DESPUÉS QUE OJO DE HALCÓN ANALIZA
 
-const DEFAULT_MATCH_VALIDATION = `### 4.3 VALIDACIÓN DE MATCH
-COMPARAR con Kommo/Supabase:
-1. ¿Monto coincide con precio esperado del lead?
-2. ¿Fecha es reciente (hoy +/- 2 días)?
-3. ¿Referencia coincide con nombre o ID?
+Make.com ejecuta validación:
 
-IF Match > 90%:
-  - Auto-confirmar pago.
-  - Mover lead a "Inscrito".
-  - Enviar bienvenida.
-ELSE:
-  - Alertar a Humano: "Posible pago de {{nombre}}, validar manual."`;
+STEP 1: Obtener datos de Kommo
+GET cliente.monto_validado (lo que debería pagar)
+GET cliente.ultimos_4_digitos (lo que registramos)
+
+STEP 2: Comparar con comprobante
+IF comprobante.monto == kommo.monto_validado
+✅ MATCH_MONTO = TRUE
+ELSE
+❌ MATCH_MONTO = FALSE
+Log: "Monto no coincide: Esperado \${{exp}}, Recibido \${{rec}}"
+
+IF comprobante.ultimos_4_digitos == kommo.ultimos_4_digitos
+✅ MATCH_DIGITOS = TRUE
+ELSE
+❌ MATCH_DIGITOS = FALSE
+Log: "Dígitos no coinciden: Esperado {{exp}}, Recibido {{rec}}"
+
+STEP 3: Validar fecha
+TODAY = 2026-02-14
+comprobante.fecha = 2026-02-14
+IF comprobante.fecha BETWEEN (TODAY - 2 DAYS) AND TODAY
+✅ MATCH_FECHA = TRUE
+ELSE
+❌ MATCH_FECHA = FALSE
+Log: "Fecha fuera de rango: {{comprobante.fecha}}"
+
+STEP 4: Score de validación
+SCORE = (MATCH_MONTO + MATCH_DIGITOS + MATCH_FECHA) / 3
+IF SCORE >= 0.80 AND comprobante.confianza_general >= 80
+✅✅ VALIDACIÓN EXITOSA
+confidence = comprobante.confianza_general
+ELSE
+⚠️ VALIDACIÓN PARCIAL - Revisar manualmente
+confidence = SCORE * 100`;
 
 // --- CONSTANTES PARTE 5 ---
 const DEFAULT_PENDING_LIST = `- [ ] Conectar API de Supabase real para inyección de contexto (2.1)
@@ -343,7 +359,7 @@ const AgentBrain = () => {
   const [validationImprovement, setValidationImprovement] = useState(DEFAULT_VALIDATION_IMPROVEMENT);
 
   const [visionAnalysis, setVisionAnalysis] = useState(DEFAULT_VISION_ANALYSIS);
-  const [dataExtraction, setDataExtraction] = useState(DEFAULT_DATA_EXTRACTION);
+  // Removed intermediate extraction state as it is now integrated into 4.1 Output / 4.2 Validation Logic
   const [matchValidation, setMatchValidation] = useState(DEFAULT_MATCH_VALIDATION);
 
   const [pendingList, setPendingList] = useState(DEFAULT_PENDING_LIST);
@@ -424,8 +440,7 @@ const AgentBrain = () => {
               <div className="md:col-span-2">
                  <PromptCard title="4.1 Análisis de Comprobantes" icon={ScanEye} color="text-sky-500" bg="bg-sky-500/10" value={visionAnalysis} onChange={setVisionAnalysis} height="h-[200px]" />
               </div>
-              <PromptCard title="4.2 Extracción de Datos" icon={FileText} color="text-violet-500" bg="bg-violet-500/10" value={dataExtraction} onChange={setDataExtraction} />
-              <PromptCard title="4.3 Validación de Match" icon={CheckCheck} color="text-lime-500" bg="bg-lime-500/10" value={matchValidation} onChange={setMatchValidation} />
+              <PromptCard title="4.2 Validación de Match (Lógica)" icon={CheckCheck} color="text-lime-500" bg="bg-lime-500/10" value={matchValidation} onChange={setMatchValidation} />
             </div>
           </TabsContent>
 
