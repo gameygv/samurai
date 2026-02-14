@@ -1,10 +1,21 @@
 import React, { useState } from 'react';
 import Layout from '@/components/Layout';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
+import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Save, Bot, Sparkles, AlertTriangle, Eye, ClipboardList, Hammer, ScrollText, ShieldAlert, Database, History, MessageSquare, Gift, RefreshCw, Server, CheckCircle2, ScanEye, FileText, CheckCheck, ListTodo, Zap } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Separator } from '@/components/ui/separator';
+import { 
+  Save, Bot, Sparkles, AlertTriangle, Eye, ClipboardList, Hammer, ScrollText, 
+  ShieldAlert, Database, History, MessageSquare, Gift, RefreshCw, Server, 
+  CheckCircle2, ScanEye, CheckCheck, ListTodo, Zap, GitBranch, FlaskConical, 
+  Play, Archive, RotateCcw, BarChart3, GripVertical, Check, X
+} from 'lucide-react';
 import { toast } from 'sonner';
 
 // --- CONSTANTES PARTE 1 ---
@@ -415,20 +426,6 @@ Razon: {{razon_fallo}}
 
 Acción requerida: Contactar manualmente"`;
 
-// --- CONSTANTES PARTE 5 ---
-const DEFAULT_PENDING_LIST = `# 📋 ÍNDICE PARTE 5 v2.0
-
-SECCIÓN 1: NUEVA ESTRUCTURA (Josué como supervisor)
-SECCIÓN 2: TIMELINE DIARIO ACELERADO (15-22 Feb)
-SECCIÓN 3: PANEL SAMURAI - CONFIGURACIÓN COMPLETA
-  └─ 3.1 Estados Emocionales (CRUD)
-  └─ 3.2 API Keys & Webhooks (Configurable)
-  └─ 3.3 Frases Geoffrey (Dynamic)
-  └─ 3.4 Prompts (Versionado)
-  └─ 3.5 Promos & Ofertas (Editable)
-SECCIÓN 4: ESCENARIOS MAKE.COM (Ready to Test)
-SECCIÓN 5: REGISTRO MASTER (Tracking en tiempo real)`;
-
 const AgentBrain = () => {
   // State hooks for all prompts
   const [corePrompt, setCorePrompt] = useState(DEFAULT_CORE_PROMPT);
@@ -450,7 +447,22 @@ const AgentBrain = () => {
   const [matchValidation, setMatchValidation] = useState(DEFAULT_MATCH_VALIDATION);
   const [postValidationAction, setPostValidationAction] = useState(DEFAULT_POST_VALIDATION_ACTION);
 
-  const [pendingList, setPendingList] = useState(DEFAULT_PENDING_LIST);
+  // --- STATES PART 5 ---
+  const [activeVersion, setActiveVersion] = useState("v2.0");
+  const [contextToggles, setContextToggles] = useState({
+    history: true,
+    emotional: true,
+    geoffrey: true,
+    corrections: false
+  });
+  
+  // Fake versions data
+  const versions = [
+    { id: "v1.0", date: "18/02 09:00", status: "Draft", performance: "-", user: "System" },
+    { id: "v1.1", date: "18/02 14:30", status: "Archive", performance: "42%", user: "Gamey" },
+    { id: "v1.2", date: "19/02 09:15", status: "Archive", performance: "45%", user: "Josué" },
+    { id: "v2.0", date: "20/02 16:45", status: "Active", performance: "58%", user: "Gamey" },
+  ];
 
   const handleSave = () => {
     toast.success('Cerebro del Samurai actualizado y guardado.');
@@ -487,7 +499,7 @@ const AgentBrain = () => {
                 <Eye className="w-4 h-4 mr-2" /> Parte 4: Visión
               </TabsTrigger>
               <TabsTrigger value="part5" className="data-[state=active]:bg-slate-800 data-[state=active]:text-white whitespace-nowrap">
-                <ClipboardList className="w-4 h-4 mr-2" /> Parte 5: Índice v2.0
+                <GitBranch className="w-4 h-4 mr-2" /> Parte 5: Versionado
               </TabsTrigger>
             </TabsList>
           </div>
@@ -533,26 +545,231 @@ const AgentBrain = () => {
             </div>
           </TabsContent>
 
-           {/* PARTE 5: PENDIENTES */}
+           {/* PARTE 5: VERSIONADO Y CONTROL */}
            <TabsContent value="part5" className="mt-6 space-y-6 animate-in fade-in-50">
-            <Card className="bg-slate-900 border-slate-800 shadow-xl">
-              <CardHeader className="border-b border-slate-800 pb-4">
-                <CardTitle className="text-white flex items-center gap-2 text-lg">
-                  <div className="w-8 h-8 rounded bg-slate-500/10 flex items-center justify-center text-slate-400">
-                    <ListTodo className="w-5 h-5" />
-                  </div>
-                  Registro de Pendientes y Prioridades
+            
+            {/* ÍNDICE v2.0 */}
+            <Card className="bg-slate-900/50 border-slate-800">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-white flex items-center gap-2">
+                  <ListTodo className="w-5 h-5 text-indigo-400" />
+                  Índice Parte 5 v2.0
                 </CardTitle>
-                <CardDescription>Backlog de implementación y mejoras futuras.</CardDescription>
               </CardHeader>
-              <CardContent className="pt-4">
-                <Textarea 
-                  value={pendingList}
-                  onChange={(e) => setPendingList(e.target.value)}
-                  className="min-h-[500px] bg-slate-950/50 border-slate-800 font-mono text-sm text-slate-300 focus:border-slate-500/50 focus:ring-slate-500/20 resize-none p-4 leading-relaxed custom-scrollbar"
-                />
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-slate-300 font-mono bg-black/20 p-4 rounded-lg">
+                  <ul className="space-y-1">
+                    <li className="text-indigo-300">SECCIÓN 1: NUEVA ESTRUCTURA (Josué)</li>
+                    <li>SECCIÓN 2: TIMELINE DIARIO ACELERADO</li>
+                    <li>SECCIÓN 3: PANEL SAMURAI - CONFIG
+                      <ul className="pl-4 mt-1 space-y-1 text-slate-400">
+                        <li>└─ 3.1 Estados Emocionales</li>
+                        <li>└─ 3.2 API Keys & Webhooks</li>
+                        <li>└─ 3.3 Frases Geoffrey</li>
+                      </ul>
+                    </li>
+                  </ul>
+                  <ul className="space-y-1">
+                     <li className="text-slate-400 pl-4">
+                        <ul className="space-y-1">
+                           <li>└─ 3.4 Prompts (Versionado)</li>
+                           <li>└─ 3.5 Promos & Ofertas</li>
+                        </ul>
+                     </li>
+                     <li>SECCIÓN 4: ESCENARIOS MAKE.COM</li>
+                     <li className="text-green-400">SECCIÓN 5: REGISTRO MASTER</li>
+                  </ul>
+                </div>
               </CardContent>
             </Card>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              
+              {/* COLUMNA IZQUIERDA: HISTORIAL */}
+              <div className="lg:col-span-1 space-y-6">
+                <Card className="bg-slate-900 border-slate-800 h-full">
+                  <CardHeader>
+                     <CardTitle className="text-white flex items-center gap-2 text-base">
+                        <History className="w-4 h-4 text-slate-400" />
+                        Historial de Versiones
+                     </CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-0">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="border-slate-800 hover:bg-slate-900/50">
+                          <TableHead className="text-slate-400 h-9">Versión</TableHead>
+                          <TableHead className="text-slate-400 h-9">Status</TableHead>
+                          <TableHead className="text-slate-400 h-9 text-right">Perf</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {versions.map((v) => (
+                          <TableRow key={v.id} className="border-slate-800 hover:bg-slate-800/50 cursor-pointer" onClick={() => setActiveVersion(v.id)}>
+                            <TableCell className="font-mono font-medium text-slate-300">
+                              <div className="flex flex-col">
+                                <span>{v.id}</span>
+                                <span className="text-[10px] text-slate-500">{v.date}</span>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              {v.status === 'Active' && <Badge className="bg-green-500/20 text-green-400 border-green-500/50">Active</Badge>}
+                              {v.status === 'Draft' && <Badge variant="outline" className="text-slate-400 border-slate-600">Draft</Badge>}
+                              {v.status === 'Archive' && <Badge variant="secondary" className="bg-slate-800 text-slate-500">Archive</Badge>}
+                            </TableCell>
+                            <TableCell className="text-right text-slate-400 font-mono text-xs">{v.performance}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </CardContent>
+                  <CardFooter className="border-t border-slate-800 pt-4 flex gap-2">
+                    <Button variant="outline" size="sm" className="w-full border-slate-700 hover:bg-slate-800 text-slate-300">
+                      <BarChart3 className="w-3 h-3 mr-2" /> Comparar
+                    </Button>
+                    <Button size="sm" className="w-full bg-indigo-600 hover:bg-indigo-700">
+                      <GitBranch className="w-3 h-3 mr-2" /> Fork New
+                    </Button>
+                  </CardFooter>
+                </Card>
+
+                {/* TEST RUNNER CARD */}
+                <Card className="bg-slate-900 border-slate-800">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-white flex items-center gap-2 text-base">
+                      <FlaskConical className="w-4 h-4 text-purple-400" />
+                      Test Runner
+                    </CardTitle>
+                    <CardDescription>Prueba {activeVersion} antes de activar.</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="space-y-2">
+                      <Label className="text-xs text-slate-400">Input Cliente (Simulado)</Label>
+                      <Input className="bg-slate-950 border-slate-800 text-slate-200" placeholder="Ej: Es muy caro..." />
+                    </div>
+                    
+                    <div className="p-3 bg-black/40 rounded border border-slate-800 min-h-[100px]">
+                      <span className="text-xs font-mono text-purple-400 block mb-2">// Output Preview</span>
+                      <p className="text-sm text-slate-400 italic">Esperando ejecución...</p>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 text-xs font-mono text-slate-500">
+                       <div className="flex justify-between">
+                         <span>Tokens:</span>
+                         <span className="text-slate-300">0</span>
+                       </div>
+                       <div className="flex justify-between">
+                         <span>Conf:</span>
+                         <span className="text-slate-300">0%</span>
+                       </div>
+                    </div>
+                  </CardContent>
+                  <CardFooter>
+                     <Button className="w-full bg-purple-600 hover:bg-purple-700">
+                        <Play className="w-4 h-4 mr-2" /> Ejecutar Test
+                     </Button>
+                  </CardFooter>
+                </Card>
+              </div>
+
+              {/* COLUMNA DERECHA: EDITOR */}
+              <div className="lg:col-span-2 space-y-6">
+                
+                {/* HEADER EDITOR */}
+                <div className="flex items-center justify-between bg-slate-900 p-4 rounded-lg border border-slate-800">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded bg-indigo-500/10 flex items-center justify-center text-indigo-400">
+                      <GitBranch className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-white font-medium flex items-center gap-2">
+                        Editando: <span className="text-indigo-400 font-mono">{activeVersion}</span>
+                        {activeVersion === 'v2.0' && <Badge className="bg-green-500/20 text-green-400 text-[10px] h-5">Live</Badge>}
+                      </h3>
+                      <p className="text-xs text-slate-400">Última mod: Hoy 16:45 por Gamey</p>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                     <Button variant="ghost" size="sm" className="text-slate-400 hover:text-white">
+                        <RotateCcw className="w-4 h-4" />
+                     </Button>
+                     <Button variant="outline" size="sm" className="border-slate-700 text-slate-300 hover:bg-slate-800">
+                        <Archive className="w-4 h-4 mr-2" /> Draft
+                     </Button>
+                     <Button size="sm" className="bg-green-600 hover:bg-green-700">
+                        <Check className="w-4 h-4 mr-2" /> Activar
+                     </Button>
+                  </div>
+                </div>
+
+                {/* SECCIÓN 1: ADN CORE */}
+                <Card className="bg-slate-900 border-slate-800">
+                  <CardHeader className="pb-2">
+                     <CardTitle className="text-sm text-slate-400 uppercase tracking-wider font-semibold">Sección 1: ADN Core</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                     <Textarea 
+                        className="bg-slate-950 border-slate-800 text-slate-300 font-mono text-sm min-h-[120px]"
+                        defaultValue={`Eres SAMURAI - Guerrero del crecimiento consciente.\nPrincipios:\n- Velocidad: Respuestas ágiles, decisiones rápidas\n- Verdad: Nunca mentir, siempre honesto\n- Valor: Ayudar sin agenda oculta\n- Maestría: Geoffrey + Tatiana guían`}
+                     />
+                  </CardContent>
+                </Card>
+
+                {/* SECCIÓN 2: CONTEXTO DINÁMICO */}
+                <Card className="bg-slate-900 border-slate-800">
+                  <CardHeader className="pb-2">
+                     <CardTitle className="text-sm text-slate-400 uppercase tracking-wider font-semibold">Sección 2: Contexto Dinámico</CardTitle>
+                  </CardHeader>
+                  <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                     <div className="flex items-center justify-between p-3 bg-slate-950 rounded border border-slate-800">
+                        <Label className="text-slate-300 cursor-pointer" htmlFor="toggle-hist">Incluir Historial (5 msgs)</Label>
+                        <Switch id="toggle-hist" checked={contextToggles.history} onCheckedChange={(c) => setContextToggles(p => ({...p, history: c}))} />
+                     </div>
+                     <div className="flex items-center justify-between p-3 bg-slate-950 rounded border border-slate-800">
+                        <Label className="text-slate-300 cursor-pointer" htmlFor="toggle-emo">Estado Emocional</Label>
+                        <Switch id="toggle-emo" checked={contextToggles.emotional} onCheckedChange={(c) => setContextToggles(p => ({...p, emotional: c}))} />
+                     </div>
+                     <div className="flex items-center justify-between p-3 bg-slate-950 rounded border border-slate-800">
+                        <Label className="text-slate-300 cursor-pointer" htmlFor="toggle-geo">Frases Geoffrey</Label>
+                        <Switch id="toggle-geo" checked={contextToggles.geoffrey} onCheckedChange={(c) => setContextToggles(p => ({...p, geoffrey: c}))} />
+                     </div>
+                     <div className="flex items-center justify-between p-3 bg-slate-950 rounded border border-slate-800">
+                        <Label className="text-slate-300 cursor-pointer" htmlFor="toggle-corr">Correcciones (7 días)</Label>
+                        <Switch id="toggle-corr" checked={contextToggles.corrections} onCheckedChange={(c) => setContextToggles(p => ({...p, corrections: c}))} />
+                     </div>
+                  </CardContent>
+                </Card>
+
+                {/* SECCIÓN 3: PROTOCOLOS */}
+                <Card className="bg-slate-900 border-slate-800">
+                   <CardHeader className="pb-2">
+                     <CardTitle className="text-sm text-slate-400 uppercase tracking-wider font-semibold">Sección 3: Comportamientos Específicos</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                     <div>
+                        <Label className="text-xs text-indigo-400 mb-1 block">Protocolo Siesta (Pausa)</Label>
+                        <Textarea className="bg-slate-950 border-slate-800 text-slate-400 text-xs h-20" defaultValue="Cuando cliente está ENOJADO + confidence > 90%, pausar 10 min. Ceder control a humano." />
+                     </div>
+                     <div>
+                        <Label className="text-xs text-emerald-400 mb-1 block">Protocolo Promesa Pago</Label>
+                        <Textarea className="bg-slate-950 border-slate-800 text-slate-400 text-xs h-20" defaultValue="Si dice 'mañana pago': Registrar promesa. Schedule TIMER 1 (+24h), TIMER 2 (+48h)." />
+                     </div>
+                     <div className="grid grid-cols-2 gap-4">
+                        <div>
+                           <Label className="text-xs text-orange-400 mb-1 block">Detección Perfiles</Label>
+                           <Textarea className="bg-slate-950 border-slate-800 text-slate-400 text-xs h-20" defaultValue="PRAGMÁTICO, EMOCIONAL, CURIOSO, FRUSTRADO." />
+                        </div>
+                        <div>
+                           <Label className="text-xs text-pink-400 mb-1 block">Recomendaciones</Label>
+                           <Textarea className="bg-slate-950 border-slate-800 text-slate-400 text-xs h-20" defaultValue="PRAGMÁTICO + 3 días = ofrecer 6 cuotas." />
+                        </div>
+                     </div>
+                  </CardContent>
+                </Card>
+
+              </div>
+
+            </div>
           </TabsContent>
 
         </Tabs>
