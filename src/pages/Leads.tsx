@@ -8,11 +8,16 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { MessageSquare, Search, Loader2, Phone, Mail, MapPin, Zap } from 'lucide-react';
 import { toast } from 'sonner';
+import ChatViewer from '@/components/ChatViewer';
 
 const Leads = () => {
   const [leads, setLeads] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  
+  // Chat Viewer State
+  const [selectedLead, setSelectedLead] = useState<any>(null);
+  const [isChatOpen, setIsChatOpen] = useState(false);
 
   useEffect(() => {
     fetchLeads();
@@ -54,6 +59,11 @@ const Leads = () => {
       setLeads(data);
     }
     setLoading(false);
+  };
+
+  const handleOpenChat = (lead: any) => {
+    setSelectedLead(lead);
+    setIsChatOpen(true);
   };
 
   const filteredLeads = leads.filter(l => 
@@ -154,7 +164,13 @@ const Leads = () => {
                          {lead.funnel_stage || 'Inicial'} <span className="text-xs text-slate-600">({lead.dias_en_funnel}d)</span>
                       </TableCell>
                       <TableCell className="text-right">
-                         <Button size="sm" variant="ghost" className="text-indigo-400 hover:text-indigo-300 hover:bg-indigo-900/20">
+                         <Button 
+                            size="sm" 
+                            variant="ghost" 
+                            className="text-indigo-400 hover:text-indigo-300 hover:bg-indigo-900/20"
+                            onClick={() => handleOpenChat(lead)}
+                         >
+                            <MessageSquare className="w-4 h-4 mr-2" />
                             Ver Chat
                          </Button>
                       </TableCell>
@@ -165,6 +181,13 @@ const Leads = () => {
             </Table>
           </CardContent>
         </Card>
+
+        {/* Chat Component */}
+        <ChatViewer 
+           lead={selectedLead} 
+           open={isChatOpen} 
+           onOpenChange={setIsChatOpen} 
+        />
       </div>
     </Layout>
   );
