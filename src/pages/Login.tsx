@@ -15,27 +15,23 @@ const Login = () => {
   const [dbStatus, setDbStatus] = useState<'checking' | 'ok' | 'error'>('checking');
   const navigate = useNavigate();
 
-  // Test de conexión al montar
   useEffect(() => {
     checkDbConnection();
   }, []);
 
   const checkDbConnection = async () => {
     try {
+      // Intentamos una operación simple. Si la URL está vacía o es incorrecta, esto lanzará error.
       const { error } = await supabase.from('profiles').select('count', { count: 'exact', head: true });
       
       if (error && error.code !== 'PGRST116') {
-         console.warn("Health check failed:", error);
-         if (error.message.includes("schema")) {
-            setDbStatus('error');
-         } else {
-            setDbStatus('ok');
-         }
+         console.error("Health check error:", error);
+         setDbStatus('error');
       } else {
          setDbStatus('ok');
       }
     } catch (err) {
-      console.error("Connection error:", err);
+      console.error("Critical Connection error:", err);
       setDbStatus('error');
     }
   };
@@ -44,9 +40,14 @@ const Login = () => {
     e.preventDefault();
     setLoading(true);
 
-    const email = `${username.toLowerCase().trim()}@samurai.local`;
+    // Aseguramos que el email tenga el formato correcto
+    const email = username.includes('@') ? username : `${username.toLowerCase().trim()}@samurai.local`;
 
     try {
+      if (dbStatus === 'error') {
+         throw new Error("No hay conexión con la base de datos. Por favor RECONSTRUYE la app.");
+      }
+
       console.log("Login attempt:", email);
       
       const { data, error } = await supabase.auth.signInWithPassword({
@@ -66,9 +67,9 @@ const Login = () => {
       
       if (msg.includes("Invalid login credentials")) {
         msg = "Usuario o contraseña incorrectos";
+      } else if (msg.includes("Failed to fetch") || msg.includes("URL")) {
+        msg = "Error de red: Verifica que Supabase esté conectado y haz REBUILD.";
       }
-      
-      // Ya NO enmascaramos el error de "querying schema" para ver el detalle real si persiste
       
       toast.error(msg, { duration: 5000 });
     } finally {
@@ -83,7 +84,7 @@ const Login = () => {
           <div className="mx-auto w-12 h-12 rounded-full bg-red-600 flex items-center justify-center mb-2 shadow-lg shadow-red-900/50">
             <span className="text-white font-bold text-2xl">侍</span>
           </div>
-          <CardTitle className="text-2xl font-bold text-white">SAMURAI PANEL v5.1</CardTitle>
+          <CardTitle className="text-2xl font-bold text-white">SAMURAI PANEL v5.2</CardTitle>
           <CardDescription className="text-slate-400">
             Acceso exclusivo personal autorizado
           </CardDescription>
@@ -93,8 +94,9 @@ const Login = () => {
             <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-md flex items-start gap-3">
               <WifiOff className="w-5 h-5 text-red-500 mt-0.5" />
               <div className="text-xs text-red-400">
-                <p className="font-bold">Error de Conexión Detectado</p>
-                <p>La API no responde correctamente. Ejecuta el script <code>FIX_PERMISSIONS.sql</code> en Supabase y luego reinicia la página.</p>
+                <p className="font-bold">Error de Conexión</p>
+                <p>La app no detecta las credenciales de Supabase.</p>
+                <p className="mt-1 text-white font-mono bg-red-900/40 p-1 rounded">Haz clic en el botón REBUILD arriba del chat.</p>
               </div>
             </div>
           )}
@@ -132,7 +134,7 @@ const Login = () => {
             <Button 
               type="submit" 
               className="w-full bg-red-600 hover:bg-red-700 text-white font-medium py-2 transition-all duration-200"
-              disabled={loading}
+              disabled={loading || dbStatus === 'error'}
             >
               {loading ? (
                 <>
@@ -154,7 +156,7 @@ const Login = () => {
             IP Registrada
           </p>
           <div className="flex items-center gap-2">
-             {dbStatus === 'checking' && <span className="text-xs text-yellow-500 flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin"/> Verificando API...</span>}
+             {dbStatus === 'checking' && <span className="text-xs text-yellow-500 flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin"/> Verificando...</span>}
              {dbStatus === 'ok' && <span className="text-xs text-green-500 flex items-center gap-1"><Wifi className="w-3 h-3"/> API Online</span>}
              {dbStatus === 'error' && <span className="text-xs text-red-500 flex items-center gap-1"><WifiOff className="w-3 h-3"/> API Error</span>}
           </div>
