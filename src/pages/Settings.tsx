@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Webhook, Key, Save, Loader2, ShieldAlert, CheckCircle2, Eye, EyeOff, Info, Play, ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
@@ -30,16 +31,21 @@ const Settings = () => {
 
   const fetchConfigs = async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from('app_config')
-      .select('*')
-      .in('category', ['WEBHOOK', 'SECRET', 'SYSTEM'])
-      .order('key');
+    try {
+      const { data, error } = await supabase
+        .from('app_config')
+        .select('*')
+        .in('category', ['WEBHOOK', 'SECRET', 'SYSTEM'])
+        .order('key');
 
-    if (!error && data) {
-      setConfigs(data as ConfigItem[]);
+      if (!error && data) {
+        setConfigs(data as ConfigItem[]);
+      }
+    } catch (err) {
+      console.error("Error fetching configs:", err);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const handleInputChange = (key: string, newValue: string) => {
