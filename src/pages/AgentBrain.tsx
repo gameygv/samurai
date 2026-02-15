@@ -13,28 +13,30 @@ import {
   Save, Bot, Sparkles, AlertTriangle, Eye, Hammer, ScrollText, 
   ShieldAlert, Database, History, MessageSquare, Gift, RefreshCw, Server, 
   CheckCircle2, ScanEye, CheckCheck, Zap, GitBranch, FlaskConical, 
-  Play, RotateCcw, Loader2, Terminal, Info
+  Play, RotateCcw, Loader2, Terminal, Info, BrainCircuit, Target
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { logActivity } from '@/utils/logger';
 import { triggerMakeWebhook } from '@/utils/makeService';
 
 const DEFAULTS = {
-  'prompt_core': `# ADN CORE\nDefine quién es el Samurai. Su nombre, personalidad, valores y misión general en la empresa.`,
-  'prompt_technical': `# FÓRMULA TÉCNICA\nInstrucciones sobre la estructura de las respuestas: longitud, uso de emojis, formato de listas y restricciones técnicas.`,
-  'prompt_behavior': `# PROTOCOLOS DE COMPORTAMIENTO\nDefine el tono de voz, nivel de formalidad y cómo debe actuar ante diferentes situaciones comunes.`,
-  'prompt_objections': `# MATRIZ DE OBJECIONES\nGuía específica sobre cómo responder cuando el cliente dice "está caro", "lo voy a pensar" o "busco otra cosa".`,
-  'prompt_data_injection': `# INYECCIÓN DE DATOS\nCómo debe el Samurai interpretar y usar los datos variables que recibe de Kommo CRM (nombres, etiquetas, campos).`,
-  'prompt_memory': `# MEMORIA HISTÓRICA\nInstrucciones para que la IA sepa usar el historial previo de la conversación para no repetirse y ser coherente.`,
-  'prompt_tone': `# TONO ADAPTATIVO\nCómo ajustar el lenguaje según la plataforma (WhatsApp vs Web) o el estado emocional detectado del cliente.`,
-  'prompt_recommendations': `# LÓGICA DE RECOMENDACIÓN\nReglas para hacer Upselling o Cross-selling. ¿Cuándo es el momento ideal para ofrecer un producto adicional?`,
-  'prompt_learning_trigger': `# TRIGGER DE APRENDIZAJE\nDefine qué palabras clave o situaciones deben disparar la etiqueta #CORREGIRIA para que el sistema aprenda.`,
-  'prompt_error_storage': `# ALMACENAMIENTO DE ERRORES\nInstrucciones internas sobre qué detalles guardar cuando se detecta un fallo en la respuesta.`,
-  'prompt_relearning': `# RE-APRENDIZAJE\nDefine cómo el Samurai debe priorizar las correcciones validadas por el humano sobre sus conocimientos previos.`,
-  'prompt_validation_improvement': `# MÉTRICAS DE VALIDACIÓN\nCriterios para considerar que una respuesta ha mejorado sustancialmente tras un ajuste.`,
-  'prompt_vision_analysis': `# OJO DE HALCÓN (ANÁLISIS VISUAL)\nReglas maestras para analizar comprobantes de pago, fotos de productos o capturas. ¿Qué datos NO deben faltar?`,
-  'prompt_match_validation': `# VALIDACIÓN DE DATOS VISUALES\nCómo comparar lo que ve en la imagen con la información que tenemos en la base de datos (Montos, fechas, bancos).`,
-  'prompt_post_validation': `# ACCIÓN POST-VALIDACIÓN\n¿Qué debe responder el Samurai después de confirmar que un comprobante es real? (Confirmación, siguiente paso).`
+  'prompt_core': `# ADN CORE\nEres Samurai, un asistente de ventas de elite. Tu misión es filtrar curiosos, calificar leads y cerrar ventas. Eres directo, eficiente pero educado.`,
+  'prompt_technical': `# FÓRMULA TÉCNICA\nResponde SIEMPRE en formato JSON estricto para que el sistema pueda leer tu respuesta y actualizar el CRM.\nEstructura:\n{\n  "reply": "Tu respuesta al cliente aquí (usa emojis, párrafos cortos)",\n  "lead_analysis": {\n    "mood": "ENOJADO | NEUTRO | FELIZ | PRAGMATICO",\n    "buying_intent": "BAJO | MEDIO | ALTO",\n    "summary": "Resumen de 1 linea de lo que quiere"\n  }\n}`,
+  'prompt_behavior': `# PROTOCOLOS\nSaluda brevemente. No seas redundante. Si el cliente pregunta precio, dalo y termina con una pregunta de cierre.`,
+  'prompt_objections': `# MATRIZ DE OBJECIONES\nSi dice "caro" -> Resalta valor/durabilidad.\nSi dice "lo pienso" -> Pregunta qué le detiene.\nSi dice "competencia" -> No hables mal, resalta nuestra garantía.`,
+  'prompt_data_injection': `# INYECCIÓN DE DATOS\nUsa los datos del contexto (Nombre, Ciudad) para personalizar. "Hola {nombre}" es mejor que "Hola".`,
+  'prompt_memory': `# MEMORIA\nRevisa los últimos mensajes. Si ya te dijo su nombre, no lo preguntes. Si ya le diste el precio, no lo repitas a menos que lo pida.`,
+  'prompt_tone': `# TONO ADAPTATIVO\nWhatsApp = Casual, emojis, audios (simulados con texto).\nCorreo = Formal, estructurado.`,
+  'prompt_recommendations': `# UPSELLING\nSi compra X, ofrece Y con un 10% de descuento. Solo ofrece si la intención de compra es ALTA.`,
+  'prompt_learning_trigger': `# TRIGGER APRENDIZAJE\nSi el humano interviene con #CORREGIRIA, analiza su feedback y ajusta tu comportamiento futuro.`,
+  'prompt_error_storage': `# ERROR LOGGING\nNo aplica al prompt de sistema directo, uso interno.`,
+  'prompt_relearning': `# RE-APRENDIZAJE (MANDATORIO)\nLee las "LECCIONES APRENDIDAS" al final de este prompt. Son correcciones de errores pasados. TIENEN PRIORIDAD sobre cualquier otra instrucción.`,
+  'prompt_validation_improvement': `# VALIDACIÓN\nEl objetivo es reducir la fricción. Menos mensajes para llegar a la venta = Mejor desempeño.`,
+  'prompt_vision_analysis': `# OJO DE HALCÓN\nBusca: Monto total, Fecha, CUIT/Razón Social. Si la imagen es borrosa, pide otra educadamente.`,
+  'prompt_match_validation': `# MATCHING\nCompara el monto del comprobante con la deuda registrada. Margen de error aceptable: $5 pesos.`,
+  'prompt_post_validation': `# POST-VALIDACIÓN\nSi coincide: "Pago recibido, gracias {nombre}. Tu pedido sale el {fecha}".`,
+  'prompt_psychology': `# PERFILADO PSICOLÓGICO\nAnaliza el texto del cliente. \n- Usa muchas exclamaciones? -> EMOCIONAL.\n- Pregunta datos técnicos? -> PRAGMÁTICO.\n- Se queja del tiempo? -> IMPACIENTE.\nAdapta tu respuesta a su perfil. Al Pragmático dale datos, al Emocional dale experiencia.`,
+  'prompt_closing_strategy': `# ESTRATEGIA DE CIERRE\nTu objetivo es mover al lead en el Funnel. \nEtapa Inicial -> Calificar.\nEtapa Interés -> Cotizar.\nEtapa Cierre -> Pedir pago.\nIdentifica en qué etapa está y empújalo a la siguiente.`
 };
 
 const AgentBrain = () => {
@@ -130,7 +132,7 @@ const AgentBrain = () => {
           <TabsList className="bg-slate-900 border border-slate-800 p-1 w-full justify-start overflow-x-auto">
              <TabsTrigger value="part1"><Bot className="w-4 h-4 mr-2" /> 1. Sistema</TabsTrigger>
              <TabsTrigger value="part2"><Database className="w-4 h-4 mr-2" /> 2. Contexto</TabsTrigger>
-             <TabsTrigger value="part3"><RefreshCw className="w-4 h-4 mr-2" /> 3. Aprendizaje</TabsTrigger>
+             <TabsTrigger value="part3"><BrainCircuit className="w-4 h-4 mr-2" /> 3. Psicología</TabsTrigger>
              <TabsTrigger value="part4"><Eye className="w-4 h-4 mr-2" /> 4. Visión</TabsTrigger>
              <TabsTrigger value="part5" className="data-[state=active]:bg-indigo-600"><FlaskConical className="w-4 h-4 mr-2" /> Laboratorio</TabsTrigger>
           </TabsList>
@@ -146,9 +148,9 @@ const AgentBrain = () => {
                 onChange={(v: string) => handlePromptChange('prompt_core', v)} 
               />
               <PromptCard 
-                title="1.2 Técnico" 
+                title="1.2 Técnico (Estructura JSON)" 
                 icon={Hammer} 
-                description="Define el formato de salida. ¿Usa emojis? ¿Escribe párrafos cortos? ¿Listas con puntos? Aquí van las reglas de arquitectura del mensaje."
+                description="CRÍTICO: Define que la respuesta debe ser un JSON para poder extraer datos del CRM. No cambies la estructura JSON a menos que sepas lo que haces."
                 value={prompts['prompt_technical']} 
                 onChange={(v: string) => handlePromptChange('prompt_technical', v)} 
               />
@@ -203,36 +205,39 @@ const AgentBrain = () => {
             </div>
           </TabsContent>
 
-          {/* PARTE 3: APRENDIZAJE */}
+          {/* PARTE 3: PSICOLOGIA Y APRENDIZAJE */}
           <TabsContent value="part3" className="mt-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="md:col-span-2">
+                 <PromptCard 
+                   title="3.1 Perfilado Psicológico" 
+                   icon={BrainCircuit} 
+                   description="Instrucciones para que la IA analice la personalidad del cliente basándose en su forma de escribir. Esto alimenta la base de datos de Leads para futuros análisis."
+                   value={prompts['prompt_psychology']} 
+                   onChange={(v: string) => handlePromptChange('prompt_psychology', v)} 
+                   height="h-[120px]"
+                 />
+              </div>
               <PromptCard 
-                title="3.1 Trigger #CORREGIRIA" 
-                icon={AlertTriangle} 
-                description="Define qué situaciones activan el aprendizaje automático. Ej: cuando un cliente dice 'no me entendiste'."
-                value={prompts['prompt_learning_trigger']} 
-                onChange={(v: string) => handlePromptChange('prompt_learning_trigger', v)} 
+                title="3.2 Estrategia de Cierre" 
+                icon={Target} 
+                description="Cómo mover al lead a través del embudo. Identificar si está 'tibio' o 'caliente' y aplicar presión adecuada."
+                value={prompts['prompt_closing_strategy']} 
+                onChange={(v: string) => handlePromptChange('prompt_closing_strategy', v)} 
               />
               <PromptCard 
-                title="3.2 Registro" 
-                icon={Server} 
-                description="Instrucciones para documentar errores. Qué datos técnicos debe capturar la IA para que tú puedas revisarlos después."
-                value={prompts['prompt_error_storage']} 
-                onChange={(v: string) => handlePromptChange('prompt_error_storage', v)} 
-              />
-              <PromptCard 
-                title="3.3 Re-Aprendizaje" 
+                title="3.3 Re-Aprendizaje (Correcciones)" 
                 icon={RefreshCw} 
-                description="Cómo integrar las nuevas reglas de oro que tú validas en el Learning Log."
+                description="Cómo integrar las nuevas reglas de oro que tú validas en el Learning Log. Esto es lo que hace que el sistema mejore solo."
                 value={prompts['prompt_relearning']} 
                 onChange={(v: string) => handlePromptChange('prompt_relearning', v)} 
               />
               <PromptCard 
-                title="3.4 Validación" 
-                icon={CheckCircle2} 
-                description="Criterios para medir si el Samurai está aprendiendo o si sigue cometiendo los mismos errores."
-                value={prompts['prompt_validation_improvement']} 
-                onChange={(v: string) => handlePromptChange('prompt_validation_improvement', v)} 
+                title="3.4 Trigger #CORREGIRIA" 
+                icon={AlertTriangle} 
+                description="Define qué situaciones activan el reporte de error manual."
+                value={prompts['prompt_learning_trigger']} 
+                onChange={(v: string) => handlePromptChange('prompt_learning_trigger', v)} 
               />
             </div>
           </TabsContent>
@@ -278,7 +283,7 @@ const AgentBrain = () => {
                          onClick={() => { setActiveVersionId('live'); setEditorContent(prompts['prompt_core'] || ''); }}
                       >
                          <div className="text-white font-bold">VERSION LIVE</div>
-                         <div className="text-[10px] text-green-500 flex items-center gap-1 mt-1"><Check className="w-3 h-3"/> En Producción</div>
+                         <div className="text-[10px] text-green-500 flex items-center gap-1 mt-1"><CheckCheck className="w-3 h-3"/> En Producción</div>
                       </div>
                       {historyVersions.map(v => (
                          <div 

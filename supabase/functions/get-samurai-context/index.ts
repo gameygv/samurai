@@ -17,17 +17,17 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
-    const { message, lead_name, lead_id, platform } = await req.json();
+    const { message, lead_name, lead_id, platform, relevant_knowledge } = await req.json();
 
-    // DETECCIÓN DE APRENDIZAJE
+    // 1. DETECCIÓN DE APRENDIZAJE (FEEDBACK HUMANO DIRECTO)
     if (message && message.includes('#CORREGIRIA')) {
       const feedback = message.replace('#CORREGIRIA', '').trim();
       await supabaseClient.from('errores_ia').insert({
-        mensaje_cliente: "Feedback Directo",
-        respuesta_ia: "N/A",
+        mensaje_cliente: "Feedback Directo Manual",
+        respuesta_ia: "N/A - Intervención Humana",
         correccion_sugerida: feedback,
         categoria: "ENTRENAMIENTO",
-        estado_correccion: "PENDIENTE",
+        estado_correccion: "VALIDADA", // Auto-validamos si viene directo del panel con el comando
         severidad: "MEDIA",
         created_by: "MakeAutomation"
       });
@@ -35,13 +35,13 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({
           action: 'LEARNING_LOGGED',
-          reply: `🫡 Entendido. He registrado esta mejora: "${feedback}". La aplicaré en mi próximo entrenamiento.`
+          reply: `🫡 Entendido. He registrado esta corrección: "${feedback}". La he marcado como VALIDADA para aplicarla de inmediato.`
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
-    // CONSTRUCCIÓN DEL CONTEXTO BASADO EN PROMPTS CORE
+    // 2. OBTENER PROMPTS CONFIGURADOS
     const { data: configData } = await supabaseClient
       .from('app_config')
       .select('key, value')
@@ -50,40 +50,105 @@ serve(async (req) => {
     const prompts: Record<string, string> = {}
     configData?.forEach((item: any) => { prompts[item.key] = item.value; });
 
-    // Registro de Actividad
-    await supabaseClient.from('activity_logs').insert({
-       action: 'CHAT', resource: 'BRAIN', description: `Generando contexto para: ${lead_name || 'Desconocido'}`, status: 'OK'
-    });
+    // 3. OBTENER PERFIL DEL LEAD (Si existe ID)
+    let leadProfile = "Perfil desconocido";
+    let leadMood = "NEUTRO";
+    
+    if (lead_id) {
+       const { data: lead } = await supabaseClient
+         .from('leads')
+         .select('*')
+         .eq('id', lead_id) // Asumiendo que Make pasa el ID de Supabase, si pasa el de Kommo habría que ajustar
+         .maybeSingle();
+       
+       if (lead) {
+          leadProfile = `
+          - Nombre: ${lead.nombre || lead_name}
+          - Estado Emocional: ${lead.estado_emocional_actual || 'NEUTRO'}
+          - Score Confianza: ${lead.confidence_score || 0}%
+          - Etapa Funnel: ${lead.funnel_stage || 'Inicial'}
+          - Ciudad: ${lead.ciudad || 'N/A'}
+          `;
+          leadMood = lead.estado_emocional_actual || "NEUTRO";
+       }
+    }
 
-    // System Prompt Maestro (Consolidado)
+    // 4. OBTENER HISTORIAL DE CHAT RECIENTE (Contexto Inmediato)
+    let chatHistoryText = "";
+    if (lead_id) {
+       const { data: history } = await supabaseClient
+          .from('conversaciones')
+          .select('emisor, mensaje, created_at')
+          .eq('lead_id', lead_id)
+          .order('created_at', { ascending: false })
+          .limit(10); // Últimos 10 mensajes
+       
+       if (history && history.length > 0) {
+          // Invertimos para orden cronológico
+          chatHistoryText = history.reverse().map(m => `[${m.emisor}]: ${m.mensaje}`).join('\n');
+       }
+    }
+
+    // 5. OBTENER LECCIONES APRENDIDAS (Correcciones Validadas)
+    // Esto es CRUCIAL: Inyectamos errores pasados que ya fueron corregidos para que no los repita.
+    const { data: learnings } = await supabaseClient
+       .from('errores_ia')
+       .select('correccion_sugerida')
+       .eq('estado_correccion', 'VALIDADA')
+       .order('applied_at', { ascending: false })
+       .limit(5);
+
+    const learnedLessons = learnings?.map(l => `- ${l.correccion_sugerida}`).join('\n') || "Ninguna por ahora.";
+
+
+    // 6. CONSTRUCCIÓN DEL SYSTEM PROMPT FINAL
     const fullSystemPrompt = `
-### PILAR 1: ADN & SISTEMA
+=== IDENTIDAD ===
 ${prompts['prompt_core'] || ''}
+
+=== REGLAS TÉCNICAS (OUTPUT JSON) ===
 ${prompts['prompt_technical'] || ''}
+
+=== PROTOCOLOS DE COMPORTAMIENTO ===
 ${prompts['prompt_behavior'] || ''}
 ${prompts['prompt_objections'] || ''}
 
-### PILAR 2: CONTEXTO & MEMORIA
-${prompts['prompt_data_injection'] || ''}
-${prompts['prompt_memory'] || ''}
-${prompts['prompt_tone'] || ''}
+=== ESTRATEGIA DE VENTA & PSICOLOGÍA ===
+${prompts['prompt_psychology'] || ''}
+${prompts['prompt_closing_strategy'] || ''}
 ${prompts['prompt_recommendations'] || ''}
+${prompts['prompt_tone'] || ''}
 
-### PILAR 3: APRENDIZAJE ADAPTATIVO
-${prompts['prompt_learning_trigger'] || ''}
+=== CONTEXTO DEL CLIENTE (CRM) ===
+${prompts['prompt_data_injection'] || ''}
+DATOS REALES DEL CLIENTE:
+${leadProfile}
+
+=== MEMORIA DE CONVERSACIÓN RECIENTE ===
+${prompts['prompt_memory'] || ''}
+HISTORIAL (Últimos mensajes):
+${chatHistoryText}
+
+=== CONOCIMIENTO EXTERNO (RAG) ===
+${relevant_knowledge ? `Información recuperada de la Base de Conocimiento:\n${relevant_knowledge}` : 'No se requiere conocimiento externo específico para este turno.'}
+
+=== ⚠️ LECCIONES APRENDIDAS (PRIORIDAD ALTA) ===
+Estas son correcciones de errores pasados que NO DEBES REPETIR:
+${learnedLessons}
 ${prompts['prompt_relearning'] || ''}
 
-### PILAR 4: VISIÓN (OJO DE HALCÓN)
-${prompts['prompt_vision_analysis'] || ''}
-${prompts['prompt_match_validation'] || ''}
-${prompts['prompt_post_validation'] || ''}
-
 ---
-CONTEXTO DE CONVERSACIÓN ACTUAL:
-- CLIENTE: ${lead_name || 'Desconocido'}
-- PLATAFORMA: ${platform || 'WhatsApp'}
-- FECHA/HORA: ${new Date().toLocaleString('es-MX')}
+INSTRUCCIÓN FINAL: Analiza el último mensaje del cliente, evalúa su perfil psicológico, consulta la memoria y genera tu respuesta en formato JSON.
     `
+
+    // Registro de Actividad
+    await supabaseClient.from('activity_logs').insert({
+       action: 'CHAT', 
+       resource: 'BRAIN', 
+       description: `Contexto generado para ${lead_name || 'Lead'} (Mood: ${leadMood})`, 
+       status: 'OK',
+       metadata: { model: 'gemini-1.5-pro', context_length: fullSystemPrompt.length }
+    });
 
     return new Response(
       JSON.stringify({
