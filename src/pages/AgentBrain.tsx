@@ -17,7 +17,6 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { logActivity } from '@/utils/logger';
-import { triggerMakeWebhook } from '@/utils/makeService';
 
 const DEFAULTS = {
   'prompt_core': `# ADN CORE\nEres Samurai, un asistente de ventas de elite. Tu misión es filtrar curiosos, calificar leads y cerrar ventas. Eres directo, eficiente pero educado.`,
@@ -105,11 +104,30 @@ const AgentBrain = () => {
   const handleRunTest = async () => {
     if (!testInput) return;
     setTesting(true);
-    const response = await triggerMakeWebhook('webhook_make_test', {
-      input: testInput, prompt: editorContent
-    });
-    setTestOutput(response?.reply || response?.text || "Sin respuesta.");
-    setTesting(false);
+    setTestOutput("Generando contexto de prueba...");
+    
+    try {
+        // Invocamos la Edge Function REAL
+        const { data, error } = await supabase.functions.invoke('get-samurai-context', {
+            body: {
+                message: testInput,
+                lead_name: "Usuario de Prueba (Lab)",
+                platform: "TEST_RUNNER"
+            }
+        });
+
+        if (error) throw error;
+
+        // Mostramos el System Prompt generado para que el usuario verifique si se inyectaron las correcciones
+        setTestOutput(data.system_prompt || "No se generó contexto.");
+        toast.success("Contexto generado exitosamente. Verifica si incluye las lecciones aprendidas.");
+
+    } catch (error: any) {
+        setTestOutput(`Error: ${error.message}`);
+        toast.error("Error al invocar Edge Function.");
+    } finally {
+        setTesting(false);
+    }
   };
 
   if (loading) return <Layout><div className="flex h-[80vh] items-center justify-center"><Loader2 className="animate-spin text-red-600" /></div></Layout>;
@@ -320,8 +338,8 @@ const AgentBrain = () => {
                    <div className="flex-1 p-4 overflow-y-auto space-y-4">
                       {testOutput ? (
                          <div className="bg-slate-900 p-3 rounded border border-slate-700">
-                            <p className="text-[10px] text-indigo-400 font-bold uppercase mb-2 flex items-center gap-1"><Bot className="w-3 h-3"/> Respuesta:</p>
-                            <p className="text-xs text-slate-200 leading-relaxed">{testOutput}</p>
+                            <p className="text-[10px] text-indigo-400 font-bold uppercase mb-2 flex items-center gap-1"><Bot className="w-3 h-3"/> System Prompt Generado:</p>
+                            <p className="text-[10px] text-slate-300 font-mono leading-relaxed whitespace-pre-wrap h-64 overflow-y-auto custom-scrollbar">{testOutput}</p>
                          </div>
                       ) : (
                          <div className="h-32 border border-dashed border-slate-800 rounded flex items-center justify-center text-slate-600 text-[10px] italic">Resultado del test...</div>
