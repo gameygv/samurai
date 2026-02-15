@@ -4,7 +4,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Send, Bot, User, UserCog, ShieldAlert, ZapOff, MessageSquare, BrainCircuit, TrendingUp, AlertCircle } from 'lucide-react';
+import { Loader2, Send, Bot, User, UserCog, ShieldAlert, ZapOff, MessageSquare, BrainCircuit, TrendingUp, AlertCircle, Image as ImageIcon, ExternalLink } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -26,7 +26,6 @@ const ChatViewer = ({ lead, open, onOpenChange }: ChatViewerProps) => {
   const [isAiPaused, setIsAiPaused] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   
-  // Estado local para el análisis (último detectado)
   const [currentAnalysis, setCurrentAnalysis] = useState<any>(null);
 
   useEffect(() => {
@@ -35,7 +34,6 @@ const ChatViewer = ({ lead, open, onOpenChange }: ChatViewerProps) => {
       subscribeToMessages();
       setIsAiPaused(lead.ai_paused || false);
       
-      // Inicializar análisis con datos del lead
       setCurrentAnalysis({
          mood: lead.estado_emocional_actual,
          buying_intent: lead.buying_intent,
@@ -60,7 +58,6 @@ const ChatViewer = ({ lead, open, onOpenChange }: ChatViewerProps) => {
 
     if (!error && data) {
        setMessages(data);
-       // Buscar el último mensaje de la IA que tenga análisis
        const lastAiMsg = [...data].reverse().find(m => m.emisor === 'SAMURAI' && m.metadata?.analysis);
        if (lastAiMsg) {
           setCurrentAnalysis(lastAiMsg.metadata.analysis);
@@ -74,7 +71,6 @@ const ChatViewer = ({ lead, open, onOpenChange }: ChatViewerProps) => {
       .channel(`chat:${lead.id}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'conversaciones', filter: `lead_id=eq.${lead.id}` }, (payload) => {
         setMessages((prev) => [...prev, payload.new]);
-        // Si es mensaje de IA con análisis, actualizar visualización
         if (payload.new.emisor === 'SAMURAI' && payload.new.metadata?.analysis) {
            setCurrentAnalysis(payload.new.metadata.analysis);
         }
@@ -86,18 +82,14 @@ const ChatViewer = ({ lead, open, onOpenChange }: ChatViewerProps) => {
   const toggleAiPause = async () => {
     const newState = !isAiPaused;
     setIsAiPaused(newState);
-    
-    // Actualizar en BD
     await supabase.from('leads').update({ ai_paused: newState }).eq('id', lead.id);
-
     await logActivity({
       action: newState ? 'UPDATE' : 'CREATE',
       resource: 'SYSTEM',
       description: `${newState ? 'PAUSADO' : 'ACTIVADO'} Samurai para lead: ${lead.nombre}`,
       status: 'OK'
     });
-
-    toast.info(newState ? 'Samurai pausado. Puedes hablar libremente.' : 'Samurai reactivado.');
+    toast.info(newState ? 'Samurai pausado.' : 'Samurai reactivado.');
   };
 
   const handleSendMessage = async (e: React.FormEvent) => {
@@ -116,7 +108,7 @@ const ChatViewer = ({ lead, open, onOpenChange }: ChatViewerProps) => {
       if (error) throw error;
       
       if (!isAiPaused) {
-         toggleAiPause(); // Auto-pausar por seguridad
+         toggleAiPause();
       }
 
       setNewMessage('');
@@ -140,6 +132,13 @@ const ChatViewer = ({ lead, open, onOpenChange }: ChatViewerProps) => {
      if (i === 'ALTO') return 'bg-green-600';
      if (i === 'MEDIO') return 'bg-yellow-500';
      return 'bg-slate-600';
+  };
+
+  // Helper para detectar si es imagen
+  const isImage = (msg: any) => {
+     if (msg.metadata?.type === 'image') return true;
+     // Fallback básico por extensión
+     return msg.mensaje.match(/\.(jpeg|jpg|gif|png|webp)$/i) != null;
   };
 
   return (
@@ -193,7 +192,26 @@ const ChatViewer = ({ lead, open, onOpenChange }: ChatViewerProps) => {
                                      {msg.emisor}
                                   </div>
                                )}
-                               <p className="whitespace-pre-wrap leading-relaxed text-xs">{msg.mensaje}</p>
+
+                               {/* RENDERIZADO DE MENSAJE O IMAGEN */}
+                               {isImage(msg) ? (
+                                  <div className="mt-1 mb-1">
+                                     <div className="rounded-lg overflow-hidden border border-white/10 relative group/img cursor-pointer" onClick={() => window.open(msg.mensaje, '_blank')}>
+                                        <img src={msg.mensaje} alt="Media sent" className="max-w-[200px] max-h-[200px] object-cover" />
+                                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/img:opacity-100 flex items-center justify-center transition-opacity">
+                                           <ExternalLink className="w-4 h-4 text-white" />
+                                        </div>
+                                     </div>
+                                     {msg.metadata?.auto_sent && (
+                                        <div className="text-[9px] text-green-300 mt-1 flex items-center gap-1">
+                                           <BrainCircuit className="w-3 h-3" /> Enviado autom. por IA
+                                        </div>
+                                     )}
+                                  </div>
+                               ) : (
+                                  <p className="whitespace-pre-wrap leading-relaxed text-xs">{msg.mensaje}</p>
+                               )}
+
                                <div className="flex justify-end items-center gap-2 mt-1">
                                   <span className="text-[9px] opacity-40">{new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
                                </div>
