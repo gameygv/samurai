@@ -2,8 +2,8 @@ import React from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { 
   LayoutDashboard, Brain, Activity, Settings as SettingsIcon, Database, LogOut, 
-  Users, FileText, UserCircle, Shield, GraduationCap, Zap, MessageSquare, 
-  GitBranch, Link as LinkIcon, BarChart3, Image, Sparkles
+  Users, FileText, UserCircle, GraduationCap, MessageSquare, 
+  GitBranch, Link as LinkIcon, Image, Sparkles
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/context/AuthContext';
@@ -26,7 +26,7 @@ interface LayoutProps {
 const Layout = ({ children }: LayoutProps) => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, profile, isAdmin, signOut } = useAuth();
+  const { user, profile, signOut } = useAuth();
 
   const handleLogout = async () => {
     await signOut();
@@ -43,9 +43,8 @@ const Layout = ({ children }: LayoutProps) => {
     {
       title: "SAMURAI AI",
       items: [
-        { icon: Brain, label: 'Cerebro (Core)', path: '/brain' },
-        { icon: Sparkles, label: 'Geoffrey', path: '/geoffrey' },
-        { icon: GitBranch, label: 'Prompts & Versiones', path: '/brain?tab=part5' },
+        { icon: Brain, label: 'Cerebro Core', path: '/brain' },
+        { icon: GitBranch, label: 'Control de Versiones', path: '/brain?tab=part5' },
       ]
     },
     {
@@ -76,13 +75,12 @@ const Layout = ({ children }: LayoutProps) => {
 
   return (
     <div className="flex min-h-screen bg-slate-950 text-white font-sans">
-      {/* Sidebar */}
       <aside className="w-64 border-r border-slate-800 bg-slate-900/50 hidden md:flex flex-col">
         <div className="p-6 flex items-center gap-3">
           <div className="w-8 h-8 rounded-full bg-red-600 flex items-center justify-center text-white font-bold shadow-lg shadow-red-900/50">
             侍
           </div>
-          <span className="font-bold text-xl tracking-tight">SAMURAI v0.801</span>
+          <span className="font-bold text-xl tracking-tight uppercase">Samurai</span>
         </div>
 
         <ScrollArea className="flex-1 px-4">
@@ -95,7 +93,6 @@ const Layout = ({ children }: LayoutProps) => {
                 <div className="space-y-1">
                   {group.items.map((item) => {
                     const Icon = item.icon;
-                    // Check if path matches or if query param matches for tabs
                     const isActive = location.pathname === item.path.split('?')[0];
                     
                     return (
@@ -105,7 +102,7 @@ const Layout = ({ children }: LayoutProps) => {
                         className={cn(
                           "flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-all duration-200",
                           isActive 
-                            ? "bg-red-600/10 text-red-500 font-medium" 
+                            ? "bg-red-600/10 text-red-500 font-medium border-l-2 border-red-600" 
                             : "text-slate-400 hover:bg-slate-800 hover:text-white"
                         )}
                       >
@@ -123,15 +120,11 @@ const Layout = ({ children }: LayoutProps) => {
         <div className="p-4 border-t border-slate-800">
            <div className="flex items-center gap-2 px-2 py-1 mb-1">
               <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
-              <span className="text-xs text-slate-400 font-mono">SYSTEM: ONLINE</span>
-           </div>
-           <div className="text-[10px] text-slate-600 px-2 font-mono">
-              v0.801-rc
+              <span className="text-xs text-slate-400 font-mono">SAMURAI: ONLINE</span>
            </div>
         </div>
       </aside>
 
-      {/* Main Content */}
       <main className="flex-1 overflow-auto flex flex-col">
         <header className="h-16 border-b border-slate-800 bg-slate-900/30 backdrop-blur-md flex items-center px-8 justify-between sticky top-0 z-10">
           <h2 className="text-lg font-medium text-slate-200">
@@ -143,8 +136,7 @@ const Layout = ({ children }: LayoutProps) => {
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="relative h-10 w-10 rounded-full hover:bg-slate-800">
                   <Avatar className="h-9 w-9 border border-slate-700">
-                    <AvatarImage src="" alt={profile?.username || 'User'} />
-                    <AvatarFallback className="bg-slate-800 text-indigo-400 font-bold">
+                    <AvatarFallback className="bg-slate-800 text-red-500 font-bold">
                       {profile?.username?.substring(0, 2).toUpperCase() || 'US'}
                     </AvatarFallback>
                   </Avatar>

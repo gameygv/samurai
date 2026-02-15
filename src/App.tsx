@@ -17,12 +17,10 @@ import Profile from "./pages/Profile";
 import Settings from "./pages/Settings";
 import Leads from "./pages/Leads";
 import MediaManager from "./pages/MediaManager";
-import Geoffrey from "./pages/Geoffrey";
 import { Loader2 } from "lucide-react";
 
 const queryClient = new QueryClient();
 
-// Componente para proteger rutas
 const PrivateRoute = ({ children }: { children: React.ReactNode }) => {
   const { session, loading } = useAuth();
   const location = useLocation();
@@ -52,10 +50,8 @@ const App = () => (
           <Routes>
             <Route path="/login" element={<Login />} />
             
-            {/* Protected Routes */}
             <Route path="/" element={<PrivateRoute><Index /></PrivateRoute>} />
             <Route path="/brain" element={<PrivateRoute><AgentBrain /></PrivateRoute>} />
-            <Route path="/geoffrey" element={<PrivateRoute><Geoffrey /></PrivateRoute>} />
             <Route path="/learning" element={<PrivateRoute><LearningLog /></PrivateRoute>} />
             <Route path="/knowledge" element={<PrivateRoute><KnowledgeBase /></PrivateRoute>} />
             <Route path="/media" element={<PrivateRoute><MediaManager /></PrivateRoute>} />
@@ -66,7 +62,6 @@ const App = () => (
             <Route path="/settings" element={<PrivateRoute><Settings /></PrivateRoute>} />
             <Route path="/leads" element={<PrivateRoute><Leads /></PrivateRoute>} />
             
-            {/* Catch-all */}
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
