@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Webhook, Key, Save, Loader2, ShieldAlert, CheckCircle2, Eye, EyeOff, Info } from 'lucide-react';
+import { Webhook, Key, Save, Loader2, ShieldAlert, CheckCircle2, Eye, EyeOff, Info, Play, ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
 import { logActivity } from '@/utils/logger';
 
@@ -21,6 +21,7 @@ const Settings = () => {
   const [configs, setConfigs] = useState<ConfigItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [testingWebhook, setTestingWebhook] = useState<string | null>(null);
   const [showSecrets, setShowSecrets] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
@@ -49,6 +50,33 @@ const Settings = () => {
 
   const toggleVisibility = (key: string) => {
     setShowSecrets(prev => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const handleTestWebhook = async (url: string, key: string) => {
+    if (!url) return toast.error("Ingresa una URL primero");
+    setTestingWebhook(key);
+    
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          test: true,
+          message: "Esta es una prueba de conexión desde Samurai Panel",
+          timestamp: new Date().toISOString()
+        })
+      });
+
+      if (response.ok) {
+        toast.success(`Conexión exitosa con Make! Status: ${response.status}`);
+      } else {
+        toast.error(`Make respondió con error: ${response.status}`);
+      }
+    } catch (error: any) {
+      toast.error(`Error de red: ${error.message}`);
+    } finally {
+      setTestingWebhook(null);
+    }
   };
 
   const handleSave = async () => {
@@ -96,23 +124,86 @@ const Settings = () => {
             <h1 className="text-3xl font-bold text-white mb-2">Configuración</h1>
             <p className="text-slate-400">Gestión de llaves maestras e integraciones.</p>
           </div>
-          <Button onClick={handleSave} disabled={saving} className="bg-green-600 hover:bg-green-700">
+          <Button 
+            onClick={handleSave} 
+            disabled={saving} 
+            className="bg-green-600 hover:bg-green-700 text-white font-bold shadow-lg shadow-green-900/20"
+          >
             {saving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />}
             Guardar Todo
           </Button>
         </div>
 
-        <Tabs defaultValue="secrets" className="w-full">
+        <Tabs defaultValue="webhooks" className="w-full">
           <TabsList className="bg-slate-900 border border-slate-800">
-            <TabsTrigger value="secrets"><Key className="w-4 h-4 mr-2" /> API Keys (Opcional)</TabsTrigger>
-            <TabsTrigger value="webhooks"><Webhook className="w-4 h-4 mr-2" /> Webhooks & Make</TabsTrigger>
+            <TabsTrigger value="webhooks" className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white">
+              <Webhook className="w-4 h-4 mr-2" /> Webhooks & Make
+            </TabsTrigger>
+            <TabsTrigger value="secrets" className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white">
+              <Key className="w-4 h-4 mr-2" /> API Keys (Opcional)
+            </TabsTrigger>
           </TabsList>
 
+          {/* TAB: WEBHOOKS (MAKE) */}
+          <TabsContent value="webhooks" className="mt-6">
+            <Card className="bg-slate-900 border-slate-800">
+              <CardHeader>
+                <CardTitle className="text-white">Conexiones Activas con Make</CardTitle>
+                <CardDescription className="text-slate-400">
+                  Pega aquí las URLs de tus Webhooks de Make. Usa el botón "Probar" para verificar que Make recibe datos.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-8">
+                {webhooks.length === 0 && <p className="text-slate-500">No hay webhooks configurados en la BD.</p>}
+                
+                {webhooks.map((item) => (
+                  <div key={item.key} className="space-y-3 p-4 rounded-xl bg-slate-950/50 border border-slate-800">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-indigo-400 font-bold font-mono text-sm uppercase tracking-wider">
+                          {item.key.replace('webhook_', '').replace(/_/g, ' ')}
+                        </Label>
+                        {item.value && (
+                           <Badge variant="outline" className="border-green-500/30 text-green-500 bg-green-500/10 text-[10px]">
+                              Configurado
+                           </Badge>
+                        )}
+                      </div>
+                      
+                      <div className="flex gap-2">
+                        <Input 
+                          value={item.value || ''}
+                          onChange={(e) => handleInputChange(item.key, e.target.value)}
+                          className="bg-slate-950 border-slate-700 text-white font-mono text-xs focus-visible:ring-indigo-500"
+                          placeholder="https://hook.make.com/..."
+                        />
+                        <Button 
+                          onClick={() => handleTestWebhook(item.value, item.key)}
+                          disabled={!item.value || testingWebhook === item.key}
+                          variant="secondary"
+                          className="bg-indigo-600 hover:bg-indigo-700 text-white border-0 min-w-[100px]"
+                        >
+                          {testingWebhook === item.key ? <Loader2 className="w-4 h-4 animate-spin" /> : (
+                            <>
+                              <Play className="w-3 h-3 mr-2" /> Probar
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                      <p className="text-xs text-slate-500 flex items-center gap-2">
+                        <Info className="w-3 h-3" /> {item.description}
+                      </p>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* TAB: SECRETS (API KEYS) */}
           <TabsContent value="secrets" className="mt-6 space-y-6">
              <div className="bg-blue-900/20 border border-blue-900/50 p-4 rounded-lg flex gap-3 mb-6">
                 <Info className="w-5 h-5 text-blue-400 shrink-0" />
                 <p className="text-sm text-blue-200">
-                   <strong>Nota:</strong> Estas llaves NO se usan para la conexión con Make. Son un almacenamiento seguro por si necesitas usarlas en Edge Functions personalizadas.
+                   <strong>Nota:</strong> Estas llaves son almacenamiento seguro. No se usan para la conexión con Make.
                 </p>
              </div>
 
@@ -130,9 +221,9 @@ const Settings = () => {
                                  type={showSecrets[item.key] ? "text" : "password"}
                                  value={item.value || ''}
                                  onChange={(e) => handleInputChange(item.key, e.target.value)}
-                                 className="bg-slate-950 border-slate-800 pr-10 font-mono"
+                                 className="bg-slate-950 border-slate-700 text-white pr-10 font-mono"
                                />
-                               <Button variant="ghost" size="icon" className="absolute right-0 top-0 h-full text-slate-500 hover:text-white" onClick={() => toggleVisibility(item.key)}>
+                               <Button variant="ghost" size="icon" className="absolute right-0 top-0 h-full text-slate-400 hover:text-white" onClick={() => toggleVisibility(item.key)}>
                                   {showSecrets[item.key] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                                </Button>
                             </div>
@@ -154,10 +245,10 @@ const Settings = () => {
                                  type={showSecrets[item.key] || item.key.includes('id') ? "text" : "password"}
                                  value={item.value || ''}
                                  onChange={(e) => handleInputChange(item.key, e.target.value)}
-                                 className="bg-slate-950 border-slate-800 font-mono"
+                                 className="bg-slate-950 border-slate-700 text-white font-mono"
                                />
                                {!item.key.includes('id') && (
-                                 <Button variant="ghost" size="icon" className="absolute right-0 top-0 h-full text-slate-500 hover:text-white" onClick={() => toggleVisibility(item.key)}>
+                                 <Button variant="ghost" size="icon" className="absolute right-0 top-0 h-full text-slate-400 hover:text-white" onClick={() => toggleVisibility(item.key)}>
                                     {showSecrets[item.key] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                                  </Button>
                                )}
@@ -167,38 +258,6 @@ const Settings = () => {
                    </CardContent>
                 </Card>
              </div>
-          </TabsContent>
-
-          <TabsContent value="webhooks" className="mt-6">
-            <Card className="bg-slate-900 border-slate-800">
-              <CardHeader>
-                <CardTitle className="text-white">Conexiones Activas con Make</CardTitle>
-                <CardDescription>
-                  Pega aquí las URLs de tus Webhooks de Make para conectar las funcionalidades.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="space-y-6">
-                   {webhooks.map((item) => (
-                      <div key={item.key} className="space-y-2">
-                         <div className="flex items-center justify-between">
-                            <Label className="text-indigo-400 font-mono text-sm uppercase">{item.key.replace('webhook_', '').replace(/_/g, ' ')}</Label>
-                            <span className="text-[10px] text-slate-500 bg-slate-800 px-2 py-0.5 rounded">POST</span>
-                         </div>
-                         <div className="flex gap-2">
-                            <Input 
-                              value={item.value || ''}
-                              onChange={(e) => handleInputChange(item.key, e.target.value)}
-                              className="bg-slate-950 border-slate-800 text-slate-300 font-mono text-xs"
-                              placeholder="https://hook.make.com/..."
-                            />
-                         </div>
-                         <p className="text-xs text-slate-500">{item.description}</p>
-                      </div>
-                   ))}
-                </div>
-              </CardContent>
-            </Card>
           </TabsContent>
         </Tabs>
       </div>
