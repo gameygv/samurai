@@ -15,13 +15,16 @@ import {
 } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer } from 'recharts';
 import { toast } from 'sonner';
+import { logActivity } from '@/utils/logger';
 
 const LearningLog = () => {
   const [loading, setLoading] = useState(true);
+  const [updating, setUpdating] = useState(false);
   const [errors, setErrors] = useState<any[]>([]);
   const [versions, setVersions] = useState<any[]>([]);
   const [timelineData, setTimelineData] = useState<any[]>([]);
   const [selectedError, setSelectedError] = useState<any>(null);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
 
   // Filters
   const [searchTerm, setSearchTerm] = useState('');
@@ -35,444 +38,153 @@ const LearningLog = () => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      // 1. Fetch Errores
-      const { data: errorsData, error: errorsError } = await supabase
-        .from('errores_ia')
-        .select('*')
-        .order('reported_at', { ascending: false });
-
-      if (errorsError) throw errorsError;
+      const { data: errorsData } = await supabase.from('errores_ia').select('*').order('reported_at', { ascending: false });
       setErrors(errorsData || []);
 
-      // 2. Fetch Versiones
-      const { data: versionsData, error: versionsError } = await supabase
-        .from('versiones_prompts_aprendidas')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (versionsError) throw versionsError;
+      const { data: versionsData } = await supabase.from('versiones_prompts_aprendidas').select('*').order('created_at', { ascending: false });
       setVersions(versionsData || []);
 
-      // 3. Build Timeline Data from Versions
       if (versionsData) {
-        const sortedVersions = [...versionsData].sort((a, b) => 
-          new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-        );
-        
-        const chartData = sortedVersions.map(v => ({
+        const sortedVersions = [...versionsData].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+        setTimelineData(sortedVersions.map(v => ({
           date: new Date(v.created_at).toLocaleDateString('es-MX', { day: 'numeric', month: 'numeric' }),
           accuracy: v.test_accuracy_nuevo,
           version: v.version_numero
-        }));
-        setTimelineData(chartData);
+        })));
       }
-
-    } catch (error: any) {
-      console.error('Error fetching learning data:', error);
-      toast.error('Error cargando datos de aprendizaje');
+    } catch (error) {
+      toast.error('Error cargando datos');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleExport = (type: string) => {
-    toast.success(`Reporte ${type} generado y enviado a tu correo.`);
+  const updateErrorStatus = async (status: string) => {
+    if (!selectedError) return;
+    setUpdating(true);
+    try {
+      const { error } = await supabase
+        .from('errores_ia')
+        .update({ estado_correccion: status, applied_at: status === 'VALIDADA' ? new Date().toISOString() : null })
+        .eq('error_id', selectedError.error_id);
+
+      if (error) throw error;
+
+      await logActivity({
+        action: 'UPDATE',
+        resource: 'BRAIN',
+        description: `Error IA ${selectedError.error_id.substring(0,8)} marcado como ${status}`,
+        status: 'OK'
+      });
+
+      toast.success(`Estado actualizado a ${status}`);
+      setIsDialogOpen(false);
+      fetchData();
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setUpdating(false);
+    }
   };
 
-  const getFilteredErrors = () => {
-    return errors.filter(err => {
-      const matchesSearch = 
-        err.mensaje_cliente?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        err.categoria?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        err.error_id?.toLowerCase().includes(searchTerm.toLowerCase());
-      
-      const matchesStatus = statusFilter === 'all' || err.estado_correccion?.toLowerCase() === statusFilter.toLowerCase();
-      const matchesSeverity = severityFilter === 'all' || err.severidad?.toLowerCase() === severityFilter.toLowerCase();
+  const filteredErrors = errors.filter(err => {
+    const matchesSearch = err.mensaje_cliente?.toLowerCase().includes(searchTerm.toLowerCase()) || err.categoria?.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesStatus = statusFilter === 'all' || err.estado_correccion?.toLowerCase() === statusFilter.toLowerCase();
+    const matchesSeverity = severityFilter === 'all' || err.severidad?.toLowerCase() === severityFilter.toLowerCase();
+    return matchesSearch && matchesStatus && matchesSeverity;
+  });
 
-      return matchesSearch && matchesStatus && matchesSeverity;
-    });
-  };
+  // Stats
+  const appliedPercentage = errors.length > 0 ? Math.round((errors.filter(e => e.estado_correccion === 'VALIDADA').length / errors.length) * 100) : 0;
 
-  const filteredErrors = getFilteredErrors();
-
-  // Statistics
-  const totalErrors = errors.length;
-  const appliedErrors = errors.filter(e => e.estado_correccion === 'APLICADA' || e.estado_correccion === 'VALIDADA').length;
-  const appliedPercentage = totalErrors > 0 ? Math.round((appliedErrors / totalErrors) * 100) : 0;
-  
-  // Group by category logic for KPI
-  const categoryCounts = errors.reduce((acc: any, curr) => {
-    acc[curr.categoria] = (acc[curr.categoria] || 0) + 1;
-    return acc;
-  }, {});
-  const sortedCategories = Object.entries(categoryCounts).sort(([,a]: any, [,b]: any) => b - a);
-
-  // Group by reporter logic for KPI
-  const reporterCounts = errors.reduce((acc: any, curr) => {
-    const reporter = curr.created_by || 'Unknown';
-    acc[reporter] = (acc[reporter] || 0) + 1;
-    return acc;
-  }, {});
-  const sortedReporters = Object.entries(reporterCounts).sort(([,a]: any, [,b]: any) => b - a);
-
-  if (loading) {
-     return (
-        <Layout>
-           <div className="flex h-[80vh] items-center justify-center">
-              <Loader2 className="w-8 h-8 animate-spin text-indigo-500" />
-           </div>
-        </Layout>
-     );
-  }
+  if (loading) return <Layout><div className="flex h-[80vh] items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-indigo-500" /></div></Layout>;
 
   return (
     <Layout>
       <div className="max-w-7xl mx-auto space-y-6 pb-10">
-        
-        {/* HEADER */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-white flex items-center gap-2">
-              <Brain className="w-8 h-8 text-indigo-500" />
-              Bitácora de Aprendizaje IA
-            </h1>
-            <p className="text-slate-400">
-              Tracking de #CORREGIRIA, versiones y mejora continua del Samurai.
-              <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-500/10 text-green-500 border border-green-500/20">
-                {versions[0]?.version_numero || 'v1.0'} Activa
-              </span>
-            </p>
-          </div>
-          <div className="flex gap-2">
-             <Button variant="outline" className="border-slate-700 text-slate-300 hover:bg-slate-800" onClick={() => handleExport('CSV')}>
-                <Download className="w-4 h-4 mr-2" /> CSV
-             </Button>
-             <Button variant="outline" className="border-slate-700 text-slate-300 hover:bg-slate-800" onClick={() => handleExport('PDF')}>
-                <FileText className="w-4 h-4 mr-2" /> PDF Report
-             </Button>
+            <h1 className="text-3xl font-bold text-white flex items-center gap-2"><Brain className="w-8 h-8 text-indigo-500" /> Bitácora de Aprendizaje Real</h1>
+            <p className="text-slate-400">Tracking y validación de mejoras del Samurai.</p>
           </div>
         </div>
 
-        {/* KPI CARDS */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <Card className="bg-slate-900 border-slate-800">
-            <CardHeader className="pb-2">
-               <CardTitle className="text-sm font-medium text-slate-400">Errores Aplicados</CardTitle>
-            </CardHeader>
-            <CardContent>
-               <div className="flex justify-between items-end">
-                  <div>
-                     <span className="text-3xl font-bold text-white">{appliedPercentage}%</span>
-                     <span className="text-sm text-slate-500 ml-2">{appliedErrors}/{totalErrors}</span>
-                  </div>
-                  <TrendingUp className="w-8 h-8 text-green-500 opacity-50" />
-               </div>
-               <div className="mt-2 text-xs text-green-400 flex items-center gap-1">
-                  <ArrowRight className="w-3 h-3" />
-                  Tasa de aplicación
-               </div>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-slate-900 border-slate-800">
-            <CardHeader className="pb-2">
-               <CardTitle className="text-sm font-medium text-slate-400">Top Categorías</CardTitle>
-            </CardHeader>
-            <CardContent>
-               <div className="space-y-2">
-                  {sortedCategories.slice(0, 3).map(([cat, count]: any, idx) => (
-                     <div key={cat} className="flex justify-between text-sm">
-                        <span className="text-slate-300">{idx + 1}. {cat}</span>
-                        <span className="text-slate-500">{count} errores</span>
-                     </div>
-                  ))}
-                  {sortedCategories.length === 0 && <span className="text-slate-500 text-sm">Sin datos aún</span>}
-                  
-                  <div className="w-full bg-slate-800 h-1.5 rounded-full mt-2">
-                     <div className="bg-yellow-500 h-1.5 rounded-full" style={{ width: '65%' }}></div>
-                  </div>
-               </div>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-slate-900 border-slate-800">
-             <CardHeader className="pb-2">
-               <CardTitle className="text-sm font-medium text-slate-400">Reportadores</CardTitle>
-            </CardHeader>
-            <CardContent>
-               <div className="space-y-3">
-                  {sortedReporters.slice(0, 3).map(([name, count]: any) => (
-                     <div key={name} className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                           <div className="w-6 h-6 rounded-full bg-purple-500/20 text-purple-500 flex items-center justify-center text-xs">
-                              {name.charAt(0).toUpperCase()}
-                           </div>
-                           <span className="text-sm text-slate-300">{name}</span>
-                        </div>
-                        <span className="text-sm font-bold text-white">{count}</span>
-                     </div>
-                  ))}
-                  {sortedReporters.length === 0 && <span className="text-slate-500 text-sm">Sin datos aún</span>}
-               </div>
-            </CardContent>
+          <Card className="bg-slate-900 border-slate-800 p-6">
+             <p className="text-sm font-medium text-slate-400">Eficiencia de Aprendizaje</p>
+             <h3 className="text-3xl font-bold text-white mt-1">{appliedPercentage}% <span className="text-sm text-slate-500">Validados</span></h3>
+             <div className="w-full bg-slate-800 h-1.5 rounded-full mt-4"><div className="bg-indigo-500 h-1.5 rounded-full" style={{ width: `${appliedPercentage}%` }}></div></div>
           </Card>
         </div>
 
-        {/* TABS CONTENT */}
         <Tabs defaultValue="corregiria" className="w-full">
           <TabsList className="bg-slate-900 border border-slate-800">
-            <TabsTrigger value="corregiria" className="data-[state=active]:bg-slate-800 data-[state=active]:text-white">
-               <AlertTriangle className="w-4 h-4 mr-2" /> #CORREGIRIA
-            </TabsTrigger>
-            <TabsTrigger value="versiones" className="data-[state=active]:bg-slate-800 data-[state=active]:text-white">
-               <GitBranch className="w-4 h-4 mr-2" /> Versiones Prompts
-            </TabsTrigger>
-            <TabsTrigger value="timeline" className="data-[state=active]:bg-slate-800 data-[state=active]:text-white">
-               <TrendingUp className="w-4 h-4 mr-2" /> Timeline Mejora
-            </TabsTrigger>
+            <TabsTrigger value="corregiria"><AlertTriangle className="w-4 h-4 mr-2" /> #CORREGIRIA</TabsTrigger>
+            <TabsTrigger value="versiones"><GitBranch className="w-4 h-4 mr-2" /> Versiones</TabsTrigger>
           </TabsList>
 
-          {/* TAB 1: CORREGIRIA TABLE */}
           <TabsContent value="corregiria" className="mt-6 space-y-4">
-            
-            {/* Filters */}
             <div className="flex flex-col md:flex-row gap-4 bg-slate-900 p-4 rounded-lg border border-slate-800">
-               <div className="relative flex-1">
-                  <Search className="absolute left-2 top-2.5 h-4 w-4 text-slate-500" />
-                  <Input 
-                     placeholder="Buscar por mensaje o categoría..." 
-                     className="pl-8 bg-slate-950 border-slate-800" 
-                     value={searchTerm}
-                     onChange={(e) => setSearchTerm(e.target.value)}
-                  />
-               </div>
+               <Input placeholder="Buscar..." className="bg-slate-950 border-slate-800" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
                <Select value={statusFilter} onValueChange={setStatusFilter}>
-                  <SelectTrigger className="w-[180px] bg-slate-950 border-slate-800">
-                     <SelectValue placeholder="Estado" />
-                  </SelectTrigger>
+                  <SelectTrigger className="w-[180px] bg-slate-950 border-slate-800"><SelectValue placeholder="Estado" /></SelectTrigger>
                   <SelectContent className="bg-slate-900 border-slate-800 text-white">
-                     <SelectItem value="all">Todos los Estados</SelectItem>
-                     <SelectItem value="APLICADA">Aplicada</SelectItem>
+                     <SelectItem value="all">Todos</SelectItem>
+                     <SelectItem value="REPORTADA">Reportada</SelectItem>
                      <SelectItem value="PENDIENTE">Pendiente</SelectItem>
                      <SelectItem value="VALIDADA">Validada</SelectItem>
                   </SelectContent>
                </Select>
-               <Select value={severityFilter} onValueChange={setSeverityFilter}>
-                  <SelectTrigger className="w-[180px] bg-slate-950 border-slate-800">
-                     <SelectValue placeholder="Severidad" />
-                  </SelectTrigger>
-                  <SelectContent className="bg-slate-900 border-slate-800 text-white">
-                     <SelectItem value="all">Todas</SelectItem>
-                     <SelectItem value="CRITICA">Crítica</SelectItem>
-                     <SelectItem value="ALTA">Alta</SelectItem>
-                     <SelectItem value="MEDIA">Media</SelectItem>
-                  </SelectContent>
-               </Select>
             </div>
 
-            <Card className="bg-slate-900 border-slate-800">
-               <CardContent className="p-0">
-                  <Table>
-                     <TableHeader>
-                        <TableRow className="border-slate-800 hover:bg-slate-900">
-                           <TableHead className="text-slate-400">ID</TableHead>
-                           <TableHead className="text-slate-400">Categoría</TableHead>
-                           <TableHead className="text-slate-400">Severidad</TableHead>
-                           <TableHead className="text-slate-400">Reportada</TableHead>
-                           <TableHead className="text-slate-400">Estado</TableHead>
-                           <TableHead className="text-slate-400">Mejora</TableHead>
-                           <TableHead className="text-slate-400 text-right">Acciones</TableHead>
+            <Card className="bg-slate-900 border-slate-800 overflow-hidden">
+               <Table>
+                  <TableHeader>
+                     <TableRow className="border-slate-800">
+                        <TableHead>Categoría</TableHead>
+                        <TableHead>Severidad</TableHead>
+                        <TableHead>Estado</TableHead>
+                        <TableHead className="text-right">Acciones</TableHead>
+                     </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                     {filteredErrors.map(err => (
+                        <TableRow key={err.error_id} className="border-slate-800">
+                           <TableCell className="text-slate-300 font-medium">{err.categoria}</TableCell>
+                           <TableCell><Badge variant="outline" className={err.severidad === 'CRITICA' ? 'text-red-500' : 'text-yellow-500'}>{err.severidad}</Badge></TableCell>
+                           <TableCell><Badge className={err.estado_correccion === 'VALIDADA' ? 'bg-green-600' : 'bg-slate-700'}>{err.estado_correccion}</Badge></TableCell>
+                           <TableCell className="text-right">
+                              <Button variant="ghost" size="sm" onClick={() => { setSelectedError(err); setIsDialogOpen(true); }}>
+                                 <Eye className="w-4 h-4" />
+                              </Button>
+                           </TableCell>
                         </TableRow>
-                     </TableHeader>
-                     <TableBody>
-                        {filteredErrors.length === 0 ? (
-                           <TableRow>
-                              <TableCell colSpan={7} className="text-center h-24 text-slate-500">No se encontraron errores.</TableCell>
-                           </TableRow>
-                        ) : filteredErrors.map((err) => (
-                           <TableRow key={err.error_id} className="border-slate-800 hover:bg-slate-800/50">
-                              <TableCell className="font-mono text-xs text-slate-500">{err.error_id.substring(0, 8)}...</TableCell>
-                              <TableCell className="text-slate-300 font-medium">{err.categoria}</TableCell>
-                              <TableCell>
-                                 <Badge variant="outline" className={`
-                                    ${err.severidad === 'CRITICA' ? 'border-red-500 text-red-500 bg-red-500/10' :
-                                      err.severidad === 'ALTA' ? 'border-orange-500 text-orange-500 bg-orange-500/10' :
-                                      err.severidad === 'MEDIA' ? 'border-yellow-500 text-yellow-500 bg-yellow-500/10' :
-                                      'border-blue-500 text-blue-500 bg-blue-500/10'}
-                                 `}>
-                                    {err.severidad}
-                                 </Badge>
-                              </TableCell>
-                              <TableCell className="text-slate-400 text-sm">
-                                 <div className="flex items-center gap-2">
-                                    <User className="w-3 h-3" /> {err.created_by}
-                                 </div>
-                              </TableCell>
-                              <TableCell>
-                                 {err.estado_correccion === 'APLICADA' && <Badge className="bg-green-600">Aplicada</Badge>}
-                                 {err.estado_correccion === 'VALIDADA' && <Badge className="bg-emerald-600">Validada</Badge>}
-                                 {err.estado_correccion === 'PENDIENTE' && <Badge variant="secondary">Pendiente</Badge>}
-                                 {err.estado_correccion === 'REPORTADA' && <Badge variant="secondary" className="bg-slate-700">Reportada</Badge>}
-                              </TableCell>
-                              <TableCell className="text-green-400 font-mono text-xs">{err.tasa_mejora_post ? `+${err.tasa_mejora_post}%` : '-'}</TableCell>
-                              <TableCell className="text-right">
-                                 <Dialog>
-                                    <DialogTrigger asChild>
-                                       <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => setSelectedError(err)}>
-                                          <Eye className="w-4 h-4 text-slate-400 hover:text-white" />
-                                       </Button>
-                                    </DialogTrigger>
-                                    <DialogContent className="bg-slate-900 border-slate-800 text-slate-200 max-w-2xl">
-                                       <DialogHeader>
-                                          <DialogTitle className="text-xl flex items-center gap-2">
-                                             <AlertTriangle className="w-5 h-5 text-indigo-400" />
-                                             Detalle #CORREGIRIA
-                                          </DialogTitle>
-                                          <DialogDescription className="text-slate-400">
-                                             Reportado por {err.created_by} el {new Date(err.reported_at).toLocaleString()}
-                                          </DialogDescription>
-                                       </DialogHeader>
-                                       
-                                       <div className="grid grid-cols-2 gap-6 py-4">
-                                          <div className="col-span-2 space-y-2">
-                                             <h4 className="text-xs font-semibold text-slate-500 uppercase">Contexto del Error</h4>
-                                             <div className="bg-slate-950 p-4 rounded border border-slate-800 space-y-3">
-                                                <div>
-                                                   <span className="text-xs text-red-400 block mb-1">Cliente dijo:</span>
-                                                   <p className="text-sm text-slate-300 italic">"{err.mensaje_cliente}"</p>
-                                                </div>
-                                                <div>
-                                                   <span className="text-xs text-red-400 block mb-1">Respuesta IA (Incorrecta):</span>
-                                                   <p className="text-sm text-slate-300 italic">"{err.respuesta_ia}"</p>
-                                                </div>
-                                                <div className="h-px bg-slate-800 w-full"></div>
-                                                <div>
-                                                   <span className="text-xs text-green-400 block mb-1">Corrección Propuesta:</span>
-                                                   <p className="text-sm text-slate-300">"{err.correccion_sugerida}"</p>
-                                                </div>
-                                             </div>
-                                          </div>
-
-                                          <div className="space-y-2">
-                                             <h4 className="text-xs font-semibold text-slate-500 uppercase">Análisis</h4>
-                                             <div className="space-y-1 text-sm">
-                                                <div className="flex justify-between border-b border-slate-800 pb-1">
-                                                   <span className="text-slate-400">Categoría:</span>
-                                                   <span className="text-white">{err.categoria}</span>
-                                                </div>
-                                                <div className="flex justify-between border-b border-slate-800 pb-1 pt-1">
-                                                   <span className="text-slate-400">Severidad:</span>
-                                                   <span className="text-white">{err.severidad}</span>
-                                                </div>
-                                             </div>
-                                          </div>
-
-                                          <div className="space-y-2">
-                                             <h4 className="text-xs font-semibold text-slate-500 uppercase">Impacto</h4>
-                                             <div className="space-y-1 text-sm">
-                                                <div className="flex justify-between border-b border-slate-800 pb-1">
-                                                   <span className="text-slate-400">Mejora:</span>
-                                                   <span className="text-green-400 font-bold">{err.tasa_mejora_post ? `+${err.tasa_mejora_post}%` : 'N/A'}</span>
-                                                </div>
-                                                <div className="flex justify-between border-b border-slate-800 pb-1 pt-1">
-                                                   <span className="text-slate-400">Estado:</span>
-                                                   <span className="text-white">{err.estado_correccion}</span>
-                                                </div>
-                                             </div>
-                                          </div>
-                                       </div>
-
-                                       <DialogFooter className="gap-2">
-                                          <Button variant="outline" className="border-slate-700 hover:bg-slate-800">Marcar Rechazada</Button>
-                                          <Button className="bg-indigo-600 hover:bg-indigo-700">Validar Mejora</Button>
-                                       </DialogFooter>
-                                    </DialogContent>
-                                 </Dialog>
-                              </TableCell>
-                           </TableRow>
-                        ))}
-                     </TableBody>
-                  </Table>
-               </CardContent>
+                     ))}
+                  </TableBody>
+               </Table>
             </Card>
           </TabsContent>
-
-          {/* TAB 2: VERSIONS */}
-          <TabsContent value="versiones" className="mt-6">
-             <Card className="bg-slate-900 border-slate-800">
-               <CardHeader>
-                  <CardTitle className="text-white text-lg">Evolución de Prompts</CardTitle>
-                  <p className="text-sm text-slate-400">Historial de versiones generadas a partir del aprendizaje.</p>
-               </CardHeader>
-               <CardContent className="p-0">
-                  <Table>
-                     <TableHeader>
-                        <TableRow className="border-slate-800 hover:bg-slate-900">
-                           <TableHead className="text-slate-400">Versión</TableHead>
-                           <TableHead className="text-slate-400">Prompt Base</TableHead>
-                           <TableHead className="text-slate-400">Mejora Total</TableHead>
-                           <TableHead className="text-slate-400">Accuracy (Antes → Después)</TableHead>
-                           <TableHead className="text-slate-400"># Corregiria</TableHead>
-                           <TableHead className="text-slate-400 text-right">Creado</TableHead>
-                        </TableRow>
-                     </TableHeader>
-                     <TableBody>
-                        {versions.length === 0 ? (
-                           <TableRow>
-                              <TableCell colSpan={6} className="text-center h-24 text-slate-500">No hay versiones registradas.</TableCell>
-                           </TableRow>
-                        ) : versions.map((v) => (
-                           <TableRow key={v.version_id} className="border-slate-800 hover:bg-slate-800/50">
-                              <TableCell className="font-mono text-indigo-400 font-bold">{v.version_numero}</TableCell>
-                              <TableCell className="text-slate-300">{v.prompt_nombre}</TableCell>
-                              <TableCell className="text-green-400 font-bold">+{v.mejora_porcentaje}%</TableCell>
-                              <TableCell className="text-slate-400 text-xs">
-                                 {v.test_accuracy_anterior} <ArrowRight className="w-3 h-3 inline mx-1" /> <span className="text-white">{v.test_accuracy_nuevo}</span>
-                              </TableCell>
-                              <TableCell className="text-slate-300 text-center">{v.errores_corregidia}</TableCell>
-                              <TableCell className="text-right text-xs text-slate-500">
-                                 {new Date(v.created_at).toLocaleDateString()}
-                              </TableCell>
-                           </TableRow>
-                        ))}
-                     </TableBody>
-                  </Table>
-               </CardContent>
-             </Card>
-          </TabsContent>
-
-          {/* TAB 3: TIMELINE CHART */}
-          <TabsContent value="timeline" className="mt-6">
-             <Card className="bg-slate-900 border-slate-800">
-               <CardHeader>
-                  <CardTitle className="text-white text-lg">Timeline de Precisión IA</CardTitle>
-                  <p className="text-sm text-slate-400">Mejora del Accuracy % a través del tiempo y versiones.</p>
-               </CardHeader>
-               <CardContent className="h-[400px] w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                     <LineChart data={timelineData} margin={{ top: 20, right: 30, left: 0, bottom: 0 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                        <XAxis dataKey="date" stroke="#64748b" tick={{ fill: '#64748b' }} />
-                        <YAxis stroke="#64748b" tick={{ fill: '#64748b' }} domain={[40, 70]} />
-                        <RechartsTooltip 
-                           contentStyle={{ backgroundColor: '#0f172a', borderColor: '#1e293b', color: '#f8fafc' }}
-                           itemStyle={{ color: '#818cf8' }}
-                        />
-                        <Line 
-                           type="monotone" 
-                           dataKey="accuracy" 
-                           stroke="#6366f1" 
-                           strokeWidth={3}
-                           activeDot={{ r: 8, fill: '#818cf8' }} 
-                           name="Accuracy %"
-                        />
-                     </LineChart>
-                  </ResponsiveContainer>
-               </CardContent>
-             </Card>
-          </TabsContent>
-
         </Tabs>
+
+        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+           <DialogContent className="bg-slate-900 border-slate-800 text-white">
+              <DialogHeader><DialogTitle>Gestionar Error IA</DialogTitle></DialogHeader>
+              <div className="space-y-4 py-4">
+                 <div className="bg-slate-950 p-3 rounded border border-slate-800">
+                    <p className="text-xs text-red-400">Respuesta IA:</p>
+                    <p className="text-sm italic">"{selectedError?.respuesta_ia}"</p>
+                 </div>
+                 <div className="bg-slate-950 p-3 rounded border border-slate-800">
+                    <p className="text-xs text-green-400">Corrección Sugerida:</p>
+                    <p className="text-sm font-medium">"{selectedError?.correccion_sugerida}"</p>
+                 </div>
+              </div>
+              <DialogFooter>
+                 <Button variant="outline" className="border-slate-700" onClick={() => updateErrorStatus('RECHAZADA')} disabled={updating}>Rechazar</Button>
+                 <Button className="bg-indigo-600" onClick={() => updateErrorStatus('VALIDADA')} disabled={updating}>Validar Mejora</Button>
+              </DialogFooter>
+           </DialogContent>
+        </Dialog>
       </div>
     </Layout>
   );
