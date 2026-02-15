@@ -19,12 +19,11 @@ serve(async (req) => {
 
     const { message, lead_name, lead_phone, lead_id, platform, relevant_knowledge } = await req.json();
 
-    // 1. GESTIÓN DEL LEAD (Buscar o Crear)
+    // 1. GESTIÓN DEL LEAD
     let currentLeadId = lead_id;
     let leadProfile = "Nuevo Lead";
     let leadMood = "NEUTRO";
 
-    // Si no viene ID, intentamos buscar por teléfono
     if (!currentLeadId && lead_phone) {
        const { data: existingLead } = await supabaseClient
           .from('leads')
@@ -37,7 +36,6 @@ serve(async (req) => {
           leadProfile = `Cliente Recurrente: ${existingLead.nombre} (${existingLead.estado_emocional_actual})`;
           leadMood = existingLead.estado_emocional_actual;
        } else {
-          // Crear Lead si no existe
           const { data: newLead } = await supabaseClient
              .from('leads')
              .insert({ nombre: lead_name || 'Desconocido', telefono: lead_phone, origen: platform || 'Desconocido' })
@@ -47,7 +45,7 @@ serve(async (req) => {
        }
     }
 
-    // 2. LOGUEAR MENSAJE DEL USUARIO (CRÍTICO: NO PERDER DATOS)
+    // 2. LOGUEAR MENSAJE
     if (currentLeadId && message) {
        await supabaseClient.from('conversaciones').insert({
           lead_id: currentLeadId,
@@ -55,19 +53,17 @@ serve(async (req) => {
           mensaje: message,
           platform: platform || 'API'
        });
-       
-       // Actualizar timestamp del lead
        await supabaseClient.from('leads').update({ last_message_at: new Date().toISOString() }).eq('id', currentLeadId);
     }
 
-    // 3. RECUPERAR MEMORIA (Historial + Config)
+    // 3. RECUPERAR CONTEXTO (Prompts, Historial, Media)
     
     // Prompts
     const { data: configData } = await supabaseClient.from('app_config').select('key, value').eq('category', 'PROMPT');
     const prompts: Record<string, string> = {};
     configData?.forEach((item: any) => { prompts[item.key] = item.value; });
 
-    // Historial Chat (Últimos 15 mensajes para contexto profundo)
+    // Historial
     let chatHistoryText = "";
     if (currentLeadId) {
        const { data: history } = await supabaseClient
@@ -82,7 +78,18 @@ serve(async (req) => {
        }
     }
 
-    // Lecciones Aprendidas
+    // Media Assets con Instrucciones (NUEVO)
+    const { data: mediaAssets } = await supabaseClient
+       .from('media_assets')
+       .select('title, url, ai_instructions, type')
+       .not('ai_instructions', 'is', null)
+       .neq('ai_instructions', '');
+    
+    const mediaContext = mediaAssets && mediaAssets.length > 0
+       ? mediaAssets.map(m => `[ASSET: ${m.title} (${m.type})]\nURL: ${m.url}\nTRIGGER: ${m.ai_instructions}`).join('\n\n')
+       : "No media assets available.";
+
+    // Lecciones
     const { data: learnings } = await supabaseClient
        .from('errores_ia')
        .select('correccion_sugerida')
@@ -110,20 +117,24 @@ CURRENT LEAD DATA:
 - History:
 ${chatHistoryText}
 
+=== 📸 AVAILABLE MEDIA ASSETS (INVENTORY) ===
+Use these assets ONLY if the user asks for them or the TRIGGER condition is met.
+${mediaContext}
+
 === KNOWLEDGE BASE (RAG) ===
 ${relevant_knowledge || 'No specific knowledge retrieved.'}
 
-=== ⚠️ MANDATORY LEARNINGS (DO NOT REPEAT ERRORS) ===
+=== ⚠️ MANDATORY LEARNINGS ===
 ${learnedLessons}
 ${prompts['prompt_relearning'] || ''}
 
 ---
-INSTRUCTION: Reply to the user in the requested JSON format. Analyze their mood and intent based on the history.
+INSTRUCTION: Reply to the user in the requested JSON format. Analyze their mood and intent.
     `;
 
     return new Response(
       JSON.stringify({
-        lead_id: currentLeadId, // Devolvemos el ID para que Make lo use en el siguiente paso
+        lead_id: currentLeadId,
         system_prompt: fullSystemPrompt
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

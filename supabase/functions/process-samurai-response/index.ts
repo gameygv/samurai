@@ -17,26 +17,23 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
-    // Recibimos el raw output del LLM y el ID del lead
     const { ai_json_response, lead_id, raw_text } = await req.json();
 
     if (!lead_id) throw new Error("Lead ID is required");
 
-    // Intentar parsear si viene como string
     let parsedResponse;
     try {
         parsedResponse = typeof ai_json_response === 'string' ? JSON.parse(ai_json_response) : ai_json_response;
     } catch (e) {
-        // Fallback si el LLM no devolvió JSON válido
         parsedResponse = { 
             reply: raw_text || ai_json_response || "Error de formato IA",
             lead_analysis: { mood: "NEUTRO", summary: "Error parsing AI response" }
         };
     }
 
-    const { reply, lead_analysis } = parsedResponse;
+    const { reply, media_url, lead_analysis } = parsedResponse;
 
-    // 1. GUARDAR RESPUESTA DEL SAMURAI EN EL CHAT
+    // 1. GUARDAR RESPUESTA TEXTO
     const { error: chatError } = await supabaseClient.from('conversaciones').insert({
         lead_id: lead_id,
         emisor: 'SAMURAI',
@@ -47,8 +44,18 @@ serve(async (req) => {
 
     if (chatError) throw chatError;
 
-    // 2. ACTUALIZAR PERFIL DEL LEAD (CEREBRO PSICOLÓGICO)
-    // Esto es lo que permite que el Samurai "aprenda" sobre el cliente
+    // 1.5 GUARDAR MEDIA SI EXISTE (Como un segundo mensaje)
+    if (media_url && media_url.length > 5) {
+       await supabaseClient.from('conversaciones').insert({
+          lead_id: lead_id,
+          emisor: 'SAMURAI',
+          mensaje: media_url,
+          platform: 'API',
+          metadata: { type: 'image', auto_sent: true }
+       });
+    }
+
+    // 2. ACTUALIZAR PERFIL LEAD
     if (lead_analysis) {
         const updates: any = {
             last_message_at: new Date().toISOString()
@@ -58,7 +65,6 @@ serve(async (req) => {
         if (lead_analysis.buying_intent) updates.buying_intent = lead_analysis.buying_intent;
         if (lead_analysis.summary) updates.summary = lead_analysis.summary;
         
-        // Calcular Score basado en intención
         if (lead_analysis.buying_intent === 'ALTO') updates.confidence_score = 90;
         else if (lead_analysis.buying_intent === 'MEDIO') updates.confidence_score = 50;
         else if (lead_analysis.buying_intent === 'BAJO') updates.confidence_score = 20;
@@ -66,16 +72,17 @@ serve(async (req) => {
         await supabaseClient.from('leads').update(updates).eq('id', lead_id);
     }
 
-    // 3. LOG DE ACTIVIDAD
+    // 3. LOG
     await supabaseClient.from('activity_logs').insert({
         action: 'UPDATE',
         resource: 'USERS',
-        description: `Perfil actualizado para Lead ${lead_id.substring(0,8)} (Mood: ${lead_analysis?.mood})`,
+        description: `Perfil actualizado Lead ${lead_id.substring(0,8)} ${media_url ? '+ IMAGEN ENVIADA' : ''}`,
         status: 'OK'
     });
 
+    // Retornamos todo a Make para que pueda enviarlo por WhatsApp
     return new Response(
-      JSON.stringify({ success: true, reply: reply }),
+      JSON.stringify({ success: true, reply: reply, media_url: media_url || null }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
 
