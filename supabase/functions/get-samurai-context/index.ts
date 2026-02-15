@@ -17,152 +17,119 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
-    const { message, lead_name, lead_id, platform, relevant_knowledge } = await req.json();
+    const { message, lead_name, lead_phone, lead_id, platform, relevant_knowledge } = await req.json();
 
-    // 1. DETECCIÓN DE APRENDIZAJE (FEEDBACK HUMANO DIRECTO)
-    if (message && message.includes('#CORREGIRIA')) {
-      const feedback = message.replace('#CORREGIRIA', '').trim();
-      await supabaseClient.from('errores_ia').insert({
-        mensaje_cliente: "Feedback Directo Manual",
-        respuesta_ia: "N/A - Intervención Humana",
-        correccion_sugerida: feedback,
-        categoria: "ENTRENAMIENTO",
-        estado_correccion: "VALIDADA", // Auto-validamos si viene directo del panel con el comando
-        severidad: "MEDIA",
-        created_by: "MakeAutomation"
-      });
-
-      return new Response(
-        JSON.stringify({
-          action: 'LEARNING_LOGGED',
-          reply: `🫡 Entendido. He registrado esta corrección: "${feedback}". La he marcado como VALIDADA para aplicarla de inmediato.`
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
-    }
-
-    // 2. OBTENER PROMPTS CONFIGURADOS
-    const { data: configData } = await supabaseClient
-      .from('app_config')
-      .select('key, value')
-      .eq('category', 'PROMPT')
-
-    const prompts: Record<string, string> = {}
-    configData?.forEach((item: any) => { prompts[item.key] = item.value; });
-
-    // 3. OBTENER PERFIL DEL LEAD (Si existe ID)
-    let leadProfile = "Perfil desconocido";
+    // 1. GESTIÓN DEL LEAD (Buscar o Crear)
+    let currentLeadId = lead_id;
+    let leadProfile = "Nuevo Lead";
     let leadMood = "NEUTRO";
-    
-    if (lead_id) {
-       const { data: lead } = await supabaseClient
-         .from('leads')
-         .select('*')
-         .eq('id', lead_id) // Asumiendo que Make pasa el ID de Supabase, si pasa el de Kommo habría que ajustar
-         .maybeSingle();
+
+    // Si no viene ID, intentamos buscar por teléfono
+    if (!currentLeadId && lead_phone) {
+       const { data: existingLead } = await supabaseClient
+          .from('leads')
+          .select('*')
+          .eq('telefono', lead_phone)
+          .maybeSingle();
        
-       if (lead) {
-          leadProfile = `
-          - Nombre: ${lead.nombre || lead_name}
-          - Estado Emocional: ${lead.estado_emocional_actual || 'NEUTRO'}
-          - Score Confianza: ${lead.confidence_score || 0}%
-          - Etapa Funnel: ${lead.funnel_stage || 'Inicial'}
-          - Ciudad: ${lead.ciudad || 'N/A'}
-          `;
-          leadMood = lead.estado_emocional_actual || "NEUTRO";
+       if (existingLead) {
+          currentLeadId = existingLead.id;
+          leadProfile = `Cliente Recurrente: ${existingLead.nombre} (${existingLead.estado_emocional_actual})`;
+          leadMood = existingLead.estado_emocional_actual;
+       } else {
+          // Crear Lead si no existe
+          const { data: newLead } = await supabaseClient
+             .from('leads')
+             .insert({ nombre: lead_name || 'Desconocido', telefono: lead_phone, origen: platform || 'Desconocido' })
+             .select()
+             .single();
+          if (newLead) currentLeadId = newLead.id;
        }
     }
 
-    // 4. OBTENER HISTORIAL DE CHAT RECIENTE (Contexto Inmediato)
+    // 2. LOGUEAR MENSAJE DEL USUARIO (CRÍTICO: NO PERDER DATOS)
+    if (currentLeadId && message) {
+       await supabaseClient.from('conversaciones').insert({
+          lead_id: currentLeadId,
+          emisor: 'CLIENTE',
+          mensaje: message,
+          platform: platform || 'API'
+       });
+       
+       // Actualizar timestamp del lead
+       await supabaseClient.from('leads').update({ last_message_at: new Date().toISOString() }).eq('id', currentLeadId);
+    }
+
+    // 3. RECUPERAR MEMORIA (Historial + Config)
+    
+    // Prompts
+    const { data: configData } = await supabaseClient.from('app_config').select('key, value').eq('category', 'PROMPT');
+    const prompts: Record<string, string> = {};
+    configData?.forEach((item: any) => { prompts[item.key] = item.value; });
+
+    // Historial Chat (Últimos 15 mensajes para contexto profundo)
     let chatHistoryText = "";
-    if (lead_id) {
+    if (currentLeadId) {
        const { data: history } = await supabaseClient
           .from('conversaciones')
           .select('emisor, mensaje, created_at')
-          .eq('lead_id', lead_id)
+          .eq('lead_id', currentLeadId)
           .order('created_at', { ascending: false })
-          .limit(10); // Últimos 10 mensajes
+          .limit(15);
        
        if (history && history.length > 0) {
-          // Invertimos para orden cronológico
           chatHistoryText = history.reverse().map(m => `[${m.emisor}]: ${m.mensaje}`).join('\n');
        }
     }
 
-    // 5. OBTENER LECCIONES APRENDIDAS (Correcciones Validadas)
-    // Esto es CRUCIAL: Inyectamos errores pasados que ya fueron corregidos para que no los repita.
+    // Lecciones Aprendidas
     const { data: learnings } = await supabaseClient
        .from('errores_ia')
        .select('correccion_sugerida')
        .eq('estado_correccion', 'VALIDADA')
        .order('applied_at', { ascending: false })
-       .limit(5);
+       .limit(8);
+    const learnedLessons = learnings?.map(l => `IMPORTANTE: ${l.correccion_sugerida}`).join('\n') || "Sin correcciones previas.";
 
-    const learnedLessons = learnings?.map(l => `- ${l.correccion_sugerida}`).join('\n') || "Ninguna por ahora.";
-
-
-    // 6. CONSTRUCCIÓN DEL SYSTEM PROMPT FINAL
+    // 4. CONSTRUIR PROMPT SYSTEM
     const fullSystemPrompt = `
-=== IDENTIDAD ===
+=== IDENTITY & CORE ===
 ${prompts['prompt_core'] || ''}
-
-=== REGLAS TÉCNICAS (OUTPUT JSON) ===
 ${prompts['prompt_technical'] || ''}
 
-=== PROTOCOLOS DE COMPORTAMIENTO ===
+=== BEHAVIOR & SALES PROTOCOLS ===
 ${prompts['prompt_behavior'] || ''}
 ${prompts['prompt_objections'] || ''}
-
-=== ESTRATEGIA DE VENTA & PSICOLOGÍA ===
-${prompts['prompt_psychology'] || ''}
 ${prompts['prompt_closing_strategy'] || ''}
-${prompts['prompt_recommendations'] || ''}
-${prompts['prompt_tone'] || ''}
 
-=== CONTEXTO DEL CLIENTE (CRM) ===
-${prompts['prompt_data_injection'] || ''}
-DATOS REALES DEL CLIENTE:
-${leadProfile}
-
-=== MEMORIA DE CONVERSACIÓN RECIENTE ===
-${prompts['prompt_memory'] || ''}
-HISTORIAL (Últimos mensajes):
+=== CUSTOMER PROFILE & CONTEXT ===
+${prompts['prompt_psychology'] || ''}
+CURRENT LEAD DATA:
+- Name: ${lead_name || 'Unknown'}
+- Detected Mood: ${leadMood}
+- History:
 ${chatHistoryText}
 
-=== CONOCIMIENTO EXTERNO (RAG) ===
-${relevant_knowledge ? `Información recuperada de la Base de Conocimiento:\n${relevant_knowledge}` : 'No se requiere conocimiento externo específico para este turno.'}
+=== KNOWLEDGE BASE (RAG) ===
+${relevant_knowledge || 'No specific knowledge retrieved.'}
 
-=== ⚠️ LECCIONES APRENDIDAS (PRIORIDAD ALTA) ===
-Estas son correcciones de errores pasados que NO DEBES REPETIR:
+=== ⚠️ MANDATORY LEARNINGS (DO NOT REPEAT ERRORS) ===
 ${learnedLessons}
 ${prompts['prompt_relearning'] || ''}
 
 ---
-INSTRUCCIÓN FINAL: Analiza el último mensaje del cliente, evalúa su perfil psicológico, consulta la memoria y genera tu respuesta en formato JSON.
-    `
-
-    // Registro de Actividad
-    await supabaseClient.from('activity_logs').insert({
-       action: 'CHAT', 
-       resource: 'BRAIN', 
-       description: `Contexto generado para ${lead_name || 'Lead'} (Mood: ${leadMood})`, 
-       status: 'OK',
-       metadata: { model: 'gemini-1.5-pro', context_length: fullSystemPrompt.length }
-    });
+INSTRUCTION: Reply to the user in the requested JSON format. Analyze their mood and intent based on the history.
+    `;
 
     return new Response(
       JSON.stringify({
-        action: 'REPLY',
-        system_prompt: fullSystemPrompt,
-        config: { temperature: 0.3, model: 'gemini-1.5-pro' }
+        lead_id: currentLeadId, // Devolvemos el ID para que Make lo use en el siguiente paso
+        system_prompt: fullSystemPrompt
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
 
   } catch (error) {
-    return new Response(
-      JSON.stringify({ error: error.message }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    )
+    return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: corsHeaders })
   }
 })
