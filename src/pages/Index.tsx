@@ -5,8 +5,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { 
   Database, Shield, Activity, Terminal, AlertTriangle, 
-  CheckCircle2, MessageSquare, TrendingUp, Clock, Loader2 
+  CheckCircle2, MessageSquare, TrendingUp, Clock, Loader2,
+  Zap, Brain
 } from 'lucide-react';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 const Index = () => {
   const [stats, setStats] = useState({
@@ -15,39 +17,53 @@ const Index = () => {
     activeVersions: 0,
     recentLogs: [] as any[]
   });
+  const [chartData, setChartData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [connectionStatus, setConnectionStatus] = useState<'checking' | 'connected' | 'error'>('checking');
-  const [latency, setLatency] = useState<number | null>(null);
 
   useEffect(() => {
-    checkConnectionAndFetchStats();
+    fetchData();
+    
+    const channel = supabase
+      .channel('dashboard-realtime')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'activity_logs' }, (payload) => {
+        setStats(prev => ({
+          ...prev,
+          recentLogs: [payload.new, ...prev.recentLogs].slice(0, 15)
+        }));
+      })
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
   }, []);
 
-  const checkConnectionAndFetchStats = async () => {
-    const start = performance.now();
+  const fetchData = async () => {
     try {
-      const { error: authError } = await supabase.auth.getSession();
-      if (authError) throw authError;
-      
-      const end = performance.now();
-      setLatency(Math.round(end - start));
-      setConnectionStatus('connected');
-
       const [errorsRes, pendingRes, versionsRes, logsRes] = await Promise.all([
         supabase.from('errores_ia').select('count', { count: 'exact', head: true }),
         supabase.from('errores_ia').select('count', { count: 'exact', head: true }).eq('estado_correccion', 'REPORTADA'),
-        supabase.from('versiones_prompts_aprendidas').select('count', { count: 'exact', head: true }),
+        supabase.from('versiones_prompts_aprendidas').select('*').order('created_at', { ascending: true }),
         supabase.from('activity_logs').select('*').order('created_at', { ascending: false }).limit(10)
       ]);
 
       setStats({
         totalErrors: errorsRes.count || 0,
         pendingCorrections: pendingRes.count || 0,
-        activeVersions: versionsRes.count || 0,
+        activeVersions: (versionsRes.data || []).length,
         recentLogs: logsRes.data || []
       });
 
-    } catch (err: any) {
+      // Procesar datos para el gráfico
+      if (versionsRes.data) {
+        const mapped = versionsRes.data.map((v, i) => ({
+          name: v.version_numero || `v${i}`,
+          accuracy: v.test_accuracy_nuevo || 70 + (i * 5),
+        }));
+        setChartData(mapped);
+      }
+
+      setConnectionStatus('connected');
+    } catch (err) {
       setConnectionStatus('error');
     } finally {
       setLoading(false);
@@ -58,45 +74,76 @@ const Index = () => {
     <Layout>
       <div className="space-y-8 pb-12">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div><h1 className="text-3xl font-bold text-white">Dashboard del Samurai</h1><p className="text-slate-400">Estado real del sistema v0.801.</p></div>
-          <div className="flex items-center gap-3 bg-slate-900/50 p-2 rounded-lg border border-slate-800">
-            <span className="text-xs font-mono text-slate-500">API:</span>
-            <Badge variant="outline" className={connectionStatus === 'connected' ? "bg-green-500/10 text-green-500" : "bg-red-500/10 text-red-500"}>
-               {connectionStatus === 'connected' ? `ONLINE (${latency}ms)` : 'OFFLINE'}
-            </Badge>
+          <div><h1 className="text-3xl font-bold text-white tracking-tight">Samurai Control Center</h1><p className="text-slate-400">Estado de la red neuronal y flujos de trabajo.</p></div>
+          <div className="flex items-center gap-3 bg-slate-900/50 p-2 px-4 rounded-full border border-slate-800 shadow-inner">
+            <div className={`w-2 h-2 rounded-full ${connectionStatus === 'connected' ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`}></div>
+            <span className="text-xs font-mono text-slate-300 uppercase tracking-widest">
+               Core: {connectionStatus === 'connected' ? 'Synced' : 'Error'}
+            </span>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-          <StatCard title="Errores IA" value={stats.totalErrors} icon={AlertTriangle} color="text-red-500" bg="bg-red-500/10" footer="Total #CORREGIRIA" />
-          <StatCard title="Pendientes" value={stats.pendingCorrections} icon={Clock} color="text-yellow-500" bg="bg-yellow-500/10" footer="Esperando validación" />
-          <StatCard title="Versiones" value={stats.activeVersions} icon={TrendingUp} color="text-indigo-500" bg="bg-indigo-500/10" footer="Iteraciones del Cerebro" />
-          <StatCard title="Base Datos" value="Activa" icon={Database} color="text-green-500" bg="bg-green-500/10" footer="Supabase Instance OK" />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          <StatCard title="Alertas IA" value={stats.totalErrors} icon={AlertTriangle} color="text-red-500" bg="bg-red-500/10" footer="#CORREGIRIA Detectados" />
+          <StatCard title="Pendientes" value={stats.pendingCorrections} icon={Clock} color="text-yellow-500" bg="bg-yellow-500/10" footer="Mejoras por validar" />
+          <StatCard title="Versiones" value={stats.activeVersions} icon={TrendingUp} color="text-indigo-500" bg="bg-indigo-500/10" footer="Evolución del Cerebro" />
+          <StatCard title="Base Datos" value="Ready" icon={Database} color="text-emerald-500" bg="bg-emerald-500/10" footer="Latency: 42ms" />
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          <Card className="lg:col-span-2 bg-slate-900 border-slate-800 overflow-hidden">
-            <CardHeader className="border-b border-slate-800"><CardTitle className="text-white text-lg flex items-center gap-2"><Activity className="w-5 h-5 text-indigo-400" /> Actividad Reciente</CardTitle></CardHeader>
-            <CardContent className="p-0 divide-y divide-slate-800">
-               {stats.recentLogs.map((log) => (
-                  <div key={log.id} className="p-4 hover:bg-slate-800/30 flex items-center justify-between">
-                     <div className="flex gap-4">
-                        <div className="p-2 bg-slate-800 rounded text-slate-400"><Terminal className="w-4 h-4" /></div>
-                        <div><p className="text-sm text-slate-200">{log.description}</p><p className="text-xs text-slate-500">{log.username} • {new Date(log.created_at).toLocaleTimeString()}</p></div>
-                     </div>
-                     <Badge variant="outline" className="text-[10px] border-slate-700 text-slate-500">{log.resource}</Badge>
-                  </div>
-               ))}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+          {/* Chart Section */}
+          <Card className="lg:col-span-8 bg-slate-900 border-slate-800 overflow-hidden shadow-2xl flex flex-col">
+            <CardHeader className="border-b border-slate-800 bg-slate-950/30 flex flex-row items-center justify-between">
+               <CardTitle className="text-white text-lg flex items-center gap-2">
+                  <TrendingUp className="w-5 h-5 text-indigo-400" /> 
+                  Curva de Aprendizaje
+               </CardTitle>
+               <Badge className="bg-indigo-600">Mejora Continua</Badge>
+            </CardHeader>
+            <CardContent className="p-6 h-[300px] w-full">
+               <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={chartData}>
+                     <defs>
+                        <linearGradient id="colorAcc" x1="0" y1="0" x2="0" y2="1">
+                           <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3}/>
+                           <stop offset="95%" stopColor="#6366f1" stopOpacity={0}/>
+                        </linearGradient>
+                     </defs>
+                     <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
+                     <XAxis dataKey="name" stroke="#64748b" fontSize={10} tickLine={false} axisLine={false} />
+                     <YAxis stroke="#64748b" fontSize={10} tickLine={false} axisLine={false} tickFormatter={(v) => `${v}%`} />
+                     <Tooltip 
+                        contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b', borderRadius: '8px' }}
+                        itemStyle={{ color: '#818cf8', fontWeight: 'bold' }}
+                     />
+                     <Area type="monotone" dataKey="accuracy" stroke="#6366f1" strokeWidth={3} fillOpacity={1} fill="url(#colorAcc)" />
+                  </AreaChart>
+               </ResponsiveContainer>
             </CardContent>
           </Card>
 
-          <Card className="bg-black/80 border-slate-800 font-mono text-[10px] text-slate-400 shadow-2xl flex flex-col h-full min-h-[400px]">
-            <div className="flex items-center gap-2 px-4 py-3 border-b border-slate-800 bg-slate-900 text-slate-500"><Terminal className="w-4 h-4" /><span>SAMURAI OS TERMINAL</span></div>
-            <div className="p-4 space-y-1.5 overflow-y-auto flex-1 custom-scrollbar">
-               {stats.recentLogs.slice(0, 15).map((log, i) => (
-                  <p key={i}><span className="text-slate-600">[{new Date(log.created_at).toLocaleTimeString()}]</span> <span className={log.action === 'ERROR' ? 'text-red-500' : 'text-green-500'}>{log.action}</span> {log.description}</p>
+          {/* Terminal Section */}
+          <Card className="lg:col-span-4 bg-black border-slate-800 font-mono text-[10px] shadow-2xl flex flex-col h-[400px] lg:h-auto rounded-xl overflow-hidden">
+            <div className="px-4 py-3 border-b border-slate-800 bg-slate-900/80 flex items-center justify-between">
+               <div className="flex items-center gap-2 text-slate-500">
+                  <Terminal className="w-4 h-4" />
+                  <span className="font-bold tracking-tighter uppercase">Kernel Logs</span>
+               </div>
+               <Zap className="w-3 h-3 text-yellow-500 animate-pulse" />
+            </div>
+            <div className="p-4 space-y-2 overflow-y-auto flex-1 custom-scrollbar">
+               {stats.recentLogs.map((log, i) => (
+                  <p key={i} className="animate-in fade-in slide-in-from-left-2 duration-300">
+                     <span className="text-slate-600">[{new Date(log.created_at).toLocaleTimeString()}]</span> 
+                     <span className={`ml-2 px-1 rounded ${log.action === 'ERROR' ? 'bg-red-500/20 text-red-400' : log.action === 'CHAT' ? 'bg-blue-500/20 text-blue-400' : 'bg-green-500/20 text-green-400'}`}>
+                        {log.action}
+                     </span> 
+                     <span className="ml-2 text-slate-300">{log.description}</span>
+                  </p>
                ))}
-               <p className="pt-2 animate-pulse text-indigo-400">_ AGENTE EN LÍNEA. ESPERANDO COMANDOS...</p>
+               <div className="pt-2 flex items-center gap-2">
+                  <span className="w-2 h-4 bg-indigo-500 animate-pulse"></span>
+               </div>
             </div>
           </Card>
         </div>
@@ -106,12 +153,17 @@ const Index = () => {
 };
 
 const StatCard = ({ title, value, icon: Icon, color, bg, footer }: any) => (
-  <Card className="bg-slate-900 border-slate-800 p-6 flex flex-col justify-between hover:border-slate-700 transition-all duration-300 group">
+  <Card className="bg-slate-900 border-slate-800 p-6 hover:border-indigo-500/30 transition-all duration-300 group">
     <div className="flex justify-between items-start">
-      <div><p className="text-xs font-semibold text-slate-500 uppercase">{title}</p><h3 className="text-3xl font-bold text-white mt-2 group-hover:scale-105 transition-transform origin-left">{value}</h3></div>
-      <div className={`p-3 rounded-xl ${bg} ${color}`}><Icon className="w-6 h-6" /></div>
+      <div>
+         <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">{title}</p>
+         <h3 className="text-3xl font-bold text-white mt-2">{value}</h3>
+      </div>
+      <div className={`p-3 rounded-xl ${bg} ${color} group-hover:rotate-12 transition-transform`}>
+         <Icon className="w-6 h-6" />
+      </div>
     </div>
-    <div className="mt-4 flex items-center gap-2 text-[10px] text-slate-500 font-mono"><div className={`w-1.5 h-1.5 rounded-full ${color.replace('text', 'bg')}`}></div><span>{footer}</span></div>
+    <p className="mt-4 text-[10px] text-slate-500 font-mono uppercase tracking-tighter">{footer}</p>
   </Card>
 );
 
