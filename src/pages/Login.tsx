@@ -84,7 +84,7 @@ const Login = () => {
           <div className="mx-auto w-12 h-12 rounded-full bg-red-600 flex items-center justify-center mb-2 shadow-lg shadow-red-900/50">
             <span className="text-white font-bold text-2xl">侍</span>
           </div>
-          <CardTitle className="text-2xl font-bold text-white">SAMURAI PANEL v5.2</CardTitle>
+          <CardTitle className="text-2xl font-bold text-white">SAMURAI PANEL v0.801</CardTitle>
           <CardDescription className="text-slate-400">
             Acceso exclusivo personal autorizado
           </CardDescription>

@@ -1,11 +1,11 @@
-# DYAD SAMURAI - MANUAL DE ESTADO Y REPORTE (v8.0)
+# DYAD SAMURAI - MANUAL DE ESTADO Y REPORTE (v0.801)
 
-Este documento detalla el estado actual del sistema tras la implementación de la versión 8.0.
+Este documento detalla el estado actual del sistema tras la implementación de la versión 0.801.
 
 ## 1. RESUMEN EJECUTIVO
 
 - **Estado del Sistema:** ✅ ONLINE
-- **Versión:** 8.0.0-rc
+- **Versión:** 0.801-rc
 - **Base de Datos:** ✅ Conectada (Supabase)
 - **Integraciones:** ⚠️ Parcial (Requiere configuración en Make.com)
 
@@ -21,7 +21,8 @@ Los siguientes módulos están completamente desarrollados, integrados con la ba
 ### B. Cerebro del Agente (Brain)
 - [x] **Editor de Prompts:** 4 secciones de configuración (Sistema, Contexto, Corrección, Visión).
 - [x] **Persistencia:** Los prompts se guardan en tabla `app_config`.
-- [x] **Versionado (FIXED):** Capacidad de ver historial y restaurar versiones anteriores del prompt.
+- [x] **Versionado:** Capacidad de ver historial y restaurar versiones anteriores del prompt.
+- [x] **Test Runner:** Módulo para probar prompts conectando con Make (requiere configuración).
 
 ### C. Leads & Chat (Live)
 - [x] **Tabla de Leads:** Visualización de clientes desde Kommo (Tabla `leads`).
@@ -32,7 +33,7 @@ Los siguientes módulos están completamente desarrollados, integrados con la ba
 - [x] **Geoffrey:** Gestor de frases de cortesía y personalidad auxiliar.
 - [x] **Media Manager:** Subida de imágenes/videos para que el agente los use.
 - [x] **Base de Conocimiento:** Carga de PDFs/Links (Metadatos listos, vectorización pendiente).
-- [x] **Configuración:** Gestión de API Keys (Encriptación simulada en UI).
+- [x] **Configuración:** Gestión de API Keys y Webhooks.
 
 ## 3. LO QUE FALTA / REQUIERE CONFIGURACIÓN EXTERNA (⚠️)
 
@@ -50,20 +51,7 @@ Estos elementos dependen de servicios externos para funcionar al 100%:
     *   *Estado:* Los archivos se suben a Supabase Storage.
     *   *Falta:* No hay un proceso automático que lea el PDF, genere embeddings y los guarde para búsqueda semántica. Actualmente la búsqueda es por título/descripción.
 
-## 4. GUÍA DE RECUPERACIÓN DE VERSIONES (SOLUCIÓN BUG)
-
-Se ha corregido el módulo de "Parte 5: Versionado" en el Cerebro.
-
-**Instrucciones para restaurar la v1.1:**
-1.  Ve a **Cerebro (Core)** > Pestaña **Parte 5: Versionado**.
-2.  En la tabla izquierda, haz clic en **v1.1**.
-3.  El editor de la derecha se pondrá en modo "Visualización" (fondo oscuro, borde azul).
-4.  Verifica que el texto es el deseado.
-5.  Haz clic en el botón azul **"Restaurar esta Versión"** en la esquina superior derecha.
-6.  Confirma la alerta.
-7.  El sistema aplicará el texto de la v1.1 como el nuevo "LIVE" y te redirigirá al modo edición.
-
-## 5. TABLAS DE BASE DE DATOS (SCHEMA)
+## 4. TABLAS DE BASE DE DATOS (SCHEMA)
 
 El sistema opera sobre las siguientes tablas en Supabase (Schema `public`):
 
@@ -81,4 +69,4 @@ El sistema opera sobre las siguientes tablas en Supabase (Schema `public`):
 | `errores_ia` | Registro de correcciones humanas (#CORREGIRIA) | ✅ |
 
 ---
-*Reporte generado automáticamente por Dyad System v8.0*
+*Reporte generado automáticamente por Dyad System v0.801*

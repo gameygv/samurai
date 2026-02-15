@@ -82,7 +82,7 @@ const Layout = ({ children }: LayoutProps) => {
           <div className="w-8 h-8 rounded-full bg-red-600 flex items-center justify-center text-white font-bold shadow-lg shadow-red-900/50">
             侍
           </div>
-          <span className="font-bold text-xl tracking-tight">SAMURAI v8.0</span>
+          <span className="font-bold text-xl tracking-tight">SAMURAI v0.801</span>
         </div>
 
         <ScrollArea className="flex-1 px-4">
@@ -126,7 +126,7 @@ const Layout = ({ children }: LayoutProps) => {
               <span className="text-xs text-slate-400 font-mono">SYSTEM: ONLINE</span>
            </div>
            <div className="text-[10px] text-slate-600 px-2 font-mono">
-              v8.0.0-rc
+              v0.801-rc
            </div>
         </div>
       </aside>
