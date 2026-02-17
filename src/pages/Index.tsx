@@ -26,7 +26,6 @@ const Index = () => {
     fetchData();
     fetchRecentChats();
     
-    // Suscripción para Logs
     const logChannel = supabase
       .channel('logs-dashboard')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'activity_logs' }, (payload) => {
@@ -37,7 +36,6 @@ const Index = () => {
       })
       .subscribe();
 
-    // Suscripción para Mensajes en Vivo
     const chatChannel = supabase
       .channel('chats-dashboard')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'conversaciones' }, (payload) => {
@@ -67,18 +65,17 @@ const Index = () => {
         recentLogs: logsRes.data || []
       });
 
-      // Procesar datos para el gráfico
       if (versionsRes.data && versionsRes.data.length > 0) {
         setChartData(versionsRes.data.map((v, i) => ({
           name: v.version_numero || `v${i}`,
           accuracy: v.test_accuracy_nuevo || 70 + (i * 5),
         })));
       } else {
-         // Data de ejemplo si no hay versiones
          setChartData([
+            { name: 'Inicio', accuracy: 70 },
             { name: 'v0.1', accuracy: 72 },
             { name: 'v0.5', accuracy: 78 },
-            { name: 'v0.8', accuracy: 85 }
+            { name: 'Actual', accuracy: 85 }
          ]);
       }
 
@@ -115,7 +112,6 @@ const Index = () => {
           </div>
         </div>
 
-        {/* STATS GRID */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           <StatCard title="Alertas IA" value={stats.totalErrors} icon={AlertTriangle} color="text-red-500" bg="bg-red-500/10" footer="#CORREGIRIA Detectados" />
           <StatCard title="Pendientes" value={stats.pendingCorrections} icon={Clock} color="text-yellow-500" bg="bg-yellow-500/10" footer="Mejoras por validar" />
@@ -125,9 +121,7 @@ const Index = () => {
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
           
-          {/* CHART & CHATS */}
           <div className="lg:col-span-8 space-y-8">
-             {/* Chart Card */}
              <Card className="bg-slate-900 border-slate-800 overflow-hidden shadow-2xl flex flex-col">
                <CardHeader className="border-b border-slate-800 bg-slate-950/30 flex flex-row items-center justify-between">
                   <CardTitle className="text-white text-lg flex items-center gap-2">
@@ -158,7 +152,6 @@ const Index = () => {
                </CardContent>
              </Card>
 
-             {/* Recent Chats Card */}
              <Card className="bg-slate-900 border-slate-800 shadow-xl">
                 <CardHeader className="border-b border-slate-800 flex flex-row items-center justify-between">
                    <CardTitle className="text-white text-sm uppercase tracking-widest flex items-center gap-2">
@@ -192,7 +185,6 @@ const Index = () => {
              </Card>
           </div>
 
-          {/* SYSTEM LOGS (TERMINAL) */}
           <Card className="lg:col-span-4 bg-black border-slate-800 font-mono text-[10px] shadow-2xl flex flex-col h-full rounded-xl overflow-hidden min-h-[500px]">
             <div className="px-4 py-3 border-b border-slate-800 bg-slate-900/80 flex items-center justify-between">
                <div className="flex items-center gap-2 text-slate-500">
