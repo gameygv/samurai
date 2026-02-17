@@ -21,68 +21,66 @@ serve(async (req) => {
 
     if (!lead_id) throw new Error("Lead ID is required");
 
-    let parsedResponse;
-    try {
-        parsedResponse = typeof ai_json_response === 'string' ? JSON.parse(ai_json_response) : ai_json_response;
-    } catch (e) {
-        parsedResponse = { 
-            reply: raw_text || ai_json_response || "Error de formato IA",
-            lead_analysis: { mood: "NEUTRO", summary: "Error parsing AI response" }
-        };
+    // 1. PROCESAR RESPUESTA (TEXTO PLANO)
+    // Ya no esperamos JSON. Tomamos el raw_text o ai_json_response como string directo.
+    let replyText = "";
+    let mediaUrlFound = null;
+
+    // Si viene como string JSON, intentamos extraer, si no, usamos el texto directo.
+    if (typeof ai_json_response === 'string') {
+        // Intentar parsear por si acaso es JSON, pero con fallback a texto
+        try {
+            const parsed = JSON.parse(ai_json_response);
+            replyText = parsed.reply || ai_json_response;
+            mediaUrlFound = parsed.media_url || null;
+        } catch (e) {
+            replyText = ai_json_response;
+        }
+    } else if (typeof ai_json_response === 'object') {
+        replyText = ai_json_response.reply || JSON.stringify(ai_json_response);
+        mediaUrlFound = ai_json_response.media_url || null;
+    } else {
+        replyText = raw_text || "Error: No response text";
     }
 
-    const { reply, media_url, lead_analysis } = parsedResponse;
+    // 2. DETECTAR URL EN TEXTO (Si la IA puso el link en el texto)
+    if (!mediaUrlFound) {
+       const urlRegex = /(https?:\/\/[^\s]+)/g;
+       const urls = replyText.match(urlRegex);
+       if (urls && urls.length > 0) {
+          // Asumimos que la última URL es la imagen/archivo
+          // Opcional: Podríamos verificar extensión de imagen
+          mediaUrlFound = urls[urls.length - 1];
+       }
+    }
 
-    // 1. GUARDAR RESPUESTA TEXTO
+    // 3. GUARDAR RESPUESTA TEXTO
     const { error: chatError } = await supabaseClient.from('conversaciones').insert({
         lead_id: lead_id,
         emisor: 'SAMURAI',
-        mensaje: reply,
+        mensaje: replyText,
         platform: 'API',
-        metadata: { analysis: lead_analysis }
+        metadata: { format: 'text_plain' }
     });
 
     if (chatError) throw chatError;
 
-    // 1.5 GUARDAR MEDIA SI EXISTE (Como un segundo mensaje)
-    if (media_url && media_url.length > 5) {
-       await supabaseClient.from('conversaciones').insert({
-          lead_id: lead_id,
-          emisor: 'SAMURAI',
-          mensaje: media_url,
-          platform: 'API',
-          metadata: { type: 'image', auto_sent: true }
-       });
-    }
+    // 4. ACTUALIZAR LEAD TIMESTAMP
+    await supabaseClient.from('leads').update({
+        last_message_at: new Date().toISOString()
+    }).eq('id', lead_id);
 
-    // 2. ACTUALIZAR PERFIL LEAD
-    if (lead_analysis) {
-        const updates: any = {
-            last_message_at: new Date().toISOString()
-        };
-
-        if (lead_analysis.mood) updates.estado_emocional_actual = lead_analysis.mood;
-        if (lead_analysis.buying_intent) updates.buying_intent = lead_analysis.buying_intent;
-        if (lead_analysis.summary) updates.summary = lead_analysis.summary;
-        
-        if (lead_analysis.buying_intent === 'ALTO') updates.confidence_score = 90;
-        else if (lead_analysis.buying_intent === 'MEDIO') updates.confidence_score = 50;
-        else if (lead_analysis.buying_intent === 'BAJO') updates.confidence_score = 20;
-
-        await supabaseClient.from('leads').update(updates).eq('id', lead_id);
-    }
-
-    // 3. LOG
+    // 5. LOG
     await supabaseClient.from('activity_logs').insert({
-        action: 'UPDATE',
+        action: 'CHAT',
         resource: 'USERS',
-        description: `Perfil actualizado Lead ${lead_id.substring(0,8)} ${media_url ? '+ IMAGEN ENVIADA' : ''}`,
+        description: `Respuesta enviada a Lead ${lead_id.substring(0,8)}`,
         status: 'OK'
     });
 
-    // Retornamos todo a Make para que pueda enviarlo por WhatsApp
+    // Retornamos todo a Make
     return new Response(
-      JSON.stringify({ success: true, reply: reply, media_url: media_url || null }),
+      JSON.stringify({ success: true, reply: replyText, media_url: mediaUrlFound }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
 

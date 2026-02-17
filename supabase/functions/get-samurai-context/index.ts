@@ -6,6 +6,15 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+const DEFAULTS = {
+  'prompt_core': `# ADN CORE\nEres Samurai, un asistente de ventas de elite. Tu misión es filtrar curiosos, calificar leads y cerrar ventas. Eres directo, eficiente pero educado.`,
+  'prompt_technical': `# FORMATO DE RESPUESTA\nIMPORTANTE: Responde solo con texto plano, sin JSON, sin markdown, sin bloques de código. Si necesitas enviar una imagen o archivo, coloca el enlace directo en una línea separada al final.`,
+  'prompt_behavior': `# PROTOCOLOS\nSaluda brevemente. No seas redundante. Si el cliente pregunta precio, dalo y termina con una pregunta de cierre.`,
+  'prompt_objections': `# MATRIZ DE OBJECIONES\nSi dice "caro" -> Resalta valor/durabilidad.`,
+  'prompt_psychology': `# PERFILADO PSICOLÓGICO\nAnaliza el texto del cliente.`,
+  'prompt_closing_strategy': `# ESTRATEGIA DE CIERRE\nTu objetivo es mover al lead en el Funnel.`
+};
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders })
@@ -58,10 +67,16 @@ serve(async (req) => {
 
     // 3. RECUPERAR CONTEXTO (Prompts, Historial, Media)
     
-    // Prompts
+    // Prompts con Fallback
     const { data: configData } = await supabaseClient.from('app_config').select('key, value').eq('category', 'PROMPT');
-    const prompts: Record<string, string> = {};
-    configData?.forEach((item: any) => { prompts[item.key] = item.value; });
+    const prompts: Record<string, string> = { ...DEFAULTS };
+    if (configData && configData.length > 0) {
+       configData.forEach((item: any) => { 
+          if(item.value && item.value.trim().length > 0) {
+             prompts[item.key] = item.value; 
+          }
+       });
+    }
 
     // Historial
     let chatHistoryText = "";
@@ -101,16 +116,18 @@ serve(async (req) => {
     // 4. CONSTRUIR PROMPT SYSTEM
     const fullSystemPrompt = `
 === IDENTITY & CORE ===
-${prompts['prompt_core'] || ''}
-${prompts['prompt_technical'] || ''}
+${prompts['prompt_core']}
+
+=== TECHNICAL INSTRUCTIONS ===
+IMPORTANTE: Responde solo con texto plano, sin JSON, sin markdown, sin bloques de código.
 
 === BEHAVIOR & SALES PROTOCOLS ===
-${prompts['prompt_behavior'] || ''}
-${prompts['prompt_objections'] || ''}
-${prompts['prompt_closing_strategy'] || ''}
+${prompts['prompt_behavior']}
+${prompts['prompt_objections']}
+${prompts['prompt_closing_strategy']}
 
 === CUSTOMER PROFILE & CONTEXT ===
-${prompts['prompt_psychology'] || ''}
+${prompts['prompt_psychology']}
 CURRENT LEAD DATA:
 - Name: ${lead_name || 'Unknown'}
 - Detected Mood: ${leadMood}
@@ -129,7 +146,7 @@ ${learnedLessons}
 ${prompts['prompt_relearning'] || ''}
 
 ---
-INSTRUCTION: Reply to the user in the requested JSON format. Analyze their mood and intent.
+INSTRUCTION: Reply to the user directly and naturally. Do NOT use JSON.
     `;
 
     return new Response(

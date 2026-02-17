@@ -20,7 +20,7 @@ import { logActivity } from '@/utils/logger';
 
 const DEFAULTS = {
   'prompt_core': `# ADN CORE\nEres Samurai, un asistente de ventas de elite. Tu misión es filtrar curiosos, calificar leads y cerrar ventas. Eres directo, eficiente pero educado.`,
-  'prompt_technical': `# FÓRMULA TÉCNICA (JSON STRICTO)\nResponde SIEMPRE en este formato JSON exacto:\n{\n  "reply": "Texto de respuesta al cliente (emojis OK)",\n  "media_url": "URL_DEL_MEDIA_ASSET_AQUI (Opcional, solo si aplica)",\n  "lead_analysis": {\n    "mood": "ENOJADO | NEUTRO | FELIZ | PRAGMATICO",\n    "buying_intent": "BAJO | MEDIO | ALTO",\n    "summary": "Resumen de 1 linea"\n  }\n}\n\nREGLA MEDIA: Si decides enviar una imagen del contexto 'AVAILABLE MEDIA', copia su URL exacta en el campo 'media_url'. Si no envías imagen, deja ese campo vacío o null.`,
+  'prompt_technical': `# FORMATO DE RESPUESTA\nIMPORTANTE: Responde solo con texto plano, sin JSON, sin markdown, sin bloques de código. Si necesitas enviar una imagen o archivo, coloca el enlace directo en una línea separada al final.`,
   'prompt_behavior': `# PROTOCOLOS\nSaluda brevemente. No seas redundante. Si el cliente pregunta precio, dalo y termina con una pregunta de cierre.`,
   'prompt_objections': `# MATRIZ DE OBJECIONES\nSi dice "caro" -> Resalta valor/durabilidad.\nSi dice "lo pienso" -> Pregunta qué le detiene.\nSi dice "competencia" -> No hables mal, resalta nuestra garantía.`,
   'prompt_data_injection': `# INYECCIÓN DE DATOS\nUsa los datos del contexto (Nombre, Ciudad) para personalizar. "Hola {nombre}" es mejor que "Hola".`,
@@ -107,7 +107,6 @@ const AgentBrain = () => {
     setTestOutput("Generando contexto de prueba...");
     
     try {
-        // Invocamos la Edge Function REAL
         const { data, error } = await supabase.functions.invoke('get-samurai-context', {
             body: {
                 message: testInput,
@@ -117,11 +116,8 @@ const AgentBrain = () => {
         });
 
         if (error) throw error;
-
-        // Mostramos el System Prompt generado para que el usuario verifique si se inyectaron las correcciones
         setTestOutput(data.system_prompt || "No se generó contexto.");
-        toast.success("Contexto generado exitosamente. Verifica si incluye las lecciones aprendidas.");
-
+        toast.success("Contexto generado exitosamente.");
     } catch (error: any) {
         setTestOutput(`Error: ${error.message}`);
         toast.error("Error al invocar Edge Function.");
@@ -166,9 +162,9 @@ const AgentBrain = () => {
                 onChange={(v: string) => handlePromptChange('prompt_core', v)} 
               />
               <PromptCard 
-                title="1.2 Técnico (Estructura JSON)" 
+                title="1.2 Técnico (Texto Plano)" 
                 icon={Hammer} 
-                description="CRÍTICO: Estructura JSON con soporte para MEDIA. No cambies esto a menos que sepas lo que haces."
+                description="Formato de respuesta: TEXTO PLANO obligatorio. Sin JSON. La IA sabe que si debe enviar una imagen, pone el link al final."
                 value={prompts['prompt_technical']} 
                 onChange={(v: string) => handlePromptChange('prompt_technical', v)} 
               />
