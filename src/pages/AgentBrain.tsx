@@ -6,14 +6,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Switch } from '@/components/ui/switch';
-import { Label } from '@/components/ui/label';
-import { Badge } from '@/components/ui/badge';
 import { 
-  Save, Bot, Sparkles, AlertTriangle, Eye, Hammer, ScrollText, 
-  ShieldAlert, Database, History, MessageSquare, Gift, RefreshCw, Server, 
-  CheckCircle2, ScanEye, CheckCheck, Zap, GitBranch, FlaskConical, 
-  Play, RotateCcw, Loader2, Terminal, Info, BrainCircuit, Target
+  Save, Bot, Eye, Hammer, ScrollText, 
+  ShieldAlert, Database, History, MessageSquare, Gift, RefreshCw, 
+  CheckCheck, Zap, FlaskConical, 
+  Play, Loader2, Terminal, Info, BrainCircuit, Target, ScanEye
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { logActivity } from '@/utils/logger';
@@ -48,6 +45,7 @@ const AgentBrain = () => {
   const [testing, setTesting] = useState(false);
   const [testInput, setTestInput] = useState("");
   const [testOutput, setTestOutput] = useState<string | null>(null);
+  const [testDebug, setTestDebug] = useState<any>(null);
 
   useEffect(() => {
     fetchPrompts();
@@ -105,6 +103,7 @@ const AgentBrain = () => {
     if (!testInput) return;
     setTesting(true);
     setTestOutput("Generando contexto de prueba...");
+    setTestDebug(null);
     
     try {
         const { data, error } = await supabase.functions.invoke('get-samurai-context', {
@@ -117,6 +116,7 @@ const AgentBrain = () => {
 
         if (error) throw error;
         setTestOutput(data.system_prompt || "No se generó contexto.");
+        setTestDebug(data.debug);
         toast.success("Contexto generado exitosamente.");
     } catch (error: any) {
         setTestOutput(`Error: ${error.message}`);
@@ -332,9 +332,27 @@ const AgentBrain = () => {
                 <Card className="lg:col-span-3 bg-black border-slate-800 flex flex-col">
                    <div className="p-4 border-b border-slate-800 bg-slate-900/50"><h3 className="text-white font-bold text-xs uppercase tracking-widest flex items-center gap-2"><Terminal className="w-3 h-3 text-green-500" /> Test Runner</h3></div>
                    <div className="flex-1 p-4 overflow-y-auto space-y-4">
+                      {/* DEBUG PANEL */}
+                      {testDebug && (
+                         <div className="mb-4 space-y-2 animate-in slide-in-from-top-2">
+                             {testDebug.rag_sources && testDebug.rag_sources.length > 0 && (
+                                 <div className="bg-emerald-900/20 border border-emerald-500/20 p-2 rounded">
+                                     <p className="text-[10px] text-emerald-400 font-bold uppercase mb-1 flex items-center gap-1"><Database className="w-3 h-3"/> RAG: Conocimiento Usado</p>
+                                     <ul className="list-disc list-inside text-[10px] text-emerald-200">
+                                        {testDebug.rag_sources.map((s: string, i: number) => <li key={i}>{s}</li>)}
+                                     </ul>
+                                 </div>
+                             )}
+                             <div className="bg-indigo-900/20 border border-indigo-500/20 p-2 rounded flex justify-between">
+                                 <span className="text-[10px] text-indigo-300">Perfil Detectado:</span>
+                                 <span className="text-[10px] font-bold text-indigo-200">{testDebug.profile?.mood} / {testDebug.profile?.intent}</span>
+                             </div>
+                         </div>
+                      )}
+
                       {testOutput ? (
                          <div className="bg-slate-900 p-3 rounded border border-slate-700">
-                            <p className="text-[10px] text-indigo-400 font-bold uppercase mb-2 flex items-center gap-1"><Bot className="w-3 h-3"/> System Prompt Generado:</p>
+                            <p className="text-[10px] text-slate-500 font-bold uppercase mb-2">System Prompt Result:</p>
                             <p className="text-[10px] text-slate-300 font-mono leading-relaxed whitespace-pre-wrap h-64 overflow-y-auto custom-scrollbar">{testOutput}</p>
                          </div>
                       ) : (
@@ -342,7 +360,7 @@ const AgentBrain = () => {
                       )}
                    </div>
                    <div className="p-4 border-t border-slate-800 space-y-3">
-                      <Input placeholder="Input de prueba..." value={testInput} onChange={e => setTestInput(e.target.value)} className="bg-slate-950 border-slate-800 text-xs" />
+                      <Input placeholder="Input de prueba (ej: Tienen garantía?)" value={testInput} onChange={e => setTestInput(e.target.value)} className="bg-slate-950 border-slate-800 text-xs" />
                       <Button onClick={handleRunTest} disabled={testing} className="w-full bg-green-600 hover:bg-green-700 h-9">
                          {testing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4 mr-2" />} Probar Prompt
                       </Button>

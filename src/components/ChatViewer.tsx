@@ -4,11 +4,14 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Send, Bot, User, UserCog, ShieldAlert, ZapOff, MessageSquare, BrainCircuit, TrendingUp, AlertCircle, Image as ImageIcon, ExternalLink } from 'lucide-react';
+import { Loader2, Send, Bot, User, UserCog, ShieldAlert, ZapOff, MessageSquare, BrainCircuit, TrendingUp, AlertCircle, Image as ImageIcon, ExternalLink, X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import { logActivity } from '@/utils/logger';
 
@@ -25,8 +28,12 @@ const ChatViewer = ({ lead, open, onOpenChange }: ChatViewerProps) => {
   const [sending, setSending] = useState(false);
   const [isAiPaused, setIsAiPaused] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
-  
   const [currentAnalysis, setCurrentAnalysis] = useState<any>(null);
+
+  // Error Reporting State
+  const [isReportOpen, setIsReportOpen] = useState(false);
+  const [errorContext, setErrorContext] = useState({ ia_response: '', correction: '', reason: '' });
+  const [reporting, setReporting] = useState(false);
 
   useEffect(() => {
     if (open && lead) {
@@ -106,17 +113,49 @@ const ChatViewer = ({ lead, open, onOpenChange }: ChatViewerProps) => {
       });
 
       if (error) throw error;
-      
-      if (!isAiPaused) {
-         toggleAiPause();
-      }
-
+      if (!isAiPaused) toggleAiPause();
       setNewMessage('');
     } catch (error: any) {
       toast.error('Error enviando mensaje');
     } finally {
       setSending(false);
     }
+  };
+
+  const openReportDialog = () => {
+     // Find last AI message to pre-fill
+     const lastAi = [...messages].reverse().find(m => m.emisor === 'SAMURAI');
+     setErrorContext({
+        ia_response: lastAi ? lastAi.mensaje : '',
+        correction: '',
+        reason: ''
+     });
+     setIsReportOpen(true);
+  };
+
+  const submitError = async () => {
+     if (!errorContext.correction) return toast.error("Debes sugerir una corrección.");
+     setReporting(true);
+     try {
+        const { error } = await supabase.from('errores_ia').insert({
+           cliente_id: lead.id,
+           mensaje_cliente: "Reporte Manual desde Chat",
+           respuesta_ia: errorContext.ia_response,
+           correccion_sugerida: errorContext.correction,
+           correccion_explicacion: errorContext.reason,
+           categoria: 'CONDUCTA',
+           severidad: 'MEDIA',
+           estado_correccion: 'REPORTADA'
+        });
+
+        if (error) throw error;
+        toast.success("Error reportado al núcleo de aprendizaje.");
+        setIsReportOpen(false);
+     } catch (err: any) {
+        toast.error(err.message);
+     } finally {
+        setReporting(false);
+     }
   };
 
   const getMoodColor = (mood: string) => {
@@ -134,10 +173,8 @@ const ChatViewer = ({ lead, open, onOpenChange }: ChatViewerProps) => {
      return 'bg-slate-600';
   };
 
-  // Helper para detectar si es imagen
   const isImage = (msg: any) => {
      if (msg.metadata?.type === 'image') return true;
-     // Fallback básico por extensión
      return msg.mensaje.match(/\.(jpeg|jpg|gif|png|webp)$/i) != null;
   };
 
@@ -193,7 +230,6 @@ const ChatViewer = ({ lead, open, onOpenChange }: ChatViewerProps) => {
                                   </div>
                                )}
 
-                               {/* RENDERIZADO DE MENSAJE O IMAGEN */}
                                {isImage(msg) ? (
                                   <div className="mt-1 mb-1">
                                      <div className="rounded-lg overflow-hidden border border-white/10 relative group/img cursor-pointer" onClick={() => window.open(msg.mensaje, '_blank')}>
@@ -202,11 +238,6 @@ const ChatViewer = ({ lead, open, onOpenChange }: ChatViewerProps) => {
                                            <ExternalLink className="w-4 h-4 text-white" />
                                         </div>
                                      </div>
-                                     {msg.metadata?.auto_sent && (
-                                        <div className="text-[9px] text-green-300 mt-1 flex items-center gap-1">
-                                           <BrainCircuit className="w-3 h-3" /> Enviado autom. por IA
-                                        </div>
-                                     )}
                                   </div>
                                ) : (
                                   <p className="whitespace-pre-wrap leading-relaxed text-xs">{msg.mensaje}</p>
@@ -215,13 +246,6 @@ const ChatViewer = ({ lead, open, onOpenChange }: ChatViewerProps) => {
                                <div className="flex justify-end items-center gap-2 mt-1">
                                   <span className="text-[9px] opacity-40">{new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
                                </div>
-                               
-                               {/* Debug Metadata Hover */}
-                               {msg.metadata?.analysis && (
-                                 <div className="absolute -bottom-6 right-0 opacity-0 group-hover:opacity-100 transition-opacity bg-black/80 text-[9px] p-1 rounded text-green-400 font-mono whitespace-nowrap z-10">
-                                    Mood: {msg.metadata.analysis.mood} | Intent: {msg.metadata.analysis.buying_intent}
-                                 </div>
-                               )}
                             </div>
                          </div>
                       ))}
@@ -306,18 +330,67 @@ const ChatViewer = ({ lead, open, onOpenChange }: ChatViewerProps) => {
                        <TrendingUp className="w-3 h-3" /> Próximos Pasos
                     </h4>
                     <div className="space-y-2">
-                       <Button variant="outline" size="sm" className="w-full justify-start text-[10px] h-8 border-slate-800 bg-slate-900 hover:bg-slate-800 text-slate-300">
+                       <Button 
+                          variant="outline" 
+                          size="sm" 
+                          className="w-full justify-start text-[10px] h-8 border-slate-800 bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white"
+                          onClick={openReportDialog}
+                       >
                           <AlertCircle className="w-3 h-3 mr-2 text-yellow-500" /> Reportar Error (#CORREGIRIA)
                        </Button>
-                       <Button variant="outline" size="sm" className="w-full justify-start text-[10px] h-8 border-slate-800 bg-slate-900 hover:bg-slate-800 text-slate-300">
+                       <Button variant="outline" size="sm" className="w-full justify-start text-[10px] h-8 border-slate-800 bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white">
                           <MessageSquare className="w-3 h-3 mr-2 text-indigo-500" /> Enviar Catálogo PDF
                        </Button>
                     </div>
                  </div>
-
               </div>
            </div>
         </div>
+
+        {/* DIALOGO DE REPORTE DE ERROR */}
+        <Dialog open={isReportOpen} onOpenChange={setIsReportOpen}>
+           <DialogContent className="bg-slate-900 border-slate-800 text-white">
+              <DialogHeader>
+                 <DialogTitle>Reportar Error de Conducta</DialogTitle>
+                 <DialogDescription className="text-slate-400">
+                    Ayuda al Samurai a mejorar. Describe qué hizo mal y qué debería haber hecho.
+                 </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 pt-2">
+                 <div className="space-y-2">
+                    <Label className="text-xs text-red-400">Respuesta Incorrecta (IA)</Label>
+                    <div className="bg-slate-950 p-3 rounded border border-slate-800 text-xs italic text-slate-300">
+                       {errorContext.ia_response || "No se detectó respuesta previa."}
+                    </div>
+                 </div>
+                 <div className="space-y-2">
+                    <Label className="text-xs text-green-400">Corrección Sugerida (Lo que debió decir)</Label>
+                    <Textarea 
+                       value={errorContext.correction}
+                       onChange={e => setErrorContext({...errorContext, correction: e.target.value})}
+                       className="bg-slate-950 border-slate-800 font-mono text-xs h-20"
+                       placeholder="Ej: Debió saludar primero y luego dar el precio..."
+                    />
+                 </div>
+                 <div className="space-y-2">
+                    <Label className="text-xs text-slate-400">¿Por qué?</Label>
+                    <Input 
+                       value={errorContext.reason}
+                       onChange={e => setErrorContext({...errorContext, reason: e.target.value})}
+                       className="bg-slate-950 border-slate-800 text-xs"
+                       placeholder="Ej: Fue muy agresivo / Olvidó el protocolo..."
+                    />
+                 </div>
+              </div>
+              <DialogFooter>
+                 <Button variant="ghost" onClick={() => setIsReportOpen(false)}>Cancelar</Button>
+                 <Button onClick={submitError} className="bg-yellow-600 hover:bg-yellow-700 text-white" disabled={reporting}>
+                    {reporting ? <Loader2 className="w-4 h-4 animate-spin"/> : 'Enviar Reporte'}
+                 </Button>
+              </DialogFooter>
+           </DialogContent>
+        </Dialog>
+
       </SheetContent>
     </Sheet>
   );

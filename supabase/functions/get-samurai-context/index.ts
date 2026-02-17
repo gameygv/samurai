@@ -107,6 +107,8 @@ serve(async (req) => {
 
     // 4. RAG NATIVO
     let ragContext = relevant_knowledge || "";
+    let ragSources: string[] = []; // Debug info
+
     if (!ragContext && message && message.length > 3) {
        const query = message.replace(/[^\w\s]/gi, '').split(' ').filter((w: string) => w.length > 3).join(' | ');
        if (query.length > 0) {
@@ -118,6 +120,7 @@ serve(async (req) => {
 
           if (docs && docs.length > 0) {
              ragContext = docs.map((d: any) => `📌 DATOS DE "${d.title}":\n${d.content}`).join('\n\n');
+             ragSources = docs.map((d: any) => d.title);
           }
        }
     }
@@ -188,7 +191,12 @@ ${prompts['prompt_relearning'] || ''}
     return new Response(
       JSON.stringify({
         lead_id: currentLeadId,
-        system_prompt: fullSystemPrompt
+        system_prompt: fullSystemPrompt,
+        debug: {
+            rag_sources: ragSources,
+            media_count: mediaAssets?.length || 0,
+            profile: { mood: leadMood, intent: buyingIntent }
+        }
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
