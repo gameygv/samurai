@@ -1,3 +1,4 @@
+' character.">
 import React from 'react';
 import Layout from '@/components/Layout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -298,7 +299,7 @@ const Manual = () => {
                    <div className="mt-4 p-4 bg-slate-800 rounded-lg">
                       <h4 className="font-bold text-white text-sm mb-2 flex items-center gap-2"><Lightbulb className="w-4 h-4 text-yellow-400"/> Cómo mejorarlo</h4>
                       <p className="text-xs text-slate-400">
-                         Si notas que Samurai clasifica mal a los clientes, ve a <strong>Agent Brain > Psicología</strong> y refina las instrucciones. Sé más específico sobre qué constituye un cliente "Enojado" o "Listo para comprar".
+                         Si notas que Samurai clasifica mal a los clientes, ve a <strong>Agent Brain {" > "} Psicología</strong> y refina las instrucciones. Sé más específico sobre qué constituye un cliente "Enojado" o "Listo para comprar".
                       </p>
                    </div>
                 </CardContent>
