@@ -105,7 +105,29 @@ serve(async (req) => {
        }
     }
 
-    // 4. MEDIA
+    // 4. RAG NATIVO (Búsqueda de Conocimiento)
+    // Buscamos en la tabla knowledge_documents basándonos en el mensaje del usuario
+    let ragContext = relevant_knowledge || ""; // Si Make lo envía, lo usamos. Si no, buscamos.
+    
+    if (!ragContext && message && message.length > 3) {
+       // Limpiamos un poco el mensaje para búsqueda
+       const query = message.replace(/[^\w\s]/gi, '').split(' ').filter((w: string) => w.length > 3).join(' | ');
+       
+       if (query.length > 0) {
+          const { data: docs, error: searchError } = await supabaseClient
+             .from('knowledge_documents')
+             .select('title, content')
+             .textSearch('content', query, { type: 'websearch', config: 'spanish' })
+             .limit(2); // Traemos los 2 docs más relevantes
+
+          if (!searchError && docs && docs.length > 0) {
+             ragContext = docs.map((d: any) => `📌 DATOS DE "${d.title}":\n${d.content}`).join('\n\n');
+             console.log(`[RAG] Found ${docs.length} docs for query: ${query}`);
+          }
+       }
+    }
+
+    // 5. MEDIA ASSETS
     const { data: mediaAssets } = await supabaseClient
        .from('media_assets')
        .select('title, url, ai_instructions, type')
@@ -116,7 +138,7 @@ serve(async (req) => {
        ? mediaAssets.map(m => ` - [${m.type}] ${m.title}: ${m.url} (USAR SI: ${m.ai_instructions})`).join('\n')
        : "No hay archivos multimedia disponibles.";
 
-    // 5. LECCIONES
+    // 6. LECCIONES
     const { data: learnings } = await supabaseClient
        .from('errores_ia')
        .select('correccion_sugerida')
@@ -128,7 +150,7 @@ serve(async (req) => {
        ? learnings.map(l => `🔴 EVITAR ERROR PREVIO: ${l.correccion_sugerida}`).join('\n')
        : "Sin correcciones reportadas aún.";
 
-    // 6. SYSTEM PROMPT MAESTRO (CON INYECCIÓN DE PROTOCOLO DE ANÁLISIS)
+    // 7. SYSTEM PROMPT MAESTRO
     const fullSystemPrompt = `
 === 🧠 IDENTIDAD & OBJETIVO (CORE) ===
 ${prompts['prompt_core']}
@@ -148,8 +170,8 @@ ${chatHistoryText}
 === 📦 MEDIA ===
 ${mediaContext}
 
-=== 📚 CONOCIMIENTO ===
-${relevant_knowledge || 'Usa tu conocimiento general.'}
+=== 🔍 BASE DE CONOCIMIENTO (CONTEXTO RELEVANTE) ===
+${ragContext || 'Usa tu conocimiento general.'}
 
 === 🚫 CORRECCIONES ===
 ${learnedLessons}

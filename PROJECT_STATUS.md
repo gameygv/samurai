@@ -1,30 +1,27 @@
-# DYAD SAMURAI - MANUAL DE ESTADO Y REPORTE (v0.801-PRO)
+# DYAD SAMURAI - MANUAL DE ESTADO Y REPORTE (v0.802-AI)
 
-Este documento detalla el estado actual del sistema tras la implementación de la versión 0.801-PRO.
+Este documento detalla el estado actual del sistema tras la implementación de la versión 0.802-AI.
 
 ## 1. RESUMEN EJECUTIVO
 
 - **Estado del Sistema:** ✅ ONLINE (PRO)
-- **Versión:** 0.801.5 (Command Center Edition)
-- **Base de Datos:** ✅ Conectada (Supabase Realtime activado)
+- **Versión:** 0.802.1 (Self-Learning & RAG Edition)
+- **Base de Datos:** ✅ Conectada y Optimizada (Índices GIN activos)
 - **Integraciones:** 🚀 Optimizadas (Texto Plano por defecto)
 
 ## 2. ARQUITECTURA DEL CEREBRO (Brain)
 
 - **Identity:** DNA Maestro cargado.
 - **Vision:** Análisis de imágenes activo.
-- **Context:** Historial de 15 mensajes integrado en cada petición.
-- **RAG:** Acceso a Base de Conocimiento PDF/Doc/Link.
-- **Format:** Texto plano forzado para máxima compatibilidad con Make.
+- **Context:** Historial de 30 mensajes (Deep Memory).
+- **RAG NATIVO:** ✅ Búsqueda automática en documentos PDF/Text subidos.
+- **Self-Learning:** ✅ Bucle cerrado de análisis emocional y de intención.
 
 ## 3. NOVEDADES DEL DASHBOARD
 
-- [x] **Live Feed:** Visualización de chats en vivo desde la página de inicio.
-- [x] **Kernel Console:** Auditoría técnica de eventos en tiempo real.
-- [x] **Accuracy Chart:** Seguimiento de mejora por versión.
-
-## 4. INSTRUCCIONES PARA MAKE (MANDATORIO)
-Asegúrate de que el módulo de Gemini/GPT **NO** use formato JSON. El Samurai procesará el texto crudo para detectar URLs de medios y análisis psicológicos internamente.
+- [x] **Live Feed:** Visualización de chats en vivo.
+- [x] **Kernel Console:** Auditoría técnica.
+- [x] **Auto-Perfilado:** El Samurai actualiza el estado del Lead en cada respuesta.
 
 ---
-*Reporte generado automáticamente por Dyad System v0.801.5*
+*Reporte generado automáticamente por Dyad System v0.802.1*
