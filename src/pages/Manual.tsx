@@ -1,14 +1,11 @@
-' character.">
 import React from 'react';
 import Layout from '@/components/Layout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
-import { Badge } from '@/components/ui/badge';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { 
-  BookOpen, Brain, Zap, MessageSquare, ShieldAlert, Target, 
-  Database, Image, GitBranch, Lightbulb, AlertTriangle, ScanEye 
+  BookOpen, Brain, Zap, ShieldAlert, Target, 
+  Database, Image, Lightbulb, AlertTriangle, ScanEye 
 } from 'lucide-react';
 
 const Manual = () => {
