@@ -17,6 +17,7 @@ import Profile from "./pages/Profile";
 import Settings from "./pages/Settings";
 import Leads from "./pages/Leads";
 import MediaManager from "./pages/MediaManager";
+import Manual from "./pages/Manual"; // Import Manual
 import { Loader2 } from "lucide-react";
 
 const queryClient = new QueryClient();
@@ -61,6 +62,7 @@ const App = () => (
             <Route path="/profile" element={<PrivateRoute><Profile /></PrivateRoute>} />
             <Route path="/settings" element={<PrivateRoute><Settings /></PrivateRoute>} />
             <Route path="/leads" element={<PrivateRoute><Leads /></PrivateRoute>} />
+            <Route path="/manual" element={<PrivateRoute><Manual /></PrivateRoute>} /> 
             
             <Route path="*" element={<NotFound />} />
           </Routes>

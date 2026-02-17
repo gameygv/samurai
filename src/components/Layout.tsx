@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { 
   LayoutDashboard, Brain, Activity, Settings as SettingsIcon, Database, LogOut, 
   Users, FileText, UserCircle, GraduationCap, MessageSquare, 
-  GitBranch, Link as LinkIcon, Image, Sparkles
+  GitBranch, Link as LinkIcon, Image, Sparkles, BookOpen
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/context/AuthContext';
@@ -65,8 +65,9 @@ const Layout = ({ children }: LayoutProps) => {
       ]
     },
     {
-      title: "CONFIGURACIÓN",
+      title: "SISTEMA",
       items: [
+        { icon: BookOpen, label: 'Manual de Ayuda', path: '/manual' },
         { icon: LinkIcon, label: 'Integraciones', path: '/settings?tab=webhooks' },
         { icon: SettingsIcon, label: 'API Keys', path: '/settings?tab=secrets' },
       ]
@@ -153,6 +154,10 @@ const Layout = ({ children }: LayoutProps) => {
                 <DropdownMenuItem className="focus:bg-slate-800 focus:text-white cursor-pointer" onClick={() => navigate('/profile')}>
                   <UserCircle className="mr-2 h-4 w-4" />
                   <span>Mi Perfil</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem className="focus:bg-slate-800 focus:text-white cursor-pointer" onClick={() => navigate('/manual')}>
+                  <BookOpen className="mr-2 h-4 w-4" />
+                  <span>Manual de Ayuda</span>
                 </DropdownMenuItem>
                 <DropdownMenuItem className="focus:bg-slate-800 focus:text-white cursor-pointer" onClick={() => navigate('/settings')}>
                   <SettingsIcon className="mr-2 h-4 w-4" />
