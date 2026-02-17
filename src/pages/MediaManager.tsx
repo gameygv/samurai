@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { Image, FileText, Video, Upload, Trash2, ExternalLink, Loader2, Copy, AlertTriangle, Bot, Edit } from 'lucide-react';
+import { Image, FileText, Video, Upload, Trash2, ExternalLink, Loader2, Copy, AlertTriangle, Bot, Edit, Zap } from 'lucide-react';
 import { toast } from 'sonner';
 import { logActivity } from '@/utils/logger';
 
@@ -73,7 +73,7 @@ const MediaManager = () => {
         url: publicUrl,
         type,
         tags: [type],
-        ai_instructions: uploadInstructions || null // Guardar instrucciones IA
+        ai_instructions: uploadInstructions || null
       });
 
       if (dbError) throw dbError;
@@ -104,7 +104,7 @@ const MediaManager = () => {
      try {
         const { error } = await supabase
            .from('media_assets')
-           .update({ ai_instructions: editInstructions })
+           .update({ ai_instructions: editInstructions || null }) // Convertir string vacio a null
            .eq('id', editingAsset.id);
         
         if (error) throw error;
@@ -146,7 +146,10 @@ const MediaManager = () => {
       <div className="max-w-7xl mx-auto space-y-6">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-white mb-2">Media Manager</h1>
+            <h1 className="text-3xl font-bold text-white mb-2 flex items-center gap-2">
+               Media Manager
+               <Badge className="bg-indigo-600 hover:bg-indigo-700 text-[10px] uppercase tracking-widest">Vision-Ready</Badge>
+            </h1>
             <p className="text-slate-400">Archivos multimedia con instrucciones de detonación para la IA.</p>
           </div>
           
@@ -166,7 +169,7 @@ const MediaManager = () => {
               <form onSubmit={handleUpload} className="space-y-4 pt-4">
                 <div className="space-y-2">
                   <Label>Archivo</Label>
-                  <div className="border-2 border-dashed border-slate-700 rounded-lg p-4 hover:border-indigo-500 transition-colors cursor-pointer text-center">
+                  <div className="border-2 border-dashed border-slate-700 rounded-lg p-4 hover:border-indigo-500 transition-colors cursor-pointer text-center group">
                      <Input 
                         type="file" 
                         onChange={e => setSelectedFile(e.target.files?.[0] || null)} 
@@ -176,9 +179,16 @@ const MediaManager = () => {
                      />
                      <label htmlFor="file-upload" className="cursor-pointer w-full h-full block">
                         {selectedFile ? (
-                           <span className="text-green-400 font-mono text-sm">{selectedFile.name}</span>
+                           <div className="flex flex-col items-center gap-2">
+                              <FileText className="w-8 h-8 text-green-500" />
+                              <span className="text-green-400 font-mono text-sm">{selectedFile.name}</span>
+                              <span className="text-xs text-slate-500">{(selectedFile.size / 1024).toFixed(1)} KB</span>
+                           </div>
                         ) : (
-                           <span className="text-slate-500 text-sm">Click para seleccionar (Img, Video, PDF)</span>
+                           <div className="flex flex-col items-center gap-2 text-slate-500 group-hover:text-indigo-400 transition-colors">
+                              <Upload className="w-8 h-8" />
+                              <span className="text-sm">Click para seleccionar (Img, Video, PDF)</span>
+                           </div>
                         )}
                      </label>
                   </div>
@@ -194,15 +204,15 @@ const MediaManager = () => {
                 </div>
                 <div className="space-y-2">
                   <div className="flex justify-between">
-                     <Label className="text-indigo-400 flex items-center gap-1"><Bot className="w-3 h-3"/> Instrucciones IA (Trigger)</Label>
+                     <Label className="text-indigo-400 flex items-center gap-1"><Zap className="w-3 h-3 text-yellow-500"/> Trigger Automático (Instrucciones IA)</Label>
                   </div>
                   <Textarea 
                      value={uploadInstructions}
                      onChange={e => setUploadInstructions(e.target.value)}
-                     className="bg-slate-950 border-slate-800 min-h-[80px] font-mono text-xs"
+                     className="bg-slate-950 border-slate-800 min-h-[80px] font-mono text-xs focus:border-yellow-500/50 transition-colors"
                      placeholder="Ej: Enviar esta imagen cuando el cliente pregunte por precios de mayoreo o quiera ver el catálogo completo."
                   />
-                  <p className="text-[10px] text-slate-500">Si dejas esto vacío, la IA ignorará este archivo.</p>
+                  <p className="text-[10px] text-slate-500">Si dejas esto vacío, la IA ignorará este archivo y solo servirá de repositorio.</p>
                 </div>
                 <Button type="submit" className="w-full bg-indigo-600" disabled={uploading || !selectedFile}>
                   {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Subir e Indexar'}
@@ -221,11 +231,12 @@ const MediaManager = () => {
               </DialogHeader>
               <div className="space-y-4 pt-2">
                  <div className="space-y-2">
-                    <Label className="text-indigo-400">¿Cuándo enviar esto?</Label>
+                    <Label className="text-indigo-400 flex items-center gap-2"><Bot className="w-4 h-4"/> ¿Cuándo debe el Samurai enviar esto?</Label>
                     <Textarea 
                        value={editInstructions}
                        onChange={e => setEditInstructions(e.target.value)}
-                       className="bg-slate-950 border-slate-800 h-32 font-mono text-xs"
+                       className="bg-slate-950 border-slate-800 h-32 font-mono text-xs focus:border-indigo-500"
+                       placeholder="Describe la situación exacta. Ej: 'Si el cliente pide ver los colores disponibles...'"
                     />
                  </div>
                  <DialogFooter>
@@ -249,10 +260,20 @@ const MediaManager = () => {
              </div>
           ) : (
              assets.map((asset) => (
-                <Card key={asset.id} className="bg-slate-900 border-slate-800 group overflow-hidden hover:border-indigo-500/50 transition-all flex flex-col">
+                <Card key={asset.id} className={`bg-slate-900 border-slate-800 group overflow-hidden hover:border-indigo-500/50 transition-all flex flex-col relative ${asset.ai_instructions ? 'ring-1 ring-green-500/20' : ''}`}>
+                   
+                   {/* AI Active Indicator */}
+                   {asset.ai_instructions && (
+                      <div className="absolute top-2 right-2 z-10">
+                         <Badge className="bg-green-500/90 hover:bg-green-600 text-white text-[9px] shadow-lg shadow-green-900/50 px-1.5 h-5 gap-1">
+                            <Zap className="w-3 h-3 fill-white" /> AI READY
+                         </Badge>
+                      </div>
+                   )}
+
                    <div className="aspect-square bg-slate-950 relative flex items-center justify-center overflow-hidden border-b border-slate-800">
                       {asset.type === 'IMAGE' ? (
-                         <img src={asset.url} alt={asset.title} className="object-cover w-full h-full opacity-90 group-hover:opacity-100 transition-opacity" />
+                         <img src={asset.url} alt={asset.title} className="object-cover w-full h-full opacity-80 group-hover:opacity-100 transition-opacity duration-500" />
                       ) : (
                          <div className="text-slate-600 group-hover:text-indigo-400 transition-colors">
                             {asset.type === 'VIDEO' ? <Video className="w-12 h-12" /> : <FileText className="w-12 h-12" />}
@@ -283,7 +304,7 @@ const MediaManager = () => {
                          <Badge variant="outline" className="text-[9px] h-4 px-1 border-slate-700 text-slate-500">{asset.type}</Badge>
                       </div>
                       
-                      {/* AI Status Indicator */}
+                      {/* AI Status Text */}
                       <div className="mt-auto pt-2 border-t border-slate-800/50">
                          {asset.ai_instructions ? (
                             <div className="flex items-start gap-1.5 group/tooltip cursor-help">
@@ -295,7 +316,7 @@ const MediaManager = () => {
                          ) : (
                             <div className="flex items-center gap-1.5 text-slate-600">
                                <Bot className="w-3 h-3" />
-                               <span className="text-[10px]">Ignorado por IA</span>
+                               <span className="text-[10px] italic">Sin trigger activo</span>
                             </div>
                          )}
                       </div>
