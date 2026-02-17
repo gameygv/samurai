@@ -1,3 +1,4 @@
+' characters in the JSX text content.">
 import React, { useEffect, useState } from 'react';
 import Layout from '@/components/Layout';
 import { supabase } from '@/integrations/supabase/client';
@@ -302,10 +303,10 @@ const Settings = () => {
                       <ol className="list-decimal list-inside space-y-3 text-slate-300 text-sm">
                          <li>Crea un escenario nuevo.</li>
                          <li>
-                            <strong>Módulo 1 (Trigger):</strong> Webhook > Custom Webhook. Copia la URL y pégala en Kommo (Digital Pipeline > Incoming Leads).
+                            <strong>Módulo 1 (Trigger):</strong> Webhook {" > "} Custom Webhook. Copia la URL y pégala en Kommo (Digital Pipeline {" > "} Incoming Leads).
                          </li>
                          <li>
-                            <strong>Módulo 2 (Samurai Context):</strong> HTTP > Make a Request.
+                            <strong>Módulo 2 (Samurai Context):</strong> HTTP {" > "} Make a Request.
                             <ul className="list-disc list-inside ml-6 mt-1 text-slate-400 text-xs">
                                <li>URL: <code>https://giwoovmvwlddaizorizk.supabase.co/functions/v1/get-samurai-context</code></li>
                                <li>Method: POST</li>
@@ -321,14 +322,14 @@ const Settings = () => {
                             </ul>
                          </li>
                          <li>
-                            <strong>Módulo 4 (Samurai Process):</strong> HTTP > Make a Request.
+                            <strong>Módulo 4 (Samurai Process):</strong> HTTP {" > "} Make a Request.
                             <ul className="list-disc list-inside ml-6 mt-1 text-slate-400 text-xs">
                                <li>URL: <code>https://giwoovmvwlddaizorizk.supabase.co/functions/v1/process-samurai-response</code></li>
                                <li>JSON: <code>{`{"ai_json_response": "{{ai_output_text}}", "lead_id": "{{lead_id_from_mod_2}}"}`}</code></li>
                             </ul>
                          </li>
                          <li>
-                            <strong>Módulo 5 (Respuesta):</strong> Kommo > Send a message. Envía la respuesta procesada al cliente.
+                            <strong>Módulo 5 (Respuesta):</strong> Kommo {" > "} Send a message. Envía la respuesta procesada al cliente.
                          </li>
                       </ol>
                    </div>
