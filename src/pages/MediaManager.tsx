@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { Image, FileText, Video, Upload, Trash2, ExternalLink, Loader2, Copy, AlertTriangle, Bot, Edit, Zap } from 'lucide-react';
+import { Image, FileText, Video, Upload, Trash2, ExternalLink, Loader2, Copy, AlertTriangle, Bot, Edit, Zap, WifiOff } from 'lucide-react';
 import { toast } from 'sonner';
 import { logActivity } from '@/utils/logger';
 
@@ -16,6 +16,7 @@ const MediaManager = () => {
   const [assets, setAssets] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
+  const [schemaError, setSchemaError] = useState(false);
   
   // Upload State
   const [isUploadOpen, setIsUploadOpen] = useState(false);
@@ -33,13 +34,31 @@ const MediaManager = () => {
 
   const fetchAssets = async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from('media_assets')
-      .select('*')
-      .order('created_at', { ascending: false });
+    setSchemaError(false);
+    try {
+      const { data, error } = await supabase
+        .from('media_assets')
+        .select('*')
+        .order('created_at', { ascending: false });
 
-    if (!error && data) setAssets(data);
-    setLoading(false);
+      if (error) {
+        if (error.code === 'PGRST204') {
+          setSchemaError(true);
+        }
+        throw error;
+      }
+      
+      if (data) setAssets(data);
+    } catch (error: any) {
+      console.error("Fetch assets error:", error);
+      if (error.code === 'PGRST204') {
+        toast.error('Error de base de datos: Falta la columna ai_instructions');
+      } else {
+        toast.error('Error cargando archivos multimedia');
+      }
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleUpload = async (e: React.FormEvent) => {
@@ -48,6 +67,7 @@ const MediaManager = () => {
 
     setUploading(true);
     try {
+      // 1. Subir a Storage
       const fileExt = selectedFile.name.split('.').pop();
       const fileName = `${Date.now()}.${fileExt}`;
       const filePath = `uploads/${fileName}`;
@@ -68,6 +88,7 @@ const MediaManager = () => {
       if (['mp4', 'mov', 'webm'].includes(ext)) type = 'VIDEO';
       if (['pdf'].includes(ext)) type = 'PDF';
 
+      // 2. Insertar en DB
       const { error: dbError } = await supabase.from('media_assets').insert({
         title: title || selectedFile.name,
         url: publicUrl,
@@ -91,8 +112,12 @@ const MediaManager = () => {
       fetchAssets();
 
     } catch (error: any) {
-      console.error(error);
-      toast.error(error.message.includes('Bucket') ? 'Error de Storage (Bucket no existe)' : error.message);
+      console.error("Upload error:", error);
+      let msg = error.message;
+      if (error.code === 'PGRST204') {
+        msg = "Falta la columna 'ai_instructions' en la base de datos. Por favor ejecuta el SQL de reparación.";
+      }
+      toast.error(msg);
     } finally {
       setUploading(false);
     }
@@ -104,7 +129,7 @@ const MediaManager = () => {
      try {
         const { error } = await supabase
            .from('media_assets')
-           .update({ ai_instructions: editInstructions || null }) // Convertir string vacio a null
+           .update({ ai_instructions: editInstructions || null })
            .eq('id', editingAsset.id);
         
         if (error) throw error;
@@ -155,7 +180,7 @@ const MediaManager = () => {
           
           <Dialog open={isUploadOpen} onOpenChange={setIsUploadOpen}>
             <DialogTrigger asChild>
-              <Button className="bg-indigo-600 hover:bg-indigo-700 shadow-lg shadow-indigo-900/20">
+              <Button className="bg-indigo-600 hover:bg-indigo-700 shadow-lg shadow-indigo-900/20" disabled={schemaError}>
                 <Upload className="w-4 h-4 mr-2" /> Subir Nuevo Asset
               </Button>
             </DialogTrigger>
@@ -222,6 +247,20 @@ const MediaManager = () => {
           </Dialog>
         </div>
 
+        {/* Schema Error Alert */}
+        {schemaError && (
+          <div className="bg-red-500/10 border border-red-500/20 p-4 rounded-lg flex items-start gap-3">
+            <WifiOff className="w-5 h-5 text-red-500 mt-0.5" />
+            <div className="text-sm text-red-400">
+               <p className="font-bold">Error de Estructura detectado</p>
+               <p>Falta la columna 'ai_instructions' en la tabla 'media_assets'.</p>
+               <p className="mt-2 text-white font-mono bg-red-900/40 p-2 rounded text-xs">
+                 ALTER TABLE public.media_assets ADD COLUMN ai_instructions TEXT;
+               </p>
+            </div>
+          </div>
+        )}
+
         {/* Edit Dialog */}
         <Dialog open={!!editingAsset} onOpenChange={(open) => !open && setEditingAsset(null)}>
            <DialogContent className="bg-slate-900 border-slate-800 text-white">
@@ -256,7 +295,7 @@ const MediaManager = () => {
           ) : assets.length === 0 ? (
              <div className="col-span-full flex flex-col items-center justify-center py-16 text-slate-500 border-2 border-dashed border-slate-800 rounded-lg bg-slate-900/50">
                 <AlertTriangle className="w-10 h-10 mb-4 text-slate-600" />
-                <p>No hay archivos multimedia.</p>
+                <p>{schemaError ? "Error de conexión con la tabla." : "No hay archivos multimedia."}</p>
              </div>
           ) : (
              assets.map((asset) => (
