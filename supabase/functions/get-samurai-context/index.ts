@@ -6,7 +6,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-// Fallbacks de seguridad por si la BD falla
+// Fallbacks de seguridad
 const DEFAULTS = {
   'prompt_core': `Eres Samurai, un asistente de ventas experto.`,
   'prompt_behavior': `Sé breve y profesional.`,
@@ -27,7 +27,7 @@ serve(async (req) => {
 
     const { message, lead_name, lead_phone, lead_id, platform, relevant_knowledge } = await req.json();
 
-    // 1. IDENTIFICACIÓN Y CAPTURA (CRÍTICO PARA MEMORIA)
+    // 1. IDENTIFICACIÓN Y CAPTURA
     let currentLeadId = lead_id;
     let leadProfile = "Nuevo Prospecto";
     let leadMood = "NEUTRO";
@@ -43,12 +43,10 @@ serve(async (req) => {
        
        if (existingLead) {
           currentLeadId = existingLead.id;
-          // Recuperamos perfilado previo para "Autoaprendizaje"
           leadMood = existingLead.estado_emocional_actual || "NEUTRO";
           buyingIntent = existingLead.buying_intent || "MEDIO";
           leadProfile = `Cliente Recurrente | Mood: ${leadMood} | Intent: ${buyingIntent}`;
           
-          // Actualizar nombre si no existía
           if (!existingLead.nombre && lead_name) {
              await supabaseClient.from('leads').update({ nombre: lead_name }).eq('id', currentLeadId);
           }
@@ -67,8 +65,7 @@ serve(async (req) => {
        }
     }
 
-    // Guardar el mensaje del Usuario (INPUT)
-    // Esto asegura que NADA se pierda.
+    // Guardar mensaje INPUT
     if (currentLeadId && message) {
        await supabaseClient.from('conversaciones').insert({
           lead_id: currentLeadId,
@@ -76,11 +73,10 @@ serve(async (req) => {
           mensaje: message,
           platform: platform || 'API'
        });
-       // Actualizar timestamp para que suba en el dashboard
        await supabaseClient.from('leads').update({ last_message_at: new Date().toISOString() }).eq('id', currentLeadId);
     }
 
-    // 2. RECUPERACIÓN DE CEREBRO (Prompts Dinámicos)
+    // 2. PROMPTS
     const { data: configData } = await supabaseClient.from('app_config').select('key, value').eq('category', 'PROMPT');
     const prompts: Record<string, string> = { ...DEFAULTS };
     if (configData && configData.length > 0) {
@@ -91,8 +87,7 @@ serve(async (req) => {
        });
     }
 
-    // 3. MEMORIA PROFUNDA (Contexto Histórico)
-    // Aumentamos a 30 mensajes para tener contexto real de conversaciones largas.
+    // 3. MEMORIA (30 mensajes)
     let chatHistoryText = "Sin historial previo (Inicio de conversación).";
     if (currentLeadId) {
        const { data: history } = await supabaseClient
@@ -100,10 +95,9 @@ serve(async (req) => {
           .select('emisor, mensaje, created_at')
           .eq('lead_id', currentLeadId)
           .order('created_at', { ascending: false })
-          .limit(30); // AUMENTADO DE 15 A 30
+          .limit(30);
        
        if (history && history.length > 0) {
-          // Formateamos para que la IA entienda la secuencia temporal
           chatHistoryText = history.reverse().map(m => {
              const time = new Date(m.created_at).toLocaleTimeString('es-MX', {hour: '2-digit', minute:'2-digit'});
              return `[${time}] ${m.emisor}: ${m.mensaje}`;
@@ -111,7 +105,7 @@ serve(async (req) => {
        }
     }
 
-    // 4. MEDIA ASSETS (Inventario Visual)
+    // 4. MEDIA
     const { data: mediaAssets } = await supabaseClient
        .from('media_assets')
        .select('title, url, ai_instructions, type')
@@ -122,7 +116,7 @@ serve(async (req) => {
        ? mediaAssets.map(m => ` - [${m.type}] ${m.title}: ${m.url} (USAR SI: ${m.ai_instructions})`).join('\n')
        : "No hay archivos multimedia disponibles.";
 
-    // 5. LECCIONES APRENDIDAS (Auto-corrección)
+    // 5. LECCIONES
     const { data: learnings } = await supabaseClient
        .from('errores_ia')
        .select('correccion_sugerida')
@@ -134,39 +128,44 @@ serve(async (req) => {
        ? learnings.map(l => `🔴 EVITAR ERROR PREVIO: ${l.correccion_sugerida}`).join('\n')
        : "Sin correcciones reportadas aún.";
 
-    // 6. CONSTRUCCIÓN DEL SYSTEM PROMPT MAESTRO
-    // Estructurado para que la IA priorice Identidad > Contexto > Respuesta
+    // 6. SYSTEM PROMPT MAESTRO (CON INYECCIÓN DE PROTOCOLO DE ANÁLISIS)
     const fullSystemPrompt = `
 === 🧠 IDENTIDAD & OBJETIVO (CORE) ===
 ${prompts['prompt_core']}
 
-=== 📜 PROTOCOLOS DE VENTA ===
+=== 📜 PROTOCOLOS ===
 ${prompts['prompt_behavior']}
 ${prompts['prompt_objections']}
 ${prompts['prompt_closing_strategy']}
 
-=== 👤 PERFIL DEL CLIENTE (AUTO-LEARNING) ===
-Nombre: ${lead_name || 'No especificado'}
-Perfil Detectado: ${leadProfile}
-Psicología a aplicar: ${prompts['prompt_psychology']}
+=== 👤 PERFIL ACTUAL (INICIO) ===
+Mood: ${leadMood} | Intent: ${buyingIntent}
+Instrucción: ${prompts['prompt_psychology']}
 
-=== 🕰️ MEMORIA DE CONVERSACIÓN (HISTORIAL REAL) ===
-Analiza esto para no repetir preguntas y mantener el hilo:
+=== 🕰️ MEMORIA ===
 ${chatHistoryText}
 
-=== 📦 INVENTARIO & MEDIA (SOLO USAR SI APLICA) ===
+=== 📦 MEDIA ===
 ${mediaContext}
 
-=== 📚 BASE DE CONOCIMIENTO (RAG) ===
-${relevant_knowledge || 'Usa tu conocimiento general de ventas.'}
+=== 📚 CONOCIMIENTO ===
+${relevant_knowledge || 'Usa tu conocimiento general.'}
 
-=== 🚫 REGLAS DE ORO & CORRECCIONES ===
+=== 🚫 CORRECCIONES ===
 ${learnedLessons}
 ${prompts['prompt_relearning'] || ''}
-IMPORTANTE: Responde SIEMPRE en TEXTO PLANO. Sé natural.
+
+=== ⚡ PROTOCOLO DE RESPUESTA Y AUTO-ANÁLISIS (MANDATORIO) ===
+1. Responde al cliente de forma natural y persuasiva.
+2. AL FINAL de tu respuesta, añade un bloque oculto JSON con tu análisis actualizado del cliente.
+3. Formato OBLIGATORIO del bloque final:
+[[ANALYSIS: {"mood": "FELIZ|ENOJADO|NEUTRO|PRAGMATICO|IMPACIENTE", "intent": "ALTO|MEDIO|BAJO", "summary": "Resumen de 1 frase del estado actual"}]]
+
+Ejemplo de salida correcta:
+"Claro que sí, el precio es $500. ¿Te gustaría reservar uno ahora?"
+[[ANALYSIS: {"mood": "PRAGMATICO", "intent": "ALTO", "summary": "Cliente preguntó precio directo, alta probabilidad"}]]
     `;
 
-    // Retornamos el contexto listo para que Make se lo pase a Gemini/GPT
     return new Response(
       JSON.stringify({
         lead_id: currentLeadId,

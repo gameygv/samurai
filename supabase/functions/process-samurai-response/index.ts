@@ -21,71 +21,108 @@ serve(async (req) => {
 
     if (!lead_id) throw new Error("Lead ID is required");
 
-    // 1. PROCESAR RESPUESTA (TEXTO PLANO)
-    // Ya no esperamos JSON. Tomamos el raw_text o ai_json_response como string directo.
-    let replyText = "";
-    let mediaUrlFound = null;
-
-    // Si viene como string JSON, intentamos extraer, si no, usamos el texto directo.
+    // 1. NORMALIZACIÓN DE ENTRADA
+    let fullText = "";
+    
     if (typeof ai_json_response === 'string') {
-        // Intentar parsear por si acaso es JSON, pero con fallback a texto
         try {
+            // Intentamos parsear por si Make manda JSON stringificado
             const parsed = JSON.parse(ai_json_response);
-            replyText = parsed.reply || ai_json_response;
-            mediaUrlFound = parsed.media_url || null;
+            fullText = parsed.reply || ai_json_response;
         } catch (e) {
-            replyText = ai_json_response;
+            fullText = ai_json_response;
         }
     } else if (typeof ai_json_response === 'object') {
-        replyText = ai_json_response.reply || JSON.stringify(ai_json_response);
-        mediaUrlFound = ai_json_response.media_url || null;
+        fullText = ai_json_response.reply || JSON.stringify(ai_json_response);
     } else {
-        replyText = raw_text || "Error: No response text";
+        fullText = raw_text || "Error: No response text";
     }
 
-    // 2. DETECTAR URL EN TEXTO (Si la IA puso el link en el texto)
-    if (!mediaUrlFound) {
-       const urlRegex = /(https?:\/\/[^\s]+)/g;
-       const urls = replyText.match(urlRegex);
-       if (urls && urls.length > 0) {
-          // Asumimos que la última URL es la imagen/archivo
-          // Opcional: Podríamos verificar extensión de imagen
-          mediaUrlFound = urls[urls.length - 1];
-       }
+    // 2. EXTRACCIÓN DE INTELIGENCIA (AUTOAPRENDIZAJE)
+    // Buscamos el patrón [[ANALYSIS: { ... }]] que inyectamos en el prompt
+    let cleanText = fullText;
+    let analysisData: any = null;
+    let mediaUrlFound = null;
+
+    // Regex para capturar el bloque JSON de análisis al final
+    const analysisRegex = /\[\[ANALYSIS:({.*?})\]\]/s;
+    const match = fullText.match(analysisRegex);
+
+    if (match && match[1]) {
+        try {
+            analysisData = JSON.parse(match[1]);
+            // Eliminamos el bloque de análisis del texto que verá el cliente
+            cleanText = fullText.replace(match[0], '').trim();
+            console.log("Analysis extracted:", analysisData);
+        } catch (e) {
+            console.error("Error parsing analysis JSON:", e);
+        }
     }
 
-    // 3. GUARDAR RESPUESTA TEXTO
+    // 3. ACTUALIZACIÓN DEL PERFIL DEL LEAD (MEMORIA ACTIVA)
+    if (analysisData) {
+        const updateData: any = {
+           last_ai_analysis: new Date().toISOString()
+        };
+        
+        if (analysisData.mood) updateData.estado_emocional_actual = analysisData.mood;
+        if (analysisData.intent) updateData.buying_intent = analysisData.intent;
+        if (analysisData.summary) updateData.summary = analysisData.summary;
+
+        // Actualizamos el lead para que la próxima vez el contexto sea más preciso
+        await supabaseClient.from('leads').update(updateData).eq('id', lead_id);
+        
+        // Log de aprendizaje
+        await supabaseClient.from('activity_logs').insert({
+            action: 'UPDATE',
+            resource: 'BRAIN',
+            description: `Auto-perfilado Lead ${lead_id.substring(0,8)}: ${analysisData.mood} / ${analysisData.intent}`,
+            status: 'OK',
+            metadata: analysisData
+        });
+    }
+
+    // 4. DETECTAR MEDIA URLS (Si la IA puso un link en el texto limpio)
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    const urls = cleanText.match(urlRegex);
+    if (urls && urls.length > 0) {
+       // Asumimos que la última URL es la imagen/archivo si está aislada
+       mediaUrlFound = urls[urls.length - 1];
+    }
+
+    // 5. GUARDAR CONVERSACIÓN
     const { error: chatError } = await supabaseClient.from('conversaciones').insert({
         lead_id: lead_id,
         emisor: 'SAMURAI',
-        mensaje: replyText,
+        mensaje: cleanText, // Guardamos solo el mensaje limpio
         platform: 'API',
-        metadata: { format: 'text_plain' }
+        metadata: { 
+           format: 'text_processed',
+           analysis: analysisData, // Guardamos el análisis crudo en metadata para auditoría
+           has_media: !!mediaUrlFound
+        }
     });
 
     if (chatError) throw chatError;
 
-    // 4. ACTUALIZAR LEAD TIMESTAMP
+    // 6. TIMESTAMP UPDATE
     await supabaseClient.from('leads').update({
         last_message_at: new Date().toISOString()
     }).eq('id', lead_id);
 
-    // 5. LOG
-    await supabaseClient.from('activity_logs').insert({
-        action: 'CHAT',
-        resource: 'USERS',
-        description: `Respuesta enviada a Lead ${lead_id.substring(0,8)}`,
-        status: 'OK'
-    });
-
-    // Retornamos todo a Make
+    // Retornamos el texto LIMPIO a Make para que lo envíe a WhatsApp
     return new Response(
-      JSON.stringify({ success: true, reply: replyText, media_url: mediaUrlFound }),
+      JSON.stringify({ 
+         success: true, 
+         reply: cleanText, 
+         media_url: mediaUrlFound,
+         analysis_captured: !!analysisData 
+      }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
 
   } catch (error) {
-    console.error("Error processing response:", error);
+    console.error("Processing Error:", error);
     return new Response(
       JSON.stringify({ error: error.message }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
