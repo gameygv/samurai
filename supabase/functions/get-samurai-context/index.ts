@@ -105,29 +105,24 @@ serve(async (req) => {
        }
     }
 
-    // 4. RAG NATIVO (Búsqueda de Conocimiento)
-    // Buscamos en la tabla knowledge_documents basándonos en el mensaje del usuario
-    let ragContext = relevant_knowledge || ""; // Si Make lo envía, lo usamos. Si no, buscamos.
-    
+    // 4. RAG NATIVO
+    let ragContext = relevant_knowledge || "";
     if (!ragContext && message && message.length > 3) {
-       // Limpiamos un poco el mensaje para búsqueda
        const query = message.replace(/[^\w\s]/gi, '').split(' ').filter((w: string) => w.length > 3).join(' | ');
-       
        if (query.length > 0) {
-          const { data: docs, error: searchError } = await supabaseClient
+          const { data: docs } = await supabaseClient
              .from('knowledge_documents')
              .select('title, content')
              .textSearch('content', query, { type: 'websearch', config: 'spanish' })
-             .limit(2); // Traemos los 2 docs más relevantes
+             .limit(2);
 
-          if (!searchError && docs && docs.length > 0) {
+          if (docs && docs.length > 0) {
              ragContext = docs.map((d: any) => `📌 DATOS DE "${d.title}":\n${d.content}`).join('\n\n');
-             console.log(`[RAG] Found ${docs.length} docs for query: ${query}`);
           }
        }
     }
 
-    // 5. MEDIA ASSETS
+    // 5. MEDIA
     const { data: mediaAssets } = await supabaseClient
        .from('media_assets')
        .select('title, url, ai_instructions, type')
@@ -150,7 +145,7 @@ serve(async (req) => {
        ? learnings.map(l => `🔴 EVITAR ERROR PREVIO: ${l.correccion_sugerida}`).join('\n')
        : "Sin correcciones reportadas aún.";
 
-    // 7. SYSTEM PROMPT MAESTRO
+    // 7. SYSTEM PROMPT MAESTRO (INTEGRADO TOTAL)
     const fullSystemPrompt = `
 === 🧠 IDENTIDAD & OBJETIVO (CORE) ===
 ${prompts['prompt_core']}
@@ -160,32 +155,34 @@ ${prompts['prompt_behavior']}
 ${prompts['prompt_objections']}
 ${prompts['prompt_closing_strategy']}
 
-=== 👤 PERFIL ACTUAL (INICIO) ===
+=== 👁️ VISIÓN & VALIDACIÓN DE PAGOS ===
+ATENCIÓN: Si el cliente envía una imagen o comprobante, aplica estas reglas:
+1. ANÁLISIS: ${prompts['prompt_vision_analysis'] || 'Verifica fecha, monto y banco.'}
+2. VALIDACIÓN: ${prompts['prompt_match_validation'] || 'Compara con deuda pendiente.'}
+3. ACCIÓN POSTERIOR: ${prompts['prompt_post_validation'] || 'Confirma recepción.'}
+
+=== 👤 PERFIL ACTUAL ===
 Mood: ${leadMood} | Intent: ${buyingIntent}
 Instrucción: ${prompts['prompt_psychology']}
 
 === 🕰️ MEMORIA ===
 ${chatHistoryText}
 
-=== 📦 MEDIA ===
+=== 📦 MEDIA DISPONIBLE ===
 ${mediaContext}
 
-=== 🔍 BASE DE CONOCIMIENTO (CONTEXTO RELEVANTE) ===
+=== 🔍 CONOCIMIENTO (RAG) ===
 ${ragContext || 'Usa tu conocimiento general.'}
 
-=== 🚫 CORRECCIONES ===
+=== 🚫 LECCIONES APRENDIDAS ===
 ${learnedLessons}
 ${prompts['prompt_relearning'] || ''}
 
-=== ⚡ PROTOCOLO DE RESPUESTA Y AUTO-ANÁLISIS (MANDATORIO) ===
-1. Responde al cliente de forma natural y persuasiva.
-2. AL FINAL de tu respuesta, añade un bloque oculto JSON con tu análisis actualizado del cliente.
-3. Formato OBLIGATORIO del bloque final:
-[[ANALYSIS: {"mood": "FELIZ|ENOJADO|NEUTRO|PRAGMATICO|IMPACIENTE", "intent": "ALTO|MEDIO|BAJO", "summary": "Resumen de 1 frase del estado actual"}]]
-
-Ejemplo de salida correcta:
-"Claro que sí, el precio es $500. ¿Te gustaría reservar uno ahora?"
-[[ANALYSIS: {"mood": "PRAGMATICO", "intent": "ALTO", "summary": "Cliente preguntó precio directo, alta probabilidad"}]]
+=== ⚡ PROTOCOLO DE SALIDA ===
+1. Responde naturalmente.
+2. Si detectas un comprobante válido, confírmalo según reglas de Visión.
+3. AL FINAL, añade SIEMPRE el bloque de análisis:
+[[ANALYSIS: {"mood": "...", "intent": "...", "summary": "..."}]]
     `;
 
     return new Response(

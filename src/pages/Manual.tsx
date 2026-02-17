@@ -7,7 +7,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { 
   BookOpen, Brain, Zap, MessageSquare, ShieldAlert, Target, 
-  Database, Image, GitBranch, Lightbulb, AlertTriangle 
+  Database, Image, GitBranch, Lightbulb, AlertTriangle, ScanEye 
 } from 'lucide-react';
 
 const Manual = () => {
@@ -26,7 +26,7 @@ const Manual = () => {
 
         <Tabs defaultValue="cerebro" className="w-full">
           <TabsList className="bg-slate-900 border border-slate-800 w-full justify-start p-1 h-auto flex-wrap">
-            <TabsTrigger value="cerebro" className="py-2 px-4 data-[state=active]:bg-indigo-600">🧠 El Cerebro Core</TabsTrigger>
+            <TabsTrigger value="cerebro" className="py-2 px-4 data-[state=active]:bg-indigo-600">🧠 El Cerebro Core (1.1-4.3)</TabsTrigger>
             <TabsTrigger value="conocimiento" className="py-2 px-4 data-[state=active]:bg-indigo-600">📚 Base de Conocimiento (RAG)</TabsTrigger>
             <TabsTrigger value="media" className="py-2 px-4 data-[state=active]:bg-indigo-600">📸 Media & Triggers</TabsTrigger>
             <TabsTrigger value="aprendizaje" className="py-2 px-4 data-[state=active]:bg-indigo-600">🔄 Auto-Aprendizaje</TabsTrigger>
@@ -36,10 +36,9 @@ const Manual = () => {
           <TabsContent value="cerebro" className="mt-6 space-y-6">
             <Card className="bg-slate-900 border-slate-800">
               <CardHeader>
-                <CardTitle className="text-white">Arquitectura de Prompts (1.1 - 4.3)</CardTitle>
+                <CardTitle className="text-white">Arquitectura de Prompts</CardTitle>
                 <CardDescription>
-                  El "Cerebro" no es magia. Es un conjunto de instrucciones de texto que se concatenan antes de cada respuesta. 
-                  Si cambias algo aquí, el efecto es **inmediato** en la siguiente respuesta.
+                  Cada casilla en "Agent Brain" es una variable que se inyecta en el Prompt del Sistema.
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -47,7 +46,7 @@ const Manual = () => {
                   
                   {/* 1. SISTEMA */}
                   <AccordionItem value="item-1">
-                    <AccordionTrigger className="text-indigo-400 hover:text-indigo-300">1. SISTEMA (La Identidad)</AccordionTrigger>
+                    <AccordionTrigger className="text-indigo-400 hover:text-indigo-300 font-bold">1. SISTEMA (La Identidad)</AccordionTrigger>
                     <AccordionContent className="text-slate-300 space-y-4 pt-2">
                       <div className="space-y-2">
                         <h4 className="font-bold text-white flex items-center gap-2"><Target className="w-4 h-4"/> 1.1 ADN Core</h4>
@@ -84,7 +83,7 @@ const Manual = () => {
 
                   {/* 2. CONTEXTO */}
                   <AccordionItem value="item-2">
-                    <AccordionTrigger className="text-indigo-400 hover:text-indigo-300">2. CONTEXTO (Datos y Memoria)</AccordionTrigger>
+                    <AccordionTrigger className="text-indigo-400 hover:text-indigo-300 font-bold">2. CONTEXTO (Datos y Memoria)</AccordionTrigger>
                     <AccordionContent className="text-slate-300 space-y-4 pt-2">
                       <p className="text-sm">Instrucciones sobre cómo usar los datos que el sistema inyecta automáticamente (Nombre, Historial).</p>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -102,7 +101,7 @@ const Manual = () => {
 
                   {/* 3. PSICOLOGÍA */}
                   <AccordionItem value="item-3">
-                    <AccordionTrigger className="text-indigo-400 hover:text-indigo-300">3. PSICOLOGÍA (Ventas Avanzadas)</AccordionTrigger>
+                    <AccordionTrigger className="text-indigo-400 hover:text-indigo-300 font-bold">3. PSICOLOGÍA (Ventas Avanzadas)</AccordionTrigger>
                     <AccordionContent className="text-slate-300 space-y-4 pt-2">
                       <div className="bg-blue-900/20 p-4 rounded border border-blue-800 mb-4">
                          <p className="text-sm text-blue-200 flex items-center gap-2">
@@ -129,19 +128,41 @@ const Manual = () => {
                     </AccordionContent>
                   </AccordionItem>
 
-                  {/* 4. VISIÓN */}
+                  {/* 4. VISIÓN & VALIDACIÓN */}
                   <AccordionItem value="item-4">
-                    <AccordionTrigger className="text-indigo-400 hover:text-indigo-300">4. VISIÓN (Análisis de Imágenes)</AccordionTrigger>
+                    <AccordionTrigger className="text-indigo-400 hover:text-indigo-300 font-bold">4. VISIÓN & VALIDACIÓN (Pagos)</AccordionTrigger>
                     <AccordionContent className="text-slate-300 space-y-4 pt-2">
-                      <p className="text-sm">
-                         Instrucciones específicas para cuando el cliente envía una foto (Comprobantes, Productos dañados, etc).
+                      <p className="text-sm mb-4">
+                         Esta sección se activa <strong>SOLO</strong> cuando el cliente envía una imagen. Es crítica para automatizar la cobranza.
                       </p>
-                      <div className="space-y-2">
-                        <h4 className="font-bold text-white">4.1 Ojo de Halcón</h4>
-                        <p className="text-sm">Qué buscar en la imagen.</p>
-                        <div className="bg-slate-950 p-3 rounded border border-slate-800 text-xs font-mono text-green-400">
-                           Ejemplo: "Busca: Fecha, Monto, Banco de Origen. Si la imagen es borrosa, pídele amablemente que envíe otra."
-                        </div>
+                      
+                      <div className="grid grid-cols-1 gap-6">
+                         {/* 4.1 Ojo de Halcón */}
+                         <div className="border border-slate-800 rounded-lg p-4 bg-slate-950/30">
+                            <h4 className="font-bold text-white flex items-center gap-2 mb-2"><ScanEye className="w-4 h-4 text-purple-500"/> 4.1 Ojo de Halcón (Análisis)</h4>
+                            <p className="text-sm text-slate-400 mb-2">Instrucciones sobre QUÉ buscar en la imagen.</p>
+                            <div className="bg-slate-950 p-2 rounded border border-slate-800 text-xs font-mono text-green-400 italic">
+                               "Analiza la imagen. Busca: Fecha de transferencia, Monto total, Banco emisor y Nombre del destinatario. Si falta alguno, la imagen es inválida."
+                            </div>
+                         </div>
+
+                         {/* 4.2 Match Validation */}
+                         <div className="border border-slate-800 rounded-lg p-4 bg-slate-950/30">
+                            <h4 className="font-bold text-white flex items-center gap-2 mb-2"><ShieldAlert className="w-4 h-4 text-purple-500"/> 4.2 Match (Validación)</h4>
+                            <p className="text-sm text-slate-400 mb-2">Instrucciones para COMPARAR lo que vio en la imagen vs. lo que esperaba recibir.</p>
+                            <div className="bg-slate-950 p-2 rounded border border-slate-800 text-xs font-mono text-green-400 italic">
+                               "Compara el monto de la imagen con la deuda del cliente. Acepta una diferencia de hasta $5 pesos. Si el monto es menor, rechaza el pago amablemente. Si la fecha no es de hoy, alerta fraude."
+                            </div>
+                         </div>
+
+                         {/* 4.3 Post Validation */}
+                         <div className="border border-slate-800 rounded-lg p-4 bg-slate-950/30">
+                            <h4 className="font-bold text-white flex items-center gap-2 mb-2"><Zap className="w-4 h-4 text-purple-500"/> 4.3 Acción Post-Validación</h4>
+                            <p className="text-sm text-slate-400 mb-2">Qué hacer después de confirmar que el pago es real.</p>
+                            <div className="bg-slate-950 p-2 rounded border border-slate-800 text-xs font-mono text-green-400 italic">
+                               "Si el pago es válido: Agradece con entusiasmo, confirma que el pedido se procesará hoy y pregunta si necesita factura A o B. NO pidas el comprobante de nuevo."
+                            </div>
+                         </div>
                       </div>
                     </AccordionContent>
                   </AccordionItem>
