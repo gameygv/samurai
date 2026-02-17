@@ -10,7 +10,8 @@ import {
   Save, Bot, Eye, Hammer, ScrollText, 
   ShieldAlert, Database, History, MessageSquare, Gift, RefreshCw, 
   CheckCheck, Zap, FlaskConical, 
-  Play, Loader2, Terminal, Info, BrainCircuit, Target, ScanEye
+  Play, Loader2, Terminal, Info, BrainCircuit, Target, ScanEye,
+  AlertTriangle 
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { logActivity } from '@/utils/logger';
@@ -60,21 +61,30 @@ const AgentBrain = () => {
 
   const fetchPrompts = async () => {
     setLoading(true);
-    const { data, error } = await supabase.from('app_config').select('key, value').eq('category', 'PROMPT');
-    if (!error && data && data.length > 0) {
-      const dbPrompts: Record<string, string> = {};
-      data.forEach((item: any) => { dbPrompts[item.key] = item.value; });
-      setPrompts(prev => ({ ...prev, ...dbPrompts }));
+    try {
+      const { data, error } = await supabase.from('app_config').select('key, value').eq('category', 'PROMPT');
+      if (!error && data && data.length > 0) {
+        const dbPrompts: Record<string, string> = {};
+        data.forEach((item: any) => { dbPrompts[item.key] = item.value; });
+        setPrompts(prev => ({ ...prev, ...dbPrompts }));
+      }
+    } catch (err) {
+      console.error("Error fetching prompts:", err);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const fetchHistory = async () => {
-    const { data } = await supabase.from('versiones_prompts_aprendidas').select('*').order('created_at', { ascending: false });
-    if (data) {
-        setHistoryVersions(data.map(v => ({
-            id: v.version_id, version_numero: v.version_numero, created_at: v.created_at, content: v.contenido_nuevo
-        })));
+    try {
+      const { data } = await supabase.from('versiones_prompts_aprendidas').select('*').order('created_at', { ascending: false });
+      if (data && Array.isArray(data)) {
+          setHistoryVersions(data.map(v => ({
+              id: v.version_id, version_numero: v.version_numero, created_at: v.created_at, content: v.contenido_nuevo
+          })));
+      }
+    } catch (err) {
+      console.error("Error fetching history:", err);
     }
   };
 
@@ -151,13 +161,12 @@ const AgentBrain = () => {
              <TabsTrigger value="part5" className="data-[state=active]:bg-indigo-600"><FlaskConical className="w-4 h-4 mr-2" /> Laboratorio</TabsTrigger>
           </TabsList>
 
-          {/* PARTE 1: SISTEMA */}
           <TabsContent value="part1" className="mt-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <PromptCard 
                 title="1.1 ADN Core" 
                 icon={Bot} 
-                description="Aquí defines la esencia del bot. Su nombre, su rol como Samurai, y los valores innegociables de la marca. Es el pilar fundamental que guía todas las respuestas."
+                description="Aquí defines la esencia del bot. Su nombre, su rol como Samurai, y los valores innegociables de la marca."
                 value={prompts['prompt_core']} 
                 onChange={(v: string) => handlePromptChange('prompt_core', v)} 
               />
@@ -171,7 +180,7 @@ const AgentBrain = () => {
               <PromptCard 
                 title="1.3 Protocolos" 
                 icon={ScrollText} 
-                description="Define cómo reacciona ante saludos, despedidas o situaciones estándar. Es el manual de 'buenas costumbres' del Samurai."
+                description="Define cómo reacciona ante saludos, despedidas o situaciones estándar."
                 value={prompts['prompt_behavior']} 
                 onChange={(v: string) => handlePromptChange('prompt_behavior', v)} 
               />
@@ -185,20 +194,19 @@ const AgentBrain = () => {
             </div>
           </TabsContent>
 
-          {/* PARTE 2: CONTEXTO */}
           <TabsContent value="part2" className="mt-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <PromptCard 
                 title="2.1 Datos CRM" 
                 icon={Database} 
-                description="Cómo usar la información de Kommo. Cómo llamar al cliente por su nombre y cómo interpretar sus etiquetas de interés."
+                description="Cómo usar la información de Kommo. Cómo llamar al cliente por su nombre."
                 value={prompts['prompt_data_injection']} 
                 onChange={(v: string) => handlePromptChange('prompt_data_injection', v)} 
               />
               <PromptCard 
                 title="2.2 Memoria" 
                 icon={History} 
-                description="Reglas para que la IA no olvide lo que se dijo hace 5 minutos. Evita que el Samurai pregunte cosas que el cliente ya respondió."
+                description="Reglas para que la IA no olvide lo que se dijo hace 5 minutos."
                 value={prompts['prompt_memory']} 
                 onChange={(v: string) => handlePromptChange('prompt_memory', v)} 
               />
@@ -212,21 +220,20 @@ const AgentBrain = () => {
               <PromptCard 
                 title="2.4 Upselling" 
                 icon={Gift} 
-                description="Lógica comercial. ¿Cuándo debe intentar vender algo más? Define qué productos son complementarios."
+                description="Lógica comercial. ¿Cuándo debe intentar vender algo más?"
                 value={prompts['prompt_recommendations']} 
                 onChange={(v: string) => handlePromptChange('prompt_recommendations', v)} 
               />
             </div>
           </TabsContent>
 
-          {/* PARTE 3: PSICOLOGIA Y APRENDIZAJE */}
           <TabsContent value="part3" className="mt-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="md:col-span-2">
                  <PromptCard 
                    title="3.1 Perfilado Psicológico" 
                    icon={BrainCircuit} 
-                   description="Instrucciones para que la IA analice la personalidad del cliente basándose en su forma de escribir. Esto alimenta la base de datos de Leads para futuros análisis."
+                   description="Instrucciones para que la IA analice la personalidad del cliente basándose en su forma de escribir."
                    value={prompts['prompt_psychology']} 
                    onChange={(v: string) => handlePromptChange('prompt_psychology', v)} 
                    height="h-[120px]"
@@ -235,14 +242,14 @@ const AgentBrain = () => {
               <PromptCard 
                 title="3.2 Estrategia de Cierre" 
                 icon={Target} 
-                description="Cómo mover al lead a través del embudo. Identificar si está 'tibio' o 'caliente' y aplicar presión adecuada."
+                description="Cómo mover al lead a través del embudo. Identificar si está 'tibio' o 'caliente'."
                 value={prompts['prompt_closing_strategy']} 
                 onChange={(v: string) => handlePromptChange('prompt_closing_strategy', v)} 
               />
               <PromptCard 
                 title="3.3 Re-Aprendizaje (Correcciones)" 
                 icon={RefreshCw} 
-                description="Cómo integrar las nuevas reglas de oro que tú validas en el Learning Log. Esto es lo que hace que el sistema mejore solo."
+                description="Cómo integrar las nuevas reglas de oro que tú validas en el Learning Log."
                 value={prompts['prompt_relearning']} 
                 onChange={(v: string) => handlePromptChange('prompt_relearning', v)} 
               />
@@ -256,14 +263,13 @@ const AgentBrain = () => {
             </div>
           </TabsContent>
 
-          {/* PARTE 4: VISIÓN */}
           <TabsContent value="part4" className="mt-6">
              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="md:col-span-2">
                  <PromptCard 
                    title="4.1 Ojo de Halcón (Análisis de Imagen)" 
                    icon={ScanEye} 
-                   description="La joya de la corona. Define cómo la IA debe 'mirar' una foto. Debe buscar montos, CUITs, logos de bancos y fechas. Si falta algo, debe saber pedirlo educadamente."
+                   description="La joya de la corona. Define cómo la IA debe 'mirar' una foto."
                    value={prompts['prompt_vision_analysis']} 
                    onChange={(v: string) => handlePromptChange('prompt_vision_analysis', v)} 
                    height="h-[250px]" 
@@ -272,21 +278,20 @@ const AgentBrain = () => {
               <PromptCard 
                 title="4.2 Match" 
                 icon={CheckCheck} 
-                description="Cómo comparar el texto extraído de la imagen con la deuda real del cliente en el CRM."
+                description="Cómo comparar el texto extraído de la imagen con la deuda real del cliente."
                 value={prompts['prompt_match_validation']} 
                 onChange={(v: string) => handlePromptChange('prompt_match_validation', v)} 
               />
               <PromptCard 
                 title="4.3 Acción Post" 
                 icon={Zap} 
-                description="Qué hacer inmediatamente después de validar un pago. Confirmar, enviar recibo o pasar a un humano."
+                description="Qué hacer inmediatamente después de validar un pago. Confirmar o pasar a un humano."
                 value={prompts['prompt_post_validation']} 
                 onChange={(v: string) => handlePromptChange('prompt_post_validation', v)} 
               />
             </div>
           </TabsContent>
 
-          {/* PARTE 5: LABORATORIO (Versiones & Test) */}
           <TabsContent value="part5" className="mt-6">
              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 h-[700px]">
                 <Card className="lg:col-span-3 bg-slate-900 border-slate-800 flex flex-col overflow-hidden">
@@ -317,9 +322,6 @@ const AgentBrain = () => {
                       <h3 className="text-white font-bold flex items-center gap-2">
                          {activeVersionId === 'live' ? 'Editor Principal' : `Visor: ${historyVersions.find(v => v.id === activeVersionId)?.version_numero}`}
                       </h3>
-                      {activeVersionId !== 'live' && (
-                         <Button size="sm" onClick={() => { setPrompts(p => ({...p, 'prompt_core': editorContent})); setActiveVersionId('live'); toast.success('Cargado en Editor'); }} className="h-7 text-[10px] bg-indigo-600">Restaurar en Editor</Button>
-                      )}
                    </div>
                    <Textarea 
                       className="flex-1 bg-transparent border-0 text-slate-300 font-mono text-xs p-6 resize-none focus-visible:ring-0 leading-relaxed"
@@ -332,7 +334,6 @@ const AgentBrain = () => {
                 <Card className="lg:col-span-3 bg-black border-slate-800 flex flex-col">
                    <div className="p-4 border-b border-slate-800 bg-slate-900/50"><h3 className="text-white font-bold text-xs uppercase tracking-widest flex items-center gap-2"><Terminal className="w-3 h-3 text-green-500" /> Test Runner</h3></div>
                    <div className="flex-1 p-4 overflow-y-auto space-y-4">
-                      {/* DEBUG PANEL */}
                       {testDebug && (
                          <div className="mb-4 space-y-2 animate-in slide-in-from-top-2">
                              {testDebug.rag_sources && testDebug.rag_sources.length > 0 && (
@@ -343,10 +344,6 @@ const AgentBrain = () => {
                                      </ul>
                                  </div>
                              )}
-                             <div className="bg-indigo-900/20 border border-indigo-500/20 p-2 rounded flex justify-between">
-                                 <span className="text-[10px] text-indigo-300">Perfil Detectado:</span>
-                                 <span className="text-[10px] font-bold text-indigo-200">{testDebug.profile?.mood} / {testDebug.profile?.intent}</span>
-                             </div>
                          </div>
                       )}
 
@@ -360,7 +357,7 @@ const AgentBrain = () => {
                       )}
                    </div>
                    <div className="p-4 border-t border-slate-800 space-y-3">
-                      <Input placeholder="Input de prueba (ej: Tienen garantía?)" value={testInput} onChange={e => setTestInput(e.target.value)} className="bg-slate-950 border-slate-800 text-xs" />
+                      <Input placeholder="Input de prueba" value={testInput} onChange={e => setTestInput(e.target.value)} className="bg-slate-950 border-slate-800 text-xs" />
                       <Button onClick={handleRunTest} disabled={testing} className="w-full bg-green-600 hover:bg-green-700 h-9">
                          {testing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4 mr-2" />} Probar Prompt
                       </Button>
@@ -391,7 +388,7 @@ const PromptCard = ({ title, icon: Icon, description, value, onChange, height = 
         value={value}
         onChange={(e) => onChange(e.target.value)}
         className={`${height} w-full bg-slate-950/50 border-slate-800 font-mono text-xs text-slate-300 resize-none p-4 custom-scrollbar focus:border-red-600/50`}
-        placeholder="Escribe aquí las instrucciones maestras..."
+        placeholder="Escribe aquí las instrucciones..."
       />
     </CardContent>
   </Card>
