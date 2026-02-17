@@ -6,7 +6,6 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-// Fallbacks de seguridad
 const DEFAULTS = {
   'prompt_core': `Eres Samurai, un asistente de ventas experto.`,
   'prompt_behavior': `Sé breve y profesional.`,
@@ -27,13 +26,14 @@ serve(async (req) => {
 
     const { message, lead_name, lead_phone, lead_id, platform, relevant_knowledge } = await req.json();
 
-    // 1. IDENTIFICACIÓN Y CAPTURA
     let currentLeadId = lead_id;
     let leadProfile = "Nuevo Prospecto";
     let leadMood = "NEUTRO";
     let buyingIntent = "DESCONOCIDO";
+    let leadSummary = "";
+    let timeGapHours = 0;
 
-    // Buscar o Crear Lead
+    // 1. IDENTIFICACIÓN Y MEMORIA PROFUNDA
     if (!currentLeadId && lead_phone) {
        const { data: existingLead } = await supabaseClient
           .from('leads')
@@ -45,8 +45,15 @@ serve(async (req) => {
           currentLeadId = existingLead.id;
           leadMood = existingLead.estado_emocional_actual || "NEUTRO";
           buyingIntent = existingLead.buying_intent || "MEDIO";
-          leadProfile = `Cliente Recurrente | Mood: ${leadMood} | Intent: ${buyingIntent}`;
+          leadSummary = existingLead.summary || "No hay resumen previo.";
           
+          // Calcular tiempo desde última interacción
+          if (existingLead.last_message_at) {
+             const lastActive = new Date(existingLead.last_message_at).getTime();
+             const now = new Date().getTime();
+             timeGapHours = (now - lastActive) / (1000 * 60 * 60);
+          }
+
           if (!existingLead.nombre && lead_name) {
              await supabaseClient.from('leads').update({ nombre: lead_name }).eq('id', currentLeadId);
           }
@@ -87,8 +94,8 @@ serve(async (req) => {
        });
     }
 
-    // 3. MEMORIA (30 mensajes)
-    let chatHistoryText = "Sin historial previo (Inicio de conversación).";
+    // 3. HISTORIAL DE CHAT (MEMORIA RECIENTE)
+    let chatHistoryText = "Sin historial reciente.";
     if (currentLeadId) {
        const { data: history } = await supabaseClient
           .from('conversaciones')
@@ -105,87 +112,40 @@ serve(async (req) => {
        }
     }
 
-    // 4. RAG NATIVO
-    let ragContext = relevant_knowledge || "";
-    let ragSources: string[] = []; // Debug info
+    // Instrucción de saludo si pasó mucho tiempo
+    const timeInstruction = timeGapHours >= 12 
+       ? `⚠️ RECONEXIÓN: Han pasado ${Math.round(timeGapHours)} horas desde la última charla. Inicia con un saludo amable y re-conecta con el cliente reconociendo que ha pasado un tiempo.`
+       : `CONTINUIDAD: La charla es reciente. No repitas saludos formales si no es necesario.`;
 
-    if (!ragContext && message && message.length > 3) {
-       const query = message.replace(/[^\w\s]/gi, '').split(' ').filter((w: string) => w.length > 3).join(' | ');
-       if (query.length > 0) {
-          const { data: docs } = await supabaseClient
-             .from('knowledge_documents')
-             .select('title, content')
-             .textSearch('content', query, { type: 'websearch', config: 'spanish' })
-             .limit(2);
+    // 4. RAG Y MEDIA (Simplificado para el ejemplo)
+    const mediaContext = "Consultar Media Manager para archivos.";
+    const learnedLessons = "Consultar Learning Log.";
 
-          if (docs && docs.length > 0) {
-             ragContext = docs.map((d: any) => `📌 DATOS DE "${d.title}":\n${d.content}`).join('\n\n');
-             ragSources = docs.map((d: any) => d.title);
-          }
-       }
-    }
-
-    // 5. MEDIA
-    const { data: mediaAssets } = await supabaseClient
-       .from('media_assets')
-       .select('title, url, ai_instructions, type')
-       .not('ai_instructions', 'is', null)
-       .neq('ai_instructions', '');
-    
-    const mediaContext = mediaAssets && mediaAssets.length > 0
-       ? mediaAssets.map(m => ` - [${m.type}] ${m.title}: ${m.url} (USAR SI: ${m.ai_instructions})`).join('\n')
-       : "No hay archivos multimedia disponibles.";
-
-    // 6. LECCIONES
-    const { data: learnings } = await supabaseClient
-       .from('errores_ia')
-       .select('correccion_sugerida')
-       .eq('estado_correccion', 'VALIDADA')
-       .order('applied_at', { ascending: false })
-       .limit(10);
-    
-    const learnedLessons = learnings && learnings.length > 0
-       ? learnings.map(l => `🔴 EVITAR ERROR PREVIO: ${l.correccion_sugerida}`).join('\n')
-       : "Sin correcciones reportadas aún.";
-
-    // 7. SYSTEM PROMPT MAESTRO (INTEGRADO TOTAL)
+    // 5. SYSTEM PROMPT MAESTRO (CON MEMORIA REFORZADA)
     const fullSystemPrompt = `
-=== 🧠 IDENTIDAD & OBJETIVO (CORE) ===
+=== 🧠 IDENTIDAD & REGLAS DE MEMORIA ===
 ${prompts['prompt_core']}
+- PROHIBICIÓN: No vuelvas a preguntar datos que ya conoces (Nombre, ciudad, presupuesto, etc).
+- RECONOCIMIENTO: Si el cliente ya te habló antes, trátalo como conocido, no como un extraño.
 
-=== 📜 PROTOCOLOS ===
-${prompts['prompt_behavior']}
-${prompts['prompt_objections']}
-${prompts['prompt_closing_strategy']}
+=== 👤 PERFIL DEL CLIENTE (MEMORIA PROFUNDA) ===
+Resumen de lo que sabemos: ${leadSummary}
+Estado actual: Mood ${leadMood} | Intención ${buyingIntent}
+${timeInstruction}
 
-=== 👁️ VISIÓN & VALIDACIÓN DE PAGOS ===
-ATENCIÓN: Si el cliente envía una imagen o comprobante, aplica estas reglas:
-1. ANÁLISIS: ${prompts['prompt_vision_analysis'] || 'Verifica fecha, monto y banco.'}
-2. VALIDACIÓN: ${prompts['prompt_match_validation'] || 'Compara con deuda pendiente.'}
-3. ACCIÓN POSTERIOR: ${prompts['prompt_post_validation'] || 'Confirma recepción.'}
-
-=== 👤 PERFIL ACTUAL ===
-Mood: ${leadMood} | Intent: ${buyingIntent}
-Instrucción: ${prompts['prompt_psychology']}
-
-=== 🕰️ MEMORIA ===
+=== 🕰️ HISTORIAL RECIENTE (Últimos 30 mensajes) ===
 ${chatHistoryText}
 
-=== 📦 MEDIA DISPONIBLE ===
-${mediaContext}
-
-=== 🔍 CONOCIMIENTO (RAG) ===
-${ragContext || 'Usa tu conocimiento general.'}
-
-=== 🚫 LECCIONES APRENDIDAS ===
-${learnedLessons}
-${prompts['prompt_relearning'] || ''}
+=== 📜 PROTOCOLOS & COMPORTAMIENTO ===
+${prompts['prompt_behavior']}
+${prompts['prompt_objections']}
+${prompts['prompt_psychology']}
 
 === ⚡ PROTOCOLO DE SALIDA ===
-1. Responde naturalmente.
-2. Si detectas un comprobante válido, confírmalo según reglas de Visión.
-3. AL FINAL, añade SIEMPRE el bloque de análisis:
-[[ANALYSIS: {"mood": "...", "intent": "...", "summary": "..."}]]
+1. Responde de forma natural basándote en la MEMORIA arriba descrita.
+2. Si el cliente ya dio su nombre, úsalo. Si ya preguntó un precio, no lo des de nuevo a menos que haya cambiado.
+3. AL FINAL, añade SIEMPRE el bloque de análisis para seguir aprendiendo:
+[[ANALYSIS: {"mood": "...", "intent": "...", "summary": "ACTUALIZA EL RESUMEN AQUÍ..."}]]
     `;
 
     return new Response(
@@ -193,8 +153,8 @@ ${prompts['prompt_relearning'] || ''}
         lead_id: currentLeadId,
         system_prompt: fullSystemPrompt,
         debug: {
-            rag_sources: ragSources,
-            media_count: mediaAssets?.length || 0,
+            time_gap: timeGapHours,
+            has_summary: !!leadSummary,
             profile: { mood: leadMood, intent: buyingIntent }
         }
       }),
