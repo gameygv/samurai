@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import Layout from '@/components/Layout';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -7,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Webhook, Key, Save, Loader2, Info, Play, Eye, EyeOff, ShoppingCart, Globe } from 'lucide-react';
+import { Webhook, Key, Save, Loader2, Info, Play, Eye, EyeOff, ShoppingCart, Globe, Zap } from 'lucide-react';
 import { toast } from 'sonner';
 import { logActivity } from '@/utils/logger';
 
@@ -19,10 +20,12 @@ interface ConfigItem {
 }
 
 const Settings = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeTab = searchParams.get('tab') || 'ecommerce';
+  
   const [configs, setConfigs] = useState<ConfigItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [testingWebhook, setTestingWebhook] = useState<string | null>(null);
   const [showSecrets, setShowSecrets] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
@@ -45,6 +48,10 @@ const Settings = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleTabChange = (value: string) => {
+    setSearchParams({ tab: value });
   };
 
   const handleInputChange = (key: string, newValue: string, category: string = 'SYSTEM') => {
@@ -82,11 +89,11 @@ const Settings = () => {
       await logActivity({
         action: 'UPDATE',
         resource: 'SYSTEM',
-        description: 'Actualización de configuración de ventas y API',
+        description: 'Actualización de configuración técnica y comercial',
         status: 'OK'
       });
 
-      toast.success('Configuración de The Elephant Bowl guardada.');
+      toast.success('Configuración guardada correctamente.');
     } catch (error: any) {
       toast.error(`Error al guardar: ${error.message}`);
     } finally {
@@ -103,8 +110,8 @@ const Settings = () => {
       <div className="max-w-5xl mx-auto space-y-8 pb-12">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-white mb-2">Configuración Samurai</h1>
-            <p className="text-slate-400">Integración con WooCommerce y Base de Datos.</p>
+            <h1 className="text-3xl font-bold text-white mb-2">Configuración Técnica</h1>
+            <p className="text-slate-400">Control de integraciones, pasarelas y llaves de acceso.</p>
           </div>
           <Button 
             onClick={handleSave} 
@@ -116,7 +123,7 @@ const Settings = () => {
           </Button>
         </div>
 
-        <Tabs defaultValue="ecommerce" className="w-full">
+        <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
           <TabsList className="bg-slate-900 border border-slate-800">
             <TabsTrigger value="ecommerce" className="data-[state=active]:bg-indigo-600">
                <ShoppingCart className="w-4 h-4 mr-2" /> E-commerce
@@ -129,28 +136,28 @@ const Settings = () => {
             </TabsTrigger>
           </TabsList>
 
-          {/* TAB: E-COMMERCE (NUEVO) */}
           <TabsContent value="ecommerce" className="mt-6">
              <Card className="bg-slate-900 border-slate-800">
                 <CardHeader>
-                   <CardTitle className="text-white">The Elephant Bowl - Ventas Directas</CardTitle>
-                   <CardDescription>Configura el producto de apartado para que el Samurai genere links de pago.</CardDescription>
+                   <CardTitle className="text-white">The Elephant Bowl - Ventas</CardTitle>
+                   <CardDescription>Configuración de links de pago para el Samurai.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       <div className="space-y-2">
-                         <Label className="text-indigo-400">URL de la Tienda (Checkout)</Label>
+                         <Label className="text-indigo-400">URL del Checkout</Label>
                          <div className="flex gap-2">
                             <Globe className="w-5 h-5 text-slate-600 mt-2" />
                             <Input 
-                               value={getConfig('shop_base_url') || 'https://theelephantbowl.com/finalizar-compra/'}
+                               value={getConfig('shop_base_url')}
                                onChange={(e) => handleInputChange('shop_base_url', e.target.value, 'SYSTEM')}
                                className="bg-slate-950 border-slate-800 font-mono text-xs"
+                               placeholder="https://tienda.com/checkout/"
                             />
                          </div>
                       </div>
                       <div className="space-y-2">
-                         <Label className="text-indigo-400">ID Producto: Apartado $1500</Label>
+                         <Label className="text-indigo-400">ID Producto Apartado</Label>
                          <div className="flex gap-2">
                             <ShoppingCart className="w-5 h-5 text-slate-600 mt-2" />
                             <Input 
@@ -160,26 +167,12 @@ const Settings = () => {
                                className="bg-slate-950 border-slate-800 font-mono text-xs"
                             />
                          </div>
-                         <p className="text-[10px] text-slate-500 italic">Puedes encontrar este ID en tu lista de productos de WooCommerce.</p>
                       </div>
-                   </div>
-
-                   <div className="p-4 bg-indigo-500/10 border border-indigo-500/20 rounded-lg">
-                      <h4 className="text-xs font-bold text-indigo-400 mb-2 flex items-center gap-2">
-                         <Zap className="w-3 h-3"/> Generación Automática
-                      </h4>
-                      <p className="text-xs text-slate-400">
-                         El Samurai usará estos datos para enviar este link cuando el cliente esté listo:
-                      </p>
-                      <code className="block bg-black p-2 mt-2 rounded text-[10px] text-green-500 font-mono">
-                         {getConfig('shop_base_url') || 'https://theelephantbowl.com/finalizar-compra/'}?add-to-cart={getConfig('reservation_product_id') || 'ID'}
-                      </code>
                    </div>
                 </CardContent>
              </Card>
           </TabsContent>
 
-          {/* TAB: WEBHOOKS */}
           <TabsContent value="webhooks" className="mt-6">
             <Card className="bg-slate-900 border-slate-800">
               <CardHeader>
@@ -192,7 +185,7 @@ const Settings = () => {
                        <Input 
                           value={item.value}
                           onChange={(e) => handleInputChange(item.key, e.target.value, 'WEBHOOK')}
-                          className="bg-slate-950 border-slate-800"
+                          className="bg-slate-950 border-slate-800 font-mono text-xs"
                        />
                     </div>
                  ))}
@@ -200,11 +193,10 @@ const Settings = () => {
             </Card>
           </TabsContent>
 
-          {/* TAB: SECRETS */}
           <TabsContent value="secrets" className="mt-6">
             <Card className="bg-slate-900 border-slate-800">
               <CardHeader>
-                <CardTitle className="text-white">Llaves de API</CardTitle>
+                <CardTitle className="text-white">API Keys / Secrets</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                  {configs.filter(c => c.category === 'SECRET').map((item) => (
@@ -215,7 +207,7 @@ const Settings = () => {
                              type={showSecrets[item.key] ? "text" : "password"}
                              value={item.value}
                              onChange={(e) => handleInputChange(item.key, e.target.value, 'SECRET')}
-                             className="bg-slate-950 border-slate-800 pr-10"
+                             className="bg-slate-950 border-slate-800 pr-10 font-mono text-xs"
                           />
                           <Button variant="ghost" size="icon" className="absolute right-0 top-0 h-full" onClick={() => toggleVisibility(item.key)}>
                              {showSecrets[item.key] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
