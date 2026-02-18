@@ -4,7 +4,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Send, Bot, User, UserCog, ShieldAlert, ZapOff, MessageSquare, BrainCircuit, TrendingUp, AlertCircle, Image as ImageIcon, ExternalLink, X, Save, Edit2, RotateCcw } from 'lucide-react';
+import { Loader2, Send, Bot, User, UserCog, ShieldAlert, ZapOff, MessageSquare, BrainCircuit, TrendingUp, AlertCircle, Image as ImageIcon, ExternalLink, X, Save, Edit2, RotateCcw, Play, Pause } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -47,7 +47,6 @@ const ChatViewer = ({ lead, open, onOpenChange }: ChatViewerProps) => {
       subscribeToMessages();
       setIsAiPaused(lead.ai_paused || false);
       
-      // Load initial memory from lead prop, but we will refresh it from DB ideally
       const initialMemory = {
          mood: lead.estado_emocional_actual || 'NEUTRO',
          buying_intent: lead.buying_intent || 'BAJO',
@@ -74,7 +73,6 @@ const ChatViewer = ({ lead, open, onOpenChange }: ChatViewerProps) => {
 
     if (!error && data) {
        setMessages(data);
-       // Refresh memory from actual DB lead row to be sure
        const { data: freshLead } = await supabase.from('leads').select('*').eq('id', lead.id).single();
        if (freshLead) {
           const freshMemory = {
@@ -84,6 +82,7 @@ const ChatViewer = ({ lead, open, onOpenChange }: ChatViewerProps) => {
           };
           setCurrentAnalysis(freshMemory);
           setMemoryForm(freshMemory);
+          setIsAiPaused(freshLead.ai_paused);
        }
     }
     setLoading(false);
@@ -94,27 +93,41 @@ const ChatViewer = ({ lead, open, onOpenChange }: ChatViewerProps) => {
       .channel(`chat:${lead.id}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'conversaciones', filter: `lead_id=eq.${lead.id}` }, (payload) => {
         setMessages((prev) => [...prev, payload.new]);
-        // If AI replies with new analysis, update view (unless user is editing)
         if (payload.new.emisor === 'SAMURAI' && payload.new.metadata?.analysis && !isEditingMemory) {
            setCurrentAnalysis(payload.new.metadata.analysis);
            setMemoryForm(prev => ({ ...prev, ...payload.new.metadata.analysis }));
         }
       })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'leads', filter: `id=eq.${lead.id}` }, (payload) => {
+         setIsAiPaused(payload.new.ai_paused);
+      })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   };
 
-  const toggleAiPause = async () => {
-    const newState = !isAiPaused;
-    setIsAiPaused(newState);
-    await supabase.from('leads').update({ ai_paused: newState }).eq('id', lead.id);
-    await logActivity({
-      action: newState ? 'UPDATE' : 'CREATE',
-      resource: 'SYSTEM',
-      description: `${newState ? 'PAUSADO' : 'ACTIVADO'} Samurai para lead: ${lead.nombre}`,
-      status: 'OK'
-    });
-    toast.info(newState ? 'Samurai pausado.' : 'Samurai reactivado.');
+  const sendCommand = async (cmd: string) => {
+     setSending(true);
+     try {
+         // Insert message as if operator typed it
+         const { error } = await supabase.from('conversaciones').insert({
+             lead_id: lead.id,
+             mensaje: cmd,
+             emisor: 'HUMANO',
+             platform: 'PANEL'
+         });
+         
+         if (error) throw error;
+         
+         // If command is explicit control, update UI immediately optimistically
+         if (cmd.includes('#STOP')) setIsAiPaused(true);
+         if (cmd.includes('#START')) setIsAiPaused(false);
+         
+         toast.success("Comando enviado.");
+     } catch (err) {
+         toast.error("Error enviando comando");
+     } finally {
+         setSending(false);
+     }
   };
 
   const handleSendMessage = async (e: React.FormEvent) => {
@@ -131,7 +144,6 @@ const ChatViewer = ({ lead, open, onOpenChange }: ChatViewerProps) => {
       });
 
       if (error) throw error;
-      if (!isAiPaused) toggleAiPause();
       setNewMessage('');
     } catch (error: any) {
       toast.error('Error enviando mensaje');
@@ -158,13 +170,6 @@ const ChatViewer = ({ lead, open, onOpenChange }: ChatViewerProps) => {
         setCurrentAnalysis(memoryForm);
         setIsEditingMemory(false);
         toast.success("Memoria del Samurai actualizada manualmente.");
-        
-        await logActivity({
-           action: 'UPDATE',
-           resource: 'BRAIN',
-           description: `Intervención humana en memoria de lead: ${lead.nombre}`,
-           status: 'OK'
-        });
      } catch (err: any) {
         toast.error(err.message);
      } finally {
@@ -173,7 +178,6 @@ const ChatViewer = ({ lead, open, onOpenChange }: ChatViewerProps) => {
   };
 
   const openReportDialog = () => {
-     // Find last AI message to pre-fill
      const lastAi = [...messages].reverse().find(m => m.emisor === 'SAMURAI');
      setErrorContext({
         ia_response: lastAi ? lastAi.mensaje : '',
@@ -186,20 +190,32 @@ const ChatViewer = ({ lead, open, onOpenChange }: ChatViewerProps) => {
   const submitError = async () => {
      if (!errorContext.correction) return toast.error("Debes sugerir una corrección.");
      setReporting(true);
+     
+     const ciaCommand = `#CIA ${errorContext.correction}. Contexto: ${errorContext.reason}`;
+
      try {
+        // 1. Send #CIA command to chat (so AI reads it next time)
+        await supabase.from('conversaciones').insert({
+           lead_id: lead.id,
+           mensaje: ciaCommand,
+           emisor: 'HUMANO',
+           platform: 'PANEL'
+        });
+
+        // 2. Log to Error Table
         const { error } = await supabase.from('errores_ia').insert({
            cliente_id: lead.id,
-           mensaje_cliente: "Reporte Manual desde Chat",
+           mensaje_cliente: "Comando #CIA Manual",
            respuesta_ia: errorContext.ia_response,
            correccion_sugerida: errorContext.correction,
            correccion_explicacion: errorContext.reason,
            categoria: 'CONDUCTA',
-           severidad: 'MEDIA',
+           severidad: 'ALTA',
            estado_correccion: 'REPORTADA'
         });
 
         if (error) throw error;
-        toast.success("Error reportado al núcleo de aprendizaje.");
+        toast.success("Comando #CIA enviado y registrado.");
         setIsReportOpen(false);
      } catch (err: any) {
         toast.error(err.message);
@@ -210,9 +226,8 @@ const ChatViewer = ({ lead, open, onOpenChange }: ChatViewerProps) => {
 
   const getMoodColor = (mood: string) => {
      const m = mood?.toUpperCase() || 'NEUTRO';
-     if (m.includes('ENOJADO') || m.includes('MOLESTO')) return 'text-red-500 border-red-500/50 bg-red-500/10';
-     if (m.includes('FELIZ') || m.includes('CONTENTO')) return 'text-green-500 border-green-500/50 bg-green-500/10';
-     if (m.includes('PRAGMATICO') || m.includes('TECNICO')) return 'text-blue-500 border-blue-500/50 bg-blue-500/10';
+     if (m.includes('ENOJADO')) return 'text-red-500 border-red-500/50 bg-red-500/10';
+     if (m.includes('FELIZ')) return 'text-green-500 border-green-500/50 bg-green-500/10';
      return 'text-slate-400 border-slate-700 bg-slate-800';
   };
 
@@ -221,11 +236,6 @@ const ChatViewer = ({ lead, open, onOpenChange }: ChatViewerProps) => {
      if (i === 'ALTO') return 'bg-green-600';
      if (i === 'MEDIO') return 'bg-yellow-500';
      return 'bg-slate-600';
-  };
-
-  const isImage = (msg: any) => {
-     if (msg.metadata?.type === 'image') return true;
-     return msg.mensaje.match(/\.(jpeg|jpg|gif|png|webp)$/i) != null;
   };
 
   return (
@@ -247,15 +257,28 @@ const ChatViewer = ({ lead, open, onOpenChange }: ChatViewerProps) => {
              </div>
           </div>
           
-          <Button 
-             variant={isAiPaused ? "destructive" : "outline"} 
-             size="sm" 
-             onClick={toggleAiPause}
-             className="h-8 text-[10px] px-3 font-bold tracking-wider"
-          >
-             {isAiPaused ? <ZapOff className="w-3 h-3 mr-1" /> : <Bot className="w-3 h-3 mr-1" />}
-             {isAiPaused ? 'IA PAUSADA' : 'AI ACTIVA'}
-          </Button>
+          <div className="flex items-center gap-2">
+             {isAiPaused ? (
+                <Button 
+                   size="sm" 
+                   className="h-7 bg-green-600 hover:bg-green-700 text-white text-[10px] font-bold"
+                   onClick={() => sendCommand('#START')}
+                   disabled={sending}
+                >
+                   <Play className="w-3 h-3 mr-1" /> #START
+                </Button>
+             ) : (
+                <Button 
+                   size="sm" 
+                   variant="destructive"
+                   className="h-7 text-[10px] font-bold"
+                   onClick={() => sendCommand('#STOP')}
+                   disabled={sending}
+                >
+                   <Pause className="w-3 h-3 mr-1" /> #STOP
+                </Button>
+             )}
+          </div>
         </SheetHeader>
 
         <div className="flex-1 flex overflow-hidden">
@@ -272,6 +295,7 @@ const ChatViewer = ({ lead, open, onOpenChange }: ChatViewerProps) => {
                                ${msg.emisor === 'CLIENTE' ? 'bg-slate-800 text-slate-200 rounded-tl-none' : 
                                  msg.emisor === 'SAMURAI' ? 'bg-indigo-600 text-white rounded-tr-none' : 
                                  'bg-slate-700 text-slate-300 rounded-tr-none border border-slate-600'}
+                               ${msg.mensaje.includes('#STOP') || msg.mensaje.includes('#START') || msg.mensaje.includes('#CIA') ? 'border-yellow-500/50 bg-yellow-900/10' : ''}
                             `}>
                                {msg.emisor !== 'CLIENTE' && (
                                   <div className="text-[9px] opacity-70 mb-1 font-bold flex items-center gap-1 uppercase tracking-wider">
@@ -279,23 +303,7 @@ const ChatViewer = ({ lead, open, onOpenChange }: ChatViewerProps) => {
                                      {msg.emisor}
                                   </div>
                                )}
-
-                               {isImage(msg) ? (
-                                  <div className="mt-1 mb-1">
-                                     <div className="rounded-lg overflow-hidden border border-white/10 relative group/img cursor-pointer" onClick={() => window.open(msg.mensaje, '_blank')}>
-                                        <img src={msg.mensaje} alt="Media sent" className="max-w-[200px] max-h-[200px] object-cover" />
-                                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/img:opacity-100 flex items-center justify-center transition-opacity">
-                                           <ExternalLink className="w-4 h-4 text-white" />
-                                        </div>
-                                     </div>
-                                  </div>
-                               ) : (
-                                  <p className="whitespace-pre-wrap leading-relaxed text-xs">{msg.mensaje}</p>
-                               )}
-
-                               <div className="flex justify-end items-center gap-2 mt-1">
-                                  <span className="text-[9px] opacity-40">{new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
-                               </div>
+                               <p className="whitespace-pre-wrap leading-relaxed text-xs">{msg.mensaje}</p>
                             </div>
                          </div>
                       ))}
@@ -320,7 +328,7 @@ const ChatViewer = ({ lead, open, onOpenChange }: ChatViewerProps) => {
                  </form>
                  {isAiPaused && (
                     <div className="mt-2 text-[10px] text-red-400 flex items-center justify-center gap-1 opacity-80">
-                       <ShieldAlert className="w-3 h-3" /> Modo manual activado
+                       <ShieldAlert className="w-3 h-3" /> IA DETENIDA (#STOP)
                     </div>
                  )}
               </div>
@@ -363,8 +371,7 @@ const ChatViewer = ({ lead, open, onOpenChange }: ChatViewerProps) => {
                                    <SelectItem value="NEUTRO">Neutro</SelectItem>
                                    <SelectItem value="FELIZ">Feliz / Satisfecho</SelectItem>
                                    <SelectItem value="ENOJADO">Enojado / Molesto</SelectItem>
-                                   <SelectItem value="PRAGMATICO">Pragmático / Técnico</SelectItem>
-                                   <SelectItem value="CONFUNDIDO">Confundido</SelectItem>
+                                   <SelectItem value="PRAGMATICO">Pragmático</SelectItem>
                                 </SelectContent>
                              </Select>
                           ) : (
@@ -441,7 +448,7 @@ const ChatViewer = ({ lead, open, onOpenChange }: ChatViewerProps) => {
                              className="w-full justify-start text-[10px] h-8 border-slate-800 bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white"
                              onClick={openReportDialog}
                           >
-                             <AlertCircle className="w-3 h-3 mr-2 text-yellow-500" /> Reportar Error (#CORREGIRIA)
+                             <AlertCircle className="w-3 h-3 mr-2 text-yellow-500" /> Comando #CIA
                           </Button>
                           <Button 
                              variant="outline" 
@@ -458,45 +465,38 @@ const ChatViewer = ({ lead, open, onOpenChange }: ChatViewerProps) => {
            </div>
         </div>
 
-        {/* DIALOGO DE REPORTE DE ERROR */}
+        {/* DIALOGO DE REPORTE DE ERROR #CIA */}
         <Dialog open={isReportOpen} onOpenChange={setIsReportOpen}>
            <DialogContent className="bg-slate-900 border-slate-800 text-white">
               <DialogHeader>
-                 <DialogTitle>Reportar Error de Conducta</DialogTitle>
+                 <DialogTitle className="flex items-center gap-2 text-yellow-500">
+                    <ShieldAlert className="w-5 h-5" /> Comando #CIA
+                 </DialogTitle>
                  <DialogDescription className="text-slate-400">
-                    Ayuda al Samurai a mejorar. Describe qué hizo mal y qué debería haber hecho.
+                    Estás por enviar una orden de corrección absoluta. El Samurai registrará esto como una nueva ley.
                  </DialogDescription>
               </DialogHeader>
               <div className="space-y-4 pt-2">
                  <div className="space-y-2">
-                    <Label className="text-xs text-red-400">Respuesta Incorrecta (IA)</Label>
-                    <div className="bg-slate-950 p-3 rounded border border-slate-800 text-xs italic text-slate-300">
-                       {errorContext.ia_response || "No se detectó respuesta previa."}
+                    <Label className="text-xs text-slate-400">Error detectado (IA)</Label>
+                    <div className="bg-slate-950 p-3 rounded border border-slate-800 text-xs italic text-slate-500 line-clamp-2">
+                       {errorContext.ia_response || "..."}
                     </div>
                  </div>
                  <div className="space-y-2">
-                    <Label className="text-xs text-green-400">Corrección Sugerida (Lo que debió decir)</Label>
+                    <Label className="text-xs text-green-400">Instrucción #CIA (Sé directivo)</Label>
                     <Textarea 
                        value={errorContext.correction}
                        onChange={e => setErrorContext({...errorContext, correction: e.target.value})}
-                       className="bg-slate-950 border-slate-800 font-mono text-xs h-20"
-                       placeholder="Ej: Debió saludar primero y luego dar el precio..."
-                    />
-                 </div>
-                 <div className="space-y-2">
-                    <Label className="text-xs text-slate-400">¿Por qué?</Label>
-                    <Input 
-                       value={errorContext.reason}
-                       onChange={e => setErrorContext({...errorContext, reason: e.target.value})}
-                       className="bg-slate-950 border-slate-800 text-xs"
-                       placeholder="Ej: Fue muy agresivo / Olvidó el protocolo..."
+                       className="bg-slate-950 border-slate-800 font-mono text-xs h-24 focus:border-green-500"
+                       placeholder="Ej: NUNCA ofrezcas descuento en el primer mensaje. Espera a que el cliente muestre interés real."
                     />
                  </div>
               </div>
               <DialogFooter>
                  <Button variant="ghost" onClick={() => setIsReportOpen(false)}>Cancelar</Button>
                  <Button onClick={submitError} className="bg-yellow-600 hover:bg-yellow-700 text-white" disabled={reporting}>
-                    {reporting ? <Loader2 className="w-4 h-4 animate-spin"/> : 'Enviar Reporte'}
+                    {reporting ? <Loader2 className="w-4 h-4 animate-spin"/> : 'Enviar Orden #CIA'}
                  </Button>
               </DialogFooter>
            </DialogContent>

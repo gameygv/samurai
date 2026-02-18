@@ -6,7 +6,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-// Valores por defecto por si la DB falla
+// Valores por defecto
 const DEFAULTS = {
   'prompt_core': `Eres Samurai, un asistente de ventas experto.`,
   'prompt_technical': `Responde solo con texto plano.`,
@@ -76,14 +76,36 @@ serve(async (req) => {
        }
     }
 
-    if (currentLeadId && message) {
-       await supabaseClient.from('conversaciones').insert({
-          lead_id: currentLeadId,
-          emisor: 'CLIENTE',
-          mensaje: message,
-          platform: platform || 'API'
-       });
-       await supabaseClient.from('leads').update({ last_message_at: new Date().toISOString() }).eq('id', currentLeadId);
+    // --- MANEJO DE COMANDOS DE CONTROL ---
+    if (currentLeadId) {
+        if (message && message.includes('#STOP')) {
+            await supabaseClient.from('leads').update({ ai_paused: true }).eq('id', currentLeadId);
+            // No guardamos el mensaje #STOP como "conversación cliente" necesariamente, o sí para registro.
+            // Retornamos un prompt especial que le dice a la IA que se despida o se calle.
+            return new Response(
+                JSON.stringify({
+                    lead_id: currentLeadId,
+                    system_prompt: "SISTEMA: El usuario ha enviado #STOP. Tu única respuesta debe ser: 'Entendido, pauso mi asistencia. Un humano te contactará pronto.' y NADA MÁS.",
+                    debug: { status: 'PAUSED' }
+                }),
+                { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+        }
+
+        if (message && message.includes('#START')) {
+            await supabaseClient.from('leads').update({ ai_paused: false }).eq('id', currentLeadId);
+            // Si es #START, continuamos con el flujo normal para que analice lo previo.
+        }
+
+        if (message) {
+            await supabaseClient.from('conversaciones').insert({
+                lead_id: currentLeadId,
+                emisor: 'CLIENTE',
+                mensaje: message,
+                platform: platform || 'API'
+            });
+            await supabaseClient.from('leads').update({ last_message_at: new Date().toISOString() }).eq('id', currentLeadId);
+        }
     }
 
     // 2. PROMPTS (CARGA DINÁMICA COMPLETA)
@@ -166,7 +188,6 @@ serve(async (req) => {
     }
 
     // --- CONSTRUCCIÓN DEL PROMPT MAESTRO ---
-    // Aquí es donde inyectamos TODAS las variables para que el cerebro sea completo.
     
     const fullSystemPrompt = `
 === 🧠 IDENTIDAD & CORE ===
@@ -212,7 +233,7 @@ ${prompts['prompt_vision_analysis']}
 ${prompts['prompt_match_validation']}
 ${prompts['prompt_post_validation']}
 
-=== 🔄 RE-APRENDIZAJE (Correcciones Previas) ===
+=== 🔄 RE-APRENDIZAJE (#CIA) ===
 ${prompts['prompt_relearning']}
 
 === 🕰️ HISTORIAL DE CHAT RECIENTE ===
@@ -221,7 +242,8 @@ ${chatHistoryText}
 === ⚡ INSTRUCCIÓN FINAL ===
 1. Analiza el último mensaje del cliente.
 2. Decide tu respuesta basándote en la ESTRATEGIA DE CIERRE.
-3. AL FINAL de tu respuesta, añade SIEMPRE el bloque de análisis JSON oculto:
+3. Si el mensaje contiene #CIA, confirma la corrección.
+4. AL FINAL de tu respuesta, añade SIEMPRE el bloque de análisis JSON oculto:
 [[ANALYSIS: {"mood": "...", "intent": "...", "summary": "Actualiza el resumen aquí..."}]]
     `;
 

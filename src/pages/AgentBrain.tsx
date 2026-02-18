@@ -18,15 +18,15 @@ import { logActivity } from '@/utils/logger';
 
 const DEFAULTS = {
   'prompt_core': `# ADN CORE\nEres Samurai, un asistente de ventas de elite. Tu misión es filtrar curiosos, calificar leads y cerrar ventas. Eres directo, eficiente pero educado.`,
-  'prompt_technical': `# FORMATO DE RESPUESTA\nIMPORTANTE: Responde solo con texto plano, sin JSON, sin markdown, sin bloques de código. Si necesitas enviar una imagen o archivo, coloca el enlace directo en una línea separada al final.`,
+  'prompt_technical': `# FORMATO DE RESPUESTA\nIMPORTANTE: Responde solo con texto plano. Si recibes el comando #STOP, despídete y no respondas más. Si recibes #START, retoma la conversación analizando el contexto previo.`,
   'prompt_behavior': `# PROTOCOLOS\nSaluda brevemente. No seas redundante. Si el cliente pregunta precio, dalo y termina con una pregunta de cierre.`,
   'prompt_objections': `# MATRIZ DE OBJECIONES\nSi dice "caro" -> Resalta valor/durabilidad.\nSi dice "lo pienso" -> Pregunta qué le detiene.\nSi dice "competencia" -> No hables mal, resalta nuestra garantía.`,
   'prompt_data_injection': `# INYECCIÓN DE DATOS\nUsa los datos del contexto (Nombre, Ciudad) para personalizar. "Hola {nombre}" es mejor que "Hola".`,
   'prompt_memory': `# MEMORIA\nRevisa los últimos mensajes. Si ya te dijo su nombre, no lo preguntes. Si ya le diste el precio, no lo repitas a menos que lo pida.`,
   'prompt_tone': `# TONO ADAPTATIVO\nWhatsApp = Casual, emojis, audios (simulados con texto).\nCorreo = Formal, estructurado.`,
   'prompt_recommendations': `# UPSELLING\nSi compra X, ofrece Y con un 10% de descuento. Solo ofrece si la intención de compra es ALTA.`,
-  'prompt_learning_trigger': `# TRIGGER APRENDIZAJE\nSi el humano interviene con #CORREGIRIA, analiza su feedback y ajusta tu comportamiento futuro.`,
-  'prompt_relearning': `# RE-APRENDIZAJE (MANDATORIO)\nLee las "LECCIONES APRENDIDAS" al final de este prompt. Son correcciones de errores pasados. TIENEN PRIORIDAD sobre cualquier otra instrucción.`,
+  'prompt_learning_trigger': `# TRIGGER #CIA (CORRECCIÓN)\nSi el humano escribe "#CIA [instrucción]", esto es una ORDEN DE CORRECCIÓN SUPREMA. Analiza qué hiciste mal en el mensaje anterior, internaliza la regla y confima que has aprendido la lección para el futuro.`,
+  'prompt_relearning': `# RE-APRENDIZAJE (MANDATORIO)\nLee las "LECCIONES APRENDIDAS" al final de este prompt. Son correcciones #CIA validadas. TIENEN PRIORIDAD sobre cualquier otra instrucción.`,
   'prompt_vision_analysis': `# OJO DE HALCÓN\nBusca: Monto total, Fecha, CUIT/Razón Social. Si la imagen es borrosa, pide otra educadamente.`,
   'prompt_match_validation': `# MATCHING\nCompara el monto del comprobante con la deuda registrada. Margen de error aceptable: $5 pesos.`,
   'prompt_post_validation': `# POST-VALIDACIÓN\nSi coincide: "Pago recibido, gracias {nombre}. Tu pedido sale el {fecha}".`,
@@ -121,7 +121,7 @@ const AgentBrain = () => {
             body: {
                 message: testInput,
                 lead_name: "Usuario de Prueba (Lab)",
-                lead_phone: testPhone, // IMPORTANTE: Enviamos teléfono para activar memoria
+                lead_phone: testPhone, 
                 platform: "TEST_RUNNER"
             }
         });
@@ -175,7 +175,7 @@ const AgentBrain = () => {
               <PromptCard 
                 title="1.2 Técnico (Texto Plano)" 
                 icon={Hammer} 
-                description="Formato de respuesta: TEXTO PLANO obligatorio. Sin JSON. La IA sabe que si debe enviar una imagen, pone el link al final."
+                description="Formato de respuesta y manejo de comandos #STOP / #START."
                 value={prompts['prompt_technical']} 
                 onChange={(v: string) => handlePromptChange('prompt_technical', v)} 
               />
@@ -249,16 +249,16 @@ const AgentBrain = () => {
                 onChange={(v: string) => handlePromptChange('prompt_closing_strategy', v)} 
               />
               <PromptCard 
-                title="3.3 Re-Aprendizaje (Correcciones)" 
+                title="3.3 Re-Aprendizaje (#CIA)" 
                 icon={RefreshCw} 
-                description="Cómo integrar las nuevas reglas de oro que tú validas en el Learning Log."
+                description="Cómo integrar las lecciones aprendidas validadas desde el Learning Log."
                 value={prompts['prompt_relearning']} 
                 onChange={(v: string) => handlePromptChange('prompt_relearning', v)} 
               />
               <PromptCard 
-                title="3.4 Trigger #CORREGIRIA" 
+                title="3.4 Trigger #CIA" 
                 icon={AlertTriangle} 
-                description="Define qué situaciones activan el reporte de error manual."
+                description="Instrucción maestra para que el bot obedezca las correcciones en tiempo real."
                 value={prompts['prompt_learning_trigger']} 
                 onChange={(v: string) => handlePromptChange('prompt_learning_trigger', v)} 
               />
@@ -345,16 +345,6 @@ const AgentBrain = () => {
                                    <Badge variant="outline" className="text-[9px] h-4 px-1">{testDebug.profile?.intent || 'N/A'}</Badge>
                                 </div>
                              </div>
-
-                             {testDebug.website_sources > 0 && (
-                                 <div className="bg-emerald-900/20 border border-emerald-500/20 p-2 rounded">
-                                     <p className="text-[10px] text-emerald-400 font-bold uppercase mb-1 flex items-center gap-1"><Database className="w-3 h-3"/> RAG Activado</p>
-                                     <p className="text-[10px] text-emerald-200">
-                                        Fuentes Web: {testDebug.website_sources} <br/>
-                                        Docs PDF: {testDebug.docs_sources}
-                                     </p>
-                                 </div>
-                             )}
                          </div>
                       )}
 
@@ -370,10 +360,7 @@ const AgentBrain = () => {
                    <div className="p-4 border-t border-slate-800 space-y-3">
                       <div className="space-y-1">
                          <label className="text-[10px] text-slate-500 uppercase">Teléfono (ID Memoria)</label>
-                         <div className="relative">
-                            <Phone className="absolute left-2 top-2 h-3 w-3 text-slate-500" />
-                            <Input value={testPhone} onChange={e => setTestPhone(e.target.value)} className="bg-slate-950 border-slate-800 text-xs h-8 pl-7" placeholder="555..." />
-                         </div>
+                         <Input value={testPhone} onChange={e => setTestPhone(e.target.value)} className="bg-slate-950 border-slate-800 text-xs h-8" placeholder="555..." />
                       </div>
                       <div className="space-y-1">
                          <label className="text-[10px] text-slate-500 uppercase">Mensaje Cliente</label>
