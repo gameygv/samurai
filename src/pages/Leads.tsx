@@ -70,12 +70,12 @@ const Leads = () => {
                    <Zap className="w-3 h-3 mr-1" /> LIVE
                 </Badge>
              </h1>
-             <p className="text-slate-400">Monitoreo en tiempo real de interacciones.</p>
+             <p className="text-slate-400">Monitoreo en tiempo real de interacciones y perfiles psicológicos.</p>
           </div>
           <div className="relative w-full md:w-64">
             <Search className="absolute left-2 top-2.5 h-4 w-4 text-slate-500" />
             <Input 
-              placeholder="Buscar..." 
+              placeholder="Buscar por nombre o teléfono..." 
               className="pl-8 bg-slate-900 border-slate-800 text-slate-200 h-10"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
@@ -95,10 +95,10 @@ const Leads = () => {
               <TableHeader>
                 <TableRow className="border-slate-800 hover:bg-slate-900">
                   <TableHead className="text-slate-400">Cliente</TableHead>
-                  <TableHead className="text-slate-400">Psicología (IA)</TableHead>
-                  <TableHead className="text-slate-400">Intención</TableHead>
-                  <TableHead className="text-slate-400">Actividad</TableHead>
-                  <TableHead className="text-slate-400 text-right">Acción</TableHead>
+                  <TableHead className="text-slate-400">Ubicación</TableHead>
+                  <TableHead className="text-slate-400">Estado Emocional</TableHead>
+                  <TableHead className="text-slate-400">Intención de Compra</TableHead>
+                  <TableHead className="text-slate-400 text-right">Acciones</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -114,10 +114,13 @@ const Leads = () => {
                       <div className="flex flex-col">
                          <span className="font-bold text-slate-200 flex items-center gap-2">
                             {lead.nombre || 'Desconocido'}
-                            {lead.ai_paused && <Badge variant="destructive" className="h-4 px-1 text-[9px]">STOP</Badge>}
+                            {lead.ai_paused && <Badge variant="destructive" className="h-4 px-1 text-[9px]">PAUSADO</Badge>}
                          </span>
                          <span className="text-xs text-slate-500 mt-1 flex items-center gap-1"><Phone className="w-3 h-3" /> {lead.telefono}</span>
                       </div>
+                    </TableCell>
+                    <TableCell>
+                       <span className="text-sm text-slate-300">{lead.ciudad || 'Pendiente...'}</span>
                     </TableCell>
                     <TableCell>
                        <Badge variant="outline" className={`
@@ -139,9 +142,6 @@ const Leads = () => {
                           </div>
                        </div>
                     </TableCell>
-                    <TableCell className="text-[10px] text-slate-500 font-mono">
-                       {new Date(lead.last_message_at).toLocaleString()}
-                    </TableCell>
                     <TableCell className="text-right">
                        <Button size="sm" className="bg-indigo-600 hover:bg-indigo-700 h-8" onClick={() => handleOpenChat(lead)}>
                           <BrainCircuit className="w-3 h-3 mr-2" /> Analizar
@@ -154,7 +154,13 @@ const Leads = () => {
           </CardContent>
         </Card>
 
-        <ChatViewer lead={selectedLead} open={isChatOpen} onOpenChange={setIsChatOpen} />
+        {selectedLead && (
+          <ChatViewer 
+            lead={selectedLead} 
+            open={isChatOpen} 
+            onOpenChange={setIsChatOpen} 
+          />
+        )}
       </div>
     </Layout>
   );
