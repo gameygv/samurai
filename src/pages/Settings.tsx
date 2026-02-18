@@ -310,25 +310,42 @@ const Settings = () => {
                                <li>URL: <code>https://giwoovmvwlddaizorizk.supabase.co/functions/v1/get-samurai-context</code></li>
                                <li>Method: POST</li>
                                <li>Body type: Raw (JSON)</li>
-                               <li>JSON: <code>{`{"message": "{{message_text}}", "lead_phone": "{{phone_number}}"}`}</code></li>
+                               <li>JSON (Copia y pega exacto): <br/>
+                                   <code className="block bg-slate-950 p-2 rounded mt-1 border border-slate-800 text-green-400">
+                                     {`{
+  "message": "{{message_text}}", 
+  "lead_phone": "{{phone_number}}",
+  "lead_name": "{{contact_name}}",
+  "platform": "whatsapp"
+}`}
+                                   </code>
+                               </li>
                             </ul>
                          </li>
                          <li>
                             <strong>Módulo 3 (Gemini/GPT):</strong> Usa el módulo de AI de tu preferencia.
                             <ul className="list-disc list-inside ml-6 mt-1 text-slate-400 text-xs">
                                <li>System Prompt: Usa la variable <code>system_prompt</code> que devuelve el Módulo 2.</li>
-                               <li>User Message: El mensaje del cliente.</li>
+                               <li>User Message: El mensaje del cliente <code>message_text</code>.</li>
                             </ul>
                          </li>
                          <li>
                             <strong>Módulo 4 (Samurai Process):</strong> HTTP {" > "} Make a Request.
                             <ul className="list-disc list-inside ml-6 mt-1 text-slate-400 text-xs">
                                <li>URL: <code>https://giwoovmvwlddaizorizk.supabase.co/functions/v1/process-samurai-response</code></li>
-                               <li>JSON: <code>{`{"ai_json_response": "{{ai_output_text}}", "lead_id": "{{lead_id_from_mod_2}}"}`}</code></li>
+                               <li>JSON: <br/>
+                                  <code className="block bg-slate-950 p-2 rounded mt-1 border border-slate-800 text-green-400">
+                                     {`{
+  "ai_json_response": "{{ai_output_text}}", 
+  "lead_id": "{{lead_id_from_mod_2}}",
+  "raw_text": "{{ai_output_text}}"
+}`}
+                                  </code>
+                               </li>
                             </ul>
                          </li>
                          <li>
-                            <strong>Módulo 5 (Respuesta):</strong> Kommo {" > "} Send a message. Envía la respuesta procesada al cliente.
+                            <strong>Módulo 5 (Respuesta):</strong> Kommo {" > "} Send a message. Envía la respuesta procesada <code>reply</code> al cliente.
                          </li>
                       </ol>
                    </div>

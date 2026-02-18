@@ -5,7 +5,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { 
   BookOpen, Brain, Zap, ShieldAlert, Target, 
-  Database, Image, Lightbulb, AlertTriangle, ScanEye 
+  Database, Image, Lightbulb, AlertTriangle, ScanEye, FlaskConical 
 } from 'lucide-react';
 
 const Manual = () => {
@@ -28,6 +28,7 @@ const Manual = () => {
             <TabsTrigger value="conocimiento" className="py-2 px-4 data-[state=active]:bg-indigo-600">📚 Base de Conocimiento (RAG)</TabsTrigger>
             <TabsTrigger value="media" className="py-2 px-4 data-[state=active]:bg-indigo-600">📸 Media & Triggers</TabsTrigger>
             <TabsTrigger value="aprendizaje" className="py-2 px-4 data-[state=active]:bg-indigo-600">🔄 Auto-Aprendizaje</TabsTrigger>
+            <TabsTrigger value="lab" className="py-2 px-4 data-[state=active]:bg-indigo-600"><FlaskConical className="w-4 h-4 mr-2" /> Laboratorio</TabsTrigger>
           </TabsList>
 
           {/* SECCIÓN 1: EL CEREBRO */}
@@ -298,6 +299,43 @@ const Manual = () => {
                       <p className="text-xs text-slate-400">
                          Si notas que Samurai clasifica mal a los clientes, ve a <strong>Agent Brain {" > "} Psicología</strong> y refina las instrucciones. Sé más específico sobre qué constituye un cliente "Enojado" o "Listo para comprar".
                       </p>
+                   </div>
+                </CardContent>
+             </Card>
+          </TabsContent>
+
+          {/* TAB: LABORATORIO (NUEVO) */}
+          <TabsContent value="lab" className="mt-6 space-y-6">
+             <Card className="bg-slate-900 border-slate-800">
+                <CardHeader>
+                   <CardTitle className="text-white flex items-center gap-2"><FlaskConical className="w-5 h-5 text-pink-500"/> Laboratorio & Test Runner</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-6 text-slate-300">
+                   <p className="text-sm">
+                      Antes de enviar a producción, usa el Laboratorio (Pestaña 5 en Agent Brain) para simular conversaciones.
+                   </p>
+
+                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div className="bg-slate-950 p-4 rounded border border-slate-800">
+                         <h4 className="font-bold text-white mb-2 text-sm">El campo "Teléfono"</h4>
+                         <p className="text-xs text-slate-400 mb-2">
+                            Esto no es solo un número. Es la llave de la memoria.
+                         </p>
+                         <ul className="list-disc list-inside text-xs space-y-2 text-slate-500">
+                            <li>Si usas siempre el mismo número (ej: 555000), el Samurai <strong>recordará</strong> lo que le dijiste en la prueba anterior.</li>
+                            <li>Si quieres probar como un "Cliente Nuevo", cambia el número.</li>
+                         </ul>
+                      </div>
+                      <div className="bg-slate-950 p-4 rounded border border-slate-800">
+                         <h4 className="font-bold text-white mb-2 text-sm">Interpretación del Debug</h4>
+                         <p className="text-xs text-slate-400 mb-2">
+                            El panel derecho del laboratorio te muestra datos técnicos:
+                         </p>
+                         <ul className="list-disc list-inside text-xs space-y-2 text-slate-500">
+                            <li><strong>Perfil Simulado:</strong> Qué opina el Samurai de ti (Enojado/Feliz).</li>
+                            <li><strong>RAG Activado:</strong> Cuántos documentos PDF o Sitios Web encontró relevantes para tu pregunta.</li>
+                         </ul>
+                      </div>
                    </div>
                 </CardContent>
              </Card>
