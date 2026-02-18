@@ -6,7 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { MessageSquare, Search, Loader2, Phone, Mail, MapPin, Zap, BrainCircuit } from 'lucide-react';
+import { MessageSquare, Search, Loader2, Phone, Mail, MapPin, Zap, BrainCircuit } from 'lucide-center';
 import { toast } from 'sonner';
 import ChatViewer from '@/components/ChatViewer';
 
