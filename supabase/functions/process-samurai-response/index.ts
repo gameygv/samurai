@@ -17,40 +17,46 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
-    const { ai_json_response, lead_id, raw_text, is_client_message } = await req.json();
+    const { ai_json_response, lead_id, kommo_id, is_client_message = false } = await req.json();
 
-    if (!lead_id) throw new Error("Lead ID is required");
+    // 1. IDENTIFICAR AL LEAD
+    let lead = null;
+    if (lead_id) {
+        const { data } = await supabaseClient.from('leads').select('*').eq('id', lead_id).single();
+        lead = data;
+    } else if (kommo_id) {
+        const { data } = await supabaseClient.from('leads').select('*').eq('kommo_id', kommo_id).single();
+        lead = data;
+    }
 
-    // 1. OBTENER EL TEXTO BRUTO
-    let fullText = typeof ai_json_response === 'string' ? ai_json_response : (ai_json_response?.reply || raw_text || "");
+    if (!lead) throw new Error("Lead not found. Ensure kommo_id is correct.");
+
+    // 2. LIMPIAR EL TEXTO (BISTURÍ)
+    let fullText = typeof ai_json_response === 'string' ? ai_json_response : (ai_json_response?.reply || "");
     let cleanText = fullText;
     let analysisData: any = null;
 
-    // 2. EL BISTURÍ: CORTAR EL ANÁLISIS DE SISTEMA
-    // Buscamos cualquier variante del separador
     const separators = ['---SYSTEM_ANALYSIS---', '[[ANALYSIS:', '---ANALYSIS---'];
     
     for (const sep of separators) {
         if (fullText.includes(sep)) {
             const parts = fullText.split(sep);
-            cleanText = parts[0].trim(); // Nos quedamos solo con lo de ARRIBA
+            cleanText = parts[0].trim();
             
-            // Intentamos extraer el JSON de lo de ABAJO para el Dashboard
             try {
                 const jsonPart = parts[1].trim();
                 const jsonCleaned = jsonPart.replace(/```json/g, '').replace(/```/g, '').trim();
-                // Si el JSON está incompleto o mal formado, no rompemos el proceso
                 if (jsonCleaned.startsWith('{')) {
                     analysisData = JSON.parse(jsonCleaned);
                 }
             } catch (e) {
-                console.warn("[process-samurai-response] Error parsing metadata, but message is clean.");
+                console.warn("[process-samurai-response] Metadata parse error ignored.");
             }
-            break; // Una vez cortado, salimos del bucle
+            break;
         }
     }
 
-    // 3. ACTUALIZAR DASHBOARD (MEMORIA)
+    // 3. ACTUALIZAR DASHBOARD
     if (analysisData) {
         const updateData: any = { last_ai_analysis: new Date().toISOString() };
         if (analysisData.mood) updateData.estado_emocional_actual = analysisData.mood;
@@ -58,29 +64,28 @@ serve(async (req) => {
         if (analysisData.summary) updateData.summary = analysisData.summary;
         if (analysisData.handoff_required === true) updateData.ai_paused = true;
 
-        await supabaseClient.from('leads').update(updateData).eq('id', lead_id);
+        await supabaseClient.from('leads').update(updateData).eq('id', lead.id);
     }
 
-    // 4. GUARDAR EN HISTORIAL (TEXTO LIMPIO)
+    // 4. GUARDAR EN HISTORIAL
     await supabaseClient.from('conversaciones').insert({
-        lead_id: lead_id,
+        lead_id: lead.id,
         emisor: is_client_message ? 'CLIENTE' : 'SAMURAI',
         mensaje: cleanText, 
-        platform: 'API',
-        metadata: { analysis: analysisData }
+        platform: 'API'
     });
 
-    // 5. RESPUESTA FINAL (ESTO ES LO QUE VA A WHATSAPP)
     return new Response(
       JSON.stringify({ 
          success: true, 
-         reply: cleanText, // <--- ESTE ES EL CAMPO QUE DEBES USAR EN MAKE.COM
+         reply: cleanText,
          handoff: analysisData?.handoff_required || false 
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
 
   } catch (error: any) {
+    console.error("[process-samurai-response] Error:", error.message);
     return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: corsHeaders })
   }
 })
