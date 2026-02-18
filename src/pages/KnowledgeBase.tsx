@@ -13,7 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { 
   Search, FileText, Upload, BookOpen, FileCode, 
-  ExternalLink, File, Loader2, Trash2, Download, AlertCircle, Globe, Link as LinkIcon, Info
+  ExternalLink, File, Loader2, Trash2, Download, AlertCircle, Globe, Link as LinkIcon, Info, RefreshCw
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { logActivity } from '@/utils/logger';
@@ -27,6 +27,7 @@ const KnowledgeBase = () => {
   const [activeCategory, setActiveCategory] = useState('all');
   const [uploading, setUploading] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [syncingId, setSyncingId] = useState<string | null>(null);
   
   // Form state
   const [formData, setFormData] = useState({
@@ -103,6 +104,7 @@ const KnowledgeBase = () => {
       let filePath = '';
       let fileSize = 'N/A';
       let docType = formData.type;
+      let finalContent = formData.content;
 
       if (formData.uploadMode === 'file' && selectedFile) {
         const uploadResult = await uploadFile(selectedFile);
@@ -125,8 +127,8 @@ const KnowledgeBase = () => {
           file_path: filePath,
           external_link: formData.uploadMode === 'link' ? formData.external_link : null,
           size: fileSize,
-          description: formData.description, // Instrucciones de uso
-          content: formData.content, // Contenido scrapeado/pegado
+          description: formData.description,
+          content: finalContent,
           created_by: user?.id
         });
 
@@ -149,6 +151,44 @@ const KnowledgeBase = () => {
     } finally {
       setUploading(false);
     }
+  };
+
+  const handleSyncWebsite = async (id: string, url: string) => {
+     if (!url) return toast.error("No hay URL válida para sincronizar");
+     setSyncingId(id);
+     
+     try {
+        // 1. Llamar a la Edge Function para scrapear
+        const { data: scrapeData, error: scrapeError } = await supabase.functions.invoke('scrape-website', {
+           body: { url }
+        });
+
+        if (scrapeError || !scrapeData.success) {
+           throw new Error(scrapeError?.message || scrapeData?.error || "Fallo en el scraping");
+        }
+
+        const newContent = scrapeData.content;
+        const chars = scrapeData.length;
+
+        // 2. Actualizar la base de datos
+        const { error: dbError } = await supabase
+           .from('knowledge_documents')
+           .update({ 
+              content: newContent,
+              updated_at: new Date().toISOString()
+           })
+           .eq('id', id);
+
+        if (dbError) throw dbError;
+
+        toast.success(`Sincronización completa. Leídos ${chars} caracteres.`);
+        fetchDocuments(); // Refrescar vista
+        
+     } catch (err: any) {
+        toast.error(`Error de sincronización: ${err.message}`);
+     } finally {
+        setSyncingId(null);
+     }
   };
 
   const resetForm = () => {
@@ -352,22 +392,17 @@ const KnowledgeBase = () => {
                 {/* Contenido / Resumen */}
                 <div className="space-y-2">
                   <Label className="flex justify-between items-center">
-                     <span>{formData.uploadMode === 'link' ? 'Información Clave del Sitio (Pegar Texto)' : 'Contenido Indexable (Opcional)'}</span>
-                     {formData.uploadMode === 'link' && <Badge variant="outline" className="text-[9px]">Importante para IA</Badge>}
+                     <span>{formData.uploadMode === 'link' ? 'Información Clave' : 'Contenido Indexable'}</span>
+                     {formData.uploadMode === 'link' && <Badge variant="outline" className="text-[9px] bg-indigo-500/10 text-indigo-400 border-indigo-500/30">Auto-Scraping Disponible</Badge>}
                   </Label>
                   <Textarea 
                     value={formData.content}
                     onChange={e => setFormData({...formData, content: e.target.value})}
                     className="bg-slate-950 border-slate-800 min-h-[150px] font-mono text-xs leading-relaxed"
                     placeholder={formData.uploadMode === 'link' 
-                       ? "Copia y pega aquí la BIO del maestro, las FECHAS del taller y los PRECIOS que aparecen en la web. La IA usará este texto para responder preguntas sin inventar."
+                       ? "Opcional: Pega el texto manualmente O usa el botón 'Sincronizar' después de guardar para leer el sitio automáticamente."
                        : "Pega texto del PDF para ayudar a la búsqueda..."}
                   />
-                  {formData.uploadMode === 'link' && (
-                     <p className="text-[10px] text-slate-500">
-                        * Samurai NO navega la web en tiempo real. Usa el texto que pegues aquí como su "verdad".
-                     </p>
-                  )}
                 </div>
 
                 <DialogFooter>
@@ -435,6 +470,19 @@ const KnowledgeBase = () => {
                         {doc.type === 'WEBSITE' ? <Globe className="w-5 h-5 text-indigo-400" /> : <FileText className="w-5 h-5" />}
                       </div>
                       <div className="flex gap-1 z-10">
+                        {doc.type === 'WEBSITE' && (
+                           <Button 
+                             variant="secondary" 
+                             size="icon" 
+                             className="h-8 w-8 bg-indigo-600/20 text-indigo-400 hover:bg-indigo-600 hover:text-white border border-indigo-500/30" 
+                             title="Sincronizar contenido desde la web"
+                             disabled={syncingId === doc.id}
+                             onClick={() => handleSyncWebsite(doc.id, doc.external_link)}
+                           >
+                             {syncingId === doc.id ? <Loader2 className="w-4 h-4 animate-spin"/> : <RefreshCw className="w-4 h-4" />}
+                           </Button>
+                        )}
+
                         {doc.external_link && (
                           <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:text-indigo-400" onClick={() => window.open(doc.external_link, '_blank')}>
                             <ExternalLink className="w-4 h-4" />
@@ -465,12 +513,20 @@ const KnowledgeBase = () => {
                       )}
                       
                       {/* Contenido Clave (Content) */}
-                      {doc.content && (
-                        <div className="space-y-1">
-                           <p className="text-[10px] text-slate-500 uppercase font-bold">Información Clave:</p>
-                           <p className="text-xs text-slate-500 line-clamp-3 font-mono bg-slate-950 p-1.5 rounded">{doc.content}</p>
-                        </div>
-                      )}
+                      <div className="space-y-1">
+                          <div className="flex justify-between items-center">
+                              <p className="text-[10px] text-slate-500 uppercase font-bold">Información Indexada:</p>
+                              <span className="text-[9px] text-slate-600 font-mono">{doc.content ? `${doc.content.length} chars` : 'Vacío'}</span>
+                          </div>
+                          {doc.content ? (
+                             <p className="text-xs text-slate-400 line-clamp-3 font-mono bg-slate-950 p-2 rounded border border-slate-800/50">{doc.content}</p>
+                          ) : (
+                             <div className="bg-slate-950 p-2 rounded border border-dashed border-slate-800 flex items-center justify-center gap-2 text-slate-600">
+                                <AlertCircle className="w-3 h-3" />
+                                <span className="text-[10px] italic">Requiere sincronización</span>
+                             </div>
+                          )}
+                      </div>
 
                       <div className="flex gap-2 mt-3">
                          <Badge variant="secondary" className="bg-slate-800 text-slate-400 text-[10px]">{doc.category}</Badge>
@@ -479,7 +535,9 @@ const KnowledgeBase = () => {
                     
                     <CardFooter className="pt-2 border-t border-slate-800/50 flex justify-between text-xs text-slate-500">
                        <span className="truncate max-w-[150px]">{doc.external_link || doc.size}</span>
-                       <span>{new Date(doc.created_at).toLocaleDateString()}</span>
+                       <span title="Última actualización">
+                          {doc.updated_at ? new Date(doc.updated_at).toLocaleDateString() : new Date(doc.created_at).toLocaleDateString()}
+                       </span>
                     </CardFooter>
                   </Card>
                 ))}
