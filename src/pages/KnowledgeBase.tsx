@@ -159,15 +159,15 @@ const KnowledgeBase = () => {
             </div>
             <div className="flex-1">
               <h3 className="text-white font-bold mb-1 flex items-center gap-2">
-                Sitio Principal Protegido
-                <Badge className="bg-indigo-600 text-[9px]">AUTO-ACTUALIZACIÓN</Badge>
+                Sitio Principal (theelephantbowl.com)
+                <Badge className="bg-indigo-600 text-[9px]">SISTEMA PROTEGIDO</Badge>
               </h3>
               <p className="text-sm text-slate-300 mb-2">
-                El sitio web <strong>theelephantbowl.com</strong> (incluyendo todas sus páginas de cursos, expertos, comunidad, etc.) se actualiza automáticamente cada 24 horas.
+                Esta es la Fuente de Verdad Maestra. El Samurai utiliza todo el contenido indexado del sitio oficial para responder con precisión absoluta.
               </p>
-              <p className="text-xs text-slate-400">
-                <Info className="w-3 h-3 inline mr-1" />
-                Este contenido NO puede ser modificado manualmente. Es la fuente de conocimiento principal del Samurai y se mantiene sincronizada automáticamente.
+              <p className="text-xs text-slate-400 flex items-center gap-1">
+                <RefreshCw className="w-3 h-3 text-indigo-400 animate-spin-slow" /> 
+                Actualización diaria automática activa. Este recurso no puede ser modificado manualmente para garantizar la integridad del ADN Samurai.
               </p>
             </div>
           </div>

@@ -19,7 +19,7 @@ serve(async (req) => {
 
     const { message, lead_id, mode = 'LIVE' } = await req.json();
 
-    // 1. OBTENER TODAS LAS CONFIGURACIONES DE PROMPTS
+    // 1. OBTENER TODAS LAS CONFIGURACIONES DE PROMPTS (Las 15 secciones del panel)
     const { data: configData } = await supabaseClient
         .from('app_config')
         .select('key, value')
@@ -28,66 +28,92 @@ serve(async (req) => {
     const prompts: any = {};
     configData?.forEach(i => prompts[i.key] = i.value);
 
-    // 2. OBTENER DATOS DEL LEAD (Si existe)
-    let leadContext = "Nombre: Prospecto Anónimo\nCiudad: En análisis...";
+    // 2. OBTENER DATOS DEL LEAD (Contexto psicológico y memoria)
+    let leadContext = "Nombre: Prospecto Anónimo\nUbicación: Desconocida";
     if (lead_id) {
         const { data: lead } = await supabaseClient.from('leads').select('*').eq('id', lead_id).single();
         if (lead) {
             leadContext = `
-Nombre: ${lead.nombre || 'Prospecto'}
-Ciudad: ${lead.ciudad || 'Desconocida'}
-Intención de Compra: ${lead.buying_intent || 'BAJA'}
-Perfil Psicologico: ${lead.perfil_psicologico || 'En análisis...'}
-Resumen Memoria: ${lead.summary || 'Sin historial previo.'}
+NOMBRE DEL CLIENTE: ${lead.nombre || 'Desconocido'}
+CIUDAD/UBICACIÓN: ${lead.ciudad || 'No especificada'}
+INTENCIÓN DE COMPRA ACTUAL: ${lead.buying_intent || 'BAJA'}
+PERFIL PSICOLÓGICO DETECTADO: ${lead.perfil_psicologico || 'En análisis...'}
+RESUMEN DE MEMORIA (Lo que ya sabemos): ${lead.summary || 'Sin historial previo.'}
+ESTADO EMOCIONAL: ${lead.estado_emocional_actual || 'NEUTRO'}
             `;
         }
     }
 
-    // 3. OBTENER CONTENIDO DEL SITIO PRINCIPAL (NUEVO)
+    // 3. OBTENER CONTENIDO DEL SITIO PRINCIPAL (Fuente de Verdad Protegida)
     const { data: mainWebsiteData } = await supabaseClient
         .from('main_website_content')
         .select('url, title, content')
-        .eq('scrape_status', 'success')
-        .order('url', { ascending: true });
+        .eq('scrape_status', 'success');
 
     let mainWebsiteContext = "";
     if (mainWebsiteData && mainWebsiteData.length > 0) {
-        mainWebsiteContext = "\n=== 📚 CONTENIDO DEL SITIO PRINCIPAL (theelephantbowl.com) ===\n";
+        mainWebsiteContext = "\n=== 📚 FUENTE DE VERDAD: SITIO PRINCIPAL (theelephantbowl.com) ===\n";
         mainWebsiteData.forEach(page => {
-            mainWebsiteContext += `\n[${page.title}]\nURL: ${page.url}\n${page.content.substring(0, 800)}...\n`;
+            mainWebsiteContext += `\n[${page.title} - ${page.url}]\n${page.content.substring(0, 1000)}\n`;
         });
     }
 
-    // 4. ENSAMBLAJE MAESTRO (The Great Prompt)
+    // 4. OBTENER DOCUMENTOS DE LA BASE DE CONOCIMIENTO (Talleres, Maestros, etc.)
+    const { data: knowledgeDocs } = await supabaseClient
+        .from('knowledge_documents')
+        .select('title, content, type, category');
+
+    let knowledgeContext = "";
+    if (knowledgeDocs && knowledgeDocs.length > 0) {
+        knowledgeContext = "\n=== 📖 RECURSOS ADICIONALES (Talleres/Maestros/Manuales) ===\n";
+        knowledgeDocs.forEach(doc => {
+            knowledgeContext += `\n[${doc.category}: ${doc.title}]\n${doc.content?.substring(0, 800) || 'Sin contenido indexado.'}\n`;
+        });
+    }
+
+    // 5. ENSAMBLAJE MAESTRO DE TODAS LAS CAPAS (The Great Samurai Brain)
     const fullSystemPrompt = `
-${prompts['prompt_core'] || '# IDENTIDAD SAMURAI\nEres un experto en ventas.'}
+${prompts['prompt_adn_core'] || '# ADN CORE\nEres Samurai, un cerrador de elite.'}
 
-=== 🛡️ REGLAS TÉCNICAS ===
-${prompts['prompt_technical'] || 'Responde de forma concisa.'}
+=== 🛡️ REGLAS TÉCNICAS Y FORMATO ===
+${prompts['prompt_tecnico'] || 'Responde siempre en texto plano.'}
 
-=== 📚 CONTEXTO DEL NEGOCIO ===
-${prompts['prompt_context'] || 'Vendemos instrumentos de sonoterapia.'}
+=== 📜 PROTOCOLOS DE ATENCIÓN ===
+${prompts['prompt_protocolos'] || ''}
 
+=== 🤺 MATRIZ DE OBJECIONES ===
+${prompts['prompt_objeciones'] || ''}
+
+=== 📊 CONTEXTO DEL NEGOCIO (SITIO WEB Y DOCUMENTOS) ===
 ${mainWebsiteContext}
+${knowledgeContext}
 
-=== 🧠 ANALISIS PSICOLÓGICO Y PERFILADO ===
-${prompts['prompt_psychology'] || 'Analiza el sentimiento del cliente.'}
+=== 🧩 PERFILADO Y PSICOLOGÍA ===
+${prompts['prompt_perfilado'] || ''}
+${prompts['prompt_tono'] || ''}
+${prompts['prompt_estrategia_cierre'] || ''}
 
-=== 📸 PROTOCOLO DE VISIÓN (MULTIMEDIA) ===
-${prompts['prompt_vision'] || 'Si el cliente envía una imagen, analízala.'}
+=== 🔄 MEMORIA Y RE-APRENDIZAJE (#CIA) ===
+${prompts['prompt_reaprendizaje'] || ''}
+${prompts['prompt_memoria'] || ''}
+${prompts['prompt_trigger_corregiria'] || ''}
 
-=== 🔄 LECCIONES APRENDIDAS (#CIA) ===
-${prompts['prompt_relearning'] || 'No hay reglas adicionales.'}
+=== 📸 VISIÓN Y VALIDACIÓN DE PAGOS ===
+${prompts['prompt_ojo_halcon'] || ''}
+${prompts['prompt_match'] || ''}
+${prompts['prompt_accion_post'] || ''}
 
-=== 👤 CONTEXTO ACTUAL DEL CLIENTE ===
+=== 👤 CLIENTE ACTUAL ===
 ${leadContext}
 
-=== ⚡ FORMATO DE SALIDA OBLIGATORIO ===
-Responde al mensaje del cliente y termina SIEMPRE con el bloque ANALYSIS en JSON:
+=== ⚡ INSTRUCCIÓN DE SALIDA CRÍTICA ===
+1. Responde al cliente de forma DIRECTA, HUMANA y en TEXTO PLANO. 
+2. NO envíes un objeto JSON como respuesta al cliente.
+3. Al final de tu mensaje, añade OBLIGATORIAMENTE el bloque de análisis para el sistema de esta forma exacta:
 [[ANALYSIS: {
   "mood": "FELIZ|NEUTRO|ENOJADO",
   "intent": "ALTO|MEDIO|BAJO",
-  "summary": "Resumen para tu memoria",
+  "summary": "Resumen actualizado de la situación",
   "handoff_required": false
 }]]
     `;
