@@ -7,7 +7,7 @@ import { SystemStatus } from '@/components/SystemStatus';
 import { 
   Database, Shield, Activity, Terminal, AlertTriangle, 
   CheckCircle2, MessageSquare, TrendingUp, Clock, Loader2,
-  Zap, Brain, RefreshCw
+  Zap, Brain, RefreshCw, Send, ArrowRight
 } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
@@ -21,6 +21,7 @@ const Index = () => {
     scheduledRestarts: 0
   });
   const [recentChats, setRecentChats] = useState<any[]>([]);
+  const [upcomingTasks, setUpcomingTasks] = useState<any[]>([]);
   const [chartData, setChartData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [connectionStatus, setConnectionStatus] = useState<'checking' | 'connected' | 'error'>('checking');
@@ -29,6 +30,7 @@ const Index = () => {
   useEffect(() => {
     fetchData();
     fetchRecentChats();
+    fetchUpcomingTasks();
     measureLatency();
     
     // Suscripción a Logs (Auditoría)
@@ -42,17 +44,8 @@ const Index = () => {
       })
       .subscribe();
 
-    // Suscripción a Chats (Live Feed)
-    const chatChannel = supabase
-      .channel('chats-dashboard')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'conversaciones' }, (payload) => {
-         fetchNewChatMessage(payload.new.id);
-      })
-      .subscribe();
-
     return () => { 
        supabase.removeChannel(logChannel); 
-       supabase.removeChannel(chatChannel); 
     };
   }, []);
 
@@ -61,18 +54,6 @@ const Index = () => {
      await supabase.from('profiles').select('count', { count: 'exact', head: true });
      const end = performance.now();
      setLatency(Math.round(end - start));
-  };
-
-  const fetchNewChatMessage = async (id: string) => {
-     const { data } = await supabase
-        .from('conversaciones')
-        .select('*, leads(nombre)')
-        .eq('id', id)
-        .single();
-     
-     if (data) {
-        setRecentChats(prev => [data, ...prev].slice(0, 5));
-     }
   };
 
   const fetchData = async () => {
@@ -103,11 +84,10 @@ const Index = () => {
         setChartData(mappedData);
       } else {
          setChartData([
-            { name: 'v0.1 (Base)', accuracy: 65 },
-            { name: 'v0.2', accuracy: 72 },
+            { name: 'v0.1', accuracy: 65 },
             { name: 'v0.3', accuracy: 78 },
-            { name: 'v0.4', accuracy: 82 },
-            { name: 'Actual', accuracy: 88 }
+            { name: 'v0.5', accuracy: 82 },
+            { name: 'v0.8', accuracy: 88 }
          ]);
       }
 
@@ -126,6 +106,18 @@ const Index = () => {
         .order('created_at', { ascending: false })
         .limit(5);
      if (data) setRecentChats(data);
+  };
+
+  const fetchUpcomingTasks = async () => {
+     // Obtener leads que tienen acciones programadas
+     const { data: followups } = await supabase
+        .from('leads')
+        .select('id, nombre, next_followup_at, auto_restart_scheduled_at, followup_stage')
+        .or('next_followup_at.not.is.null,auto_restart_scheduled_at.not.is.null')
+        .order('next_followup_at', { ascending: true })
+        .limit(5);
+     
+     if (followups) setUpcomingTasks(followups);
   };
 
   return (
@@ -149,7 +141,7 @@ const Index = () => {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           <StatCard title="Alertas #CIA" value={stats.totalErrors} icon={AlertTriangle} color="text-red-500" bg="bg-red-500/10" footer="Correcciones Detectadas" />
           <StatCard title="Pendientes" value={stats.pendingCorrections} icon={Clock} color="text-yellow-500" bg="bg-yellow-500/10" footer="Reglas por validar" />
-          <StatCard title="Follow-ups Activos" value={stats.activeFollowups} icon={RefreshCw} color="text-blue-500" bg="bg-blue-500/10" footer="Reintentos programados" />
+          <StatCard title="Follow-ups" value={stats.activeFollowups} icon={RefreshCw} color="text-blue-500" bg="bg-blue-500/10" footer="Reintentos en cola" />
           <StatCard title="Auto-Restarts" value={stats.scheduledRestarts} icon={Zap} color="text-orange-500" bg="bg-orange-500/10" footer="Post #STOP pendientes" />
         </div>
 
@@ -162,7 +154,7 @@ const Index = () => {
                      <TrendingUp className="w-5 h-5 text-indigo-400" /> 
                      Curva de Precisión (Accuracy)
                   </CardTitle>
-                  <Badge className="bg-indigo-600">Aprendizaje Continuo</Badge>
+                  <Badge className="bg-indigo-600">v0.8 AI Ready</Badge>
                </CardHeader>
                <CardContent className="p-6 h-[250px] w-full">
                   <ResponsiveContainer width="100%" height="100%">
@@ -186,37 +178,73 @@ const Index = () => {
                </CardContent>
              </Card>
 
-             <Card className="bg-slate-900 border-slate-800 shadow-xl">
-                <CardHeader className="border-b border-slate-800 flex flex-row items-center justify-between">
-                   <CardTitle className="text-white text-sm uppercase tracking-widest flex items-center gap-2">
-                      <MessageSquare className="w-4 h-4 text-emerald-400" /> Live Interacciones
-                   </CardTitle>
-                   <Badge variant="outline" className="text-[9px] border-emerald-500/20 text-emerald-500">Live Feed</Badge>
-                </CardHeader>
-                <CardContent className="p-0">
-                   <div className="divide-y divide-slate-800">
-                      {recentChats.map((chat) => (
-                         <div key={chat.id} className="p-4 flex items-start gap-4 hover:bg-slate-800/50 transition-colors animate-in fade-in slide-in-from-bottom-2">
-                            <div className={`p-2 rounded-lg shrink-0 ${chat.emisor === 'SAMURAI' ? 'bg-indigo-600/20 text-indigo-400' : 'bg-slate-800 text-slate-400'}`}>
-                               {chat.emisor === 'SAMURAI' ? <Zap className="w-4 h-4" /> : <MessageSquare className="w-4 h-4" />}
+             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <Card className="bg-slate-900 border-slate-800 shadow-xl">
+                    <CardHeader className="border-b border-slate-800 flex flex-row items-center justify-between py-3">
+                    <CardTitle className="text-white text-[10px] uppercase tracking-widest flex items-center gap-2">
+                        <MessageSquare className="w-4 h-4 text-emerald-400" /> Live Feed
+                    </CardTitle>
+                    </CardHeader>
+                    <CardContent className="p-0">
+                    <div className="divide-y divide-slate-800">
+                        {recentChats.map((chat) => (
+                            <div key={chat.id} className="p-3 flex items-start gap-3 hover:bg-slate-800/50 transition-colors animate-in fade-in slide-in-from-bottom-2">
+                                <div className={`p-1.5 rounded shrink-0 ${chat.emisor === 'SAMURAI' ? 'bg-indigo-600/20 text-indigo-400' : 'bg-slate-800 text-slate-400'}`}>
+                                {chat.emisor === 'SAMURAI' ? <Zap className="w-3.5 h-3.5" /> : <MessageSquare className="w-3.5 h-3.5" />}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                <div className="flex justify-between items-center mb-0.5">
+                                    <span className="text-[10px] font-bold text-slate-300 truncate">
+                                        {chat.leads?.nombre || 'Desconocido'}
+                                    </span>
+                                    <span className="text-[9px] text-slate-600 font-mono">{new Date(chat.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                                </div>
+                                <p className="text-[11px] text-slate-400 line-clamp-1 italic">
+                                    "{chat.mensaje}"
+                                </p>
+                                </div>
                             </div>
-                            <div className="flex-1 min-w-0">
-                               <div className="flex justify-between items-center mb-1">
-                                  <span className="text-[10px] font-bold text-slate-500 uppercase flex items-center gap-1">
-                                     {chat.leads?.nombre || 'Desconocido'}
-                                     {chat.platform && <span className="text-[8px] bg-slate-800 px-1 rounded text-slate-400">{chat.platform}</span>}
-                                  </span>
-                                  <span className="text-[10px] text-slate-600 font-mono">{new Date(chat.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
-                               </div>
-                               <p className="text-xs text-slate-300 line-clamp-2 leading-relaxed">
-                                  {chat.mensaje}
-                               </p>
-                            </div>
-                         </div>
-                      ))}
-                   </div>
-                </CardContent>
-             </Card>
+                        ))}
+                    </div>
+                    </CardContent>
+                </Card>
+
+                <Card className="bg-slate-900 border-slate-800 shadow-xl">
+                    <CardHeader className="border-b border-slate-800 flex flex-row items-center justify-between py-3">
+                    <CardTitle className="text-white text-[10px] uppercase tracking-widest flex items-center gap-2">
+                        <RefreshCw className="w-4 h-4 text-blue-400" /> Próximas Acciones
+                    </CardTitle>
+                    </CardHeader>
+                    <CardContent className="p-0">
+                    <div className="divide-y divide-slate-800">
+                        {upcomingTasks.length === 0 ? (
+                            <div className="p-6 text-center text-slate-500 text-xs italic">No hay acciones programadas</div>
+                        ) : upcomingTasks.map((task) => {
+                            const isRestart = !!task.auto_restart_scheduled_at;
+                            const time = isRestart ? task.auto_restart_scheduled_at : task.next_followup_at;
+                            return (
+                                <div key={task.id} className="p-3 flex items-start gap-3 hover:bg-slate-800/50 transition-colors">
+                                    <div className={`p-1.5 rounded shrink-0 ${isRestart ? 'bg-orange-500/20 text-orange-400' : 'bg-blue-500/20 text-blue-400'}`}>
+                                        {isRestart ? <Zap className="w-3.5 h-3.5" /> : <Send className="w-3.5 h-3.5" />}
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex justify-between items-center">
+                                            <span className="text-[10px] font-bold text-slate-300">{task.nombre}</span>
+                                            <span className="text-[9px] text-slate-600 font-mono">{new Date(time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                                        </div>
+                                        <p className="text-[9px] text-slate-500 uppercase flex items-center gap-1 mt-0.5">
+                                            {isRestart ? 'Auto-Restart' : `Follow-up Stage ${task.followup_stage || 1}`}
+                                            <ArrowRight className="w-2 h-2" />
+                                            {new Date(time).toLocaleDateString()}
+                                        </p>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                    </CardContent>
+                </Card>
+             </div>
           </div>
 
           <div className="lg:col-span-4 space-y-6">
@@ -235,7 +263,7 @@ const Index = () => {
                  </div>
               </div>
               <div className="p-4 space-y-2 overflow-y-auto flex-1 custom-scrollbar">
-                 <p className="text-green-500/60 mb-2">SAMURAI_OS [Version 0.802] (c) 2026 Dyad Systems.</p>
+                 <p className="text-green-500/60 mb-2">SAMURAI_OS [Version 0.804] (c) 2026 Dyad Systems.</p>
                  {stats.recentLogs.map((log, i) => (
                     <div key={i} className="animate-in fade-in slide-in-from-left-2 duration-300 flex items-start gap-2">
                        <span className="text-slate-600 shrink-0">[{new Date(log.created_at).toLocaleTimeString()}]</span> 
@@ -261,7 +289,7 @@ const StatCard = ({ title, value, icon: Icon, color, bg, footer }: any) => (
          <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">{title}</p>
          <h3 className="text-3xl font-bold text-white mt-2">{value}</h3>
       </div>
-      <div className={`p-3 rounded-xl ${bg} ${color} group-hover:rotate-12 transition-transform`}>
+      <div className={`p-3 rounded-xl ${bg} ${color} group-hover:rotate-12 transition-transform shadow-inner`}>
          <Icon className="w-6 h-6" />
       </div>
     </div>
