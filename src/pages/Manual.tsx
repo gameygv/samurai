@@ -32,7 +32,6 @@ const Manual = () => {
             <TabsTrigger value="aprendizaje" className="py-2 px-4 data-[state=active]:bg-indigo-600">🔄 Auto-Aprendizaje</TabsTrigger>
           </TabsList>
 
-          {/* SECCIÓN 0: COMANDOS (NUEVO) */}
           <TabsContent value="comandos" className="mt-6 space-y-6">
              <Card className="bg-slate-900 border-slate-800">
                 <CardHeader>
@@ -48,10 +47,6 @@ const Manual = () => {
                             <h3 className="font-bold text-white">#STOP</h3>
                          </div>
                          <p className="text-xs text-slate-400 mb-3">Detiene inmediatamente a la IA. El bot se despedirá educadamente y no volverá a contestar hasta que lo reactives.</p>
-                         <div className="bg-black p-2 rounded text-[10px] font-mono text-red-400">
-                            Operador: #STOP<br/>
-                            Samurai: Entendido, pauso mi asistencia...
-                         </div>
                       </div>
 
                       <div className="bg-green-900/10 border border-green-900/50 p-4 rounded-xl">
@@ -59,11 +54,7 @@ const Manual = () => {
                             <Play className="w-5 h-5 text-green-500" />
                             <h3 className="font-bold text-white">#START</h3>
                          </div>
-                         <p className="text-xs text-slate-400 mb-3">Reactiva al Samurai. Analizará lo que hablaste tú (humano) con el cliente mientras estaba pausado y retomará el hilo.</p>
-                         <div className="bg-black p-2 rounded text-[10px] font-mono text-green-400">
-                            Operador: #START<br/>
-                            Samurai: (Vuelve a responder mensajes)
-                         </div>
+                         <p className="text-xs text-slate-400 mb-3">Reactiva al Samurai. Analizará lo que hablaste tú con el cliente mientras estaba pausado y retomará el hilo.</p>
                       </div>
 
                       <div className="bg-yellow-900/10 border border-yellow-900/50 p-4 rounded-xl">
@@ -71,11 +62,7 @@ const Manual = () => {
                             <ShieldAlert className="w-5 h-5 text-yellow-500" />
                             <h3 className="font-bold text-white">#CIA</h3>
                          </div>
-                         <p className="text-xs text-slate-400 mb-3">Comando de Inteligencia Artificial. Úsalo para corregir al bot cuando se equivoque. Esto crea una "Lección Aprendida" en la base de datos.</p>
-                         <div className="bg-black p-2 rounded text-[10px] font-mono text-yellow-400">
-                            Operador: #CIA Nunca ofrezcas descuento en el primer mensaje.<br/>
-                            Samurai: (Guarda la regla)
-                         </div>
+                         <p className="text-xs text-slate-400 mb-3">Úsalo para corregir al bot cuando se equivoque. Esto crea una "Lección Aprendida" en la base de datos.</p>
                       </div>
                    </div>
 
@@ -83,7 +70,6 @@ const Manual = () => {
              </Card>
           </TabsContent>
 
-          {/* SECCIÓN 1: EL CEREBRO */}
           <TabsContent value="cerebro" className="mt-6 space-y-6">
             <Card className="bg-slate-900 border-slate-800">
               <CardHeader>
@@ -94,148 +80,16 @@ const Manual = () => {
               </CardHeader>
               <CardContent>
                 <Accordion type="single" collapsible className="w-full">
-                  
-                  {/* 1. SISTEMA */}
                   <AccordionItem value="item-1">
                     <AccordionTrigger className="text-indigo-400 hover:text-indigo-300 font-bold">1. SISTEMA (La Identidad)</AccordionTrigger>
-                    <AccordionContent className="text-slate-300 space-y-4 pt-2">
-                      <div className="space-y-2">
-                        <h4 className="font-bold text-white flex items-center gap-2"><Target className="w-4 h-4"/> 1.1 ADN Core</h4>
-                        <p className="text-sm">Es la instrucción más importante. Define <strong>quién es</strong> y <strong>qué vende</strong>.</p>
-                        <div className="bg-slate-950 p-3 rounded border border-slate-800 text-xs font-mono text-green-400">
-                          Ejemplo: "Eres Samurai, un vendedor senior de [TU_EMPRESA]. Tu tono es seguro, directo y experto. Nunca ruegas por una venta. Tu objetivo es calificar al cliente y cerrar la venta hoy."
-                        </div>
-                      </div>
-                      
-                      <div className="space-y-2">
-                        <h4 className="font-bold text-white flex items-center gap-2"><Target className="w-4 h-4"/> 1.2 Técnico</h4>
-                        <p className="text-sm">Controla el formato de salida. <strong>NO LO CAMBIES</strong> a menos que sepas lo que haces. Garantiza que el mensaje llegue limpio a WhatsApp.</p>
-                      </div>
-
-                      <div className="space-y-2">
-                        <h4 className="font-bold text-white flex items-center gap-2"><Target className="w-4 h-4"/> 1.3 Protocolos</h4>
-                        <p className="text-sm">Reglas de etiqueta. ¿Cómo saluda? ¿Usa emojis? ¿Tutea o habla de usted?</p>
-                        <div className="bg-slate-950 p-3 rounded border border-slate-800 text-xs font-mono text-green-400">
-                           Ejemplo: "Usa emojis con moderación. Si el cliente es informal, tú también. Si el cliente es serio, sé formal. Nunca envíes textos de más de 3 líneas."
-                        </div>
-                      </div>
-                    </AccordionContent>
-                  </AccordionItem>
-
-                  {/* 2. CONTEXTO */}
-                  <AccordionItem value="item-2">
-                    <AccordionTrigger className="text-indigo-400 hover:text-indigo-300 font-bold">2. CONTEXTO (Datos y Memoria)</AccordionTrigger>
-                    <AccordionContent className="text-slate-300 space-y-4 pt-2">
-                      <p className="text-sm">Instrucciones sobre cómo usar los datos que el sistema inyecta automáticamente (Nombre, Historial).</p>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                         <div className="bg-slate-950 p-3 rounded border border-slate-800">
-                            <h5 className="font-bold text-white mb-1">2.1 Datos CRM</h5>
-                            <p className="text-xs">Dile que use el nombre del cliente. "Siempre inicia saludando por el nombre si está disponible."</p>
-                         </div>
-                         <div className="bg-slate-950 p-3 rounded border border-slate-800">
-                            <h5 className="font-bold text-white mb-1">2.2 Memoria</h5>
-                            <p className="text-xs">Reglas para no ser repetitivo. "Revisa los últimos 5 mensajes. Si ya te dijo su presupuesto, no lo vuelvas a preguntar."</p>
-                         </div>
-                      </div>
-                    </AccordionContent>
-                  </AccordionItem>
-
-                  {/* 3. PSICOLOGÍA */}
-                  <AccordionItem value="item-3">
-                    <AccordionTrigger className="text-indigo-400 hover:text-indigo-300 font-bold">3. PSICOLOGÍA (Ventas Avanzadas)</AccordionTrigger>
-                    <AccordionContent className="text-slate-300 space-y-4 pt-2">
-                      <div className="bg-blue-900/20 p-4 rounded border border-blue-800 mb-4">
-                         <p className="text-sm text-blue-200 flex items-center gap-2">
-                            <Brain className="w-4 h-4" />
-                            <strong>Nota Importante:</strong> Esta sección alimenta el sistema de Auto-Aprendizaje. Samurai usa estas reglas para decidir si marca al cliente como "ALTA INTENCIÓN" o "MOLESTO".
-                         </p>
-                      </div>
-
-                      <div className="space-y-2">
-                        <h4 className="font-bold text-white">3.1 Perfilado Psicológico</h4>
-                        <p className="text-sm">Enseña a la IA a leer entre líneas.</p>
-                        <div className="bg-slate-950 p-3 rounded border border-slate-800 text-xs font-mono text-green-400">
-                           Ejemplo: "Si el cliente escribe en mayúsculas o usa muchos signos '!!!', está EMOCIONAL o ENOJADO. Actúa con calma. Si pregunta especificaciones técnicas, es PRAGMÁTICO. Dale datos duros."
-                        </div>
-                      </div>
-
-                      <div className="space-y-2">
-                        <h4 className="font-bold text-white">3.2 Estrategia de Cierre</h4>
-                        <p className="text-sm">El "Funnel" mental del bot. Define cuándo dejar de informar y empezar a pedir el dinero.</p>
-                        <div className="bg-slate-950 p-3 rounded border border-slate-800 text-xs font-mono text-green-400">
-                           Ejemplo: "Si el cliente pregunta por métodos de pago, asume la venta. No preguntes '¿quieres pagar?', di 'Aquí tienes el CBU, ¿te queda cómodo transferir ahora?'"
-                        </div>
-                      </div>
+                    <AccordionContent className="text-slate-300 pt-2">
+                      Es la instrucción más importante. Define <strong>quién es</strong> y <strong>qué vende</strong>.
                     </AccordionContent>
                   </AccordionItem>
                 </Accordion>
               </CardContent>
             </Card>
           </TabsContent>
-
-          {/* SECCIÓN 2: RAG / CONOCIMIENTO */}
-          <TabsContent value="conocimiento" className="mt-6 space-y-6">
-             <Card className="bg-slate-900 border-slate-800">
-                <CardHeader>
-                   <CardTitle className="text-white flex items-center gap-2"><Database className="w-5 h-5 text-emerald-500"/> RAG Nativo (Búsqueda Inteligente)</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-6 text-slate-300">
-                   <div className="bg-slate-800/50 p-4 rounded-lg">
-                      <h3 className="font-bold text-white mb-2">¿Cómo funciona realmente?</h3>
-                      <p className="text-sm mb-2">
-                         No necesitas configurar nada en Make. El sistema funciona así:
-                      </p>
-                      <ol className="list-decimal list-inside text-sm space-y-2 ml-2">
-                         <li>Cliente pregunta: <em>"¿Tienen garantía de devolución?"</em></li>
-                         <li>Samurai detecta la palabra clave y busca en tu <strong>Base de Conocimiento</strong>.</li>
-                         <li>Encuentra el documento "Políticas de Garantía 2025.pdf".</li>
-                         <li>Lee el contenido del PDF y lo "inyecta" temporalmente en la mente del Samurai.</li>
-                         <li>Samurai responde: <em>"Sí, según nuestra política, tienes 30 días..."</em></li>
-                      </ol>
-                   </div>
-                </CardContent>
-             </Card>
-          </TabsContent>
-
-          {/* SECCIÓN 3: MEDIA TRIGGERS */}
-          <TabsContent value="media" className="mt-6 space-y-6">
-             <Card className="bg-slate-900 border-slate-800">
-                <CardHeader>
-                   <CardTitle className="text-white flex items-center gap-2"><Image className="w-5 h-5 text-purple-500"/> Media & Reglas de Disparo</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-6 text-slate-300">
-                   <p className="text-sm">
-                      En la sección <strong>Media Manager</strong>, puedes subir archivos. Pero lo mágico es el campo <strong>"Instrucciones IA"</strong> (Trigger).
-                   </p>
-                   <div className="border-l-4 border-purple-500 pl-4 py-2 bg-slate-950/50">
-                      <h4 className="font-bold text-white text-sm">El campo "Editar Reglas"</h4>
-                      <p className="text-xs mt-1">
-                         Es una instrucción condicional (IF/THEN) para el cerebro del Samurai.
-                      </p>
-                   </div>
-                </CardContent>
-             </Card>
-          </TabsContent>
-
-          {/* SECCIÓN 4: AUTO-APRENDIZAJE */}
-          <TabsContent value="aprendizaje" className="mt-6 space-y-6">
-             <Card className="bg-slate-900 border-slate-800">
-                <CardHeader>
-                   <CardTitle className="text-white flex items-center gap-2"><Zap className="w-5 h-5 text-yellow-400"/> Ciclo de Auto-Aprendizaje (#CIA)</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-6 text-slate-300">
-                   <p className="text-sm">
-                      El comando <strong>#CIA</strong> es el núcleo del aprendizaje. Cuando lo usas en el chat, Samurai:
-                   </p>
-                   <ol className="list-decimal list-inside text-sm space-y-2">
-                      <li>Registra el error en <strong>Bitácora #CIA</strong>.</li>
-                      <li>Un humano (tú) debe ir a la Bitácora, editar la corrección para que sea clara y cambiar el estado a <strong>VALIDADA</strong>.</li>
-                      <li>Al hacer clic en "Sincronizar Cerebro", esa corrección se inyecta permanentemente en el Prompt Maestro.</li>
-                   </ol>
-                </CardContent>
-             </Card>
-          </TabsContent>
-
         </Tabs>
       </div>
     </Layout>

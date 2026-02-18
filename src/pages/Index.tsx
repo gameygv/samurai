@@ -43,7 +43,6 @@ const Index = () => {
     const chatChannel = supabase
       .channel('chats-dashboard')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'conversaciones' }, (payload) => {
-         // Cuando entra un mensaje nuevo, lo buscamos completo (con datos del lead) para mostrarlo bien
          fetchNewChatMessage(payload.new.id);
       })
       .subscribe();
@@ -89,16 +88,13 @@ const Index = () => {
         recentLogs: logsRes.data || []
       });
 
-      // Construcción del Gráfico de Aprendizaje
       if (versionsRes.data && versionsRes.data.length > 0) {
-        // Mapeamos las versiones reales de la DB
         const mappedData = versionsRes.data.map((v, i) => ({
           name: v.version_numero || `v${i}`,
-          accuracy: v.test_accuracy_nuevo || 70, // Si es null, asumimos base 70
+          accuracy: v.test_accuracy_nuevo || 70,
         }));
         setChartData(mappedData);
       } else {
-         // Datos simulados iniciales si no hay historial aún
          setChartData([
             { name: 'v0.1 (Base)', accuracy: 65 },
             { name: 'v0.2', accuracy: 72 },
@@ -211,9 +207,6 @@ const Index = () => {
                             </div>
                          </div>
                       ))}
-                      {recentChats.length === 0 && (
-                         <div className="p-10 text-center text-slate-600 text-xs italic">Esperando primera interacción...</div>
-                      )}
                    </div>
                 </CardContent>
              </Card>
@@ -242,10 +235,6 @@ const Index = () => {
                      <span className="text-slate-300 break-all">{log.description}</span>
                   </div>
                ))}
-               <div className="pt-2 flex items-center gap-2">
-                  <span className="w-2 h-4 bg-indigo-500 animate-pulse"></span>
-                  <span className="text-slate-700 italic">Listening for events...</span>
-               </div>
             </div>
           </Card>
         </div>
