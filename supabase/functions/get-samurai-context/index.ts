@@ -6,11 +6,15 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+// Valores por defecto por si la DB falla
 const DEFAULTS = {
   'prompt_core': `Eres Samurai, un asistente de ventas experto.`,
+  'prompt_technical': `Responde solo con texto plano.`,
   'prompt_behavior': `Sé breve y profesional.`,
   'prompt_objections': `Responde dudas con certeza.`,
   'prompt_psychology': `Adapta tu tono al cliente.`,
+  'prompt_data_injection': `Usa el nombre del cliente.`,
+  'prompt_closing_strategy': `Intenta cerrar la venta.`,
   'prompt_relearning': `` 
 };
 
@@ -82,7 +86,7 @@ serve(async (req) => {
        await supabaseClient.from('leads').update({ last_message_at: new Date().toISOString() }).eq('id', currentLeadId);
     }
 
-    // 2. PROMPTS
+    // 2. PROMPTS (CARGA DINÁMICA COMPLETA)
     const { data: configData } = await supabaseClient.from('app_config').select('key, value').eq('category', 'PROMPT');
     const prompts: Record<string, string> = { ...DEFAULTS };
     if (configData && configData.length > 0) {
@@ -128,7 +132,7 @@ serve(async (req) => {
         websiteContextBlock = websites.map(w => 
            `🌐 [WEB: ${w.title}]\n` +
            `   URL: ${w.external_link}\n` +
-           `   CUÁNDO COMPARTIR (Instrucción): ${w.description}\n` +
+           `   CUÁNDO COMPARTIR: ${w.description}\n` +
            `   DATOS CLAVE DEL SITIO: ${w.content ? w.content.substring(0, 1000) : 'Sin datos extraídos.'}`
         ).join('\n\n');
     }
@@ -137,7 +141,7 @@ serve(async (req) => {
     const { data: knowledgeDocs } = await supabaseClient
         .from('knowledge_documents')
         .select('title, content, description')
-        .neq('type', 'WEBSITE') // Excluimos webs aquí
+        .neq('type', 'WEBSITE')
         .order('created_at', { ascending: false })
         .limit(5);
 
@@ -161,44 +165,64 @@ serve(async (req) => {
         ).join('\n\n');
     }
 
-
+    // --- CONSTRUCCIÓN DEL PROMPT MAESTRO ---
+    // Aquí es donde inyectamos TODAS las variables para que el cerebro sea completo.
+    
     const fullSystemPrompt = `
-=== 🧠 IDENTIDAD & REGLAS DE MEMORIA ===
+=== 🧠 IDENTIDAD & CORE ===
 ${prompts['prompt_core']}
-- PROHIBICIÓN: No vuelvas a preguntar datos que ya conoces.
-- RECONOCIMIENTO: Si el cliente ya te habló antes, trátalo como conocido.
 
-=== 👤 PERFIL DEL CLIENTE ===
-Resumen: ${leadSummary}
-Mood: ${leadMood} | Intent: ${buyingIntent}
+=== 🛠️ FORMATO TÉCNICO ===
+${prompts['prompt_technical']}
+
+=== 📜 PROTOCOLOS & COMPORTAMIENTO ===
+${prompts['prompt_behavior']}
+${prompts['prompt_tone']}
+
+=== 🛡️ MATRIZ DE OBJECIONES ===
+${prompts['prompt_objections']}
+
+=== 🧬 MEMORIA & DATOS ===
+${prompts['prompt_data_injection']}
+${prompts['prompt_memory']}
+
+=== 👤 PERFIL DEL CLIENTE (CONTEXTO REAL) ===
+Nombre: ${lead_name || 'Desconocido'}
+Resumen Previo: ${leadSummary}
+Estado Emocional: ${leadMood}
+Intención Compra: ${buyingIntent}
 ${timeInstruction}
 
-=== 🌐 ECOSISTEMA DIGITAL (The Elephant Bowl) ===
-Estos son los sitios oficiales de Maestros y Talleres. Úsalos como FUENTE PRIMARIA de verdad.
-Si el cliente pregunta algo específico de un maestro, consulta los "DATOS CLAVE" aquí abajo.
-Si se cumple la instrucción "CUÁNDO COMPARTIR", envía la URL.
+=== 🔮 PSICOLOGÍA & ESTRATEGIA ===
+${prompts['prompt_psychology']}
+${prompts['prompt_closing_strategy']}
+${prompts['prompt_recommendations']}
 
+=== 🌐 FUENTES DE VERDAD (RAG) ===
+Usa esta información para responder preguntas sobre productos, talleres o maestros.
 ${websiteContextBlock}
-
-=== 📚 DOCUMENTACIÓN TÉCNICA (Instrumentos/Políticas) ===
 ${knowledgeContextBlock}
 
-=== 📸 MEDIA (Catálogos/Imágenes) ===
+=== 📸 MEDIA DISPONIBLE ===
+Si se cumple la regla, envía la URL sola en una línea nueva.
 ${mediaContextBlock}
 
-=== 🕰️ HISTORIAL RECIENTE ===
+=== 👁️ VISIÓN & VALIDACIÓN (Si aplica) ===
+${prompts['prompt_vision_analysis']}
+${prompts['prompt_match_validation']}
+${prompts['prompt_post_validation']}
+
+=== 🔄 RE-APRENDIZAJE (Correcciones Previas) ===
+${prompts['prompt_relearning']}
+
+=== 🕰️ HISTORIAL DE CHAT RECIENTE ===
 ${chatHistoryText}
 
-=== 📜 PROTOCOLOS ===
-${prompts['prompt_behavior']}
-${prompts['prompt_objections']}
-${prompts['prompt_psychology']}
-
-=== ⚡ PROTOCOLO DE SALIDA ===
-1. Prioriza la información de los SITIOS WEB para preguntas sobre Talleres y Maestros.
-2. Si compartes un link, hazlo de forma natural: "Puedes ver más detalles del Maestro Juan aquí: [URL]".
-3. AL FINAL, añade SIEMPRE el bloque de análisis:
-[[ANALYSIS: {"mood": "...", "intent": "...", "summary": "ACTUALIZA EL RESUMEN..."}]]
+=== ⚡ INSTRUCCIÓN FINAL ===
+1. Analiza el último mensaje del cliente.
+2. Decide tu respuesta basándote en la ESTRATEGIA DE CIERRE.
+3. AL FINAL de tu respuesta, añade SIEMPRE el bloque de análisis JSON oculto:
+[[ANALYSIS: {"mood": "...", "intent": "...", "summary": "Actualiza el resumen aquí..."}]]
     `;
 
     return new Response(
@@ -209,7 +233,8 @@ ${prompts['prompt_psychology']}
             time_gap: timeGapHours,
             has_summary: !!leadSummary,
             profile: { mood: leadMood, intent: buyingIntent },
-            website_sources: websites?.length || 0
+            website_sources: websites?.length || 0,
+            docs_sources: knowledgeDocs?.length || 0
         }
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

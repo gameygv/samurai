@@ -1,7 +1,7 @@
 import React from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { 
-  LayoutDashboard, Brain, Activity, Settings as SettingsIcon, Database, LogOut, 
+  LayoutDashboard, Brain, Settings as SettingsIcon, Database, LogOut, 
   Users, FileText, UserCircle, GraduationCap, MessageSquare, 
   GitBranch, Link as LinkIcon, Image, Sparkles, BookOpen
 } from 'lucide-react';
@@ -60,8 +60,7 @@ const Layout = ({ children }: LayoutProps) => {
       items: [
         { icon: Users, label: 'Usuarios', path: '/users' },
         { icon: MessageSquare, label: 'Leads & Chats', path: '/leads' },
-        { icon: Activity, label: 'Actividad', path: '/activity' },
-        { icon: FileText, label: 'Logs Sistema', path: '/logs' },
+        { icon: FileText, label: 'Logs & Actividad', path: '/logs' },
       ]
     },
     {
