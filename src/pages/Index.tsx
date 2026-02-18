@@ -3,6 +3,7 @@ import Layout from '@/components/Layout';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { SystemStatus } from '@/components/SystemStatus';
 import { 
   Database, Shield, Activity, Terminal, AlertTriangle, 
   CheckCircle2, MessageSquare, TrendingUp, Clock, Loader2,
@@ -212,31 +213,35 @@ const Index = () => {
              </Card>
           </div>
 
-          <Card className="lg:col-span-4 bg-black border-slate-800 font-mono text-[10px] shadow-2xl flex flex-col h-full rounded-xl overflow-hidden min-h-[500px]">
-            <div className="px-4 py-3 border-b border-slate-800 bg-slate-900/80 flex items-center justify-between">
-               <div className="flex items-center gap-2 text-slate-500">
-                  <Terminal className="w-4 h-4" />
-                  <span className="font-bold tracking-tighter uppercase">Kernel Logs</span>
-               </div>
-               <div className="flex gap-1">
-                  <div className="w-2 h-2 rounded-full bg-red-500/40"></div>
-                  <div className="w-2 h-2 rounded-full bg-yellow-500/40"></div>
-                  <div className="w-2 h-2 rounded-full bg-green-500/40"></div>
-               </div>
-            </div>
-            <div className="p-4 space-y-2 overflow-y-auto flex-1 custom-scrollbar">
-               <p className="text-green-500/60 mb-2">SAMURAI_OS [Version 0.801] (c) 2026 Dyad Systems.</p>
-               {stats.recentLogs.map((log, i) => (
-                  <div key={i} className="animate-in fade-in slide-in-from-left-2 duration-300 flex items-start gap-2">
-                     <span className="text-slate-600 shrink-0">[{new Date(log.created_at).toLocaleTimeString()}]</span> 
-                     <span className={`shrink-0 px-1 rounded h-fit ${log.action === 'ERROR' ? 'bg-red-500/20 text-red-400' : log.action === 'CHAT' ? 'bg-blue-500/20 text-blue-400' : 'bg-green-500/20 text-green-400'}`}>
-                        {log.action}
-                     </span> 
-                     <span className="text-slate-300 break-all">{log.description}</span>
-                  </div>
-               ))}
-            </div>
-          </Card>
+          <div className="lg:col-span-4 space-y-6">
+            <SystemStatus />
+
+            <Card className="bg-black border-slate-800 font-mono text-[10px] shadow-2xl flex flex-col rounded-xl overflow-hidden min-h-[400px]">
+              <div className="px-4 py-3 border-b border-slate-800 bg-slate-900/80 flex items-center justify-between">
+                 <div className="flex items-center gap-2 text-slate-500">
+                    <Terminal className="w-4 h-4" />
+                    <span className="font-bold tracking-tighter uppercase">Kernel Logs</span>
+                 </div>
+                 <div className="flex gap-1">
+                    <div className="w-2 h-2 rounded-full bg-red-500/40"></div>
+                    <div className="w-2 h-2 rounded-full bg-yellow-500/40"></div>
+                    <div className="w-2 h-2 rounded-full bg-green-500/40"></div>
+                 </div>
+              </div>
+              <div className="p-4 space-y-2 overflow-y-auto flex-1 custom-scrollbar">
+                 <p className="text-green-500/60 mb-2">SAMURAI_OS [Version 0.802] (c) 2026 Dyad Systems.</p>
+                 {stats.recentLogs.map((log, i) => (
+                    <div key={i} className="animate-in fade-in slide-in-from-left-2 duration-300 flex items-start gap-2">
+                       <span className="text-slate-600 shrink-0">[{new Date(log.created_at).toLocaleTimeString()}]</span> 
+                       <span className={`shrink-0 px-1 rounded h-fit ${log.action === 'ERROR' ? 'bg-red-500/20 text-red-400' : log.action === 'CHAT' ? 'bg-blue-500/20 text-blue-400' : 'bg-green-500/20 text-green-400'}`}>
+                          {log.action}
+                       </span> 
+                       <span className="text-slate-300 break-all">{log.description}</span>
+                    </div>
+                 ))}
+              </div>
+            </Card>
+          </div>
         </div>
       </div>
     </Layout>
