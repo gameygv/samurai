@@ -17,150 +17,69 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
-    const { message, lead_id, mode = 'LIVE' } = await req.json();
+    const { message, lead_id, kommo_id } = await req.json();
 
-    console.log(`[get-samurai-context] Processing message for lead: ${lead_id}`);
+    // 1. BUSCAR O CREAR EL LEAD POR KOMMO_ID
+    let lead = null;
+    if (lead_id) {
+        const { data } = await supabaseClient.from('leads').select('*').eq('id', lead_id).single();
+        lead = data;
+    } else if (kommo_id) {
+        const { data } = await supabaseClient.from('leads').select('*').eq('kommo_id', kommo_id).single();
+        lead = data;
+        
+        if (!lead) {
+            const { data: newLead } = await supabaseClient.from('leads').insert({
+                kommo_id: kommo_id,
+                nombre: 'Cliente de Kommo',
+                last_message_at: new Date().toISOString()
+            }).select().single();
+            lead = newLead;
+        }
+    }
 
-    // 1. CARGAR CONFIGURACIÓN DE PROMPTS
-    const { data: configData } = await supabaseClient
-        .from('app_config')
-        .select('key, value')
-        .eq('category', 'PROMPT');
-    
+    // 2. CARGAR CONFIGURACIÓN Y PROMPTS
+    const { data: configData } = await supabaseClient.from('app_config').select('key, value').eq('category', 'PROMPT');
     const prompts: any = {};
     configData?.forEach(i => prompts[i.key] = i.value);
 
-    // 2. CARGAR INFORMACIÓN DEL LEAD
-    let leadContext = "Nombre: Prospecto Anónimo\nUbicación: Desconocida";
-    if (lead_id) {
-        const { data: lead } = await supabaseClient.from('leads').select('*').eq('id', lead_id).single();
-        if (lead) {
-            leadContext = `
-NOMBRE DEL CLIENTE: ${lead.nombre || 'Desconocido'}
-CIUDAD/UBICACIÓN: ${lead.ciudad || 'No especificada'}
-INTENCIÓN DE COMPRA ACTUAL: ${lead.buying_intent || 'BAJA'}
-PERFIL PSICOLÓGICO DETECTADO: ${lead.perfil_psicologico || 'En análisis...'}
-RESUMEN DE MEMORIA (Lo que ya sabemos): ${lead.summary || 'Sin historial previo.'}
-ESTADO EMOCIONAL: ${lead.estado_emocional_actual || 'NEUTRO'}
-            `;
-        }
-    }
-
-    // 3. CARGAR HISTORIAL DE CONVERSACIÓN (MEMORIA PROFUNDA)
+    // 3. CARGAR HISTORIAL (MEMORIA)
     let conversationHistory = "";
-    if (lead_id) {
+    if (lead) {
         const { data: messages } = await supabaseClient
             .from('conversaciones')
             .select('emisor, mensaje, created_at')
-            .eq('lead_id', lead_id)
+            .eq('lead_id', lead.id)
             .order('created_at', { ascending: true })
-            .limit(30); // Últimos 30 mensajes
+            .limit(20);
 
-        if (messages && messages.length > 0) {
-            conversationHistory = "\n=== 💬 HISTORIAL DE CONVERSACIÓN (MEMORIA PROFUNDA) ===\n";
-            conversationHistory += "IMPORTANTE: Lee este historial COMPLETO antes de responder. NO repitas preguntas que ya hiciste.\n\n";
-            
+        if (messages?.length) {
+            conversationHistory = "\n=== 💬 HISTORIAL RECIENTE ===\n";
             messages.forEach(msg => {
-                const timestamp = new Date(msg.created_at).toLocaleTimeString();
-                conversationHistory += `[${timestamp}] ${msg.emisor}: ${msg.mensaje}\n`;
+                conversationHistory += `[${msg.emisor}]: ${msg.mensaje}\n`;
             });
-            
-            conversationHistory += "\n--- FIN DEL HISTORIAL ---\n";
-            conversationHistory += "INSTRUCCIÓN CRÍTICA: Continúa la conversación de forma natural. NO vuelvas a preguntar el nombre o la ciudad si ya los sabes.\n";
+            conversationHistory += "\n--- FIN HISTORIAL ---\n";
         }
     }
 
-    // 4. CARGAR SITIO WEB PRINCIPAL
-    const { data: mainWebsiteData } = await supabaseClient
-        .from('main_website_content')
-        .select('url, title, content')
-        .eq('scrape_status', 'success');
-
-    let mainWebsiteContext = "";
-    if (mainWebsiteData && mainWebsiteData.length > 0) {
-        mainWebsiteContext = "\n=== 📚 FUENTE DE VERDAD: SITIO PRINCIPAL (theelephantbowl.com) ===\n";
-        mainWebsiteData.forEach(page => {
-            mainWebsiteContext += `\n[${page.title} - ${page.url}]\n${page.content.substring(0, 1000)}\n`;
-        });
-    }
-
-    // 5. CARGAR BASE DE CONOCIMIENTO
-    const { data: knowledgeDocs } = await supabaseClient
-        .from('knowledge_documents')
-        .select('title, content, type, category');
-
-    let knowledgeContext = "";
-    if (knowledgeDocs && knowledgeDocs.length > 0) {
-        knowledgeContext = "\n=== 📖 RECURSOS ADICIONALES (Talleres/Maestros/Manuales) ===\n";
-        knowledgeDocs.forEach(doc => {
-            knowledgeContext += `\n[${doc.category}: ${doc.title}]\n${doc.content?.substring(0, 800) || 'Sin contenido indexado.'}\n`;
-        });
-    }
-
-    // 6. ENSAMBLAR EL PROMPT FINAL
+    // ENSAMBLAR PROMPT
     const fullSystemPrompt = `
-${prompts['prompt_adn_core'] || '# ADN CORE\nEres Samurai, un cerrador de elite.'}
-
-=== 🛡️ REGLAS TÉCNICAS Y FORMATO ===
-${prompts['prompt_tecnico'] || 'Responde siempre en texto plano.'}
-
-=== 📜 PROTOCOLOS DE ATENCIÓN ===
-${prompts['prompt_protocolos'] || ''}
-
-=== 🤺 MATRIZ DE OBJECIONES ===
-${prompts['prompt_objeciones'] || ''}
-
-=== 📊 CONTEXTO DEL NEGOCIO (SITIO WEB Y DOCUMENTOS) ===
-${mainWebsiteContext}
-${knowledgeContext}
-
-=== 🧩 PERFILADO Y PSICOLOGÍA ===
-${prompts['prompt_perfilado'] || ''}
-${prompts['prompt_tono'] || ''}
-${prompts['prompt_estrategia_cierre'] || ''}
-
-=== 🔄 MEMORIA Y RE-APRENDIZAJE (#CIA) ===
-${prompts['prompt_reaprendizaje'] || ''}
-${prompts['prompt_memoria'] || ''}
-${prompts['prompt_trigger_corregiria'] || ''}
-
-=== 📸 VISIÓN Y VALIDACIÓN DE PAGOS ===
-${prompts['prompt_ojo_halcon'] || ''}
-${prompts['prompt_match'] || ''}
-${prompts['prompt_accion_post'] || ''}
-
-=== 👤 CLIENTE ACTUAL ===
-${leadContext}
-
+${prompts['prompt_adn_core']}
+${prompts['prompt_tecnico']}
+CLIENTE ACTUAL: ${lead?.nombre || 'Desconocido'}
 ${conversationHistory}
-
-=== ⚡ INSTRUCCIÓN DE SALIDA CRÍTICA (MANDATORIO) ===
-1. Responde al cliente de forma DIRECTA, HUMANA y en TEXTO PLANO. 
-2. NO envíes un objeto JSON completo.
-3. Al FINAL de tu mensaje humano, añade OBLIGATORIAMENTE el bloque de análisis del sistema separado por una línea de guiones, usando este formato exacto:
-
----SYSTEM_ANALYSIS---
-{
-  "mood": "FELIZ|NEUTRO|ENOJADO",
-  "intent": "ALTO|MEDIO|BAJO",
-  "summary": "Resumen actualizado de la situación",
-  "handoff_required": false
-}
     `;
-
-    console.log(`[get-samurai-context] Context assembled. History length: ${conversationHistory.length} chars`);
 
     return new Response(
       JSON.stringify({ 
         system_prompt: fullSystemPrompt,
-        message_received: message,
+        lead_id: lead?.id, // Enviamos el UUID interno para el siguiente paso
         status: "ready"
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
 
-  } catch (error) {
-    console.error("[get-samurai-context] Error:", error);
+  } catch (error: any) {
     return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: corsHeaders })
   }
 })
