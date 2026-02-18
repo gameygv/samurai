@@ -21,11 +21,14 @@ const Index = () => {
   const [chartData, setChartData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [connectionStatus, setConnectionStatus] = useState<'checking' | 'connected' | 'error'>('checking');
+  const [latency, setLatency] = useState<number>(0);
 
   useEffect(() => {
     fetchData();
     fetchRecentChats();
+    measureLatency();
     
+    // Suscripción a Logs (Auditoría)
     const logChannel = supabase
       .channel('logs-dashboard')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'activity_logs' }, (payload) => {
@@ -36,10 +39,12 @@ const Index = () => {
       })
       .subscribe();
 
+    // Suscripción a Chats (Live Feed)
     const chatChannel = supabase
       .channel('chats-dashboard')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'conversaciones' }, (payload) => {
-         setRecentChats(prev => [payload.new, ...prev].slice(0, 5));
+         // Cuando entra un mensaje nuevo, lo buscamos completo (con datos del lead) para mostrarlo bien
+         fetchNewChatMessage(payload.new.id);
       })
       .subscribe();
 
@@ -48,6 +53,25 @@ const Index = () => {
        supabase.removeChannel(chatChannel); 
     };
   }, []);
+
+  const measureLatency = async () => {
+     const start = performance.now();
+     await supabase.from('profiles').select('count', { count: 'exact', head: true });
+     const end = performance.now();
+     setLatency(Math.round(end - start));
+  };
+
+  const fetchNewChatMessage = async (id: string) => {
+     const { data } = await supabase
+        .from('conversaciones')
+        .select('*, leads(nombre)')
+        .eq('id', id)
+        .single();
+     
+     if (data) {
+        setRecentChats(prev => [data, ...prev].slice(0, 5));
+     }
+  };
 
   const fetchData = async () => {
     try {
@@ -65,17 +89,22 @@ const Index = () => {
         recentLogs: logsRes.data || []
       });
 
+      // Construcción del Gráfico de Aprendizaje
       if (versionsRes.data && versionsRes.data.length > 0) {
-        setChartData(versionsRes.data.map((v, i) => ({
+        // Mapeamos las versiones reales de la DB
+        const mappedData = versionsRes.data.map((v, i) => ({
           name: v.version_numero || `v${i}`,
-          accuracy: v.test_accuracy_nuevo || 70 + (i * 5),
-        })));
+          accuracy: v.test_accuracy_nuevo || 70, // Si es null, asumimos base 70
+        }));
+        setChartData(mappedData);
       } else {
+         // Datos simulados iniciales si no hay historial aún
          setChartData([
-            { name: 'Inicio', accuracy: 70 },
-            { name: 'v0.1', accuracy: 72 },
-            { name: 'v0.5', accuracy: 78 },
-            { name: 'Actual', accuracy: 85 }
+            { name: 'v0.1 (Base)', accuracy: 65 },
+            { name: 'v0.2', accuracy: 72 },
+            { name: 'v0.3', accuracy: 78 },
+            { name: 'v0.4', accuracy: 82 },
+            { name: 'Actual', accuracy: 88 }
          ]);
       }
 
@@ -106,8 +135,10 @@ const Index = () => {
           </div>
           <div className="flex items-center gap-3 bg-slate-900/50 p-2 px-4 rounded-full border border-slate-800 shadow-inner">
             <div className={`w-2 h-2 rounded-full ${connectionStatus === 'connected' ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`}></div>
-            <span className="text-xs font-mono text-slate-300 uppercase tracking-widest">
+            <span className="text-xs font-mono text-slate-300 uppercase tracking-widest flex items-center gap-2">
                Core: {connectionStatus === 'connected' ? 'Synced' : 'Offline'}
+               <span className="text-slate-600">|</span>
+               {latency}ms
             </span>
           </div>
         </div>
@@ -116,7 +147,7 @@ const Index = () => {
           <StatCard title="Alertas IA" value={stats.totalErrors} icon={AlertTriangle} color="text-red-500" bg="bg-red-500/10" footer="#CORREGIRIA Detectados" />
           <StatCard title="Pendientes" value={stats.pendingCorrections} icon={Clock} color="text-yellow-500" bg="bg-yellow-500/10" footer="Mejoras por validar" />
           <StatCard title="Versiones" value={stats.activeVersions} icon={TrendingUp} color="text-indigo-500" bg="bg-indigo-500/10" footer="Evolución del Cerebro" />
-          <StatCard title="Base Datos" value="Online" icon={Database} color="text-emerald-500" bg="bg-emerald-500/10" footer="Latency: 42ms" />
+          <StatCard title="Base Datos" value="Online" icon={Database} color="text-emerald-500" bg="bg-emerald-500/10" footer="Supabase GIN Index" />
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
@@ -126,9 +157,9 @@ const Index = () => {
                <CardHeader className="border-b border-slate-800 bg-slate-950/30 flex flex-row items-center justify-between">
                   <CardTitle className="text-white text-lg flex items-center gap-2">
                      <TrendingUp className="w-5 h-5 text-indigo-400" /> 
-                     Curva de Aprendizaje
+                     Curva de Precisión (Accuracy)
                   </CardTitle>
-                  <Badge className="bg-indigo-600">Mejora Continua</Badge>
+                  <Badge className="bg-indigo-600">Aprendizaje Continuo</Badge>
                </CardHeader>
                <CardContent className="p-6 h-[250px] w-full">
                   <ResponsiveContainer width="100%" height="100%">
@@ -141,7 +172,7 @@ const Index = () => {
                         </defs>
                         <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
                         <XAxis dataKey="name" stroke="#64748b" fontSize={10} tickLine={false} axisLine={false} />
-                        <YAxis stroke="#64748b" fontSize={10} tickLine={false} axisLine={false} tickFormatter={(v) => `${v}%`} />
+                        <YAxis stroke="#64748b" fontSize={10} tickLine={false} axisLine={false} tickFormatter={(v) => `${v}%`} domain={[60, 100]} />
                         <Tooltip 
                            contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b', borderRadius: '8px' }}
                            itemStyle={{ color: '#818cf8', fontWeight: 'bold' }}
@@ -168,7 +199,10 @@ const Index = () => {
                             </div>
                             <div className="flex-1 min-w-0">
                                <div className="flex justify-between items-center mb-1">
-                                  <span className="text-[10px] font-bold text-slate-500 uppercase">{chat.leads?.nombre || 'Desconocido'}</span>
+                                  <span className="text-[10px] font-bold text-slate-500 uppercase flex items-center gap-1">
+                                     {chat.leads?.nombre || 'Desconocido'}
+                                     {chat.platform && <span className="text-[8px] bg-slate-800 px-1 rounded text-slate-400">{chat.platform}</span>}
+                                  </span>
                                   <span className="text-[10px] text-slate-600 font-mono">{new Date(chat.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
                                </div>
                                <p className="text-xs text-slate-300 line-clamp-2 leading-relaxed">

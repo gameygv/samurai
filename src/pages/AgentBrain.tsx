@@ -11,7 +11,7 @@ import {
   ShieldAlert, Database, History, MessageSquare, Gift, RefreshCw, 
   CheckCheck, Zap, FlaskConical, 
   Play, Loader2, Terminal, Info, BrainCircuit, Target, ScanEye,
-  AlertTriangle 
+  AlertTriangle, Phone
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { logActivity } from '@/utils/logger';
@@ -26,9 +26,7 @@ const DEFAULTS = {
   'prompt_tone': `# TONO ADAPTATIVO\nWhatsApp = Casual, emojis, audios (simulados con texto).\nCorreo = Formal, estructurado.`,
   'prompt_recommendations': `# UPSELLING\nSi compra X, ofrece Y con un 10% de descuento. Solo ofrece si la intención de compra es ALTA.`,
   'prompt_learning_trigger': `# TRIGGER APRENDIZAJE\nSi el humano interviene con #CORREGIRIA, analiza su feedback y ajusta tu comportamiento futuro.`,
-  'prompt_error_storage': `# ERROR LOGGING\nNo aplica al prompt de sistema directo, uso interno.`,
   'prompt_relearning': `# RE-APRENDIZAJE (MANDATORIO)\nLee las "LECCIONES APRENDIDAS" al final de este prompt. Son correcciones de errores pasados. TIENEN PRIORIDAD sobre cualquier otra instrucción.`,
-  'prompt_validation_improvement': `# VALIDACIÓN\nEl objetivo es reducir la fricción. Menos mensajes para llegar a la venta = Mejor desempeño.`,
   'prompt_vision_analysis': `# OJO DE HALCÓN\nBusca: Monto total, Fecha, CUIT/Razón Social. Si la imagen es borrosa, pide otra educadamente.`,
   'prompt_match_validation': `# MATCHING\nCompara el monto del comprobante con la deuda registrada. Margen de error aceptable: $5 pesos.`,
   'prompt_post_validation': `# POST-VALIDACIÓN\nSi coincide: "Pago recibido, gracias {nombre}. Tu pedido sale el {fecha}".`,
@@ -43,8 +41,11 @@ const AgentBrain = () => {
   const [historyVersions, setHistoryVersions] = useState<any[]>([]);
   const [activeVersionId, setActiveVersionId] = useState<string>("live");
   const [editorContent, setEditorContent] = useState("");
+  
+  // Test State
   const [testing, setTesting] = useState(false);
   const [testInput, setTestInput] = useState("");
+  const [testPhone, setTestPhone] = useState("5550001234");
   const [testOutput, setTestOutput] = useState<string | null>(null);
   const [testDebug, setTestDebug] = useState<any>(null);
 
@@ -120,6 +121,7 @@ const AgentBrain = () => {
             body: {
                 message: testInput,
                 lead_name: "Usuario de Prueba (Lab)",
+                lead_phone: testPhone, // IMPORTANTE: Enviamos teléfono para activar memoria
                 platform: "TEST_RUNNER"
             }
         });
@@ -336,12 +338,21 @@ const AgentBrain = () => {
                    <div className="flex-1 p-4 overflow-y-auto space-y-4">
                       {testDebug && (
                          <div className="mb-4 space-y-2 animate-in slide-in-from-top-2">
-                             {testDebug.rag_sources && testDebug.rag_sources.length > 0 && (
+                             <div className="bg-slate-800/50 border border-slate-700 p-2 rounded mb-2">
+                                <p className="text-[10px] text-slate-400 font-bold uppercase mb-1">Perfil Simulado:</p>
+                                <div className="flex gap-2">
+                                   <Badge variant="outline" className="text-[9px] h-4 px-1">{testDebug.profile?.mood || 'N/A'}</Badge>
+                                   <Badge variant="outline" className="text-[9px] h-4 px-1">{testDebug.profile?.intent || 'N/A'}</Badge>
+                                </div>
+                             </div>
+
+                             {testDebug.website_sources > 0 && (
                                  <div className="bg-emerald-900/20 border border-emerald-500/20 p-2 rounded">
-                                     <p className="text-[10px] text-emerald-400 font-bold uppercase mb-1 flex items-center gap-1"><Database className="w-3 h-3"/> RAG: Conocimiento Usado</p>
-                                     <ul className="list-disc list-inside text-[10px] text-emerald-200">
-                                        {testDebug.rag_sources.map((s: string, i: number) => <li key={i}>{s}</li>)}
-                                     </ul>
+                                     <p className="text-[10px] text-emerald-400 font-bold uppercase mb-1 flex items-center gap-1"><Database className="w-3 h-3"/> RAG Activado</p>
+                                     <p className="text-[10px] text-emerald-200">
+                                        Fuentes Web: {testDebug.website_sources} <br/>
+                                        Docs PDF: {testDebug.docs_sources}
+                                     </p>
                                  </div>
                              )}
                          </div>
@@ -349,7 +360,7 @@ const AgentBrain = () => {
 
                       {testOutput ? (
                          <div className="bg-slate-900 p-3 rounded border border-slate-700">
-                            <p className="text-[10px] text-slate-500 font-bold uppercase mb-2">System Prompt Result:</p>
+                            <p className="text-[10px] text-slate-500 font-bold uppercase mb-2">Prompt Generado:</p>
                             <p className="text-[10px] text-slate-300 font-mono leading-relaxed whitespace-pre-wrap h-64 overflow-y-auto custom-scrollbar">{testOutput}</p>
                          </div>
                       ) : (
@@ -357,9 +368,19 @@ const AgentBrain = () => {
                       )}
                    </div>
                    <div className="p-4 border-t border-slate-800 space-y-3">
-                      <Input placeholder="Input de prueba" value={testInput} onChange={e => setTestInput(e.target.value)} className="bg-slate-950 border-slate-800 text-xs" />
-                      <Button onClick={handleRunTest} disabled={testing} className="w-full bg-green-600 hover:bg-green-700 h-9">
-                         {testing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4 mr-2" />} Probar Prompt
+                      <div className="space-y-1">
+                         <label className="text-[10px] text-slate-500 uppercase">Teléfono (ID Memoria)</label>
+                         <div className="relative">
+                            <Phone className="absolute left-2 top-2 h-3 w-3 text-slate-500" />
+                            <Input value={testPhone} onChange={e => setTestPhone(e.target.value)} className="bg-slate-950 border-slate-800 text-xs h-8 pl-7" placeholder="555..." />
+                         </div>
+                      </div>
+                      <div className="space-y-1">
+                         <label className="text-[10px] text-slate-500 uppercase">Mensaje Cliente</label>
+                         <Input placeholder="Ej: Hola, quiero info..." value={testInput} onChange={e => setTestInput(e.target.value)} className="bg-slate-950 border-slate-800 text-xs h-8" />
+                      </div>
+                      <Button onClick={handleRunTest} disabled={testing} className="w-full bg-green-600 hover:bg-green-700 h-9 text-xs">
+                         {testing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4 mr-2" />} Simular Prompt
                       </Button>
                    </div>
                 </Card>
