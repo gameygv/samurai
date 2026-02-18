@@ -6,7 +6,7 @@ import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Search, BookOpen, Upload, Loader2, Globe } from 'lucide-react';
+import { Search, BookOpen, Upload, Loader2, Globe, RefreshCw, Zap } from 'lucide-react';
 import { toast } from 'sonner';
 import { CreateResourceDialog } from '@/components/knowledge/CreateResourceDialog';
 import { DocumentCard } from '@/components/knowledge/DocumentCard';
@@ -19,6 +19,7 @@ const KnowledgeBase = () => {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [activeCategory, setActiveCategory] = useState('all');
   const [syncingId, setSyncingId] = useState<string | null>(null);
+  const [syncingAll, setSyncingAll] = useState(false);
 
   useEffect(() => {
     fetchDocuments();
@@ -78,6 +79,32 @@ const KnowledgeBase = () => {
      }
   };
 
+  const handleSyncAll = async () => {
+     setSyncingAll(true);
+     toast.info("Iniciando sincronización masiva de sitios web...");
+     
+     try {
+        const { data, error } = await supabase.functions.invoke('auto-sync-knowledge', {});
+        
+        if (error) throw error;
+        
+        const successCount = data.results.filter((r: any) => r.status === 'ok').length;
+        const failCount = data.results.filter((r: any) => r.status === 'error').length;
+        
+        if (failCount > 0) {
+           toast.warning(`Sincronización finalizada. Éxito: ${successCount}, Errores: ${failCount}`);
+        } else {
+           toast.success(`¡Todo actualizado! ${successCount} sitios sincronizados.`);
+        }
+        
+        fetchDocuments();
+     } catch (err: any) {
+        toast.error(`Fallo en sincronización masiva: ${err.message}`);
+     } finally {
+        setSyncingAll(false);
+     }
+  };
+
   const handleDeleteDocument = async (id: string, title: string, filePath?: string) => {
     if (!confirm(`¿Eliminar "${title}"?`)) return;
 
@@ -134,10 +161,22 @@ const KnowledgeBase = () => {
             <p className="text-slate-400">Recursos de The Elephant Bowl (Talleres, Maestros e Instrumentos).</p>
           </div>
           
-          <Button className="bg-indigo-600 hover:bg-indigo-700 shadow-lg shadow-indigo-900/20" onClick={() => setIsDialogOpen(true)}>
-            <Upload className="w-4 h-4 mr-2" />
-            Nuevo Recurso
-          </Button>
+          <div className="flex gap-3">
+             <Button 
+                variant="outline" 
+                className="border-indigo-500/30 text-indigo-400 hover:bg-indigo-500/10"
+                onClick={handleSyncAll}
+                disabled={syncingAll}
+             >
+                {syncingAll ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />}
+                Sincronizar Todo
+             </Button>
+
+             <Button className="bg-indigo-600 hover:bg-indigo-700 shadow-lg shadow-indigo-900/20" onClick={() => setIsDialogOpen(true)}>
+               <Upload className="w-4 h-4 mr-2" />
+               Nuevo Recurso
+             </Button>
+          </div>
 
           <CreateResourceDialog 
              open={isDialogOpen} 
