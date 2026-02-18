@@ -12,7 +12,6 @@ import { Switch } from '@/components/ui/switch';
 import { Webhook, Key, Save, Loader2, ShoppingCart, Globe, ShieldAlert, Database, Eye, Sparkles, Clock, Zap, Calendar, Package } from 'lucide-react';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 const Settings = () => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -74,32 +73,49 @@ const Settings = () => {
   const handleSaveAll = async () => {
     setSaving(true);
     try {
+      // Guardar configuraciones generales
       const { error: configErr } = await supabase.from('app_config').upsert(configs);
       if (configErr) throw configErr;
 
+      // Guardar configuración de follow-ups
       const followupPayload = {
-        ...followupConfig,
+        enabled: followupConfig.enabled,
+        stage_1_delay: followupConfig.stage_1_delay,
+        stage_2_delay: followupConfig.stage_2_delay,
+        stage_3_delay: followupConfig.stage_3_delay,
+        auto_restart_delay: followupConfig.auto_restart_delay,
+        start_hour: followupConfig.start_hour,
+        end_hour: followupConfig.end_hour,
+        allowed_days: followupConfig.allowed_days,
+        stage_1_message: followupConfig.stage_1_message,
+        stage_2_message: followupConfig.stage_2_message,
+        stage_3_message: followupConfig.stage_3_message,
+        max_followup_stage: followupConfig.max_followup_stage,
         updated_at: new Date().toISOString()
       };
 
       if (followupConfig.id) {
-        const { error: followupErr } = await supabase
+        // Actualizar registro existente
+        const { error: updateErr } = await supabase
           .from('followup_config')
           .update(followupPayload)
           .eq('id', followupConfig.id);
-        if (followupErr) throw followupErr;
+        
+        if (updateErr) throw updateErr;
       } else {
+        // Crear nuevo registro
         const { data: newRecord, error: insertErr } = await supabase
           .from('followup_config')
           .insert(followupPayload)
           .select()
           .single();
+        
         if (insertErr) throw insertErr;
-        setFollowupConfig(newRecord);
+        if (newRecord) setFollowupConfig(newRecord);
       }
 
       toast.success('Configuración global actualizada correctamente');
-      fetchAllData();
+      await fetchAllData();
     } catch (err: any) {
       console.error("Save error:", err);
       toast.error(`Error al guardar: ${err.message}`);
