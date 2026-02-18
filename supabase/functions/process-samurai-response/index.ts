@@ -17,7 +17,7 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
-    const { ai_json_response, lead_id, raw_text } = await req.json();
+    const { ai_json_response, lead_id, raw_text, is_client_message } = await req.json();
 
     if (!lead_id) throw new Error("Lead ID is required");
 
@@ -54,7 +54,18 @@ serve(async (req) => {
         
         // Si la IA decide que necesita un humano
         if (analysisData.handoff_required === true) {
-            updateData.ai_paused = true; // Pausamos la IA automáticamente
+            updateData.ai_paused = true;
+            
+            // Obtener configuración de auto-restart
+            const { data: followupConfig } = await supabaseClient
+                .from('followup_config')
+                .select('auto_restart_delay')
+                .single();
+            
+            const delayMinutes = followupConfig?.auto_restart_delay || 30;
+            const restartTime = new Date(Date.now() + delayMinutes * 60 * 1000);
+            updateData.auto_restart_scheduled_at = restartTime.toISOString();
+            updateData.stop_requested_at = new Date().toISOString();
             
             // DISPARAR WEBHOOK A MAKE PARA AVISAR AL HUMANO
             const { data: config } = await supabaseClient
@@ -72,7 +83,8 @@ serve(async (req) => {
                         event: 'human_intervention_required',
                         lead_id: lead_id,
                         reason: analysisData.handoff_reason || 'Situación delicada',
-                        last_message: cleanText
+                        last_message: cleanText,
+                        auto_restart_at: restartTime.toISOString()
                     })
                 }).catch(err => console.error("Error calling handoff webhook:", err));
             }
@@ -81,10 +93,36 @@ serve(async (req) => {
         await supabaseClient.from('leads').update(updateData).eq('id', lead_id);
     }
 
-    // 2. GUARDAR CONVERSACIÓN
+    // 2. RESETEAR FOLLOW-UPS SI EL CLIENTE RESPONDE
+    if (is_client_message) {
+        await supabaseClient.from('leads').update({
+            followup_stage: 0,
+            next_followup_at: null,
+            last_message_at: new Date().toISOString()
+        }).eq('id', lead_id);
+    } else {
+        // Si es mensaje del bot, programar follow-up
+        const { data: followupConfig } = await supabaseClient
+            .from('followup_config')
+            .select('stage_1_delay, enabled')
+            .single();
+        
+        if (followupConfig?.enabled) {
+            const delayMinutes = followupConfig.stage_1_delay || 10;
+            const nextFollowup = new Date(Date.now() + delayMinutes * 60 * 1000);
+            
+            await supabaseClient.from('leads').update({
+                followup_stage: 1,
+                next_followup_at: nextFollowup.toISOString(),
+                last_bot_message_at: new Date().toISOString()
+            }).eq('id', lead_id);
+        }
+    }
+
+    // 3. GUARDAR CONVERSACIÓN
     await supabaseClient.from('conversaciones').insert({
         lead_id: lead_id,
-        emisor: 'SAMURAI',
+        emisor: is_client_message ? 'CLIENTE' : 'SAMURAI',
         mensaje: cleanText, 
         platform: 'API',
         metadata: { analysis: analysisData }
