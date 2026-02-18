@@ -19,25 +19,42 @@ const Settings = () => {
   const activeTab = searchParams.get('tab') || 'ecommerce';
   
   const [configs, setConfigs] = useState<any[]>([]);
-  const [followupConfig, setFollowupConfig] = useState<any>(null);
+  const [followupConfig, setFollowupConfig] = useState<any>({
+    enabled: false,
+    stage_1_delay: 15,
+    stage_2_delay: 60,
+    stage_3_delay: 1440,
+    auto_restart_delay: 30,
+    start_hour: 9,
+    end_hour: 20,
+    allowed_days: ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'],
+    stage_1_message: 'Hola {nombre}, ¿pudiste ver la información?',
+    stage_2_message: 'Hola {nombre}, sigo aquí por si tienes dudas.',
+    stage_3_message: 'Hola {nombre}, te escribo por última vez para saber si quieres avanzar.',
+    max_followup_stage: 3
+  });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    fetchConfigs();
-    fetchFollowupConfig();
+    fetchAllData();
   }, []);
 
-  const fetchConfigs = async () => {
+  const fetchAllData = async () => {
     setLoading(true);
-    const { data } = await supabase.from('app_config').select('*');
-    if (data) setConfigs(data);
-    setLoading(false);
-  };
+    try {
+      const [configRes, followupRes] = await Promise.all([
+        supabase.from('app_config').select('*'),
+        supabase.from('followup_config').select('*').single()
+      ]);
 
-  const fetchFollowupConfig = async () => {
-    const { data } = await supabase.from('followup_config').select('*').single();
-    if (data) setFollowupConfig(data);
+      if (configRes.data) setConfigs(configRes.data);
+      if (followupRes.data) setFollowupConfig(followupRes.data);
+    } catch (err) {
+      console.error("Fetch settings error", err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleInputChange = (key: string, value: string, category: string = 'SYSTEM') => {
@@ -52,27 +69,24 @@ const Settings = () => {
     setFollowupConfig((prev: any) => ({ ...prev, [key]: value }));
   };
 
-  const handleSave = async () => {
+  const handleSaveAll = async () => {
     setSaving(true);
     try {
-      const { error } = await supabase.from('app_config').upsert(configs);
-      if (error) throw error;
-      toast.success('Configuración global actualizada');
-    } catch (err: any) {
-      toast.error(err.message);
-    } finally {
-      setSaving(false);
-    }
-  };
+      // 1. Guardar App Config
+      const { error: configErr } = await supabase.from('app_config').upsert(configs);
+      if (configErr) throw configErr;
 
-  const handleSaveFollowup = async () => {
-    setSaving(true);
-    try {
-      const { error } = await supabase.from('followup_config').upsert(followupConfig);
-      if (error) throw error;
-      toast.success('Configuración de Follow-ups actualizada');
+      // 2. Guardar Followup Config
+      const { error: followupErr } = await supabase.from('followup_config').upsert({
+        ...followupConfig,
+        id: followupConfig.id || undefined // Asegurar que use el ID si existe para update
+      });
+      if (followupErr) throw followupErr;
+
+      toast.success('Configuración global actualizada correctamente');
+      fetchAllData();
     } catch (err: any) {
-      toast.error(err.message);
+      toast.error(`Error al guardar: ${err.message}`);
     } finally {
       setSaving(false);
     }
@@ -90,6 +104,8 @@ const Settings = () => {
     { value: 'sunday', label: 'Domingo' }
   ];
 
+  if (loading) return <Layout><div className="flex h-[80vh] items-center justify-center"><Loader2 className="animate-spin text-indigo-600 w-10 h-10" /></div></Layout>;
+
   return (
     <Layout>
       <div className="max-w-5xl mx-auto space-y-8 pb-12">
@@ -98,20 +114,21 @@ const Settings = () => {
             <h1 className="text-3xl font-bold text-white">Configuración del Sistema</h1>
             <p className="text-slate-400">Control de integraciones, webhooks y parámetros de negocio.</p>
           </div>
-          <Button onClick={activeTab === 'followups' ? handleSaveFollowup : handleSave} disabled={saving} className="bg-green-600 hover:bg-green-700 shadow-lg shadow-green-900/20 px-8">
+          <Button onClick={handleSaveAll} disabled={saving} className="bg-indigo-600 hover:bg-indigo-700 shadow-lg shadow-indigo-900/20 px-8">
             {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />} 
-            Guardar Cambios
+            Guardar Todo
           </Button>
         </div>
 
         <Tabs value={activeTab} onValueChange={v => setSearchParams({ tab: v })}>
-          <TabsList className="bg-slate-900 border border-slate-800 p-1">
+          <TabsList className="bg-slate-900 border border-slate-800 p-1 flex-wrap h-auto">
             <TabsTrigger value="ecommerce" className="data-[state=active]:bg-indigo-600"><ShoppingCart className="w-4 h-4 mr-2" /> E-commerce</TabsTrigger>
             <TabsTrigger value="followups" className="data-[state=active]:bg-indigo-600"><Clock className="w-4 h-4 mr-2" /> Follow-ups</TabsTrigger>
             <TabsTrigger value="webhooks" className="data-[state=active]:bg-indigo-600"><Webhook className="w-4 h-4 mr-2" /> Webhooks</TabsTrigger>
             <TabsTrigger value="secrets" className="data-[state=active]:bg-indigo-600"><Key className="w-4 h-4 mr-2" /> API Keys</TabsTrigger>
           </TabsList>
 
+          {/* TAB: E-COMMERCE */}
           <TabsContent value="ecommerce" className="mt-6 space-y-6">
              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <Card className="bg-slate-900 border-slate-800">
@@ -159,191 +176,151 @@ const Settings = () => {
              </div>
           </TabsContent>
 
+          {/* TAB: FOLLOW-UPS */}
           <TabsContent value="followups" className="mt-6 space-y-6">
-             {followupConfig && (
-               <>
-                 <Card className="bg-slate-900 border-slate-800 border-l-4 border-l-indigo-500">
-                   <CardHeader>
-                     <div className="flex items-center justify-between">
-                       <div>
+             <Card className="bg-slate-900 border-slate-800 border-l-4 border-l-indigo-500">
+                <CardHeader>
+                   <div className="flex items-center justify-between">
+                      <div>
                          <CardTitle className="text-white flex items-center gap-2">
-                           <Zap className="w-5 h-5 text-indigo-400" /> Sistema de Follow-up Automático
+                            <Zap className="w-5 h-5 text-indigo-400" /> Sistema de Follow-up Automático
                          </CardTitle>
                          <CardDescription>Configuración de reintentos inteligentes y auto-reactivación post #STOP</CardDescription>
-                       </div>
-                       <Switch 
-                         checked={followupConfig.enabled}
+                      </div>
+                      <Switch 
+                         checked={followupConfig?.enabled || false}
                          onCheckedChange={(checked) => handleFollowupChange('enabled', checked)}
-                       />
-                     </div>
-                   </CardHeader>
-                   <CardContent className="space-y-6">
-                     
-                     {/* Tiempos de Reintento */}
-                     <div className="space-y-4">
-                       <h4 className="text-sm font-bold text-white flex items-center gap-2">
-                         <Clock className="w-4 h-4 text-yellow-500" /> Tiempos de Reintento Escalonados
-                       </h4>
-                       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                         <div className="space-y-2">
-                           <Label className="text-xs text-slate-400">Stage 1 (minutos)</Label>
-                           <Input 
-                             type="number"
-                             value={followupConfig.stage_1_delay}
-                             onChange={e => handleFollowupChange('stage_1_delay', parseInt(e.target.value))}
-                             className="bg-slate-950 border-slate-800"
-                           />
-                           <p className="text-[9px] text-slate-600">Primer reintento si no responde</p>
-                         </div>
-                         <div className="space-y-2">
-                           <Label className="text-xs text-slate-400">Stage 2 (minutos)</Label>
-                           <Input 
-                             type="number"
-                             value={followupConfig.stage_2_delay}
-                             onChange={e => handleFollowupChange('stage_2_delay', parseInt(e.target.value))}
-                             className="bg-slate-950 border-slate-800"
-                           />
-                           <p className="text-[9px] text-slate-600">Segundo reintento</p>
-                         </div>
-                         <div className="space-y-2">
-                           <Label className="text-xs text-slate-400">Stage 3 (minutos)</Label>
-                           <Input 
-                             type="number"
-                             value={followupConfig.stage_3_delay}
-                             onChange={e => handleFollowupChange('stage_3_delay', parseInt(e.target.value))}
-                             className="bg-slate-950 border-slate-800"
-                           />
-                           <p className="text-[9px] text-slate-600">Último reintento</p>
-                         </div>
-                       </div>
-                     </div>
-
-                     {/* Auto-Restart */}
-                     <div className="space-y-4 bg-red-500/5 border border-red-500/20 rounded-lg p-4">
-                       <h4 className="text-sm font-bold text-white flex items-center gap-2">
-                         <Zap className="w-4 h-4 text-red-500" /> Auto-Reactivación Post #STOP
-                       </h4>
-                       <div className="space-y-2">
-                         <Label className="text-xs text-slate-400">Tiempo de espera (minutos)</Label>
+                      />
+                   </div>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                   
+                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="space-y-2">
+                         <Label className="text-xs text-slate-400">Stage 1 (minutos)</Label>
                          <Input 
-                           type="number"
-                           value={followupConfig.auto_restart_delay}
-                           onChange={e => handleFollowupChange('auto_restart_delay', parseInt(e.target.value))}
-                           className="bg-slate-950 border-slate-800"
+                            type="number"
+                            value={followupConfig?.stage_1_delay || 15}
+                            onChange={e => handleFollowupChange('stage_1_delay', parseInt(e.target.value))}
+                            className="bg-slate-950 border-slate-800"
                          />
-                         <p className="text-[9px] text-slate-500">Cuánto tiempo esperar después de #STOP antes de reactivar automáticamente</p>
-                       </div>
-                     </div>
+                      </div>
+                      <div className="space-y-2">
+                         <Label className="text-xs text-slate-400">Stage 2 (minutos)</Label>
+                         <Input 
+                            type="number"
+                            value={followupConfig?.stage_2_delay || 60}
+                            onChange={e => handleFollowupChange('stage_2_delay', parseInt(e.target.value))}
+                            className="bg-slate-950 border-slate-800"
+                         />
+                      </div>
+                      <div className="space-y-2">
+                         <Label className="text-xs text-slate-400">Stage 3 (minutos)</Label>
+                         <Input 
+                            type="number"
+                            value={followupConfig?.stage_3_delay || 1440}
+                            onChange={e => handleFollowupChange('stage_3_delay', parseInt(e.target.value))}
+                            className="bg-slate-950 border-slate-800"
+                         />
+                      </div>
+                   </div>
 
-                     {/* Horarios Permitidos */}
-                     <div className="space-y-4">
-                       <h4 className="text-sm font-bold text-white flex items-center gap-2">
-                         <Calendar className="w-4 h-4 text-green-500" /> Horarios Permitidos
-                       </h4>
-                       <div className="grid grid-cols-2 gap-4">
-                         <div className="space-y-2">
-                           <Label className="text-xs text-slate-400">Hora de Inicio</Label>
-                           <Select value={followupConfig.start_hour.toString()} onValueChange={v => handleFollowupChange('start_hour', parseInt(v))}>
-                             <SelectTrigger className="bg-slate-950 border-slate-800">
-                               <SelectValue />
-                             </SelectTrigger>
-                             <SelectContent className="bg-slate-900 border-slate-800 text-white">
-                               {Array.from({length: 24}, (_, i) => (
-                                 <SelectItem key={i} value={i.toString()}>{i}:00</SelectItem>
-                               ))}
-                             </SelectContent>
-                           </Select>
-                         </div>
-                         <div className="space-y-2">
-                           <Label className="text-xs text-slate-400">Hora de Fin</Label>
-                           <Select value={followupConfig.end_hour.toString()} onValueChange={v => handleFollowupChange('end_hour', parseInt(v))}>
-                             <SelectTrigger className="bg-slate-950 border-slate-800">
-                               <SelectValue />
-                             </SelectTrigger>
-                             <SelectContent className="bg-slate-900 border-slate-800 text-white">
-                               {Array.from({length: 24}, (_, i) => (
-                                 <SelectItem key={i} value={i.toString()}>{i}:00</SelectItem>
-                               ))}
-                             </SelectContent>
-                           </Select>
-                         </div>
-                       </div>
-                       
-                       <div className="space-y-2">
-                         <Label className="text-xs text-slate-400">Días Activos</Label>
-                         <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                           {daysOfWeek.map(day => (
-                             <label key={day.value} className="flex items-center gap-2 p-2 bg-slate-950 rounded border border-slate-800 cursor-pointer hover:border-indigo-500 transition-colors">
-                               <input 
-                                 type="checkbox"
-                                 checked={followupConfig.allowed_days?.includes(day.value)}
-                                 onChange={(e) => {
-                                   const newDays = e.target.checked 
-                                     ? [...(followupConfig.allowed_days || []), day.value]
-                                     : (followupConfig.allowed_days || []).filter((d: string) => d !== day.value);
-                                   handleFollowupChange('allowed_days', newDays);
-                                 }}
-                                 className="rounded"
-                               />
-                               <span className="text-xs text-slate-300">{day.label}</span>
-                             </label>
-                           ))}
-                         </div>
-                       </div>
-                     </div>
+                   <div className="space-y-4 bg-red-500/5 border border-red-500/20 rounded-lg p-4">
+                      <Label className="text-sm font-bold text-white flex items-center gap-2">
+                         <Zap className="w-4 h-4 text-red-500" /> Auto-Reactivación Post #STOP (minutos)
+                      </Label>
+                      <Input 
+                         type="number"
+                         value={followupConfig?.auto_restart_delay || 30}
+                         onChange={e => handleFollowupChange('auto_restart_delay', parseInt(e.target.value))}
+                         className="bg-slate-950 border-slate-800"
+                      />
+                   </div>
 
-                     {/* Mensajes Personalizados */}
-                     <div className="space-y-4">
-                       <h4 className="text-sm font-bold text-white">Mensajes de Follow-up</h4>
-                       <div className="space-y-3">
+                   <div className="space-y-4">
+                      <Label className="text-sm font-bold text-white">Horarios y Días Permitidos</Label>
+                      <div className="grid grid-cols-2 gap-4">
                          <div className="space-y-2">
-                           <Label className="text-xs text-slate-400">Mensaje Stage 1</Label>
-                           <Textarea 
-                             value={followupConfig.stage_1_message}
-                             onChange={e => handleFollowupChange('stage_1_message', e.target.value)}
-                             className="bg-slate-950 border-slate-800 text-xs h-16"
-                             placeholder="Usa {nombre} para personalizar"
-                           />
+                            <Label className="text-xs text-slate-400">Desde (H)</Label>
+                            <Input type="number" value={followupConfig?.start_hour || 9} onChange={e => handleFollowupChange('start_hour', parseInt(e.target.value))} className="bg-slate-950 border-slate-800" />
                          </div>
                          <div className="space-y-2">
-                           <Label className="text-xs text-slate-400">Mensaje Stage 2</Label>
-                           <Textarea 
-                             value={followupConfig.stage_2_message}
-                             onChange={e => handleFollowupChange('stage_2_message', e.target.value)}
-                             className="bg-slate-950 border-slate-800 text-xs h-16"
-                           />
+                            <Label className="text-xs text-slate-400">Hasta (H)</Label>
+                            <Input type="number" value={followupConfig?.end_hour || 20} onChange={e => handleFollowupChange('end_hour', parseInt(e.target.value))} className="bg-slate-950 border-slate-800" />
                          </div>
-                         <div className="space-y-2">
-                           <Label className="text-xs text-slate-400">Mensaje Stage 3</Label>
-                           <Textarea 
-                             value={followupConfig.stage_3_message}
-                             onChange={e => handleFollowupChange('stage_3_message', e.target.value)}
-                             className="bg-slate-950 border-slate-800 text-xs h-16"
-                           />
-                         </div>
-                       </div>
-                     </div>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                         {daysOfWeek.map(day => (
+                            <Button
+                               key={day.value}
+                               variant={followupConfig?.allowed_days?.includes(day.value) ? 'default' : 'outline'}
+                               size="sm"
+                               className="text-[10px] h-7"
+                               onClick={() => {
+                                  const current = followupConfig?.allowed_days || [];
+                                  const next = current.includes(day.value) 
+                                     ? current.filter((d:string) => d !== day.value)
+                                     : [...current, day.value];
+                                  handleFollowupChange('allowed_days', next);
+                               }}
+                            >
+                               {day.label}
+                            </Button>
+                         ))}
+                      </div>
+                   </div>
 
-                   </CardContent>
-                 </Card>
-               </>
-             )}
+                   <div className="space-y-4">
+                      <Label className="text-sm font-bold text-white">Mensajes de Reintento</Label>
+                      <div className="space-y-2">
+                         <Label className="text-[10px] text-slate-500">Stage 1</Label>
+                         <Textarea value={followupConfig?.stage_1_message || ''} onChange={e => handleFollowupChange('stage_1_message', e.target.value)} className="bg-slate-950 border-slate-800 text-xs h-16" />
+                      </div>
+                      <div className="space-y-2">
+                         <Label className="text-[10px] text-slate-500">Stage 2</Label>
+                         <Textarea value={followupConfig?.stage_2_message || ''} onChange={e => handleFollowupChange('stage_2_message', e.target.value)} className="bg-slate-950 border-slate-800 text-xs h-16" />
+                      </div>
+                      <div className="space-y-2">
+                         <Label className="text-[10px] text-slate-500">Stage 3</Label>
+                         <Textarea value={followupConfig?.stage_3_message || ''} onChange={e => handleFollowupChange('stage_3_message', e.target.value)} className="bg-slate-950 border-slate-800 text-xs h-16" />
+                      </div>
+                   </div>
+                </CardContent>
+             </Card>
           </TabsContent>
 
+          {/* TAB: WEBHOOKS */}
           <TabsContent value="webhooks" className="mt-6 space-y-6">
              <Card className="bg-slate-900 border-slate-800 border-l-4 border-l-yellow-500">
                 <CardHeader>
                    <CardTitle className="text-white flex items-center gap-2">
-                      <ShieldAlert className="w-5 h-5 text-yellow-500" /> Webhook Intervención Humana
+                      <Webhook className="w-5 h-5 text-yellow-500" /> Integraciones Make.com
                    </CardTitle>
-                   <CardDescription>Esta URL se disparará cuando el Samurai decida que un humano debe intervenir.</CardDescription>
                 </CardHeader>
-                <CardContent>
-                   <div className="space-y-2">
-                      <Label>Make.com Hook URL</Label>
+                <CardContent className="space-y-4">
+                   <div className="space-y-1">
+                      <Label className="text-xs text-slate-500">Webhook: Intervención Humana (#STOP)</Label>
                       <Input 
                         value={getValue('webhook_human_handoff')}
                         onChange={e => handleInputChange('webhook_human_handoff', e.target.value, 'WEBHOOK')}
+                        className="bg-slate-950 border-slate-800 font-mono text-xs"
+                        placeholder="https://hook.make.com/..."
+                      />
+                   </div>
+                   <div className="space-y-1">
+                      <Label className="text-xs text-slate-500">Webhook: Notificación Nuevo Lead</Label>
+                      <Input 
+                        value={getValue('webhook_new_lead')}
+                        onChange={e => handleInputChange('webhook_new_lead', e.target.value, 'WEBHOOK')}
+                        className="bg-slate-950 border-slate-800 font-mono text-xs"
+                        placeholder="https://hook.make.com/..."
+                      />
+                   </div>
+                   <div className="space-y-1">
+                      <Label className="text-xs text-slate-500">Webhook: Alerta de Error IA</Label>
+                      <Input 
+                        value={getValue('webhook_ai_error')}
+                        onChange={e => handleInputChange('webhook_ai_error', e.target.value, 'WEBHOOK')}
                         className="bg-slate-950 border-slate-800 font-mono text-xs"
                         placeholder="https://hook.make.com/..."
                       />
@@ -352,87 +329,47 @@ const Settings = () => {
              </Card>
           </TabsContent>
           
+          {/* TAB: SECRETS */}
           <TabsContent value="secrets" className="mt-6 space-y-6">
-             {/* GEMINI API - PRINCIPAL */}
-             <Card className="bg-slate-900 border-slate-800 border-l-4 border-l-blue-500">
-                <CardHeader>
-                   <CardTitle className="text-white flex items-center gap-2">
-                      <Sparkles className="w-5 h-5 text-blue-400" /> Google Gemini API
-                      <Badge className="bg-blue-600 text-xs">PRINCIPAL</Badge>
-                   </CardTitle>
-                   <CardDescription>
-                      API Key de Gemini para el procesamiento principal del Samurai.
-                   </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                   <div className="space-y-2">
-                      <Label className="text-blue-400 flex items-center gap-2">
-                         <Key className="w-4 h-4" /> Gemini API Key
-                      </Label>
-                      <Input 
-                        type="password"
-                        value={getValue('gemini_api_key')}
-                        onChange={e => handleInputChange('gemini_api_key', e.target.value, 'SECRETS')}
-                        className="bg-slate-950 border-blue-500/30 font-mono text-xs focus:border-blue-500"
-                        placeholder="AIza..."
-                      />
-                      <p className="text-[10px] text-slate-500 italic">
-                         Esta es la API principal que usa el Samurai para todas las conversaciones.
-                      </p>
-                   </div>
+             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <Card className="bg-slate-900 border-slate-800 border-l-4 border-l-blue-500">
+                   <CardHeader>
+                      <CardTitle className="text-white flex items-center gap-2">
+                         <Sparkles className="w-5 h-5 text-blue-400" /> Gemini API
+                      </CardTitle>
+                   </CardHeader>
+                   <CardContent>
+                      <div className="space-y-2">
+                         <Label className="text-xs text-slate-500">Gemini API Key</Label>
+                         <Input 
+                           type="password"
+                           value={getValue('gemini_api_key')}
+                           onChange={e => handleInputChange('gemini_api_key', e.target.value, 'SECRETS')}
+                           className="bg-slate-950 border-slate-800 font-mono text-xs"
+                         />
+                      </div>
+                   </CardContent>
+                </Card>
 
-                   <div className="bg-blue-500/10 border border-blue-500/20 rounded p-3 text-xs text-blue-400">
-                      <strong>ℹ️ Obtener API Key:</strong> Visita <a href="https://makersuite.google.com/app/apikey" target="_blank" className="underline">Google AI Studio</a> para generar tu clave.
-                   </div>
-                </CardContent>
-             </Card>
-
-             {/* OPENAI VISION - PENDIENTE */}
-             <Card className="bg-indigo-900/10 border-indigo-500/20 border-l-4 border-l-indigo-500">
-                <CardHeader>
-                   <CardTitle className="text-white flex items-center gap-2">
-                      <Eye className="w-5 h-5 text-indigo-400" /> OpenAI Vision API (Ojo de Halcón)
-                      <Badge className="bg-yellow-600 text-xs">PENDIENTE</Badge>
-                   </CardTitle>
-                   <CardDescription>
-                      Configuración para el análisis de comprobantes de pago mediante GPT-4 Vision.
-                   </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                   <div className="space-y-2">
-                      <Label className="text-indigo-400 flex items-center gap-2">
-                         <Sparkles className="w-4 h-4" /> OpenAI Vision API Key
-                      </Label>
-                      <Input 
-                        type="password"
-                        value={getValue('openai_vision_key')}
-                        onChange={e => handleInputChange('openai_vision_key', e.target.value, 'SECRETS')}
-                        className="bg-slate-950 border-indigo-500/30 font-mono text-xs focus:border-indigo-500"
-                        placeholder="sk-proj-..."
-                      />
-                      <p className="text-[10px] text-slate-500 italic">
-                         Esta API se usará exclusivamente para validar comprobantes de pago cuando el cliente envíe una imagen.
-                      </p>
-                   </div>
-
-                   <div className="bg-slate-950 border border-slate-800 rounded-lg p-4">
-                      <h4 className="text-xs font-bold text-white mb-2 flex items-center gap-2">
-                         <Eye className="w-3 h-3 text-indigo-400" /> Flujo del Ojo de Halcón
-                      </h4>
-                      <ol className="text-[10px] text-slate-400 space-y-1 list-decimal list-inside">
-                         <li>Cliente envía foto del comprobante</li>
-                         <li>GPT-4 Vision extrae: Monto, Fecha, CUIT/Razón Social</li>
-                         <li>Sistema compara con deuda registrada en Kommo</li>
-                         <li>Si coincide (±5 pesos): Confirma pago automáticamente</li>
-                         <li>Si no coincide: Escala a humano</li>
-                      </ol>
-                   </div>
-
-                   <div className="bg-yellow-500/10 border border-yellow-500/20 rounded p-3 text-xs text-yellow-400">
-                      <strong>⚠️ Estado:</strong> Infraestructura lista. Esperando instrucción para desarrollar la lógica de validación.
-                   </div>
-                </CardContent>
-             </Card>
+                <Card className="bg-slate-900 border-slate-800 border-l-4 border-l-indigo-500">
+                   <CardHeader>
+                      <CardTitle className="text-white flex items-center gap-2">
+                         <Eye className="w-5 h-5 text-indigo-400" /> OpenAI Vision
+                      </CardTitle>
+                   </CardHeader>
+                   <CardContent>
+                      <div className="space-y-2">
+                         <Label className="text-xs text-slate-500">OpenAI API Key (GPT-4V)</Label>
+                         <Input 
+                           type="password"
+                           value={getValue('openai_vision_key')}
+                           onChange={e => handleInputChange('openai_vision_key', e.target.value, 'SECRETS')}
+                           className="bg-slate-950 border-slate-800 font-mono text-xs"
+                         />
+                      </div>
+                   </CardContent>
+                </Card>
+             </div>
           </TabsContent>
         </Tabs>
       </div>
