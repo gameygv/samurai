@@ -6,7 +6,6 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-// Valores por defecto para fallback
 const DEFAULTS = {
   'prompt_core': `Eres Samurai, asistente experto de The Elephant Bowl. Tu misión es vender el anticipo de lugar de $1500.`,
   'prompt_technical': `Responde en texto plano.`,
@@ -29,86 +28,87 @@ serve(async (req) => {
 
     const { message, lead_name, lead_phone, lead_id, platform } = await req.json();
 
-    let currentLeadId = lead_id;
-    let leadMood = "NEUTRO";
-    let buyingIntent = "DESCONOCIDO";
-    let leadSummary = "";
-
-    // 1. OBTENER CONFIGURACIÓN COMPLETA
+    // 1. OBTENER CONFIGURACIÓN
     const { data: configData } = await supabaseClient.from('app_config').select('key, value');
     const configs: Record<string, string> = { ...DEFAULTS };
     if (configData) {
        configData.forEach((item: any) => { configs[item.key] = item.value; });
     }
 
-    // 2. IDENTIFICACIÓN DEL LEAD
-    if (!currentLeadId && lead_phone) {
-       const { data: existingLead } = await supabaseClient
-          .from('leads')
-          .select('*')
-          .eq('telefono', lead_phone)
-          .maybeSingle();
+    // 2. BUSQUEDA EN BASE DE CONOCIMIENTO (RAG SIMPLE)
+    // Buscamos palabras clave del mensaje en los documentos
+    const { data: knowledge } = await supabaseClient
+      .from('knowledge_documents')
+      .select('title, content, type, external_link')
+      .limit(3); 
+    
+    let knowledgeContext = knowledge?.map(d => 
+      `DOCUMENTO [${d.title}]: ${d.content?.substring(0, 1000)} ${d.external_link ? '(Link: ' + d.external_link + ')' : ''}`
+    ).join('\n\n') || "No hay documentos específicos encontrados.";
+
+    // 3. BUSQUEDA DE TRIGGERS EN MEDIA MANAGER
+    const { data: mediaTriggers } = await supabaseClient
+      .from('media_assets')
+      .select('title, url, ai_instructions')
+      .not('ai_instructions', 'is', null);
+
+    let mediaContext = mediaTriggers?.map(m => 
+      `MEDIA [${m.title}]: Si detectas que ${m.ai_instructions}, ofrece este link: ${m.url}`
+    ).join('\n') || "No hay disparadores de media activos.";
+
+    // 4. DATOS DEL LEAD
+    let currentLeadId = lead_id;
+    let leadMood = "NEUTRO";
+    let buyingIntent = "DESCONOCIDO";
+    let leadSummary = "";
+
+    if (lead_phone || lead_id) {
+       const query = supabaseClient.from('leads').select('*');
+       if (lead_id) query.eq('id', lead_id);
+       else query.eq('telefono', lead_phone);
        
-       if (existingLead) {
-          currentLeadId = existingLead.id;
-          leadMood = existingLead.estado_emocional_actual || "NEUTRO";
-          buyingIntent = existingLead.buying_intent || "BAJO";
-          leadSummary = existingLead.summary || "";
-       } else {
-          const { data: newLead } = await supabaseClient
-             .from('leads')
-             .insert({ nombre: lead_name || 'Prospecto', telefono: lead_phone, origen: platform || 'API' })
-             .select().single();
-          if (newLead) currentLeadId = newLead.id;
+       const { data: lead } = await query.maybeSingle();
+       if (lead) {
+          currentLeadId = lead.id;
+          leadMood = lead.estado_emocional_actual;
+          buyingIntent = lead.buying_intent;
+          leadSummary = lead.summary;
        }
     }
 
-    // 3. GENERAR LINK DE PAGO DINÁMICO
     const checkoutUrl = `${configs['shop_base_url']}?add-to-cart=${configs['reservation_product_id']}`;
 
-    // 4. CONSTRUCCIÓN DEL PROMPT MAESTRO (THE ELEPHANT BOWL EDITION)
     const fullSystemPrompt = `
 === 🧠 IDENTIDAD ELEPHANT BOWL ===
 ${configs['prompt_core']}
-Tu objetivo máximo: Que el cliente aparte su lugar hoy mismo.
-Producto: Anticipo de lugar para talleres/cursos.
-Precio: $1500 MXN.
+Objetivo: Vender anticipo de $1500 MXN.
 
-=== 🔗 LINK DE PAGO DIRECTO ===
-Cuando el cliente esté listo para apartar o pida cómo pagar, envía EXCLUSIVAMENTE este link:
+=== 📚 CONOCIMIENTO ESPECÍFICO (RAG) ===
+Usa esta información técnica para responder dudas:
+${knowledgeContext}
+
+=== 📸 DISPARADORES MULTIMEDIA ===
+${mediaContext}
+
+=== 🔗 LINK DE VENTA ===
 ${checkoutUrl}
 
-=== 📜 COMPORTAMIENTO Y VENTAS ===
+=== 📜 COMPORTAMIENTO ===
 ${configs['prompt_behavior']}
 ${configs['prompt_objections']}
 
-=== 🧬 CONTEXTO DEL CLIENTE ===
-Nombre: ${lead_name || 'Prospecto'}
-Mood: ${leadMood}
-Intención: ${buyingIntent}
-Resumen Previo: ${leadSummary}
+=== 🧬 CONTEXTO CLIENTE ===
+Nombre: ${lead_name || 'Prospecto'} | Mood: ${leadMood} | Intención: ${buyingIntent}
+Resumen: ${leadSummary}
 
-=== 🔮 PSICOLOGÍA Y CIERRE ===
-${configs['prompt_psychology']}
-${configs['prompt_closing_strategy']}
-
-=== ⚡ INSTRUCCIÓN CRÍTICA ===
-1. Eres la voz de The Elephant Bowl. 
-2. Si el cliente pregunta por un taller específico, usa la información de la web (https://theelephantbowl.com).
-3. NO des rodeos. Si detectas interés, ofrece el anticipo de $1500.
-4. Siempre termina con el bloque de análisis:
+=== ⚡ REGLA DE ORO ===
+Sé directo. Si el cliente tiene dudas sobre talleres, usa el conocimiento arriba. Si está listo, envía el link de $1500.
+Finaliza siempre con:
 [[ANALYSIS: {"mood": "...", "intent": "...", "summary": "..."}]]
     `;
 
     return new Response(
-      JSON.stringify({
-        lead_id: currentLeadId,
-        system_prompt: fullSystemPrompt,
-        debug: {
-            checkout_link: checkoutUrl,
-            product_id: configs['reservation_product_id']
-        }
-      }),
+      JSON.stringify({ lead_id: currentLeadId, system_prompt: fullSystemPrompt }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
 
