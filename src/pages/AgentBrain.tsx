@@ -17,21 +17,21 @@ import { toast } from 'sonner';
 import { logActivity } from '@/utils/logger';
 
 const DEFAULTS = {
-  'prompt_core': `# ADN CORE\nEres Samurai, un asistente de ventas de elite. Tu misión es filtrar curiosos, calificar leads y cerrar ventas. Eres directo, eficiente pero educado.`,
-  'prompt_technical': `# FORMATO DE RESPUESTA\nIMPORTANTE: Responde solo con texto plano. Si recibes el comando #STOP, despídete y no respondas más. Si recibes #START, retoma la conversación analizando el contexto previo.`,
-  'prompt_behavior': `# PROTOCOLOS\nSaluda brevemente. No seas redundante. Si el cliente pregunta precio, dalo y termina con una pregunta de cierre.`,
-  'prompt_objections': `# MATRIZ DE OBJECIONES\nSi dice "caro" -> Resalta valor/durabilidad.\nSi dice "lo pienso" -> Pregunta qué le detiene.\nSi dice "competencia" -> No hables mal, resalta nuestra garantía.`,
-  'prompt_data_injection': `# INYECCIÓN DE DATOS\nUsa los datos del contexto (Nombre, Ciudad) para personalizar. "Hola {nombre}" es mejor que "Hola".`,
-  'prompt_memory': `# MEMORIA\nRevisa los últimos mensajes. Si ya te dijo su nombre, no lo preguntes. Si ya le diste el precio, no lo repitas a menos que lo pida.`,
-  'prompt_tone': `# TONO ADAPTATIVO\nWhatsApp = Casual, emojis, audios (simulados con texto).\nCorreo = Formal, estructurado.`,
-  'prompt_recommendations': `# UPSELLING\nSi compra X, ofrece Y con un 10% de descuento. Solo ofrece si la intención de compra es ALTA.`,
-  'prompt_learning_trigger': `# TRIGGER #CIA (CORRECCIÓN)\nSi el humano escribe "#CIA [instrucción]", esto es una ORDEN DE CORRECCIÓN SUPREMA. Analiza qué hiciste mal en el mensaje anterior, internaliza la regla y confima que has aprendido la lección para el futuro.`,
-  'prompt_relearning': `# RE-APRENDIZAJE (MANDATORIO)\nLee las "LECCIONES APRENDIDAS" al final de este prompt. Son correcciones #CIA validadas. TIENEN PRIORIDAD sobre cualquier otra instrucción.`,
-  'prompt_vision_analysis': `# OJO DE HALCÓN\nBusca: Monto total, Fecha, CUIT/Razón Social. Si la imagen es borrosa, pide otra educadamente.`,
-  'prompt_match_validation': `# MATCHING\nCompara el monto del comprobante con la deuda registrada. Margen de error aceptable: $5 pesos.`,
-  'prompt_post_validation': `# POST-VALIDACIÓN\nSi coincide: "Pago recibido, gracias {nombre}. Tu pedido sale el {fecha}".`,
-  'prompt_psychology': `# PERFILADO PSICOLÓGICO\nAnaliza el texto del cliente. \n- Usa muchas exclamaciones? -> EMOCIONAL.\n- Pregunta datos técnicos? -> PRAGMÁTICO.\n- Se queja del tiempo? -> IMPACIENTE.\nAdapta tu respuesta a su perfil. Al Pragmático dale datos, al Emocional dale experiencia.`,
-  'prompt_closing_strategy': `# ESTRATEGIA DE CIERRE\nTu objetivo es mover al lead en el Funnel. \nEtapa Inicial -> Calificar.\nEtapa Interés -> Cotizar.\nEtapa Cierre -> Pedir pago.\nIdentifica en qué etapa está y empújalo a la siguiente.`
+  'prompt_core': `# ADN SAMURAI - THE ELEPHANT BOWL\nEres el cerrador estrella de The Elephant Bowl. Tu misión es vender los cursos y talleres de Sonoterapia y Cuencos. Tu producto estrella es el "Anticipo para apartar lugar" que vale $1500 MXN. Eres experto en la web https://theelephantbowl.com.`,
+  'prompt_technical': `# FORMATO Y CONTROL\nResponde solo texto plano. Usa #STOP para pausar y #START para volver. Genera el link de pago usando el PRODUCT_ID configurado: https://theelephantbowl.com/finalizar-compra/?add-to-cart=[ID]`,
+  'prompt_behavior': `# PROTOCOLO DE VENTA\nSaluda con energía. Informa sobre los beneficios de los talleres. Si el cliente duda, recalca que los lugares son limitados y debe "apartar su lugar" ahora mismo con el anticipo de $1500.`,
+  'prompt_objections': `# CIERRE Y OBJECIONES\nSi dicen que es caro: "Es una inversión en tu bienestar y formación profesional".\nSi dicen "lo veo luego": "Los cupos se agotan rápido, te recomiendo apartar tu lugar con los $1500 hoy mismo".`,
+  'prompt_data_injection': `# PERSONALIZACIÓN\nUsa siempre el nombre del cliente. "Hola {nombre}, qué gusto que te intereses en la Sonoterapia".`,
+  'prompt_memory': `# MEMORIA ACTIVA\nRecuerda qué taller le interesó. No repitas información que ya leyó en la web.`,
+  'prompt_tone': `# TONO ELEPHANT BOWL\nCálido, místico pero profesional y MUY orientado a resultados (ventas).`,
+  'prompt_recommendations': `# UPSELLING\nUna vez que paguen el anticipo, menciona que pueden adquirir sus cuencos con descuento el día del curso.`,
+  'prompt_learning_trigger': `# TRIGGER #CIA\nSi recibes #CIA, es una corrección de tu Maestro. Apréndela y aplícala inmediatamente.`,
+  'prompt_relearning': `# LECCIONES VALIDADAS\nPrioriza estas reglas sobre todo lo demás.`,
+  'prompt_vision_analysis': `# VALIDACIÓN DE PAGOS\nSi envían comprobante, busca: Monto ($1500), Concepto y Fecha.`,
+  'prompt_match_validation': `# MATCHING\nConfirma que el depósito sea de $1500 para el apartado de lugar.`,
+  'prompt_post_validation': `# POST-PAGO\n"¡Lugar asegurado! Gracias {nombre}. Nos vemos en el taller. Te enviaré los detalles de ubicación ahora."`,
+  'prompt_psychology': `# PERFILADO\nIdentifica si es un profesional de salud (pragmático) o alguien buscando sanación (emocional) y adapta el pitch de venta.`,
+  'prompt_closing_strategy': `# ESTRATEGIA DE CIERRE\nNo dejes que la charla muera. Si no responde en 24h, haz seguimiento. Tu meta es que haga clic en el link de pago de $1500.`
 };
 
 const AgentBrain = () => {
@@ -101,8 +101,8 @@ const AgentBrain = () => {
       }));
       const { error } = await supabase.from('app_config').upsert(updates);
       if (error) throw error;
-      await logActivity({ action: 'UPDATE', resource: 'BRAIN', description: 'Actualización de matriz de prompts', status: 'OK' });
-      toast.success('Configuración guardada.');
+      await logActivity({ action: 'UPDATE', resource: 'BRAIN', description: 'Actualización de matriz de prompts para The Elephant Bowl', status: 'OK' });
+      toast.success('Cerebro actualizado para ventas.');
     } catch (error: any) {
       toast.error(error.message);
     } finally {
@@ -120,19 +120,19 @@ const AgentBrain = () => {
         const { data, error } = await supabase.functions.invoke('get-samurai-context', {
             body: {
                 message: testInput,
-                lead_name: "Usuario de Prueba (Lab)",
+                lead_name: "Usuario de Prueba",
                 lead_phone: testPhone, 
-                platform: "TEST_RUNNER"
+                platform: "LAB"
             }
         });
 
         if (error) throw error;
         setTestOutput(data.system_prompt || "No se generó contexto.");
         setTestDebug(data.debug);
-        toast.success("Contexto generado exitosamente.");
+        toast.success("Prueba completada.");
     } catch (error: any) {
         setTestOutput(`Error: ${error.message}`);
-        toast.error("Error al invocar Edge Function.");
+        toast.error("Error en simulación.");
     } finally {
         setTesting(false);
     }
@@ -145,12 +145,12 @@ const AgentBrain = () => {
       <div className="max-w-7xl mx-auto space-y-8 pb-12">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-white mb-2">Cerebro del Samurai</h1>
-            <p className="text-slate-400">La inteligencia se divide en 4 pilares maestros. Configúralos con precisión.</p>
+            <h1 className="text-3xl font-bold text-white mb-2">Cerebro Samurai: The Elephant Bowl</h1>
+            <p className="text-slate-400">Configuración maestra para venta de anticipos ($1500).</p>
           </div>
           <Button onClick={handleSave} disabled={saving} className="bg-red-600 hover:bg-red-700">
              {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
-             Guardar Cambios
+             Guardar Estrategia
           </Button>
         </div>
 
@@ -166,30 +166,30 @@ const AgentBrain = () => {
           <TabsContent value="part1" className="mt-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <PromptCard 
-                title="1.1 ADN Core" 
+                title="1.1 ADN Elephant Bowl" 
                 icon={Bot} 
-                description="Aquí defines la esencia del bot. Su nombre, su rol como Samurai, y los valores innegociables de la marca."
+                description="Esencia de la marca y objetivo de venta ($1500)."
                 value={prompts['prompt_core']} 
                 onChange={(v: string) => handlePromptChange('prompt_core', v)} 
               />
               <PromptCard 
-                title="1.2 Técnico (Texto Plano)" 
+                title="1.2 Generador de Links" 
                 icon={Hammer} 
-                description="Formato de respuesta y manejo de comandos #STOP / #START."
+                description="Lógica para crear links de compra directa de WooCommerce."
                 value={prompts['prompt_technical']} 
                 onChange={(v: string) => handlePromptChange('prompt_technical', v)} 
               />
               <PromptCard 
                 title="1.3 Protocolos" 
                 icon={ScrollText} 
-                description="Define cómo reacciona ante saludos, despedidas o situaciones estándar."
+                description="Saludos y manejo de la urgencia."
                 value={prompts['prompt_behavior']} 
                 onChange={(v: string) => handlePromptChange('prompt_behavior', v)} 
               />
               <PromptCard 
-                title="1.4 Objeciones" 
+                title="1.4 Rebatir Objeciones" 
                 icon={ShieldAlert} 
-                description="Matriz de combate. Instrucciones para dar la vuelta a dudas sobre precios, tiempos de entrega o competencia."
+                description="Cómo insistir para cerrar el apartado de lugar."
                 value={prompts['prompt_objections']} 
                 onChange={(v: string) => handlePromptChange('prompt_objections', v)} 
               />
@@ -199,30 +199,30 @@ const AgentBrain = () => {
           <TabsContent value="part2" className="mt-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <PromptCard 
-                title="2.1 Datos CRM" 
+                title="2.1 Datos Cliente" 
                 icon={Database} 
-                description="Cómo usar la información de Kommo. Cómo llamar al cliente por su nombre."
+                description="Personalización basada en CRM."
                 value={prompts['prompt_data_injection']} 
                 onChange={(v: string) => handlePromptChange('prompt_data_injection', v)} 
               />
               <PromptCard 
                 title="2.2 Memoria" 
                 icon={History} 
-                description="Reglas para que la IA no olvide lo que se dijo hace 5 minutos."
+                description="Recordar qué talleres visitó en la web."
                 value={prompts['prompt_memory']} 
                 onChange={(v: string) => handlePromptChange('prompt_memory', v)} 
               />
               <PromptCard 
                 title="2.3 Tono" 
                 icon={MessageSquare} 
-                description="Cómo sonar empático si el cliente está frustrado o profesional si el cliente es pragmático."
+                description="Tono místico pero comercial."
                 value={prompts['prompt_tone']} 
                 onChange={(v: string) => handlePromptChange('prompt_tone', v)} 
               />
               <PromptCard 
                 title="2.4 Upselling" 
                 icon={Gift} 
-                description="Lógica comercial. ¿Cuándo debe intentar vender algo más?"
+                description="Venta de cuencos post-apartado."
                 value={prompts['prompt_recommendations']} 
                 onChange={(v: string) => handlePromptChange('prompt_recommendations', v)} 
               />
@@ -233,9 +233,9 @@ const AgentBrain = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="md:col-span-2">
                  <PromptCard 
-                   title="3.1 Perfilado Psicológico" 
+                   title="3.1 Perfilado Emocional" 
                    icon={BrainCircuit} 
-                   description="Instrucciones para que la IA analice la personalidad del cliente basándose en su forma de escribir."
+                   description="Analizar la necesidad de sanación del cliente."
                    value={prompts['prompt_psychology']} 
                    onChange={(v: string) => handlePromptChange('prompt_psychology', v)} 
                    height="h-[120px]"
@@ -244,21 +244,21 @@ const AgentBrain = () => {
               <PromptCard 
                 title="3.2 Estrategia de Cierre" 
                 icon={Target} 
-                description="Cómo mover al lead a través del embudo. Identificar si está 'tibio' o 'caliente'."
+                description="Empujar al link de pago de $1500."
                 value={prompts['prompt_closing_strategy']} 
                 onChange={(v: string) => handlePromptChange('prompt_closing_strategy', v)} 
               />
               <PromptCard 
                 title="3.3 Re-Aprendizaje (#CIA)" 
                 icon={RefreshCw} 
-                description="Cómo integrar las lecciones aprendidas validadas desde el Learning Log."
+                description="Lecciones del Maestro sobre cómo vender mejor."
                 value={prompts['prompt_relearning']} 
                 onChange={(v: string) => handlePromptChange('prompt_relearning', v)} 
               />
               <PromptCard 
                 title="3.4 Trigger #CIA" 
                 icon={AlertTriangle} 
-                description="Instrucción maestra para que el bot obedezca las correcciones en tiempo real."
+                description="Orden de corrección en tiempo real."
                 value={prompts['prompt_learning_trigger']} 
                 onChange={(v: string) => handlePromptChange('prompt_learning_trigger', v)} 
               />
@@ -269,25 +269,25 @@ const AgentBrain = () => {
              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="md:col-span-2">
                  <PromptCard 
-                   title="4.1 Ojo de Halcón (Análisis de Imagen)" 
+                   title="4.1 Validación de Comprobantes" 
                    icon={ScanEye} 
-                   description="La joya de la corona. Define cómo la IA debe 'mirar' una foto."
+                   description="Verificar transferencias de $1500."
                    value={prompts['prompt_vision_analysis']} 
                    onChange={(v: string) => handlePromptChange('prompt_vision_analysis', v)} 
                    height="h-[250px]" 
                  />
               </div>
               <PromptCard 
-                title="4.2 Match" 
+                title="4.2 Match de Pago" 
                 icon={CheckCheck} 
-                description="Cómo comparar el texto extraído de la imagen con la deuda real del cliente."
+                description="Validar que el monto coincida con el apartado."
                 value={prompts['prompt_match_validation']} 
                 onChange={(v: string) => handlePromptChange('prompt_match_validation', v)} 
               />
               <PromptCard 
-                title="4.3 Acción Post" 
+                title="4.3 Confirmación" 
                 icon={Zap} 
-                description="Qué hacer inmediatamente después de validar un pago. Confirmar o pasar a un humano."
+                description="Mensaje post-pago exitoso."
                 value={prompts['prompt_post_validation']} 
                 onChange={(v: string) => handlePromptChange('prompt_post_validation', v)} 
               />
@@ -296,79 +296,30 @@ const AgentBrain = () => {
 
           <TabsContent value="part5" className="mt-6">
              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 h-[700px]">
-                <Card className="lg:col-span-3 bg-slate-900 border-slate-800 flex flex-col overflow-hidden">
-                   <div className="p-4 bg-slate-950/50 border-b border-slate-800 font-bold text-xs uppercase tracking-widest text-slate-500">Historial de Versiones</div>
-                   <div className="flex-1 overflow-y-auto">
-                      <div 
-                         className={`p-4 border-b border-slate-800 cursor-pointer hover:bg-slate-800 transition-colors ${activeVersionId === 'live' ? 'bg-red-600/10 border-l-4 border-red-600' : ''}`}
-                         onClick={() => { setActiveVersionId('live'); setEditorContent(prompts['prompt_core'] || ''); }}
-                      >
-                         <div className="text-white font-bold">VERSION LIVE</div>
-                         <div className="text-[10px] text-green-500 flex items-center gap-1 mt-1"><CheckCheck className="w-3 h-3"/> En Producción</div>
-                      </div>
-                      {historyVersions.map(v => (
-                         <div 
-                            key={v.id} 
-                            className={`p-4 border-b border-slate-800 cursor-pointer hover:bg-slate-800 transition-colors ${activeVersionId === v.id ? 'bg-indigo-900/20 border-l-4 border-indigo-600' : ''}`}
-                            onClick={() => { setActiveVersionId(v.id); setEditorContent(v.content); }}
-                         >
-                            <div className="text-slate-300 font-mono text-xs">{v.version_numero}</div>
-                            <div className="text-[10px] text-slate-500 mt-1">{new Date(v.created_at).toLocaleDateString()}</div>
-                         </div>
-                      ))}
+                {/* Historial y Editor (Simplificado para el demo) */}
+                <Card className="lg:col-span-12 bg-slate-900 border-slate-800 flex flex-col p-6">
+                   <div className="flex justify-between items-center mb-4">
+                      <h3 className="text-white font-bold flex items-center gap-2"><FlaskConical className="w-5 h-5 text-indigo-500" /> Laboratorio de Pruebas</h3>
                    </div>
-                </Card>
-
-                <Card className="lg:col-span-6 bg-slate-900 border-slate-800 flex flex-col">
-                   <div className="p-4 border-b border-slate-800 bg-slate-950 flex justify-between items-center">
-                      <h3 className="text-white font-bold flex items-center gap-2">
-                         {activeVersionId === 'live' ? 'Editor Principal' : `Visor: ${historyVersions.find(v => v.id === activeVersionId)?.version_numero}`}
-                      </h3>
-                   </div>
-                   <Textarea 
-                      className="flex-1 bg-transparent border-0 text-slate-300 font-mono text-xs p-6 resize-none focus-visible:ring-0 leading-relaxed"
-                      value={editorContent}
-                      onChange={e => { setEditorContent(e.target.value); if(activeVersionId === 'live') handlePromptChange('prompt_core', e.target.value); }}
-                      readOnly={activeVersionId !== 'live'}
-                   />
-                </Card>
-
-                <Card className="lg:col-span-3 bg-black border-slate-800 flex flex-col">
-                   <div className="p-4 border-b border-slate-800 bg-slate-900/50"><h3 className="text-white font-bold text-xs uppercase tracking-widest flex items-center gap-2"><Terminal className="w-3 h-3 text-green-500" /> Test Runner</h3></div>
-                   <div className="flex-1 p-4 overflow-y-auto space-y-4">
-                      {testDebug && (
-                         <div className="mb-4 space-y-2 animate-in slide-in-from-top-2">
-                             <div className="bg-slate-800/50 border border-slate-700 p-2 rounded mb-2">
-                                <p className="text-[10px] text-slate-400 font-bold uppercase mb-1">Perfil Simulado:</p>
-                                <div className="flex gap-2">
-                                   <Badge variant="outline" className="text-[9px] h-4 px-1">{testDebug.profile?.mood || 'N/A'}</Badge>
-                                   <Badge variant="outline" className="text-[9px] h-4 px-1">{testDebug.profile?.intent || 'N/A'}</Badge>
-                                </div>
-                             </div>
+                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6 flex-1">
+                      <div className="space-y-4">
+                         <div className="space-y-2">
+                            <Label>Mensaje del Cliente</Label>
+                            <Input 
+                               placeholder="Ej: Hola, me interesa el taller de cuencos en CDMX..." 
+                               value={testInput} 
+                               onChange={e => setTestInput(e.target.value)}
+                               className="bg-slate-950 border-slate-800"
+                            />
                          </div>
-                      )}
-
-                      {testOutput ? (
-                         <div className="bg-slate-900 p-3 rounded border border-slate-700">
-                            <p className="text-[10px] text-slate-500 font-bold uppercase mb-2">Prompt Generado:</p>
-                            <p className="text-[10px] text-slate-300 font-mono leading-relaxed whitespace-pre-wrap h-64 overflow-y-auto custom-scrollbar">{testOutput}</p>
-                         </div>
-                      ) : (
-                         <div className="h-32 border border-dashed border-slate-800 rounded flex items-center justify-center text-slate-600 text-[10px] italic">Resultado del test...</div>
-                      )}
-                   </div>
-                   <div className="p-4 border-t border-slate-800 space-y-3">
-                      <div className="space-y-1">
-                         <label className="text-[10px] text-slate-500 uppercase">Teléfono (ID Memoria)</label>
-                         <Input value={testPhone} onChange={e => setTestPhone(e.target.value)} className="bg-slate-950 border-slate-800 text-xs h-8" placeholder="555..." />
+                         <Button onClick={handleRunTest} disabled={testing} className="w-full bg-indigo-600">
+                            {testing ? <Loader2 className="w-4 h-4 animate-spin mr-2"/> : <Play className="w-4 h-4 mr-2"/>} Simular Respuesta Samurai
+                         </Button>
                       </div>
-                      <div className="space-y-1">
-                         <label className="text-[10px] text-slate-500 uppercase">Mensaje Cliente</label>
-                         <Input placeholder="Ej: Hola, quiero info..." value={testInput} onChange={e => setTestInput(e.target.value)} className="bg-slate-950 border-slate-800 text-xs h-8" />
+                      <div className="bg-black rounded-lg p-4 font-mono text-xs overflow-y-auto max-h-[400px]">
+                         <p className="text-indigo-400 mb-2">// RESULTADO DEL PROMPT MAESTRO:</p>
+                         <div className="text-slate-300 whitespace-pre-wrap">{testOutput || "Esperando ejecución..."}</div>
                       </div>
-                      <Button onClick={handleRunTest} disabled={testing} className="w-full bg-green-600 hover:bg-green-700 h-9 text-xs">
-                         {testing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4 mr-2" />} Simular Prompt
-                      </Button>
                    </div>
                 </Card>
              </div>
