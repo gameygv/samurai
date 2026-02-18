@@ -6,13 +6,14 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+// Fallbacks de seguridad
 const DEFAULTS = {
   'prompt_core': `Eres Samurai, asistente experto de The Elephant Bowl. Tu misión es vender el anticipo de lugar de $1500.`,
   'prompt_technical': `Responde en texto plano.`,
   'prompt_behavior': `Sé empático pero enfocado en el cierre.`,
-  'prompt_psychology': `Analiza la necesidad emocional del cliente.`,
-  'shop_base_url': `https://theelephantbowl.com/finalizar-compra/`,
-  'reservation_product_id': `0`
+  'prompt_objections': `Maneja objeciones con firmeza y amabilidad.`,
+  'shop_base_url': `https://theelephantbowl.com/finalizar-compra/`, // Valor seguro
+  'reservation_product_id': `4521` // ID genérico por defecto
 };
 
 serve(async (req) => {
@@ -32,11 +33,10 @@ serve(async (req) => {
     const { data: configData } = await supabaseClient.from('app_config').select('key, value');
     const configs: Record<string, string> = { ...DEFAULTS };
     if (configData) {
-       configData.forEach((item: any) => { configs[item.key] = item.value; });
+       configData.forEach((item: any) => { configs[item.key] = item.value || DEFAULTS[item.key as keyof typeof DEFAULTS] || ''; });
     }
 
-    // 2. BUSQUEDA EN BASE DE CONOCIMIENTO (RAG SIMPLE)
-    // Buscamos palabras clave del mensaje en los documentos
+    // 2. RAG NATIVO
     const { data: knowledge } = await supabaseClient
       .from('knowledge_documents')
       .select('title, content, type, external_link')
@@ -46,7 +46,7 @@ serve(async (req) => {
       `DOCUMENTO [${d.title}]: ${d.content?.substring(0, 1000)} ${d.external_link ? '(Link: ' + d.external_link + ')' : ''}`
     ).join('\n\n') || "No hay documentos específicos encontrados.";
 
-    // 3. BUSQUEDA DE TRIGGERS EN MEDIA MANAGER
+    // 3. MEDIA TRIGGERS
     const { data: mediaTriggers } = await supabaseClient
       .from('media_assets')
       .select('title, url, ai_instructions')
@@ -76,7 +76,10 @@ serve(async (req) => {
        }
     }
 
-    const checkoutUrl = `${configs['shop_base_url']}?add-to-cart=${configs['reservation_product_id']}`;
+    // Construcción del Link Seguro
+    const baseURL = configs['shop_base_url'] || DEFAULTS['shop_base_url'];
+    const prodID = configs['reservation_product_id'] || DEFAULTS['reservation_product_id'];
+    const checkoutUrl = `${baseURL}?add-to-cart=${prodID}`;
 
     const fullSystemPrompt = `
 === 🧠 IDENTIDAD ELEPHANT BOWL ===
