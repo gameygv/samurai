@@ -19,6 +19,9 @@ serve(async (req) => {
 
     const { message, lead_id, mode = 'LIVE' } = await req.json();
 
+    console.log(`[get-samurai-context] Processing message for lead: ${lead_id}`);
+
+    // 1. CARGAR CONFIGURACIÓN DE PROMPTS
     const { data: configData } = await supabaseClient
         .from('app_config')
         .select('key, value')
@@ -27,6 +30,7 @@ serve(async (req) => {
     const prompts: any = {};
     configData?.forEach(i => prompts[i.key] = i.value);
 
+    // 2. CARGAR INFORMACIÓN DEL LEAD
     let leadContext = "Nombre: Prospecto Anónimo\nUbicación: Desconocida";
     if (lead_id) {
         const { data: lead } = await supabaseClient.from('leads').select('*').eq('id', lead_id).single();
@@ -42,6 +46,31 @@ ESTADO EMOCIONAL: ${lead.estado_emocional_actual || 'NEUTRO'}
         }
     }
 
+    // 3. CARGAR HISTORIAL DE CONVERSACIÓN (MEMORIA PROFUNDA)
+    let conversationHistory = "";
+    if (lead_id) {
+        const { data: messages } = await supabaseClient
+            .from('conversaciones')
+            .select('emisor, mensaje, created_at')
+            .eq('lead_id', lead_id)
+            .order('created_at', { ascending: true })
+            .limit(30); // Últimos 30 mensajes
+
+        if (messages && messages.length > 0) {
+            conversationHistory = "\n=== 💬 HISTORIAL DE CONVERSACIÓN (MEMORIA PROFUNDA) ===\n";
+            conversationHistory += "IMPORTANTE: Lee este historial COMPLETO antes de responder. NO repitas preguntas que ya hiciste.\n\n";
+            
+            messages.forEach(msg => {
+                const timestamp = new Date(msg.created_at).toLocaleTimeString();
+                conversationHistory += `[${timestamp}] ${msg.emisor}: ${msg.mensaje}\n`;
+            });
+            
+            conversationHistory += "\n--- FIN DEL HISTORIAL ---\n";
+            conversationHistory += "INSTRUCCIÓN CRÍTICA: Continúa la conversación de forma natural. NO vuelvas a preguntar el nombre o la ciudad si ya los sabes.\n";
+        }
+    }
+
+    // 4. CARGAR SITIO WEB PRINCIPAL
     const { data: mainWebsiteData } = await supabaseClient
         .from('main_website_content')
         .select('url, title, content')
@@ -55,6 +84,7 @@ ESTADO EMOCIONAL: ${lead.estado_emocional_actual || 'NEUTRO'}
         });
     }
 
+    // 5. CARGAR BASE DE CONOCIMIENTO
     const { data: knowledgeDocs } = await supabaseClient
         .from('knowledge_documents')
         .select('title, content, type, category');
@@ -67,6 +97,7 @@ ESTADO EMOCIONAL: ${lead.estado_emocional_actual || 'NEUTRO'}
         });
     }
 
+    // 6. ENSAMBLAR EL PROMPT FINAL
     const fullSystemPrompt = `
 ${prompts['prompt_adn_core'] || '# ADN CORE\nEres Samurai, un cerrador de elite.'}
 
@@ -101,6 +132,8 @@ ${prompts['prompt_accion_post'] || ''}
 === 👤 CLIENTE ACTUAL ===
 ${leadContext}
 
+${conversationHistory}
+
 === ⚡ INSTRUCCIÓN DE SALIDA CRÍTICA (MANDATORIO) ===
 1. Responde al cliente de forma DIRECTA, HUMANA y en TEXTO PLANO. 
 2. NO envíes un objeto JSON completo.
@@ -115,6 +148,8 @@ ${leadContext}
 }
     `;
 
+    console.log(`[get-samurai-context] Context assembled. History length: ${conversationHistory.length} chars`);
+
     return new Response(
       JSON.stringify({ 
         system_prompt: fullSystemPrompt,
@@ -125,6 +160,7 @@ ${leadContext}
     )
 
   } catch (error) {
+    console.error("[get-samurai-context] Error:", error);
     return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: corsHeaders })
   }
 })
