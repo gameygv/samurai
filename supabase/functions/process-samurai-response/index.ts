@@ -45,7 +45,8 @@ serve(async (req) => {
     let mediaUrlFound = null;
 
     // Regex para capturar el bloque JSON de análisis al final
-    const analysisRegex = /\[\[ANALYSIS:({.*?})\]\]/s;
+    // Ahora aceptamos cualquier cosa entre las llaves y posibles espacios extra
+    const analysisRegex = /\[\[ANALYSIS:\s*({[\s\S]*?})\s*\]\]/s;
     const match = fullText.match(analysisRegex);
 
     if (match && match[1]) {
@@ -71,30 +72,39 @@ serve(async (req) => {
 
         // Actualizamos el lead para que la próxima vez el contexto sea más preciso
         await supabaseClient.from('leads').update(updateData).eq('id', lead_id);
-        
-        // Log de aprendizaje
-        await supabaseClient.from('activity_logs').insert({
-            action: 'UPDATE',
-            resource: 'BRAIN',
-            description: `Auto-perfilado Lead ${lead_id.substring(0,8)}: ${analysisData.mood} / ${analysisData.intent}`,
-            status: 'OK',
-            metadata: analysisData
-        });
     }
 
-    // 4. DETECTAR MEDIA URLS (Si la IA puso un link en el texto limpio)
+    // 4. DETECTAR MEDIA URLS & DEDUPLICACIÓN (ANTI-SPAM)
     const urlRegex = /(https?:\/\/[^\s]+)/g;
     const urls = cleanText.match(urlRegex);
     if (urls && urls.length > 0) {
        // Asumimos que la última URL es la imagen/archivo si está aislada
-       mediaUrlFound = urls[urls.length - 1];
+       const candidateUrl = urls[urls.length - 1];
+       
+       // Verificar si ya se envió recientemente (últimos 10 mensajes)
+       const { data: recentMsgs } = await supabaseClient.from('conversaciones')
+           .select('mensaje')
+           .eq('lead_id', lead_id)
+           .eq('emisor', 'SAMURAI')
+           .order('created_at', {ascending: false})
+           .limit(10);
+           
+       const isDuplicate = recentMsgs?.some(m => m.mensaje.includes(candidateUrl));
+       
+       if (isDuplicate) {
+          console.log(`Duplicate media detected: ${candidateUrl}. Stripping from response.`);
+          cleanText = cleanText.replace(candidateUrl, '').trim();
+          // Agregamos una nota de debug si es necesario
+       } else {
+          mediaUrlFound = candidateUrl;
+       }
     }
 
     // 5. GUARDAR CONVERSACIÓN
     const { error: chatError } = await supabaseClient.from('conversaciones').insert({
         lead_id: lead_id,
         emisor: 'SAMURAI',
-        mensaje: cleanText, // Guardamos solo el mensaje limpio
+        mensaje: cleanText, // Guardamos solo el mensaje limpio (sin analysis, sin links duplicados)
         platform: 'API',
         metadata: { 
            format: 'text_processed',

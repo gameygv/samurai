@@ -4,7 +4,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Send, Bot, User, UserCog, ShieldAlert, ZapOff, MessageSquare, BrainCircuit, TrendingUp, AlertCircle, Image as ImageIcon, ExternalLink, X } from 'lucide-react';
+import { Loader2, Send, Bot, User, UserCog, ShieldAlert, ZapOff, MessageSquare, BrainCircuit, TrendingUp, AlertCircle, Image as ImageIcon, ExternalLink, X, Save, Edit2, RotateCcw } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -12,6 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
 import { logActivity } from '@/utils/logger';
 
@@ -28,7 +29,12 @@ const ChatViewer = ({ lead, open, onOpenChange }: ChatViewerProps) => {
   const [sending, setSending] = useState(false);
   const [isAiPaused, setIsAiPaused] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  
+  // Memory State
   const [currentAnalysis, setCurrentAnalysis] = useState<any>(null);
+  const [isEditingMemory, setIsEditingMemory] = useState(false);
+  const [memoryForm, setMemoryForm] = useState({ mood: '', buying_intent: '', summary: '' });
+  const [savingMemory, setSavingMemory] = useState(false);
 
   // Error Reporting State
   const [isReportOpen, setIsReportOpen] = useState(false);
@@ -41,11 +47,14 @@ const ChatViewer = ({ lead, open, onOpenChange }: ChatViewerProps) => {
       subscribeToMessages();
       setIsAiPaused(lead.ai_paused || false);
       
-      setCurrentAnalysis({
-         mood: lead.estado_emocional_actual,
-         buying_intent: lead.buying_intent,
-         summary: lead.summary
-      });
+      // Load initial memory from lead prop, but we will refresh it from DB ideally
+      const initialMemory = {
+         mood: lead.estado_emocional_actual || 'NEUTRO',
+         buying_intent: lead.buying_intent || 'BAJO',
+         summary: lead.summary || ''
+      };
+      setCurrentAnalysis(initialMemory);
+      setMemoryForm(initialMemory);
     }
   }, [open, lead]);
 
@@ -65,9 +74,16 @@ const ChatViewer = ({ lead, open, onOpenChange }: ChatViewerProps) => {
 
     if (!error && data) {
        setMessages(data);
-       const lastAiMsg = [...data].reverse().find(m => m.emisor === 'SAMURAI' && m.metadata?.analysis);
-       if (lastAiMsg) {
-          setCurrentAnalysis(lastAiMsg.metadata.analysis);
+       // Refresh memory from actual DB lead row to be sure
+       const { data: freshLead } = await supabase.from('leads').select('*').eq('id', lead.id).single();
+       if (freshLead) {
+          const freshMemory = {
+             mood: freshLead.estado_emocional_actual || 'NEUTRO',
+             buying_intent: freshLead.buying_intent || 'BAJO',
+             summary: freshLead.summary || ''
+          };
+          setCurrentAnalysis(freshMemory);
+          setMemoryForm(freshMemory);
        }
     }
     setLoading(false);
@@ -78,8 +94,10 @@ const ChatViewer = ({ lead, open, onOpenChange }: ChatViewerProps) => {
       .channel(`chat:${lead.id}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'conversaciones', filter: `lead_id=eq.${lead.id}` }, (payload) => {
         setMessages((prev) => [...prev, payload.new]);
-        if (payload.new.emisor === 'SAMURAI' && payload.new.metadata?.analysis) {
+        // If AI replies with new analysis, update view (unless user is editing)
+        if (payload.new.emisor === 'SAMURAI' && payload.new.metadata?.analysis && !isEditingMemory) {
            setCurrentAnalysis(payload.new.metadata.analysis);
+           setMemoryForm(prev => ({ ...prev, ...payload.new.metadata.analysis }));
         }
       })
       .subscribe();
@@ -120,6 +138,38 @@ const ChatViewer = ({ lead, open, onOpenChange }: ChatViewerProps) => {
     } finally {
       setSending(false);
     }
+  };
+
+  const handleSaveMemory = async () => {
+     setSavingMemory(true);
+     try {
+        const { error } = await supabase
+           .from('leads')
+           .update({
+              estado_emocional_actual: memoryForm.mood,
+              buying_intent: memoryForm.buying_intent,
+              summary: memoryForm.summary,
+              last_ai_analysis: new Date().toISOString()
+           })
+           .eq('id', lead.id);
+
+        if (error) throw error;
+
+        setCurrentAnalysis(memoryForm);
+        setIsEditingMemory(false);
+        toast.success("Memoria del Samurai actualizada manualmente.");
+        
+        await logActivity({
+           action: 'UPDATE',
+           resource: 'BRAIN',
+           description: `Intervención humana en memoria de lead: ${lead.nombre}`,
+           status: 'OK'
+        });
+     } catch (err: any) {
+        toast.error(err.message);
+     } finally {
+        setSavingMemory(false);
+     }
   };
 
   const openReportDialog = () => {
@@ -277,72 +327,133 @@ const ChatViewer = ({ lead, open, onOpenChange }: ChatViewerProps) => {
            </div>
 
            {/* ZONA DE INTELIGENCIA (DERECHA) */}
-           <div className="w-[280px] bg-slate-900/30 flex flex-col overflow-y-auto">
+           <div className="w-[280px] bg-slate-900/30 flex flex-col overflow-y-auto border-l border-slate-800">
               <div className="p-4 space-y-6">
                  
-                 {/* 1. ANÁLISIS PSICOLÓGICO */}
-                 <div>
-                    <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3 flex items-center gap-2">
-                       <BrainCircuit className="w-3 h-3" /> Perfil Psicológico
+                 {/* HEADER CON BOTÓN EDITAR */}
+                 <div className="flex items-center justify-between">
+                    <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest flex items-center gap-2">
+                       <BrainCircuit className="w-3 h-3" /> Memoria Viva
                     </h4>
-                    <Card className="bg-slate-950 border-slate-800 shadow-none">
-                       <CardContent className="p-3 space-y-3">
-                          <div className="space-y-1">
-                             <span className="text-[10px] text-slate-400 block">Estado Emocional</span>
+                    {!isEditingMemory ? (
+                       <Button variant="ghost" size="icon" className="h-6 w-6 text-slate-500 hover:text-white" onClick={() => setIsEditingMemory(true)}>
+                          <Edit2 className="w-3 h-3" />
+                       </Button>
+                    ) : (
+                       <div className="flex gap-1">
+                          <Button variant="ghost" size="icon" className="h-6 w-6 text-red-400 hover:text-red-300" onClick={() => setIsEditingMemory(false)}>
+                             <X className="w-3 h-3" />
+                          </Button>
+                          <Button variant="ghost" size="icon" className="h-6 w-6 text-green-400 hover:text-green-300" onClick={handleSaveMemory} disabled={savingMemory}>
+                             {savingMemory ? <Loader2 className="w-3 h-3 animate-spin"/> : <Save className="w-3 h-3" />}
+                          </Button>
+                       </div>
+                    )}
+                 </div>
+
+                 {/* 1. ANÁLISIS PSICOLÓGICO */}
+                 <Card className="bg-slate-950 border-slate-800 shadow-none">
+                    <CardContent className="p-3 space-y-4">
+                       <div className="space-y-1">
+                          <Label className="text-[10px] text-slate-400 block uppercase tracking-wide">Estado Emocional</Label>
+                          {isEditingMemory ? (
+                             <Select value={memoryForm.mood} onValueChange={v => setMemoryForm({...memoryForm, mood: v})}>
+                                <SelectTrigger className="h-7 text-xs bg-slate-900 border-slate-700"><SelectValue /></SelectTrigger>
+                                <SelectContent className="bg-slate-900 border-slate-700 text-white">
+                                   <SelectItem value="NEUTRO">Neutro</SelectItem>
+                                   <SelectItem value="FELIZ">Feliz / Satisfecho</SelectItem>
+                                   <SelectItem value="ENOJADO">Enojado / Molesto</SelectItem>
+                                   <SelectItem value="PRAGMATICO">Pragmático / Técnico</SelectItem>
+                                   <SelectItem value="CONFUNDIDO">Confundido</SelectItem>
+                                </SelectContent>
+                             </Select>
+                          ) : (
                              <Badge variant="outline" className={`w-full justify-center py-1 ${getMoodColor(currentAnalysis?.mood)}`}>
                                 {currentAnalysis?.mood || 'NEUTRO'}
                              </Badge>
+                          )}
+                       </div>
+                       
+                       <div className="space-y-1">
+                          <div className="flex justify-between text-[10px] text-slate-400 uppercase tracking-wide">
+                             <Label>Intención Compra</Label>
                           </div>
-                          
-                          <div className="space-y-1">
-                             <div className="flex justify-between text-[10px] text-slate-400">
-                                <span>Intención Compra</span>
-                                <span className={currentAnalysis?.buying_intent === 'ALTO' ? 'text-green-500 font-bold' : ''}>
-                                   {currentAnalysis?.buying_intent || 'BAJA'}
-                                </span>
-                             </div>
-                             <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
-                                <div 
-                                   className={`h-full rounded-full transition-all duration-500 ${getIntentColor(currentAnalysis?.buying_intent)}`} 
-                                   style={{ width: currentAnalysis?.buying_intent === 'ALTO' ? '90%' : currentAnalysis?.buying_intent === 'MEDIO' ? '50%' : '20%' }}
-                                />
-                             </div>
-                          </div>
-                       </CardContent>
-                    </Card>
-                 </div>
+                          {isEditingMemory ? (
+                             <Select value={memoryForm.buying_intent} onValueChange={v => setMemoryForm({...memoryForm, buying_intent: v})}>
+                                <SelectTrigger className="h-7 text-xs bg-slate-900 border-slate-700"><SelectValue /></SelectTrigger>
+                                <SelectContent className="bg-slate-900 border-slate-700 text-white">
+                                   <SelectItem value="ALTO">Alta</SelectItem>
+                                   <SelectItem value="MEDIO">Media</SelectItem>
+                                   <SelectItem value="BAJO">Baja</SelectItem>
+                                </SelectContent>
+                             </Select>
+                          ) : (
+                             <>
+                                <div className="flex justify-between text-[10px] text-slate-400 mb-1">
+                                   <span>Probabilidad</span>
+                                   <span className={currentAnalysis?.buying_intent === 'ALTO' ? 'text-green-500 font-bold' : ''}>
+                                      {currentAnalysis?.buying_intent || 'BAJA'}
+                                   </span>
+                                </div>
+                                <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
+                                   <div 
+                                      className={`h-full rounded-full transition-all duration-500 ${getIntentColor(currentAnalysis?.buying_intent)}`} 
+                                      style={{ width: currentAnalysis?.buying_intent === 'ALTO' ? '90%' : currentAnalysis?.buying_intent === 'MEDIO' ? '50%' : '20%' }}
+                                   />
+                                </div>
+                             </>
+                          )}
+                       </div>
+                    </CardContent>
+                 </Card>
 
                  {/* 2. RESUMEN EJECUTIVO */}
                  <div>
-                    <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3 flex items-center gap-2">
-                       <Bot className="w-3 h-3" /> Último Análisis
+                    <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2 flex items-center gap-2">
+                       <Bot className="w-3 h-3" /> Resumen Contextual
                     </h4>
-                    <div className="bg-slate-950 border border-slate-800 rounded-lg p-3">
-                       <p className="text-xs text-slate-300 italic leading-relaxed">
-                          "{currentAnalysis?.summary || 'Esperando análisis suficiente para generar resumen...'}"
-                       </p>
-                    </div>
+                    {isEditingMemory ? (
+                       <Textarea 
+                          value={memoryForm.summary}
+                          onChange={e => setMemoryForm({...memoryForm, summary: e.target.value})}
+                          className="bg-slate-950 border-slate-700 text-xs min-h-[150px] leading-relaxed font-mono"
+                          placeholder="Escribe lo que la IA debe recordar..."
+                       />
+                    ) : (
+                       <div className="bg-slate-950 border border-slate-800 rounded-lg p-3 relative group">
+                          <p className="text-xs text-slate-300 italic leading-relaxed">
+                             "{currentAnalysis?.summary || 'Esperando análisis suficiente para generar resumen...'}"
+                          </p>
+                       </div>
+                    )}
                  </div>
 
                  {/* 3. ACCIONES SUGERIDAS */}
-                 <div>
-                    <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3 flex items-center gap-2">
-                       <TrendingUp className="w-3 h-3" /> Próximos Pasos
-                    </h4>
-                    <div className="space-y-2">
-                       <Button 
-                          variant="outline" 
-                          size="sm" 
-                          className="w-full justify-start text-[10px] h-8 border-slate-800 bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white"
-                          onClick={openReportDialog}
-                       >
-                          <AlertCircle className="w-3 h-3 mr-2 text-yellow-500" /> Reportar Error (#CORREGIRIA)
-                       </Button>
-                       <Button variant="outline" size="sm" className="w-full justify-start text-[10px] h-8 border-slate-800 bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white">
-                          <MessageSquare className="w-3 h-3 mr-2 text-indigo-500" /> Enviar Catálogo PDF
-                       </Button>
+                 {!isEditingMemory && (
+                    <div className="pt-4 border-t border-slate-800/50">
+                       <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3 flex items-center gap-2">
+                          <TrendingUp className="w-3 h-3" /> Acciones Rápidas
+                       </h4>
+                       <div className="space-y-2">
+                          <Button 
+                             variant="outline" 
+                             size="sm" 
+                             className="w-full justify-start text-[10px] h-8 border-slate-800 bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white"
+                             onClick={openReportDialog}
+                          >
+                             <AlertCircle className="w-3 h-3 mr-2 text-yellow-500" /> Reportar Error (#CORREGIRIA)
+                          </Button>
+                          <Button 
+                             variant="outline" 
+                             size="sm" 
+                             className="w-full justify-start text-[10px] h-8 border-slate-800 bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white"
+                             onClick={() => setMemoryForm({...currentAnalysis, mood: 'NEUTRO', buying_intent: 'MEDIO', summary: ''}) || setIsEditingMemory(true)}
+                          >
+                             <RotateCcw className="w-3 h-3 mr-2 text-blue-500" /> Resetear Memoria
+                          </Button>
+                       </div>
                     </div>
-                 </div>
+                 )}
               </div>
            </div>
         </div>
