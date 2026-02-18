@@ -36,36 +36,62 @@ serve(async (req) => {
     const configs: any = {};
     configData?.forEach(i => configs[i.key] = i.value);
 
-    // 3. CARGAR CONOCIMIENTO (SITIO WEB + DOCUMENTOS)
-    // Obtenemos el contenido del sitio web principal scrapeado
+    // 3. CARGAR CONOCIMIENTO DEL SITIO WEB PRINCIPAL (14 PÁGINAS)
     const { data: websiteContent } = await supabaseClient
       .from('main_website_content')
-      .select('title, content')
+      .select('title, content, url')
       .eq('scrape_status', 'success')
-      .limit(10); // Traemos las páginas más relevantes
+      .order('last_scraped_at', { ascending: false });
 
-    // Obtenemos documentos de conocimiento adicionales (Talleres/Maestros)
-    const { data: knowledgeDocs } = await supabaseClient
-      .from('knowledge_documents')
-      .select('title, content, description')
-      .limit(5);
-
-    let brainContext = "\n=== 🧠 BASE DE CONOCIMIENTO (DATOS REALES) ===\n";
+    let webKnowledge = "\n=== 🌐 CONTENIDO DEL SITIO WEB OFICIAL (theelephantbowl.com) ===\n";
+    webKnowledge += "INSTRUCCIÓN CRÍTICA: Esta es la ÚNICA fuente de verdad. NO inventes fechas ni información.\n\n";
     
     if (websiteContent && websiteContent.length > 0) {
-        websiteContent.forEach(p => {
-            brainContext += `\n[FUENTE: ${p.title}]\n${p.content?.substring(0, 1000)}\n`;
+        websiteContent.forEach(page => {
+            webKnowledge += `\n--- PÁGINA: ${page.title} (${page.url}) ---\n`;
+            webKnowledge += `${page.content?.substring(0, 2000)}\n`;
+            webKnowledge += `--- FIN DE ${page.title} ---\n`;
+        });
+    } else {
+        webKnowledge += "⚠️ ADVERTENCIA: No hay contenido scrapeado disponible. Solicita al usuario que espere mientras actualizamos la información.\n";
+    }
+    webKnowledge += "\n=== FIN CONTENIDO WEB ===\n";
+
+    // 4. CARGAR MEDIA ASSETS (POSTERS CON FECHAS)
+    const { data: mediaAssets } = await supabaseClient
+      .from('media_assets')
+      .select('title, url, ai_instructions, type')
+      .not('ai_instructions', 'is', null);
+
+    let mediaContext = "\n=== 📸 RECURSOS VISUALES DISPONIBLES (Media Manager) ===\n";
+    if (mediaAssets && mediaAssets.length > 0) {
+        mediaAssets.forEach(asset => {
+            mediaContext += `\n[RECURSO: ${asset.title}]\n`;
+            mediaContext += `URL: ${asset.url}\n`;
+            mediaContext += `CUÁNDO USAR: ${asset.ai_instructions}\n`;
+            mediaContext += `---\n`;
         });
     }
+    mediaContext += "\n=== FIN RECURSOS VISUALES ===\n";
 
+    // 5. CARGAR DOCUMENTOS DE CONOCIMIENTO ADICIONALES
+    const { data: knowledgeDocs } = await supabaseClient
+      .from('knowledge_documents')
+      .select('title, content, description, type')
+      .limit(5);
+
+    let docsContext = "\n=== 📚 DOCUMENTOS DE CONOCIMIENTO ===\n";
     if (knowledgeDocs && knowledgeDocs.length > 0) {
-        knowledgeDocs.forEach(d => {
-            brainContext += `\n[RECURSO: ${d.title}]\n${d.content || d.description}\n`;
+        knowledgeDocs.forEach(doc => {
+            docsContext += `\n[DOCUMENTO: ${doc.title}]\n`;
+            if (doc.description) docsContext += `Descripción: ${doc.description}\n`;
+            if (doc.content) docsContext += `Contenido: ${doc.content.substring(0, 1000)}\n`;
+            docsContext += `---\n`;
         });
     }
-    brainContext += "\n=== FIN CONOCIMIENTO ===\n";
+    docsContext += "\n=== FIN DOCUMENTOS ===\n";
 
-    // 4. CARGAR HISTORIAL (MEMORIA)
+    // 6. CARGAR HISTORIAL (MEMORIA)
     let conversationHistory = "";
     if (lead) {
         const { data: messages } = await supabaseClient
@@ -73,10 +99,10 @@ serve(async (req) => {
             .select('emisor, mensaje, created_at')
             .eq('lead_id', lead.id)
             .order('created_at', { ascending: true })
-            .limit(15);
+            .limit(20);
 
         if (messages?.length) {
-            conversationHistory = "\n=== 💬 HISTORIAL RECIENTE ===\n";
+            conversationHistory = "\n=== 💬 HISTORIAL DE CONVERSACIÓN ===\n";
             messages.forEach(msg => {
                 conversationHistory += `[${msg.emisor}]: ${msg.mensaje}\n`;
             });
@@ -84,22 +110,40 @@ serve(async (req) => {
         }
     }
 
-    // 5. ENSAMBLAR PROMPT
+    // 7. ENSAMBLAR PROMPT CON VARIABLES DINÁMICAS
     let strategyPrompt = configs['prompt_estrategia_cierre'] || "";
     
-    // Inyección de variables
+    const ecommerceUrl = configs['ecommerce_url'] || "https://theelephantbowl.com";
+    const productId = configs['main_product_id'] || "1483";
+    const productPrice = configs['main_product_price'] || "1500";
+    
     strategyPrompt = strategyPrompt
-        .replace(/{ecommerce_url}/g, configs['ecommerce_url'] || "https://theelephantbowl.com")
-        .replace(/{main_product_id}/g, configs['main_product_id'] || "1483")
-        .replace(/{main_product_price}/g, configs['main_product_price'] || "1500");
+        .replace(/{ecommerce_url}/g, ecommerceUrl)
+        .replace(/{main_product_id}/g, productId)
+        .replace(/{main_product_price}/g, productPrice);
 
+    // 8. PROMPT FINAL ENSAMBLADO
     const fullSystemPrompt = `
-${configs['prompt_adn_core']}
-${configs['prompt_tecnico']}
-${strategyPrompt}
-${configs['prompt_reaprendizaje']}
+${configs['prompt_adn_core'] || ''}
 
-${brainContext}
+${configs['prompt_tecnico'] || ''}
+
+${strategyPrompt}
+
+=== 🎯 REGLAS DE CIERRE OBLIGATORIAS ===
+1. NUNCA inventes fechas. Solo usa las que veas en el contenido del sitio web o en los recursos visuales.
+2. Si el cliente dice "quiero inscribirme" o "quiero comprar", genera INMEDIATAMENTE este link:
+   ${ecommerceUrl}/checkout/?add-to-cart=${productId}
+3. NO pidas más datos innecesarios. El link de pago es suficiente para cerrar.
+4. Si no encuentras fechas específicas en el contenido, di: "Déjame verificar las fechas más recientes" y usa los recursos visuales.
+
+${configs['prompt_reaprendizaje'] || ''}
+
+${webKnowledge}
+
+${mediaContext}
+
+${docsContext}
 
 INFORMACIÓN DEL CLIENTE:
 - Nombre: ${lead?.nombre || 'Desconocido'}
@@ -108,14 +152,26 @@ INFORMACIÓN DEL CLIENTE:
 
 ${conversationHistory}
 
-INSTRUCCIÓN CRÍTICA: Tienes el contenido del sitio web arriba. NO envíes al usuario a revisar la web. Lee el contenido tú mismo y dile los nombres de los cursos y las fechas que encuentres. Si quiere inscribirse, dale el link de checkout de inmediato.
+RECORDATORIO FINAL: 
+- Tienes TODO el contenido del sitio web arriba. NO envíes al usuario a revisar la web.
+- Si el cliente quiere inscribirse, dale el link de checkout AHORA: ${ecommerceUrl}/checkout/?add-to-cart=${productId}
+- Precio del anticipo: $${productPrice} MXN
     `;
+
+    console.log("[get-samurai-context] Contexto generado. Páginas web:", websiteContent?.length || 0);
+    console.log("[get-samurai-context] Media assets:", mediaAssets?.length || 0);
+    console.log("[get-samurai-context] Documentos:", knowledgeDocs?.length || 0);
 
     return new Response(
       JSON.stringify({ 
         system_prompt: fullSystemPrompt,
         lead_id: lead?.id,
-        status: "ready"
+        status: "ready",
+        debug: {
+          web_pages: websiteContent?.length || 0,
+          media_assets: mediaAssets?.length || 0,
+          knowledge_docs: knowledgeDocs?.length || 0
+        }
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
