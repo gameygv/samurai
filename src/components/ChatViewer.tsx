@@ -58,6 +58,7 @@ const ChatViewer = ({ lead, open, onOpenChange }: ChatViewerProps) => {
 
     if (!error && data) {
        setMessages(data);
+       // Refresh lead data for latest analysis
        const { data: freshLead } = await supabase.from('leads').select('*').eq('id', lead.id).single();
        if (freshLead) {
           const freshMemory = {
@@ -78,6 +79,7 @@ const ChatViewer = ({ lead, open, onOpenChange }: ChatViewerProps) => {
       .channel(`chat:${lead.id}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'conversaciones', filter: `lead_id=eq.${lead.id}` }, (payload) => {
         setMessages((prev) => [...prev, payload.new]);
+        // Si el mensaje tiene análisis en metadata, actualizar vista
         if (payload.new.emisor === 'SAMURAI' && payload.new.metadata?.analysis && !isEditingMemory) {
            setCurrentAnalysis(payload.new.metadata.analysis);
            setMemoryForm(prev => ({ ...prev, ...payload.new.metadata.analysis }));
@@ -170,9 +172,10 @@ const ChatViewer = ({ lead, open, onOpenChange }: ChatViewerProps) => {
      if (!errorContext.correction) return toast.error("Debes sugerir una corrección.");
      setReporting(true);
      
-     const ciaCommand = `#CIA ${errorContext.correction}. Contexto: ${errorContext.reason}`;
+     const ciaCommand = `#CIA ${errorContext.correction}`;
 
      try {
+        // 1. Enviar el comando al chat para que la IA lo vea de inmediato
         await supabase.from('conversaciones').insert({
            lead_id: lead.id,
            mensaje: ciaCommand,
@@ -180,19 +183,19 @@ const ChatViewer = ({ lead, open, onOpenChange }: ChatViewerProps) => {
            platform: 'PANEL'
         });
 
+        // 2. Registrar en la bitácora para validación permanente
         const { error } = await supabase.from('errores_ia').insert({
            cliente_id: lead.id,
            mensaje_cliente: "Comando #CIA Manual",
            respuesta_ia: errorContext.ia_response,
            correccion_sugerida: errorContext.correction,
-           correccion_explicacion: errorContext.reason,
            categoria: 'CONDUCTA',
            severidad: 'ALTA',
            estado_correccion: 'REPORTADA'
         });
 
         if (error) throw error;
-        toast.success("Comando #CIA enviado y registrado.");
+        toast.success("Comando #CIA enviado y registrado en Bitácora.");
         setIsReportOpen(false);
      } catch (err: any) {
         toast.error(err.message);
@@ -200,11 +203,6 @@ const ChatViewer = ({ lead, open, onOpenChange }: ChatViewerProps) => {
         setReporting(false);
      }
   };
-
-  const handleResetMemory = () => {
-      setMemoryForm({...currentAnalysis, mood: 'NEUTRO', buying_intent: 'MEDIO', summary: ''});
-      setIsEditingMemory(true);
-  }
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -218,7 +216,7 @@ const ChatViewer = ({ lead, open, onOpenChange }: ChatViewerProps) => {
         />
 
         <div className="flex-1 flex overflow-hidden">
-           {/* LEFT COLUMN: CHAT */}
+           {/* COLUMNA IZQUIERDA: CHAT */}
            <div className="flex-1 flex flex-col border-r border-slate-800 bg-slate-950/50">
               <MessageList messages={messages} loading={loading} />
               <MessageInput 
@@ -228,7 +226,7 @@ const ChatViewer = ({ lead, open, onOpenChange }: ChatViewerProps) => {
               />
            </div>
 
-           {/* RIGHT COLUMN: BRAIN */}
+           {/* COLUMNA DERECHA: CEREBRO (MEMORIA) */}
            <MemoryPanel 
              currentAnalysis={currentAnalysis}
              isEditing={isEditingMemory}
@@ -238,7 +236,7 @@ const ChatViewer = ({ lead, open, onOpenChange }: ChatViewerProps) => {
              onSave={handleSaveMemory}
              saving={savingMemory}
              onOpenReport={openReportDialog}
-             onReset={handleResetMemory}
+             onReset={() => setMemoryForm({...currentAnalysis, summary: ''})}
            />
         </div>
 

@@ -26,7 +26,6 @@ serve(async (req) => {
     
     if (typeof ai_json_response === 'string') {
         try {
-            // Intentamos parsear por si Make manda JSON stringificado
             const parsed = JSON.parse(ai_json_response);
             fullText = parsed.reply || ai_json_response;
         } catch (e) {
@@ -39,24 +38,21 @@ serve(async (req) => {
     }
 
     // 2. EXTRACCIÓN DE INTELIGENCIA (AUTOAPRENDIZAJE)
-    // Buscamos el patrón [[ANALYSIS: { ... }]] que inyectamos en el prompt
     let cleanText = fullText;
     let analysisData: any = null;
     let mediaUrlFound = null;
 
-    // Regex para capturar el bloque JSON de análisis al final
-    // Ahora aceptamos cualquier cosa entre las llaves y posibles espacios extra
+    // Regex para capturar el bloque JSON de análisis [[ANALYSIS: {...}]]
     const analysisRegex = /\[\[ANALYSIS:\s*({[\s\S]*?})\s*\]\]/s;
     const match = fullText.match(analysisRegex);
 
     if (match && match[1]) {
         try {
             analysisData = JSON.parse(match[1]);
-            // Eliminamos el bloque de análisis del texto que verá el cliente
+            // Eliminamos el bloque del mensaje para que no lo vea el cliente
             cleanText = fullText.replace(match[0], '').trim();
-            console.log("Analysis extracted:", analysisData);
         } catch (e) {
-            console.error("Error parsing analysis JSON:", e);
+            console.error("[process-samurai-response] Error parsing analysis JSON", e);
         }
     }
 
@@ -70,57 +66,38 @@ serve(async (req) => {
         if (analysisData.intent) updateData.buying_intent = analysisData.intent;
         if (analysisData.summary) updateData.summary = analysisData.summary;
 
-        // Actualizamos el lead para que la próxima vez el contexto sea más preciso
+        // Actualizamos para que el Dashboard y el ChatViewer reflejen la nueva psicología
         await supabaseClient.from('leads').update(updateData).eq('id', lead_id);
     }
 
-    // 4. DETECTAR MEDIA URLS & DEDUPLICACIÓN (ANTI-SPAM)
+    // 4. DETECTAR MEDIA URLS (Soporte para envíos automáticos de imágenes)
     const urlRegex = /(https?:\/\/[^\s]+)/g;
     const urls = cleanText.match(urlRegex);
     if (urls && urls.length > 0) {
-       // Asumimos que la última URL es la imagen/archivo si está aislada
-       const candidateUrl = urls[urls.length - 1];
-       
-       // Verificar si ya se envió recientemente (últimos 10 mensajes)
-       const { data: recentMsgs } = await supabaseClient.from('conversaciones')
-           .select('mensaje')
-           .eq('lead_id', lead_id)
-           .eq('emisor', 'SAMURAI')
-           .order('created_at', {ascending: false})
-           .limit(10);
-           
-       const isDuplicate = recentMsgs?.some(m => m.mensaje.includes(candidateUrl));
-       
-       if (isDuplicate) {
-          console.log(`Duplicate media detected: ${candidateUrl}. Stripping from response.`);
-          cleanText = cleanText.replace(candidateUrl, '').trim();
-          // Agregamos una nota de debug si es necesario
-       } else {
-          mediaUrlFound = candidateUrl;
-       }
+       mediaUrlFound = urls[urls.length - 1]; // Tomamos la última URL como posible adjunto
     }
 
-    // 5. GUARDAR CONVERSACIÓN
+    // 5. GUARDAR CONVERSACIÓN EN HISTORIAL
     const { error: chatError } = await supabaseClient.from('conversaciones').insert({
         lead_id: lead_id,
         emisor: 'SAMURAI',
-        mensaje: cleanText, // Guardamos solo el mensaje limpio (sin analysis, sin links duplicados)
+        mensaje: cleanText, 
         platform: 'API',
         metadata: { 
            format: 'text_processed',
-           analysis: analysisData, // Guardamos el análisis crudo en metadata para auditoría
+           analysis: analysisData,
            has_media: !!mediaUrlFound
         }
     });
 
     if (chatError) throw chatError;
 
-    // 6. TIMESTAMP UPDATE
+    // 6. ACTUALIZAR TIMESTAMP DEL LEAD
     await supabaseClient.from('leads').update({
         last_message_at: new Date().toISOString()
     }).eq('id', lead_id);
 
-    // Retornamos el texto LIMPIO a Make para que lo envíe a WhatsApp
+    // Retornamos la respuesta LIMPIA a Make
     return new Response(
       JSON.stringify({ 
          success: true, 
@@ -132,7 +109,7 @@ serve(async (req) => {
     )
 
   } catch (error) {
-    console.error("Processing Error:", error);
+    console.error("[process-samurai-response] Error:", error);
     return new Response(
       JSON.stringify({ error: error.message }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
