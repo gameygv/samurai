@@ -29,9 +29,9 @@ serve(async (req) => {
         lead = data;
     }
 
-    if (!lead) throw new Error("Lead not found. Ensure kommo_id is correct.");
+    if (!lead) throw new Error("Lead not found.");
 
-    // 2. LIMPIAR EL TEXTO (BISTURÍ)
+    // 2. LIMPIAR EL TEXTO Y EXTRAER METADATOS
     let fullText = typeof ai_json_response === 'string' ? ai_json_response : (ai_json_response?.reply || "");
     let cleanText = fullText;
     let analysisData: any = null;
@@ -45,7 +45,7 @@ serve(async (req) => {
             
             try {
                 const jsonPart = parts[1].trim();
-                const jsonCleaned = jsonPart.replace(/```json/g, '').replace(/```/g, '').trim();
+                const jsonCleaned = jsonPart.replace(/```json/g, '').replace(/```/g, '').replace(/\]\]/g, '').trim();
                 if (jsonCleaned.startsWith('{')) {
                     analysisData = JSON.parse(jsonCleaned);
                 }
@@ -56,13 +56,25 @@ serve(async (req) => {
         }
     }
 
-    // 3. ACTUALIZAR DASHBOARD
+    // 3. ACTUALIZAR DASHBOARD (RADAR DE LEADS)
     if (analysisData) {
-        const updateData: any = { last_ai_analysis: new Date().toISOString() };
+        const updateData: any = { 
+            last_ai_analysis: new Date().toISOString() 
+        };
+
+        // Mapeo inteligente de campos detectados por la IA
         if (analysisData.mood) updateData.estado_emocional_actual = analysisData.mood;
         if (analysisData.intent) updateData.buying_intent = analysisData.intent;
         if (analysisData.summary) updateData.summary = analysisData.summary;
         if (analysisData.handoff_required === true) updateData.ai_paused = true;
+        
+        // ¡NUEVO!: Actualizar Nombre y Ciudad
+        if (analysisData.detected_name && (!lead.nombre || lead.nombre.includes('Cliente'))) {
+            updateData.nombre = analysisData.detected_name;
+        }
+        if (analysisData.detected_city) {
+            updateData.ciudad = analysisData.detected_city;
+        }
 
         await supabaseClient.from('leads').update(updateData).eq('id', lead.id);
     }
