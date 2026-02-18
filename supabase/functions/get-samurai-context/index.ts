@@ -38,10 +38,10 @@ serve(async (req) => {
         }
     }
 
-    // 2. CARGAR CONFIGURACIÓN Y PROMPTS
-    const { data: configData } = await supabaseClient.from('app_config').select('key, value').eq('category', 'PROMPT');
-    const prompts: any = {};
-    configData?.forEach(i => prompts[i.key] = i.value);
+    // 2. CARGAR TODAS LAS CONFIGURACIONES (PROMPTS + ECOMMERCE)
+    const { data: configData } = await supabaseClient.from('app_config').select('key, value');
+    const configs: any = {};
+    configData?.forEach(i => configs[i.key] = i.value);
 
     // 3. CARGAR HISTORIAL (MEMORIA)
     let conversationHistory = "";
@@ -62,10 +62,21 @@ serve(async (req) => {
         }
     }
 
-    // ENSAMBLAR PROMPT
+    // 4. ENSAMBLAR PROMPT CON REEMPLAZOS DINÁMICOS
+    let strategyPrompt = configs['prompt_estrategia_cierre'] || "";
+    
+    // Inyección de variables de E-commerce en el prompt
+    strategyPrompt = strategyPrompt
+        .replace(/{ecommerce_url}/g, configs['ecommerce_url'] || "https://theelephantbowl.com")
+        .replace(/{main_product_id}/g, configs['main_product_id'] || "1483")
+        .replace(/{main_product_price}/g, configs['main_product_price'] || "1500");
+
     const fullSystemPrompt = `
-${prompts['prompt_adn_core']}
-${prompts['prompt_tecnico']}
+${configs['prompt_adn_core']}
+${configs['prompt_tecnico']}
+${strategyPrompt}
+${configs['prompt_reaprendizaje']}
+
 CLIENTE ACTUAL: ${lead?.nombre || 'Desconocido'}
 ${conversationHistory}
     `;
@@ -73,7 +84,7 @@ ${conversationHistory}
     return new Response(
       JSON.stringify({ 
         system_prompt: fullSystemPrompt,
-        lead_id: lead?.id, // Enviamos el UUID interno para el siguiente paso
+        lead_id: lead?.id,
         status: "ready"
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

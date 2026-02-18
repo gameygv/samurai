@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
-import { Webhook, Key, Save, Loader2, ShoppingCart, Globe, ShieldAlert, Database, Eye, Sparkles, Clock, Zap, Calendar } from 'lucide-react';
+import { Webhook, Key, Save, Loader2, ShoppingCart, Globe, ShieldAlert, Database, Eye, Sparkles, Clock, Zap, Calendar, Package } from 'lucide-react';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -79,7 +79,7 @@ const Settings = () => {
       // 2. Guardar Followup Config
       const { error: followupErr } = await supabase.from('followup_config').upsert({
         ...followupConfig,
-        id: followupConfig.id || undefined // Asegurar que use el ID si existe para update
+        id: followupConfig.id || undefined 
       });
       if (followupErr) throw followupErr;
 
@@ -152,6 +152,34 @@ const Settings = () => {
                             onChange={e => handleInputChange('ecommerce_currency', e.target.value, 'ECOMMERCE')}
                             className="bg-slate-950 border-slate-800" 
                             placeholder="USD"
+                         />
+                      </div>
+                   </CardContent>
+                </Card>
+
+                <Card className="bg-slate-900 border-slate-800 border-l-4 border-l-orange-500">
+                   <CardHeader>
+                      <CardTitle className="text-sm text-white flex items-center gap-2"><Package className="w-4 h-4 text-orange-400"/> Producto Principal (Anticipo)</CardTitle>
+                      <CardDescription>Configura el producto de inscripción a cursos.</CardDescription>
+                   </CardHeader>
+                   <CardContent className="space-y-4">
+                      <div className="space-y-1">
+                         <Label className="text-xs text-slate-500">ID de Producto WooCommerce</Label>
+                         <Input 
+                            value={getValue('main_product_id')} 
+                            onChange={e => handleInputChange('main_product_id', e.target.value, 'ECOMMERCE')}
+                            className="bg-slate-950 border-slate-800 font-mono" 
+                            placeholder="Ej: 1483"
+                         />
+                      </div>
+                      <div className="space-y-1">
+                         <Label className="text-xs text-slate-500">Precio del Anticipo ($)</Label>
+                         <Input 
+                            type="number"
+                            value={getValue('main_product_price')} 
+                            onChange={e => handleInputChange('main_product_price', e.target.value, 'ECOMMERCE')}
+                            className="bg-slate-950 border-slate-800" 
+                            placeholder="1500"
                          />
                       </div>
                    </CardContent>
