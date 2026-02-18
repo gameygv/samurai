@@ -21,59 +21,47 @@ serve(async (req) => {
 
     if (!lead_id) throw new Error("Lead ID is required");
 
-    // Obtenemos el texto completo de la IA
+    // 1. OBTENER EL TEXTO BRUTO
     let fullText = typeof ai_json_response === 'string' ? ai_json_response : (ai_json_response?.reply || raw_text || "");
     let cleanText = fullText;
     let analysisData: any = null;
 
-    // 1. LIMPIEZA Y EXTRACCIÓN DEL ANÁLISIS
-    // Buscamos el separador ---SYSTEM_ANALYSIS---
-    if (fullText.includes('---SYSTEM_ANALYSIS---')) {
-        const parts = fullText.split('---SYSTEM_ANALYSIS---');
-        cleanText = parts[0].trim(); // El mensaje humano
-        
-        try {
-            // Intentamos parsear el JSON que viene después del separador
-            const jsonPart = parts[1].trim();
-            // Limpiamos posibles caracteres extraños que la IA pueda añadir (como bloques de código markdown)
-            const jsonCleaned = jsonPart.replace(/```json/g, '').replace(/```/g, '').trim();
-            analysisData = JSON.parse(jsonCleaned);
-        } catch (e) {
-            console.error("[process-samurai-response] Error parsing system analysis", e);
-        }
-    } else {
-        // Soporte para el formato antiguo [[ANALYSIS: ...]] por si acaso
-        const analysisRegex = /\[\[ANALYSIS:\s*({[\s\S]*?})\s*\]\]/s;
-        const match = fullText.match(analysisRegex);
-        if (match && match[1]) {
+    // 2. EL BISTURÍ: CORTAR EL ANÁLISIS DE SISTEMA
+    // Buscamos cualquier variante del separador
+    const separators = ['---SYSTEM_ANALYSIS---', '[[ANALYSIS:', '---ANALYSIS---'];
+    
+    for (const sep of separators) {
+        if (fullText.includes(sep)) {
+            const parts = fullText.split(sep);
+            cleanText = parts[0].trim(); // Nos quedamos solo con lo de ARRIBA
+            
+            // Intentamos extraer el JSON de lo de ABAJO para el Dashboard
             try {
-                analysisData = JSON.parse(match[1]);
-                cleanText = fullText.replace(match[0], '').trim();
+                const jsonPart = parts[1].trim();
+                const jsonCleaned = jsonPart.replace(/```json/g, '').replace(/```/g, '').trim();
+                // Si el JSON está incompleto o mal formado, no rompemos el proceso
+                if (jsonCleaned.startsWith('{')) {
+                    analysisData = JSON.parse(jsonCleaned);
+                }
             } catch (e) {
-                console.error("[process-samurai-response] Error parsing legacy analysis", e);
+                console.warn("[process-samurai-response] Error parsing metadata, but message is clean.");
             }
+            break; // Una vez cortado, salimos del bucle
         }
     }
 
-    // 2. ACTUALIZACIÓN DEL PERFIL DEL LEAD (MEMORIA MAESTRA)
+    // 3. ACTUALIZAR DASHBOARD (MEMORIA)
     if (analysisData) {
-        const updateData: any = {
-           last_ai_analysis: new Date().toISOString()
-        };
-        
+        const updateData: any = { last_ai_analysis: new Date().toISOString() };
         if (analysisData.mood) updateData.estado_emocional_actual = analysisData.mood;
         if (analysisData.intent) updateData.buying_intent = analysisData.intent;
         if (analysisData.summary) updateData.summary = analysisData.summary;
-        
-        if (analysisData.handoff_required === true) {
-            updateData.ai_paused = true;
-            updateData.stop_requested_at = new Date().toISOString();
-        }
+        if (analysisData.handoff_required === true) updateData.ai_paused = true;
 
         await supabaseClient.from('leads').update(updateData).eq('id', lead_id);
     }
 
-    // 3. GUARDAR CONVERSACIÓN (GUARDAMOS EL TEXTO LIMPIO)
+    // 4. GUARDAR EN HISTORIAL (TEXTO LIMPIO)
     await supabaseClient.from('conversaciones').insert({
         lead_id: lead_id,
         emisor: is_client_message ? 'CLIENTE' : 'SAMURAI',
@@ -82,17 +70,17 @@ serve(async (req) => {
         metadata: { analysis: analysisData }
     });
 
-    // 4. RESPUESTA AL CLIENTE (DEVOLVEMOS EL TEXTO LIMPIO)
+    // 5. RESPUESTA FINAL (ESTO ES LO QUE VA A WHATSAPP)
     return new Response(
       JSON.stringify({ 
          success: true, 
-         reply: cleanText, // ESTO es lo que Make.com o tu sistema de WhatsApp debe usar
+         reply: cleanText, // <--- ESTE ES EL CAMPO QUE DEBES USAR EN MAKE.COM
          handoff: analysisData?.handoff_required || false 
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
 
-  } catch (error) {
+  } catch (error: any) {
     return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: corsHeaders })
   }
 })
