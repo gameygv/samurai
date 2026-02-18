@@ -1,27 +1,26 @@
-# DYAD SAMURAI - MANUAL DE ESTADO Y REPORTE (v0.802-AI)
+# DYAD SAMURAI - MANUAL DE ESTADO Y REPORTE (v0.804-AI)
 
-Este documento detalla el estado actual del sistema tras la implementación de la versión 0.802-AI.
+Este documento detalla el estado actual del sistema tras la implementación de la versión 0.804-AI.
 
 ## 1. RESUMEN EJECUTIVO
 
 - **Estado del Sistema:** ✅ ONLINE (PRO)
-- **Versión:** 0.802.1 (Self-Learning & RAG Edition)
-- **Base de Datos:** ✅ Conectada y Optimizada (Índices GIN activos)
-- **Integraciones:** 🚀 Optimizadas (Texto Plano por defecto)
+- **Versión:** 0.804.2 (E-commerce & Closing Strategy Edition)
+- **Base de Datos:** ✅ Conectada y Optimizada.
+- **Integraciones:** 🚀 WooCommerce Dynamic Links Activo.
 
 ## 2. ARQUITECTURA DEL CEREBRO (Brain)
 
-- **Identity:** DNA Maestro cargado.
-- **Vision:** Análisis de imágenes activo.
-- **Context:** Historial de 30 mensajes (Deep Memory).
-- **RAG NATIVO:** ✅ Búsqueda automática en documentos PDF/Text subidos.
-- **Self-Learning:** ✅ Bucle cerrado de análisis emocional y de intención.
+- **Identity:** DNA Maestro cargado con enfoque en conversión.
+- **E-commerce Engine:** ✅ Inyección dinámica de Product ID (1483) y Precio ($1500).
+- **RAG NATIVO:** ✅ Búsqueda automática en documentos y sitio principal.
+- **Self-Learning:** ✅ Bucle #CIA operativo con inyección en prompt_relearning.
 
 ## 3. NOVEDADES DEL DASHBOARD
 
-- [x] **Live Feed:** Visualización de chats en vivo.
-- [x] **Kernel Console:** Auditoría técnica.
-- [x] **Auto-Perfilado:** El Samurai actualiza el estado del Lead en cada respuesta.
+- [x] **Dynamic Settings:** Gestión de ID de producto y URL de tienda desde el panel.
+- [x] **Closing Strategy:** Prompt de cierre optimizado para ofrecer anticipos de inscripción.
+- [x] **Radar de Leads:** Seguimiento de intención de compra y estado emocional.
 
 ---
-*Reporte generado automáticamente por Dyad System v0.802.1*
+*Reporte generado automáticamente por Dyad System v0.804.2*

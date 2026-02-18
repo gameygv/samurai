@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { 
   BookOpen, Brain, Zap, ShieldAlert, Target, 
   Database, Image, Lightbulb, AlertTriangle, ScanEye, FlaskConical,
-  Terminal, Play, Pause, MessageSquare, Users, Settings
+  Terminal, Play, Pause, MessageSquare, Users, Settings, ShoppingCart, LinkIcon
 } from 'lucide-react';
 
 const Manual = () => {
@@ -28,10 +28,10 @@ const Manual = () => {
           <TabsList className="bg-slate-900 border border-slate-800 w-full justify-start p-1 h-auto flex-wrap">
             <TabsTrigger value="comandos" className="py-2 px-4 data-[state=active]:bg-indigo-600"><Terminal className="w-4 h-4 mr-2"/> Comandos</TabsTrigger>
             <TabsTrigger value="cerebro" className="py-2 px-4 data-[state=active]:bg-indigo-600"><Brain className="w-4 h-4 mr-2"/> Cerebro</TabsTrigger>
+            <TabsTrigger value="ecommerce" className="py-2 px-4 data-[state=active]:bg-indigo-600"><ShoppingCart className="w-4 h-4 mr-2"/> E-commerce</TabsTrigger>
             <TabsTrigger value="conocimiento" className="py-2 px-4 data-[state=active]:bg-indigo-600"><Database className="w-4 h-4 mr-2"/> Conocimiento</TabsTrigger>
             <TabsTrigger value="media" className="py-2 px-4 data-[state=active]:bg-indigo-600"><Image className="w-4 h-4 mr-2"/> Media</TabsTrigger>
             <TabsTrigger value="aprendizaje" className="py-2 px-4 data-[state=active]:bg-indigo-600"><Zap className="w-4 h-4 mr-2"/> Aprendizaje</TabsTrigger>
-            <TabsTrigger value="leads" className="py-2 px-4 data-[state=active]:bg-indigo-600"><Users className="w-4 h-4 mr-2"/> Leads</TabsTrigger>
           </TabsList>
 
           <TabsContent value="comandos" className="mt-6 space-y-6">
@@ -70,18 +70,42 @@ const Manual = () => {
                          <Badge variant="outline" className="text-[9px] border-yellow-500/30 text-red-400">Corrección IA</Badge>
                       </div>
                    </div>
+                </CardContent>
+             </Card>
+          </TabsContent>
 
-                   <div className="bg-slate-950 border border-slate-800 rounded-lg p-4">
-                      <h4 className="text-sm font-bold text-white mb-3 flex items-center gap-2">
-                         <Lightbulb className="w-4 h-4 text-yellow-500" /> Ejemplo de Uso
+          <TabsContent value="ecommerce" className="mt-6 space-y-6">
+             <Card className="bg-slate-900 border-slate-800">
+                <CardHeader>
+                   <CardTitle className="text-white flex items-center gap-2">
+                      <ShoppingCart className="w-5 h-5 text-orange-500" /> Venta de Cursos & Anticipos
+                   </CardTitle>
+                   <CardDescription>Cómo configurar al Samurai para cerrar ventas automáticamente con links de WooCommerce.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                   <div className="bg-indigo-500/10 border border-indigo-500/20 rounded-lg p-4">
+                      <h4 className="text-sm font-bold text-indigo-400 mb-2 flex items-center gap-2">
+                         <LinkIcon className="w-4 h-4" /> Generador de Links Dinámicos
                       </h4>
-                      <div className="space-y-2 text-xs text-slate-400 font-mono">
-                         <p><span className="text-green-400">Usuario:</span> "El cliente está muy molesto, mejor lo atiendo yo"</p>
-                         <p><span className="text-blue-400">Tú escribes:</span> #STOP</p>
-                         <p><span className="text-indigo-400">Samurai:</span> "Entendido, me retiro. Avísame cuando pueda volver."</p>
-                      </div>
+                      <p className="text-xs text-slate-300 leading-relaxed">
+                         El Samurai inyecta automáticamente los datos configurados en <strong>Ajustes > E-commerce</strong>. Puedes usar estas etiquetas en tus prompts:
+                      </p>
+                      <ul className="mt-3 space-y-2 text-[11px] font-mono">
+                         <li className="text-slate-400"><span className="text-indigo-400">{"{ecommerce_url}"}</span>: La URL base de tu tienda.</li>
+                         <li className="text-slate-400"><span className="text-indigo-400">{"{main_product_id}"}</span>: ID del producto de anticipo (ej: 1483).</li>
+                         <li className="text-slate-400"><span className="text-indigo-400">{"{main_product_price}"}</span>: El monto a pagar (ej: 1500).</li>
+                      </ul>
                    </div>
 
+                   <div className="space-y-3">
+                      <h4 className="text-sm font-bold text-white">Estrategia de Cierre Recomendada</h4>
+                      <p className="text-xs text-slate-400">
+                         Cuando un cliente pregunte por precios o inscripción a un taller, el Samurai debe responder siguiendo esta lógica:
+                      </p>
+                      <div className="bg-slate-950 p-4 rounded border border-slate-800 italic text-xs text-slate-500 leading-relaxed">
+                         "Para asegurar tu lugar en el taller, puedes realizar el pago del anticipo de $1500 directamente aquí: [Link Generado]"
+                      </div>
+                   </div>
                 </CardContent>
              </Card>
           </TabsContent>
@@ -103,123 +127,13 @@ const Manual = () => {
                     <AccordionContent className="text-slate-300 pt-2 space-y-2">
                       <p>Es la instrucción más importante. Define <strong>quién es</strong> y <strong>qué vende</strong>.</p>
                       <div className="bg-slate-950 p-3 rounded border border-slate-800 text-xs font-mono">
-                         Ejemplo: "Eres el cerrador estrella de The Elephant Bowl. Vendes cuencos tibetanos y gongs de alta gama..."
+                         Ejemplo: "Eres el cerrador estrella de The Elephant Bowl. Vendes cuencos tibetanos..."
                       </div>
-                    </AccordionContent>
-                  </AccordionItem>
-
-                  <AccordionItem value="item-2">
-                    <AccordionTrigger className="text-indigo-400 hover:text-indigo-300 font-bold">2. TÉCNICO (Formato de Respuesta)</AccordionTrigger>
-                    <AccordionContent className="text-slate-300 pt-2 space-y-2">
-                      <p>Aquí defines cómo debe estructurar sus respuestas, incluyendo el bloque JSON de análisis.</p>
-                      <div className="bg-slate-950 p-3 rounded border border-slate-800 text-xs font-mono">
-                         {"[[ANALYSIS: { \"mood\": \"FELIZ\", \"intent\": \"ALTO\" }]]"}
-                      </div>
-                    </AccordionContent>
-                  </AccordionItem>
-
-                  <AccordionItem value="item-3">
-                    <AccordionTrigger className="text-indigo-400 hover:text-indigo-300 font-bold">3. CONTEXTO (Información del Negocio)</AccordionTrigger>
-                    <AccordionContent className="text-slate-300 pt-2">
-                      <p>Datos sobre productos, precios, políticas de envío, etc.</p>
-                    </AccordionContent>
-                  </AccordionItem>
-
-                  <AccordionItem value="item-4">
-                    <AccordionTrigger className="text-indigo-400 hover:text-indigo-300 font-bold">4. PSICOLOGÍA (Perfilado Emocional)</AccordionTrigger>
-                    <AccordionContent className="text-slate-300 pt-2">
-                      <p>Instrucciones para que el Samurai detecte el estado emocional y la intención de compra del cliente.</p>
-                    </AccordionContent>
-                  </AccordionItem>
-
-                  <AccordionItem value="item-5">
-                    <AccordionTrigger className="text-indigo-400 hover:text-indigo-300 font-bold">5. VISIÓN (Análisis de Imágenes)</AccordionTrigger>
-                    <AccordionContent className="text-slate-300 pt-2">
-                      <p>Qué hacer cuando el cliente envía fotos de productos o espacios.</p>
-                    </AccordionContent>
-                  </AccordionItem>
-
-                  <AccordionItem value="item-6">
-                    <AccordionTrigger className="text-indigo-400 hover:text-indigo-300 font-bold">6. LECCIONES APRENDIDAS (#CIA)</AccordionTrigger>
-                    <AccordionContent className="text-slate-300 pt-2">
-                      <p className="text-yellow-400 font-bold mb-2">⚠️ Esta sección es de SOLO LECTURA</p>
-                      <p>Se actualiza automáticamente cuando validas correcciones en la Bitácora #CIA.</p>
                     </AccordionContent>
                   </AccordionItem>
                 </Accordion>
               </CardContent>
             </Card>
-          </TabsContent>
-
-          <TabsContent value="conocimiento" className="mt-6 space-y-6">
-             <Card className="bg-slate-900 border-slate-800">
-                <CardHeader>
-                   <CardTitle className="text-white flex items-center gap-2">
-                      <Database className="w-5 h-5 text-emerald-500" /> Base de Conocimiento
-                   </CardTitle>
-                   <CardDescription>Cómo alimentar la memoria del Samurai con documentos y sitios web.</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                   <div className="bg-slate-950 border border-slate-800 rounded-lg p-4">
-                      <h4 className="text-sm font-bold text-white mb-2">Tipos de Recursos</h4>
-                      <ul className="space-y-2 text-xs text-slate-400">
-                         <li className="flex items-start gap-2">
-                            <span className="text-blue-400">•</span>
-                            <span><strong>PDFs:</strong> Catálogos, listas de precios, manuales de productos</span>
-                         </li>
-                         <li className="flex items-start gap-2">
-                            <span className="text-green-400">•</span>
-                            <span><strong>Sitios Web:</strong> Páginas de maestros, eventos, talleres</span>
-                         </li>
-                         <li className="flex items-start gap-2">
-                            <span className="text-yellow-400">•</span>
-                            <span><strong>Texto Plano:</strong> FAQs, políticas, scripts de ventas</span>
-                         </li>
-                      </ul>
-                   </div>
-
-                   <div className="bg-indigo-500/10 border border-indigo-500/20 rounded-lg p-4">
-                      <h4 className="text-sm font-bold text-indigo-400 mb-2 flex items-center gap-2">
-                         <Zap className="w-4 h-4" /> Auto-Sincronización
-                      </h4>
-                      <p className="text-xs text-slate-400">
-                         Los sitios web se actualizan automáticamente cada 24 horas. También puedes forzar la sincronización manualmente.
-                      </p>
-                   </div>
-                </CardContent>
-             </Card>
-          </TabsContent>
-
-          <TabsContent value="media" className="mt-6 space-y-6">
-             <Card className="bg-slate-900 border-slate-800">
-                <CardHeader>
-                   <CardTitle className="text-white flex items-center gap-2">
-                      <Image className="w-5 h-5 text-purple-500" /> Media Manager & Triggers
-                   </CardTitle>
-                   <CardDescription>Cómo usar imágenes y videos con instrucciones de detonación automática.</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                   <p className="text-sm text-slate-300">
-                      Cada archivo multimedia puede tener <strong>instrucciones de trigger</strong> que le dicen al Samurai cuándo enviarlo.
-                   </p>
-
-                   <div className="bg-slate-950 border border-slate-800 rounded-lg p-4">
-                      <h4 className="text-sm font-bold text-white mb-3">Ejemplo de Trigger</h4>
-                      <div className="space-y-2">
-                         <div className="flex items-center gap-2 text-xs">
-                            <Badge className="bg-purple-600">Archivo</Badge>
-                            <span className="text-slate-400">catalogo-cuencos-2026.pdf</span>
-                         </div>
-                         <div className="bg-slate-900 p-3 rounded border border-slate-700">
-                            <p className="text-[10px] text-slate-500 uppercase font-bold mb-1">Instrucción IA:</p>
-                            <p className="text-xs text-slate-300 italic">
-                               "Envía este catálogo cuando el cliente pregunte por precios de mayoreo o quiera ver todos los modelos disponibles."
-                            </p>
-                         </div>
-                      </div>
-                   </div>
-                </CardContent>
-             </Card>
           </TabsContent>
 
           <TabsContent value="aprendizaje" className="mt-6 space-y-6">
@@ -260,44 +174,6 @@ const Manual = () => {
              </Card>
           </TabsContent>
 
-          <TabsContent value="leads" className="mt-6 space-y-6">
-             <Card className="bg-slate-900 border-slate-800">
-                <CardHeader>
-                   <CardTitle className="text-white flex items-center gap-2">
-                      <Users className="w-5 h-5 text-blue-500" /> Gestión de Leads
-                   </CardTitle>
-                   <CardDescription>Cómo interpretar el análisis psicológico y la memoria del cliente.</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                   <div className="bg-slate-950 border border-slate-800 rounded-lg p-4">
-                      <h4 className="text-sm font-bold text-white mb-3">Panel de Memoria Viva</h4>
-                      <ul className="space-y-2 text-xs text-slate-400">
-                         <li className="flex items-start gap-2">
-                            <span className="text-green-400">•</span>
-                            <span><strong>Estado Emocional:</strong> FELIZ, NEUTRO, ENOJADO, PRAGMÁTICO</span>
-                         </li>
-                         <li className="flex items-start gap-2">
-                            <span className="text-yellow-400">•</span>
-                            <span><strong>Intención de Compra:</strong> ALTO (90%), MEDIO (50%), BAJO (20%)</span>
-                         </li>
-                         <li className="flex items-start gap-2">
-                            <span className="text-blue-400">•</span>
-                            <span><strong>Resumen Contextual:</strong> Lo que el Samurai recuerda del cliente</span>
-                         </li>
-                      </ul>
-                   </div>
-
-                   <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-4">
-                      <h4 className="text-sm font-bold text-yellow-400 mb-2 flex items-center gap-2">
-                         <AlertTriangle className="w-4 h-4" /> Handoff Automático
-                      </h4>
-                      <p className="text-xs text-slate-400">
-                         Si el Samurai detecta una situación delicada, pausará automáticamente y te notificará vía webhook.
-                      </p>
-                   </div>
-                </CardContent>
-             </Card>
-          </TabsContent>
         </Tabs>
       </div>
     </Layout>
