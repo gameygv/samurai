@@ -7,7 +7,7 @@ import { SystemStatus } from '@/components/SystemStatus';
 import { 
   Database, Shield, Activity, Terminal, AlertTriangle, 
   CheckCircle2, MessageSquare, TrendingUp, Clock, Loader2,
-  Zap, Brain
+  Zap, Brain, RefreshCw
 } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
@@ -16,7 +16,9 @@ const Index = () => {
     totalErrors: 0,
     pendingCorrections: 0,
     activeVersions: 0,
-    recentLogs: [] as any[]
+    recentLogs: [] as any[],
+    activeFollowups: 0,
+    scheduledRestarts: 0
   });
   const [recentChats, setRecentChats] = useState<any[]>([]);
   const [chartData, setChartData] = useState<any[]>([]);
@@ -75,18 +77,22 @@ const Index = () => {
 
   const fetchData = async () => {
     try {
-      const [errorsRes, pendingRes, versionsRes, logsRes] = await Promise.all([
+      const [errorsRes, pendingRes, versionsRes, logsRes, followupsRes, restartsRes] = await Promise.all([
         supabase.from('errores_ia').select('count', { count: 'exact', head: true }),
         supabase.from('errores_ia').select('count', { count: 'exact', head: true }).eq('estado_correccion', 'REPORTADA'),
         supabase.from('versiones_prompts_aprendidas').select('*').order('created_at', { ascending: true }),
-        supabase.from('activity_logs').select('*').order('created_at', { ascending: false }).limit(10)
+        supabase.from('activity_logs').select('*').order('created_at', { ascending: false }).limit(10),
+        supabase.from('leads').select('count', { count: 'exact', head: true }).not('next_followup_at', 'is', null),
+        supabase.from('leads').select('count', { count: 'exact', head: true }).not('auto_restart_scheduled_at', 'is', null)
       ]);
 
       setStats({
         totalErrors: errorsRes.count || 0,
         pendingCorrections: pendingRes.count || 0,
         activeVersions: (versionsRes.data || []).length,
-        recentLogs: logsRes.data || []
+        recentLogs: logsRes.data || [],
+        activeFollowups: followupsRes.count || 0,
+        scheduledRestarts: restartsRes.count || 0
       });
 
       if (versionsRes.data && versionsRes.data.length > 0) {
@@ -143,8 +149,8 @@ const Index = () => {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           <StatCard title="Alertas #CIA" value={stats.totalErrors} icon={AlertTriangle} color="text-red-500" bg="bg-red-500/10" footer="Correcciones Detectadas" />
           <StatCard title="Pendientes" value={stats.pendingCorrections} icon={Clock} color="text-yellow-500" bg="bg-yellow-500/10" footer="Reglas por validar" />
-          <StatCard title="Versiones" value={stats.activeVersions} icon={TrendingUp} color="text-indigo-500" bg="bg-indigo-500/10" footer="Evolución del Cerebro" />
-          <StatCard title="Base Datos" value="Online" icon={Database} color="text-emerald-500" bg="bg-emerald-500/10" footer="Supabase GIN Index" />
+          <StatCard title="Follow-ups Activos" value={stats.activeFollowups} icon={RefreshCw} color="text-blue-500" bg="bg-blue-500/10" footer="Reintentos programados" />
+          <StatCard title="Auto-Restarts" value={stats.scheduledRestarts} icon={Zap} color="text-orange-500" bg="bg-orange-500/10" footer="Post #STOP pendientes" />
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">

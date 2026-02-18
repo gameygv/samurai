@@ -5,7 +5,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { BrainCircuit, Edit2, X, Save, Loader2, Bot, TrendingUp, AlertCircle, RotateCcw } from 'lucide-react';
+import { BrainCircuit, Edit2, X, Save, Loader2, Bot, TrendingUp, AlertCircle, RotateCcw, Clock, Play, Pause } from 'lucide-react';
 
 interface MemoryPanelProps {
   currentAnalysis: any;
@@ -17,12 +17,13 @@ interface MemoryPanelProps {
   saving: boolean;
   onOpenReport: () => void;
   onReset: () => void;
+  onToggleFollowup?: () => void;
 }
 
 export const MemoryPanel = ({
   currentAnalysis, isEditing, setIsEditing,
   memoryForm, setMemoryForm, onSave, saving,
-  onOpenReport, onReset
+  onOpenReport, onReset, onToggleFollowup
 }: MemoryPanelProps) => {
 
   const getMoodColor = (mood: string) => {
@@ -38,6 +39,9 @@ export const MemoryPanel = ({
     if (i === 'MEDIO') return 'bg-yellow-500';
     return 'bg-slate-600';
   };
+
+  const hasActiveFollowup = currentAnalysis?.next_followup_at && !currentAnalysis?.ai_paused;
+  const hasScheduledRestart = currentAnalysis?.auto_restart_scheduled_at && currentAnalysis?.ai_paused;
 
   return (
     <div className="w-[280px] bg-slate-900/30 flex flex-col overflow-y-auto border-l border-slate-800">
@@ -63,6 +67,48 @@ export const MemoryPanel = ({
             </div>
           )}
         </div>
+
+        {/* ESTADO DE FOLLOW-UP */}
+        {(hasActiveFollowup || hasScheduledRestart) && (
+          <Card className="bg-slate-950 border-slate-800 shadow-none">
+            <CardContent className="p-3 space-y-2">
+              <div className="flex items-center justify-between">
+                <Label className="text-[10px] text-slate-400 uppercase tracking-wide flex items-center gap-1">
+                  <Clock className="w-3 h-3" />
+                  {hasScheduledRestart ? 'Auto-Restart' : 'Follow-up'}
+                </Label>
+                {onToggleFollowup && (
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    className="h-5 w-5" 
+                    onClick={onToggleFollowup}
+                    title={hasActiveFollowup ? "Pausar follow-ups" : "Reanudar follow-ups"}
+                  >
+                    {hasActiveFollowup ? <Pause className="w-3 h-3 text-yellow-500" /> : <Play className="w-3 h-3 text-green-500" />}
+                  </Button>
+                )}
+              </div>
+              {hasScheduledRestart && (
+                <div className="bg-orange-500/10 border border-orange-500/20 rounded p-2">
+                  <p className="text-[9px] text-orange-400 font-mono">
+                    Reactivación programada: {new Date(currentAnalysis.auto_restart_scheduled_at).toLocaleString()}
+                  </p>
+                </div>
+              )}
+              {hasActiveFollowup && (
+                <div className="bg-blue-500/10 border border-blue-500/20 rounded p-2">
+                  <p className="text-[9px] text-blue-400 font-mono">
+                    Próximo intento: {new Date(currentAnalysis.next_followup_at).toLocaleString()}
+                  </p>
+                  <p className="text-[9px] text-slate-500 mt-1">
+                    Stage: {currentAnalysis.followup_stage || 0}/3
+                  </p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
         {/* 1. ANÁLISIS PSICOLÓGICO */}
         <Card className="bg-slate-950 border-slate-800 shadow-none">

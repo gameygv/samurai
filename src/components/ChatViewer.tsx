@@ -108,6 +108,41 @@ const ChatViewer = ({ lead, open, onOpenChange }: ChatViewerProps) => {
      }
   };
 
+  const handleToggleFollowup = async () => {
+    try {
+      const hasActiveFollowup = lead.next_followup_at && !lead.ai_paused;
+      
+      if (hasActiveFollowup) {
+        // Pausar follow-ups
+        await supabase.from('leads').update({
+          next_followup_at: null,
+          followup_stage: 0
+        }).eq('id', lead.id);
+        
+        toast.success('Follow-ups pausados para este lead');
+      } else {
+        // Reanudar follow-ups
+        const { data: config } = await supabase.from('followup_config').select('stage_1_delay').single();
+        const delayMinutes = config?.stage_1_delay || 10;
+        const nextTime = new Date(Date.now() + delayMinutes * 60 * 1000);
+        
+        await supabase.from('leads').update({
+          next_followup_at: nextTime.toISOString(),
+          followup_stage: 1
+        }).eq('id', lead.id);
+        
+        toast.success('Follow-ups reactivados');
+      }
+      
+      // Refrescar datos del lead
+      onOpenChange(false);
+      setTimeout(() => onOpenChange(true), 100);
+      
+    } catch (err: any) {
+      toast.error('Error al modificar follow-ups');
+    }
+  };
+
   const handleReportCIA = async () => {
      setReporting(true);
      try {
@@ -175,6 +210,7 @@ const ChatViewer = ({ lead, open, onOpenChange }: ChatViewerProps) => {
              setIsReportOpen(true);
           }}
           onReset={() => toast.info("Funcionalidad de reset en desarrollo")}
+          onToggleFollowup={handleToggleFollowup}
         />
 
         {/* DIALOGS */}

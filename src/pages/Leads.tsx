@@ -6,7 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { MessageSquare, Search, Loader2, Phone, Zap, BrainCircuit } from 'lucide-react';
+import { MessageSquare, Search, Loader2, Phone, Zap, BrainCircuit, Clock, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import ChatViewer from '@/components/ChatViewer';
 
@@ -59,6 +59,37 @@ const Leads = () => {
     l.telefono?.includes(searchTerm)
   );
 
+  const getFollowupBadge = (lead: any) => {
+    if (!lead.next_followup_at) return null;
+    
+    const nextTime = new Date(lead.next_followup_at);
+    const now = new Date();
+    const diffMinutes = Math.floor((nextTime.getTime() - now.getTime()) / 60000);
+    
+    if (diffMinutes < 0) {
+      return <Badge className="bg-red-600 text-[9px] h-4 px-1">Vencido</Badge>;
+    } else if (diffMinutes < 60) {
+      return <Badge className="bg-yellow-600 text-[9px] h-4 px-1">{diffMinutes}min</Badge>;
+    } else {
+      const hours = Math.floor(diffMinutes / 60);
+      return <Badge className="bg-blue-600 text-[9px] h-4 px-1">{hours}h</Badge>;
+    }
+  };
+
+  const getAutoRestartBadge = (lead: any) => {
+    if (!lead.auto_restart_scheduled_at) return null;
+    
+    const restartTime = new Date(lead.auto_restart_scheduled_at);
+    const now = new Date();
+    const diffMinutes = Math.floor((restartTime.getTime() - now.getTime()) / 60000);
+    
+    if (diffMinutes < 0) {
+      return <Badge className="bg-green-600 text-[9px] h-4 px-1 animate-pulse">Reactivando...</Badge>;
+    } else {
+      return <Badge className="bg-orange-600 text-[9px] h-4 px-1">Restart en {diffMinutes}min</Badge>;
+    }
+  };
+
   return (
     <Layout>
       <div className="max-w-7xl mx-auto space-y-6">
@@ -98,13 +129,14 @@ const Leads = () => {
                   <TableHead className="text-slate-400">Ubicación</TableHead>
                   <TableHead className="text-slate-400">Estado Emocional</TableHead>
                   <TableHead className="text-slate-400">Intención de Compra</TableHead>
+                  <TableHead className="text-slate-400">Follow-up</TableHead>
                   <TableHead className="text-slate-400 text-right">Acciones</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {loading ? (
                    <TableRow>
-                      <TableCell colSpan={5} className="text-center h-24 text-slate-500">
+                      <TableCell colSpan={6} className="text-center h-24 text-slate-500">
                          <Loader2 className="w-6 h-6 animate-spin mx-auto" />
                       </TableCell>
                    </TableRow>
@@ -140,6 +172,21 @@ const Leads = () => {
                           <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
                              <div className="h-full bg-indigo-500" style={{ width: `${lead.confidence_score || 10}%` }} />
                           </div>
+                       </div>
+                    </TableCell>
+                    <TableCell>
+                       <div className="flex flex-col gap-1">
+                          {lead.ai_paused && lead.auto_restart_scheduled_at && getAutoRestartBadge(lead)}
+                          {!lead.ai_paused && lead.next_followup_at && (
+                            <div className="flex items-center gap-1">
+                              <Clock className="w-3 h-3 text-blue-400" />
+                              {getFollowupBadge(lead)}
+                              <span className="text-[9px] text-slate-600">Stage {lead.followup_stage || 0}</span>
+                            </div>
+                          )}
+                          {!lead.ai_paused && !lead.next_followup_at && (
+                            <span className="text-[9px] text-slate-600 italic">Sin programar</span>
+                          )}
                        </div>
                     </TableCell>
                     <TableCell className="text-right">
