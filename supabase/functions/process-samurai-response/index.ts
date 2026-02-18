@@ -21,98 +21,85 @@ serve(async (req) => {
 
     if (!lead_id) throw new Error("Lead ID is required");
 
-    // 1. NORMALIZACIÓN DE ENTRADA
-    let fullText = "";
-    
-    if (typeof ai_json_response === 'string') {
-        try {
-            const parsed = JSON.parse(ai_json_response);
-            fullText = parsed.reply || ai_json_response;
-        } catch (e) {
-            fullText = ai_json_response;
-        }
-    } else if (typeof ai_json_response === 'object') {
-        fullText = ai_json_response.reply || JSON.stringify(ai_json_response);
-    } else {
-        fullText = raw_text || "Error: No response text";
-    }
-
-    // 2. EXTRACCIÓN DE INTELIGENCIA (AUTOAPRENDIZAJE)
+    let fullText = typeof ai_json_response === 'string' ? ai_json_response : (ai_json_response?.reply || raw_text || "");
     let cleanText = fullText;
     let analysisData: any = null;
-    let mediaUrlFound = null;
 
-    // Regex para capturar el bloque JSON de análisis [[ANALYSIS: {...}]]
+    // Regex para capturar el bloque JSON de análisis avanzado
     const analysisRegex = /\[\[ANALYSIS:\s*({[\s\S]*?})\s*\]\]/s;
     const match = fullText.match(analysisRegex);
 
     if (match && match[1]) {
         try {
             analysisData = JSON.parse(match[1]);
-            // Eliminamos el bloque del mensaje para que no lo vea el cliente
             cleanText = fullText.replace(match[0], '').trim();
         } catch (e) {
             console.error("[process-samurai-response] Error parsing analysis JSON", e);
         }
     }
 
-    // 3. ACTUALIZACIÓN DEL PERFIL DEL LEAD (MEMORIA ACTIVA)
+    // 1. ACTUALIZACIÓN DEL PERFIL DEL LEAD (MEMORIA MAESTRA)
     if (analysisData) {
         const updateData: any = {
            last_ai_analysis: new Date().toISOString()
         };
         
+        // Mapeo de campos dinámicos
         if (analysisData.mood) updateData.estado_emocional_actual = analysisData.mood;
         if (analysisData.intent) updateData.buying_intent = analysisData.intent;
         if (analysisData.summary) updateData.summary = analysisData.summary;
+        if (analysisData.city) updateData.ciudad = analysisData.city;
+        if (analysisData.preferences) updateData.preferencias = analysisData.preferences;
+        if (analysisData.psychology) updateData.perfil_psicologico = analysisData.psychology;
+        
+        // Si la IA decide que necesita un humano
+        if (analysisData.handoff_required === true) {
+            updateData.ai_paused = true; // Pausamos la IA automáticamente
+            
+            // DISPARAR WEBHOOK A MAKE PARA AVISAR AL HUMANO
+            const { data: config } = await supabaseClient
+                .from('app_config')
+                .select('value')
+                .eq('key', 'webhook_human_handoff')
+                .single();
 
-        // Actualizamos para que el Dashboard y el ChatViewer reflejen la nueva psicología
+            if (config?.value) {
+                console.log("[process-samurai-response] Disparando Webhook Humano...");
+                fetch(config.value, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        event: 'human_intervention_required',
+                        lead_id: lead_id,
+                        reason: analysisData.handoff_reason || 'Situación delicada',
+                        last_message: cleanText
+                    })
+                }).catch(err => console.error("Error calling handoff webhook:", err));
+            }
+        }
+
         await supabaseClient.from('leads').update(updateData).eq('id', lead_id);
     }
 
-    // 4. DETECTAR MEDIA URLS (Soporte para envíos automáticos de imágenes)
-    const urlRegex = /(https?:\/\/[^\s]+)/g;
-    const urls = cleanText.match(urlRegex);
-    if (urls && urls.length > 0) {
-       mediaUrlFound = urls[urls.length - 1]; // Tomamos la última URL como posible adjunto
-    }
-
-    // 5. GUARDAR CONVERSACIÓN EN HISTORIAL
-    const { error: chatError } = await supabaseClient.from('conversaciones').insert({
+    // 2. GUARDAR CONVERSACIÓN
+    await supabaseClient.from('conversaciones').insert({
         lead_id: lead_id,
         emisor: 'SAMURAI',
         mensaje: cleanText, 
         platform: 'API',
-        metadata: { 
-           format: 'text_processed',
-           analysis: analysisData,
-           has_media: !!mediaUrlFound
-        }
+        metadata: { analysis: analysisData }
     });
 
-    if (chatError) throw chatError;
-
-    // 6. ACTUALIZAR TIMESTAMP DEL LEAD
-    await supabaseClient.from('leads').update({
-        last_message_at: new Date().toISOString()
-    }).eq('id', lead_id);
-
-    // Retornamos la respuesta LIMPIA a Make
     return new Response(
       JSON.stringify({ 
          success: true, 
          reply: cleanText, 
-         media_url: mediaUrlFound,
-         analysis_captured: !!analysisData 
+         handoff: analysisData?.handoff_required || false 
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
 
   } catch (error) {
-    console.error("[process-samurai-response] Error:", error);
-    return new Response(
-      JSON.stringify({ error: error.message }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    )
+    return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: corsHeaders })
   }
 })
