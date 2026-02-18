@@ -17,49 +17,70 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
-    const { message, lead_id, lead_phone } = await req.json();
+    const { message, lead_id, mode = 'LIVE' } = await req.json();
 
-    // 1. OBTENER CONFIGURACIÓN Y CONTEXTO
-    const { data: configData } = await supabaseClient.from('app_config').select('key, value');
-    const configs: any = {};
-    configData?.forEach(i => configs[i.key] = i.value);
+    // 1. OBTENER TODAS LAS CONFIGURACIONES DE PROMPTS
+    const { data: configData } = await supabaseClient
+        .from('app_config')
+        .select('key, value')
+        .eq('category', 'PROMPT');
+    
+    const prompts: any = {};
+    configData?.forEach(i => prompts[i.key] = i.value);
 
-    // 2. DATOS ACTUALES DEL LEAD
-    const { data: lead } = await supabaseClient.from('leads').select('*').eq('id', lead_id).single();
+    // 2. OBTENER DATOS DEL LEAD (Si existe)
+    let leadContext = "Nombre: Prospecto Anónimo\nCiudad: En análisis...";
+    if (lead_id) {
+        const { data: lead } = await supabaseClient.from('leads').select('*').eq('id', lead_id).single();
+        if (lead) {
+            leadContext = `
+Nombre: ${lead.nombre || 'Prospecto'}
+Ciudad: ${lead.ciudad || 'Desconocida'}
+Intención de Compra: ${lead.buying_intent || 'BAJA'}
+Perfil Psicologico: ${lead.perfil_psicologico || 'En análisis...'}
+Resumen Memoria: ${lead.summary || 'Sin historial previo.'}
+            `;
+        }
+    }
 
+    // 3. ENSAMBLAJE MAESTRO (The Great Prompt)
     const fullSystemPrompt = `
-=== 🧠 IDENTIDAD SAMURAI ===
-${configs['prompt_core']}
+${prompts['prompt_core'] || '# IDENTIDAD SAMURAI\nEres un experto en ventas.'}
 
-=== 🕵️ FUNCIÓN DE PERFILADO (OBLIGATORIO) ===
-Tu tarea secundaria es identificar y registrar datos del cliente en el bloque ANALYSIS:
-1. CIUDAD: Detecta de dónde escribe.
-2. PREFERENCIAS: ¿Qué le gusta? ¿Qué instrumentos prefiere?
-3. PERFIL: ¿Es un profesional, un principiante, alguien curioso?
-4. HANDOFF: Si el cliente está MOLESTO, pide hablar con un humano, o la situación es demasiado compleja para ti, activa "handoff_required": true y notifícale amablemente que un especialista humano tomará el control.
+=== 🛡️ REGLAS TÉCNICAS ===
+${prompts['prompt_technical'] || 'Responde de forma concisa.'}
 
-=== 🧬 MEMORIA ACTUAL DEL CLIENTE ===
-Nombre: ${lead?.nombre || 'Prospecto'}
-Ciudad actual registrada: ${lead?.ciudad || 'Desconocida'}
-Perfil Psicologico: ${lead?.perfil_psicologico || 'En análisis...'}
-Preferencias: ${lead?.preferencias || 'Sin datos...'}
+=== 📚 CONTEXTO DEL NEGOCIO ===
+${prompts['prompt_context'] || 'Vendemos instrumentos de sonoterapia.'}
 
-=== ⚡ FORMATO DE SALIDA ===
-Responde al cliente y termina SIEMPRE con este JSON exacto:
+=== 🧠 ANALISIS PSICOLÓGICO Y PERFILADO ===
+${prompts['prompt_psychology'] || 'Analiza el sentimiento del cliente.'}
+
+=== 📸 PROTOCOLO DE VISIÓN (MULTIMEDIA) ===
+${prompts['prompt_vision'] || 'Si el cliente envía una imagen, analízala.'}
+
+=== 🔄 LECCIONES APRENDIDAS (#CIA) ===
+${prompts['prompt_relearning'] || 'No hay reglas adicionales.'}
+
+=== 👤 CONTEXTO ACTUAL DEL CLIENTE ===
+${leadContext}
+
+=== ⚡ FORMATO DE SALIDA OBLIGATORIO ===
+Responde al mensaje del cliente y termina SIEMPRE con el bloque ANALYSIS en JSON:
 [[ANALYSIS: {
   "mood": "FELIZ|NEUTRO|ENOJADO",
   "intent": "ALTO|MEDIO|BAJO",
-  "city": "Ciudad detectada",
-  "preferences": "Resumen de lo que busca",
-  "psychology": "Perfil detectado",
   "summary": "Resumen para tu memoria",
-  "handoff_required": false,
-  "handoff_reason": ""
+  "handoff_required": false
 }]]
     `;
 
     return new Response(
-      JSON.stringify({ system_prompt: fullSystemPrompt }),
+      JSON.stringify({ 
+        system_prompt: fullSystemPrompt,
+        message_received: message,
+        status: "ready"
+      }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
 

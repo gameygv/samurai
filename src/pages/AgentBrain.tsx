@@ -81,15 +81,21 @@ const AgentBrain = () => {
   };
 
   const handleRunTest = async () => {
-    if (!testInput) return;
+    if (!testInput) {
+       toast.warning("Ingresa un mensaje para simular la entrada.");
+       return;
+    }
     setTesting(true);
+    setTestOutput(null);
     try {
         const { data, error } = await supabase.functions.invoke('get-samurai-context', {
-            body: { message: testInput, lead_name: "Test User", platform: "LAB" }
+            body: { message: testInput, mode: "LABORATORY" }
         });
         if (error) throw error;
         setTestOutput(data.system_prompt || "Respuesta vacía del servidor.");
+        toast.success("Simulación completada.");
     } catch (err: any) {
+        console.error("Test Error:", err);
         toast.error('Error en simulación: ' + err.message);
     } finally {
         setTesting(false);
@@ -115,7 +121,7 @@ const AgentBrain = () => {
           </Button>
         </div>
 
-        <Tabs defaultValue={initialTab} onValueChange={handleTabChange} className="w-full">
+        <Tabs value={initialTab} onValueChange={handleTabChange} className="w-full">
           <TabsList className="bg-slate-900 border border-slate-800 p-1 w-full justify-start overflow-x-auto h-auto flex-nowrap">
              <TabsTrigger value="part1" className="py-2"><Bot className="w-4 h-4 mr-2" /> 1. Sistema</TabsTrigger>
              <TabsTrigger value="part2" className="py-2"><Database className="w-4 h-4 mr-2" /> 2. Contexto</TabsTrigger>
@@ -124,7 +130,6 @@ const AgentBrain = () => {
              <TabsTrigger value="part5" className="py-2 data-[state=active]:bg-indigo-600"><FlaskConical className="w-4 h-4 mr-2" /> Laboratorio</TabsTrigger>
           </TabsList>
 
-          {/* PARTE 1: SISTEMA */}
           <TabsContent value="part1" className="mt-6">
              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <PromptCard 
@@ -144,7 +149,6 @@ const AgentBrain = () => {
              </div>
           </TabsContent>
 
-          {/* PARTE 2: CONTEXTO */}
           <TabsContent value="part2" className="mt-6">
              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <PromptCard 
@@ -165,7 +169,6 @@ const AgentBrain = () => {
              </div>
           </TabsContent>
 
-          {/* PARTE 3: PSICOLOGÍA */}
           <TabsContent value="part3" className="mt-6">
              <div className="grid grid-cols-1 md:grid-cols-1 gap-6">
                 <PromptCard 
@@ -178,7 +181,6 @@ const AgentBrain = () => {
              </div>
           </TabsContent>
 
-          {/* PARTE 4: VISIÓN */}
           <TabsContent value="part4" className="mt-6">
              <div className="grid grid-cols-1 md:grid-cols-1 gap-6">
                 <PromptCard 
@@ -191,7 +193,6 @@ const AgentBrain = () => {
              </div>
           </TabsContent>
           
-          {/* PARTE 5: LABORATORIO */}
           <TabsContent value="part5" className="mt-6">
              <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
                 <Card className="md:col-span-4 bg-slate-900 border-slate-800">
@@ -212,7 +213,7 @@ const AgentBrain = () => {
                         />
                       </div>
                       <Button onClick={handleRunTest} className="w-full bg-indigo-600" disabled={testing}>
-                         {testing ? <Loader2 className="w-4 h-4 animate-spin mr-2"/> : <Zap className="w-4 h-4 mr-2" />}
+                         {testing ? <Loader2 className="w-4 h-4 mr-2 animate-spin"/> : <Zap className="w-4 h-4 mr-2" />}
                          Ensamblar Prompt
                       </Button>
                       <div className="p-3 bg-indigo-500/10 border border-indigo-500/20 rounded text-[10px] text-indigo-300">
