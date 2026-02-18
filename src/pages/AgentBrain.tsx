@@ -14,18 +14,27 @@ import {
   Database, History, MessageSquare, Gift, RefreshCw, 
   CheckCheck, Zap, FlaskConical, 
   Play, Loader2, Terminal, Info, BrainCircuit, Target, ScanEye,
-  AlertTriangle, BookOpen
+  AlertTriangle, BookOpen, Sparkles, ShieldAlert, TrendingUp, FileText
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { logActivity } from '@/utils/logger';
 
 const DEFAULTS = {
-  'prompt_core': '# ADN SAMURAI - THE ELEPHANT BOWL\nEres el cerrador estrella...',
-  'prompt_technical': '# REGLAS TÉCNICAS\nNo uses emojis excesivos...',
-  'prompt_context': '# CONTEXTO GENERAL\nSomos especialistas en Sonoterapia...',
-  'prompt_psychology': '# ANÁLISIS PSICOLÓGICO\nIdentifica el tono del cliente...',
-  'prompt_vision': '# ANÁLISIS DE IMÁGENES\nCuando recibas una foto, descríbela...',
-  'prompt_relearning': '# LECCIONES APRENDIDAS (#CIA)\nAquí se inyectan las reglas de auto-aprendizaje...'
+  'prompt_adn_core': '# ADN CORE\nEres Samurai, un asistente de ventas de elite...',
+  'prompt_tecnico': '# FÓRMULA TÉCNICA (JSON STRICTO)\nResponde SIEMPRE en este formato JSON exacto...',
+  'prompt_protocolos': '# PROTOCOLOS\nSaluda brevemente. No seas redundante...',
+  'prompt_objeciones': '# MATRIZ DE OBJECIONES\nSi dice "caro" -> Resalta valor/durabilidad...',
+  'prompt_datos_crm': '# INYECCIÓN DE DATOS\nUsa los datos del contexto (Nombre, Ciudad)...',
+  'prompt_memoria': '# MEMORIA\nRevisa los últimos mensajes...',
+  'prompt_tono': '# TONO ADAPTATIVO\nWhatsApp = Casual, emojis...',
+  'prompt_upselling': '# UPSELLING\nSi compra X, ofrece Y con 10% descuento...',
+  'prompt_perfilado': '# PERFILADO PSICOLÓGICO\nAnaliza el texto del cliente...',
+  'prompt_estrategia_cierre': '# ESTRATEGIA DE CIERRE\nTu objetivo es mover al lead en el Funnel...',
+  'prompt_reaprendizaje': '# RE-APRENDIZAJE (MANDATORIO)\nLee las "LECCIONES APRENDIDAS"...',
+  'prompt_trigger_corregiria': '# TRIGGER APRENDIZAJE\nSi el humano interviene con #CORREGIRIA...',
+  'prompt_ojo_halcon': '# OJO DE HALCÓN\nBusca: Monto total, Fecha, CUIT/Razón Social...',
+  'prompt_match': '# MATCHING\nCompara el monto del comprobante con la deuda registrada...',
+  'prompt_accion_post': '# POST-VALIDACIÓN\nSi coincide: "Pago recibido, gracias {nombre}..."'
 };
 
 const AgentBrain = () => {
@@ -110,15 +119,12 @@ const AgentBrain = () => {
       <div className="max-w-7xl mx-auto space-y-8 pb-12">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-white flex items-center gap-3">
-               <BrainCircuit className="w-8 h-8 text-red-600" />
-               Cerebro Core del Samurai
-            </h1>
-            <p className="text-slate-400">Configura la identidad y capas de procesamiento de la IA.</p>
+            <h1 className="text-3xl font-bold text-white">Cerebro del Samurai</h1>
+            <p className="text-slate-400">La inteligencia se divide en 4 pilares maestros. Configúralos con precisión.</p>
           </div>
           <Button onClick={handleSave} disabled={saving} className="bg-red-600 hover:bg-red-700 shadow-lg shadow-red-900/20 px-8">
              {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
-             Guardar Estrategia
+             Guardar Cambios
           </Button>
         </div>
 
@@ -131,69 +137,135 @@ const AgentBrain = () => {
              <TabsTrigger value="part5" className="py-2 data-[state=active]:bg-indigo-600"><FlaskConical className="w-4 h-4 mr-2" /> Laboratorio</TabsTrigger>
           </TabsList>
 
-          {/* PARTE 1: SISTEMA (2 tarjetas) */}
+          {/* PARTE 1: SISTEMA (4 tarjetas en grid 2x2) */}
           <TabsContent value="part1" className="mt-6">
              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <PromptCard 
-                  title="Identidad Maestra (Core)" 
-                  icon={Bot} 
-                  description="Define quién es el Samurai y su tono de voz."
-                  value={prompts['prompt_core']} 
-                  onChange={(v:any) => setPrompts({...prompts, prompt_core: v})} 
+                  title="1.1 ADN CORE" 
+                  icon={Sparkles} 
+                  description="Aquí defines la esencia del bot. Su nombre, su rol como Samurai, y los valores innegociables de la marca."
+                  value={prompts['prompt_adn_core']} 
+                  onChange={(v:any) => setPrompts({...prompts, prompt_adn_core: v})} 
                 />
                 <PromptCard 
-                  title="Restricciones Técnicas" 
-                  icon={Hammer} 
-                  description="Reglas sobre formato, emojis y prohibiciones."
-                  value={prompts['prompt_technical']} 
-                  onChange={(v:any) => setPrompts({...prompts, prompt_technical: v})} 
+                  title="1.2 TÉCNICO (TEXTO PLANO)" 
+                  icon={Terminal} 
+                  description="Formato de respuesta: TEXTO PLANO obligatorio. Sin JSON. La IA sabe que debe enviar una imagen, pone el título al final."
+                  value={prompts['prompt_tecnico']} 
+                  onChange={(v:any) => setPrompts({...prompts, prompt_tecnico: v})} 
+                />
+                <PromptCard 
+                  title="1.3 PROTOCOLOS" 
+                  icon={FileText} 
+                  description="Define cómo reacciona ante saludos, despedidas o situaciones estándar."
+                  value={prompts['prompt_protocolos']} 
+                  onChange={(v:any) => setPrompts({...prompts, prompt_protocolos: v})} 
+                />
+                <PromptCard 
+                  title="1.4 OBJECIONES" 
+                  icon={ShieldAlert} 
+                  description="Matriz de combate. Instrucciones para la vuelta a dudas sobre precios, tiempos de entrega o competencia."
+                  value={prompts['prompt_objeciones']} 
+                  onChange={(v:any) => setPrompts({...prompts, prompt_objeciones: v})} 
                 />
              </div>
           </TabsContent>
 
-          {/* PARTE 2: CONTEXTO (2 tarjetas) */}
+          {/* PARTE 2: CONTEXTO (4 tarjetas en grid 2x2) */}
           <TabsContent value="part2" className="mt-6">
              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <PromptCard 
-                  title="Contexto del Negocio" 
-                  icon={BookOpen} 
-                  description="Información general sobre The Elephant Bowl."
-                  value={prompts['prompt_context']} 
-                  onChange={(v:any) => setPrompts({...prompts, prompt_context: v})} 
+                  title="2.1 DATOS CRM" 
+                  icon={Database} 
+                  description="Cómo usar la información de Kommo. Cómo llamar al cliente por su nombre."
+                  value={prompts['prompt_datos_crm']} 
+                  onChange={(v:any) => setPrompts({...prompts, prompt_datos_crm: v})} 
                 />
                 <PromptCard 
-                  title="Lecciones Aprendidas (#CIA)" 
+                  title="2.2 MEMORIA" 
                   icon={History} 
-                  description="Reglas generadas automáticamente por el auto-aprendizaje."
-                  value={prompts['prompt_relearning']} 
-                  onChange={(v:any) => setPrompts({...prompts, prompt_relearning: v})} 
-                  readOnly={true}
+                  description="Reglas para que la IA no olvide lo que se dijo hace 5 minutos."
+                  value={prompts['prompt_memoria']} 
+                  onChange={(v:any) => setPrompts({...prompts, prompt_memoria: v})} 
+                />
+                <PromptCard 
+                  title="2.3 TONO" 
+                  icon={MessageSquare} 
+                  description="Cómo sonar empático si el cliente está frustrado o profesional si el cliente es pragmático."
+                  value={prompts['prompt_tono']} 
+                  onChange={(v:any) => setPrompts({...prompts, prompt_tono: v})} 
+                />
+                <PromptCard 
+                  title="2.4 UPSELLING" 
+                  icon={TrendingUp} 
+                  description="Lógica comercial. ¿Cuándo debe intentar vender algo más?"
+                  value={prompts['prompt_upselling']} 
+                  onChange={(v:any) => setPrompts({...prompts, prompt_upselling: v})} 
                 />
              </div>
           </TabsContent>
 
-          {/* PARTE 3: PSICOLOGÍA (1 tarjeta ancha) */}
-          <TabsContent value="part3" className="mt-6">
+          {/* PARTE 3: PSICOLOGÍA (4 tarjetas, 1 ancha arriba + 3 abajo) */}
+          <TabsContent value="part3" className="mt-6 space-y-6">
              <div className="grid grid-cols-1 gap-6">
                 <PromptCard 
-                  title="Instrucciones de Perfilado" 
+                  title="3.1 PERFILADO PSICOLÓGICO" 
                   icon={Target} 
-                  description="Cómo debe el Samurai analizar emocionalmente al cliente."
-                  value={prompts['prompt_psychology']} 
-                  onChange={(v:any) => setPrompts({...prompts, prompt_psychology: v})} 
+                  description="Instrucciones para que la IA analice la personalidad del cliente basándose en su forma de escribir."
+                  value={prompts['prompt_perfilado']} 
+                  onChange={(v:any) => setPrompts({...prompts, prompt_perfilado: v})} 
+                />
+             </div>
+             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <PromptCard 
+                  title="3.2 ESTRATEGIA DE CIERRE" 
+                  icon={Zap} 
+                  description="Cómo mover al lead a través del embudo. Identificar en qué etapa está y empujarlo a la siguiente."
+                  value={prompts['prompt_estrategia_cierre']} 
+                  onChange={(v:any) => setPrompts({...prompts, prompt_estrategia_cierre: v})} 
+                />
+                <PromptCard 
+                  title="3.3 RE-APRENDIZAJE (CORRECCIONES)" 
+                  icon={RefreshCw} 
+                  description="Cómo integrar las nuevas reglas de oro que tú validas en el Learning Log."
+                  value={prompts['prompt_reaprendizaje']} 
+                  onChange={(v:any) => setPrompts({...prompts, prompt_reaprendizaje: v})} 
+                />
+                <PromptCard 
+                  title="3.4 TRIGGER #CORREGIRIA" 
+                  icon={AlertTriangle} 
+                  description="Define qué situaciones activan el reporte de error manual."
+                  value={prompts['prompt_trigger_corregiria']} 
+                  onChange={(v:any) => setPrompts({...prompts, prompt_trigger_corregiria: v})} 
                 />
              </div>
           </TabsContent>
 
-          {/* PARTE 4: VISIÓN (1 tarjeta ancha) */}
+          {/* PARTE 4: VISIÓN (3 tarjetas) */}
           <TabsContent value="part4" className="mt-6">
-             <div className="grid grid-cols-1 gap-6">
+             <div className="grid grid-cols-1 gap-6 mb-6">
                 <PromptCard 
-                  title="Análisis de Multimedia" 
+                  title="4.1 OJO DE HALCÓN (ANÁLISIS DE IMAGEN)" 
                   icon={Eye} 
-                  description="Instrucciones para cuando el cliente envía fotos o videos."
-                  value={prompts['prompt_vision']} 
-                  onChange={(v:any) => setPrompts({...prompts, prompt_vision: v})} 
+                  description="La joya de la corona. Define cómo la IA debe 'mirar' una foto."
+                  value={prompts['prompt_ojo_halcon']} 
+                  onChange={(v:any) => setPrompts({...prompts, prompt_ojo_halcon: v})} 
+                />
+             </div>
+             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <PromptCard 
+                  title="4.2 MATCH" 
+                  icon={CheckCheck} 
+                  description="Cómo comparar el texto extraído de la imagen con la deuda real del cliente."
+                  value={prompts['prompt_match']} 
+                  onChange={(v:any) => setPrompts({...prompts, prompt_match: v})} 
+                />
+                <PromptCard 
+                  title="4.3 ACCIÓN POST" 
+                  icon={Gift} 
+                  description="Qué hacer inmediatamente después de validar un pago. Confirmar o pedir a un humano."
+                  value={prompts['prompt_accion_post']} 
+                  onChange={(v:any) => setPrompts({...prompts, prompt_accion_post: v})} 
                 />
              </div>
           </TabsContent>
@@ -267,7 +339,7 @@ const PromptCard = ({ title, icon: Icon, description, value, onChange, readOnly 
         value={value} 
         onChange={e => onChange(e.target.value)} 
         readOnly={readOnly}
-        className={`h-full min-h-[300px] bg-slate-950/50 border-slate-800 font-mono text-xs text-slate-300 leading-relaxed focus-visible:ring-red-600/50 ${readOnly ? 'opacity-70 grayscale' : ''}`}
+        className={`h-full min-h-[200px] bg-slate-950/50 border-slate-800 font-mono text-xs text-slate-300 leading-relaxed focus-visible:ring-red-600/50 ${readOnly ? 'opacity-70 grayscale' : ''}`}
         placeholder="Ingresa las instrucciones aquí..."
       />
     </CardContent>

@@ -7,8 +7,9 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Webhook, Key, Save, Loader2, ShoppingCart, Globe, ShieldAlert, Database } from 'lucide-react';
+import { Webhook, Key, Save, Loader2, ShoppingCart, Globe, ShieldAlert, Database, Eye, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
+import { Badge } from '@/components/ui/badge';
 
 const Settings = () => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -142,7 +143,7 @@ const Settings = () => {
              </Card>
           </TabsContent>
           
-          <TabsContent value="secrets" className="mt-6">
+          <TabsContent value="secrets" className="mt-6 space-y-6">
              <Card className="bg-slate-900 border-slate-800">
                 <CardHeader>
                    <CardTitle className="text-white">API Keys & Tokens</CardTitle>
@@ -158,6 +159,52 @@ const Settings = () => {
                         className="bg-slate-950 border-slate-800 font-mono text-xs"
                         placeholder="sk-..."
                       />
+                   </div>
+                </CardContent>
+             </Card>
+
+             <Card className="bg-indigo-900/10 border-indigo-500/20 border-l-4 border-l-indigo-500">
+                <CardHeader>
+                   <CardTitle className="text-white flex items-center gap-2">
+                      <Eye className="w-5 h-5 text-indigo-400" /> OpenAI Vision API (Ojo de Halcón)
+                      <Badge className="bg-yellow-600 text-xs">PENDIENTE</Badge>
+                   </CardTitle>
+                   <CardDescription>
+                      Configuración para el análisis de comprobantes de pago mediante GPT-4 Vision.
+                   </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                   <div className="space-y-2">
+                      <Label className="text-indigo-400 flex items-center gap-2">
+                         <Sparkles className="w-4 h-4" /> OpenAI Vision API Key
+                      </Label>
+                      <Input 
+                        type="password"
+                        value={getValue('openai_vision_key')}
+                        onChange={e => handleInputChange('openai_vision_key', e.target.value, 'SECRETS')}
+                        className="bg-slate-950 border-indigo-500/30 font-mono text-xs focus:border-indigo-500"
+                        placeholder="sk-proj-..."
+                      />
+                      <p className="text-[10px] text-slate-500 italic">
+                         Esta API se usará exclusivamente para validar comprobantes de pago cuando el cliente envíe una imagen.
+                      </p>
+                   </div>
+
+                   <div className="bg-slate-950 border border-slate-800 rounded-lg p-4">
+                      <h4 className="text-xs font-bold text-white mb-2 flex items-center gap-2">
+                         <Eye className="w-3 h-3 text-indigo-400" /> Flujo del Ojo de Halcón
+                      </h4>
+                      <ol className="text-[10px] text-slate-400 space-y-1 list-decimal list-inside">
+                         <li>Cliente envía foto del comprobante</li>
+                         <li>GPT-4 Vision extrae: Monto, Fecha, CUIT/Razón Social</li>
+                         <li>Sistema compara con deuda registrada en Kommo</li>
+                         <li>Si coincide (±5 pesos): Confirma pago automáticamente</li>
+                         <li>Si no coincide: Escala a humano</li>
+                      </ol>
+                   </div>
+
+                   <div className="bg-yellow-500/10 border border-yellow-500/20 rounded p-3 text-xs text-yellow-400">
+                      <strong>⚠️ Estado:</strong> Infraestructura lista. Esperando instrucción para desarrollar la lógica de validación.
                    </div>
                 </CardContent>
              </Card>
