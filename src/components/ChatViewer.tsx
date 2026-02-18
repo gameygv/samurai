@@ -1,15 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { BrainCircuit, Send, Phone, User, Bot, Loader2, Save, MapPin, Target } from 'lucide-react';
+import { Sheet, SheetContent } from '@/components/ui/sheet';
+import { ChatHeader } from './chat/ChatHeader';
+import { MessageList } from './chat/MessageList';
+import { MessageInput } from './chat/MessageInput';
+import { MemoryPanel } from './chat/MemoryPanel';
+import { ReportDialog } from './chat/ReportDialog';
 import { toast } from 'sonner';
+import { logActivity } from '@/utils/logger';
 
 interface ChatViewerProps {
   lead: any;
@@ -21,23 +19,30 @@ const ChatViewer = ({ lead, open, onOpenChange }: ChatViewerProps) => {
   const [messages, setMessages] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
-  const [newMessage, setNewMessage] = useState('');
+  const [isEditingMemory, setIsEditingMemory] = useState(false);
   
-  // Perfilado Local para edición
-  const [profile, setProfile] = useState({
-    ciudad: lead.ciudad || '',
-    preferencias: lead.preferencias || '',
-    perfil_psicologico: lead.perfil_psicologico || '',
+  // States for reporting #CIA
+  const [isReportOpen, setIsReportOpen] = useState(false);
+  const [reporting, setReporting] = useState(false);
+  const [errorContext, setErrorContext] = useState({
+    ia_response: '',
+    correction: '',
+    reason: 'Corrección manual desde panel'
+  });
+
+  // Local Memory State
+  const [memoryForm, setMemoryForm] = useState({
+    summary: lead.summary || '',
+    mood: lead.estado_emocional_actual || 'NEUTRO',
     buying_intent: lead.buying_intent || 'BAJO'
   });
 
   useEffect(() => {
     if (open && lead) {
       fetchMessages();
-      setProfile({
-        ciudad: lead.ciudad || '',
-        preferencias: lead.preferencias || '',
-        perfil_psicologico: lead.perfil_psicologico || '',
+      setMemoryForm({
+        summary: lead.summary || '',
+        mood: lead.estado_emocional_actual || 'NEUTRO',
         buying_intent: lead.buying_intent || 'BAJO'
       });
     }
@@ -55,22 +60,25 @@ const ChatViewer = ({ lead, open, onOpenChange }: ChatViewerProps) => {
     setLoading(false);
   };
 
-  const handleSendMessage = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newMessage.trim()) return;
+  const handleSendMessage = async (text: string) => {
     setSending(true);
-
     try {
       const { error } = await supabase.from('conversaciones').insert({
         lead_id: lead.id,
-        mensaje: newMessage,
-        emisor: 'HUMANO',
+        mensaje: text,
+        emisor: text.startsWith('#') ? 'SISTEMA' : 'HUMANO',
         platform: 'PANEL'
       });
 
       if (error) throw error;
-      setNewMessage('');
       fetchMessages();
+      
+      // Si el mensaje es un comando #STOP o #START, actualizamos el lead localmente
+      if (text.includes('#STOP') || text.includes('#START')) {
+         const isPaused = text.includes('#STOP');
+         await supabase.from('leads').update({ ai_paused: isPaused }).eq('id', lead.id);
+         toast.success(isPaused ? 'IA Detenida' : 'IA Reactivada');
+      }
     } catch (error: any) {
       toast.error('Error enviando mensaje');
     } finally {
@@ -78,140 +86,107 @@ const ChatViewer = ({ lead, open, onOpenChange }: ChatViewerProps) => {
     }
   };
 
-  const saveManualProfile = async () => {
+  const saveMemory = async () => {
+     setSending(true);
      try {
         const { error } = await supabase
            .from('leads')
-           .update(profile)
+           .update({
+              summary: memoryForm.summary,
+              estado_emocional_actual: memoryForm.mood,
+              buying_intent: memoryForm.buying_intent
+           })
            .eq('id', lead.id);
+        
         if (error) throw error;
-        toast.success('Perfil actualizado manualmente');
+        toast.success('Memoria del Samurai actualizada');
+        setIsEditingMemory(false);
      } catch (err: any) {
         toast.error(err.message);
+     } finally {
+        setSending(false);
+     }
+  };
+
+  const handleReportCIA = async () => {
+     setReporting(true);
+     try {
+        const { error } = await supabase.from('errores_ia').insert({
+           cliente_id: lead.id,
+           mensaje_cliente: messages.filter(m => m.emisor === 'CLIENTE').pop()?.mensaje || 'Contexto desconocido',
+           respuesta_ia: errorContext.ia_response,
+           correccion_sugerida: errorContext.correction,
+           categoria: 'CONDUCTA',
+           estado_correccion: 'REPORTADA'
+        });
+
+        if (error) throw error;
+
+        await logActivity({
+           action: 'CREATE',
+           resource: 'BRAIN',
+           description: `Nueva lección #CIA reportada para ${lead.nombre}`,
+           status: 'OK'
+        });
+
+        toast.success('Lección reportada. Pendiente de validación en Bitácora.');
+        setIsReportOpen(false);
+     } catch (err: any) {
+        toast.error(err.message);
+     } finally {
+        setReporting(false);
      }
   };
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full sm:max-w-3xl flex flex-col bg-slate-950 border-l border-slate-800 text-white p-0">
-        <SheetHeader className="p-4 border-b border-slate-800 bg-slate-900/50 flex flex-row items-center gap-4 space-y-0">
-          <Avatar className="h-10 w-10 border border-slate-700">
-             <AvatarFallback className="bg-indigo-600 text-white font-bold">{lead.nombre?.substring(0,2).toUpperCase()}</AvatarFallback>
-          </Avatar>
-          <div className="flex-1">
-            <SheetTitle className="text-white text-base">{lead.nombre || 'Cliente'}</SheetTitle>
-            <div className="text-xs text-slate-500 font-mono flex items-center gap-2">
-               <Phone className="w-3 h-3" /> {lead.telefono}
-            </div>
-          </div>
-          <Badge variant={lead.ai_paused ? "destructive" : "outline"} className="h-6">
-             {lead.ai_paused ? 'SAMURAI DETENIDO' : 'SAMURAI ACTIVO'}
-          </Badge>
-        </SheetHeader>
-
-        <div className="flex-1 flex overflow-hidden">
-           {/* LADO IZQUIERDO: CHAT */}
-           <div className="flex-1 flex flex-col border-r border-slate-800 bg-slate-950/50">
-              <ScrollArea className="flex-1 p-4">
-                 {loading ? (
-                    <div className="flex h-full items-center justify-center text-slate-500 text-xs">Cargando historial...</div>
-                 ) : (
-                    <div className="space-y-4">
-                       {messages.map((msg) => (
-                          <div key={msg.id} className={`flex ${msg.emisor === 'CLIENTE' ? 'justify-start' : 'justify-end'}`}>
-                             <div className={`max-w-[80%] rounded-2xl p-3 text-sm shadow-sm
-                                ${msg.emisor === 'CLIENTE' ? 'bg-slate-800 text-slate-200 rounded-tl-none' : 
-                                  msg.emisor === 'SAMURAI' ? 'bg-indigo-600 text-white rounded-tr-none' : 
-                                  'bg-slate-700 text-slate-300 rounded-tr-none border border-slate-600'}
-                             `}>
-                                <div className="text-[9px] opacity-70 mb-1 font-bold flex items-center gap-1 uppercase tracking-wider">
-                                   {msg.emisor === 'SAMURAI' ? <Bot className="w-3 h-3" /> : <User className="w-3 h-3" />}
-                                   {msg.emisor}
-                                </div>
-                                <p className="whitespace-pre-wrap leading-relaxed">{msg.mensaje}</p>
-                             </div>
-                          </div>
-                       ))}
-                    </div>
-                 )}
-              </ScrollArea>
-              
-              <form onSubmit={handleSendMessage} className="p-4 bg-slate-900/50 border-t border-slate-800 flex gap-2">
-                 <Input 
-                    value={newMessage}
-                    onChange={(e) => setNewMessage(e.target.value)}
-                    placeholder="Escribe como un humano..."
-                    className="bg-slate-950 border-slate-700 h-10 text-sm"
-                    disabled={sending}
-                 />
-                 <Button type="submit" size="icon" className="bg-indigo-600 hover:bg-indigo-700" disabled={sending}>
-                    {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                 </Button>
-              </form>
-           </div>
-
-           {/* LADO DERECHO: CEREBRO / PERFIL */}
-           <div className="w-72 bg-slate-900/30 p-4 space-y-6 overflow-y-auto">
-              <div className="space-y-2">
-                 <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest flex items-center gap-2">
-                    <BrainCircuit className="w-3 h-3" /> Memoria Viva
-                 </h4>
-                 <div className="bg-slate-950 p-3 rounded-lg border border-slate-800 space-y-4">
-                    <div className="space-y-1">
-                       <Label className="text-[10px] text-slate-500">CIUDAD DETECTADA</Label>
-                       <div className="relative">
-                          <MapPin className="absolute left-2 top-2 h-3 w-3 text-slate-600" />
-                          <Input 
-                             value={profile.ciudad} 
-                             onChange={e => setProfile({...profile, ciudad: e.target.value})}
-                             className="bg-slate-900 border-slate-800 text-xs h-7 pl-7" 
-                             placeholder="¿De dónde es?"
-                          />
-                       </div>
-                    </div>
-                    <div className="space-y-1">
-                       <Label className="text-[10px] text-slate-500">INTENCIÓN DE COMPRA</Label>
-                       <div className="flex gap-1">
-                          {['BAJO', 'MEDIO', 'ALTO'].map(v => (
-                             <Badge 
-                                key={v}
-                                variant={profile.buying_intent === v ? "default" : "outline"}
-                                className={`text-[9px] cursor-pointer ${profile.buying_intent === v ? 'bg-indigo-600' : 'text-slate-500'}`}
-                                onClick={() => setProfile({...profile, buying_intent: v})}
-                             >
-                                {v}
-                             </Badge>
-                          ))}
-                       </div>
-                    </div>
-                 </div>
-              </div>
-
-              <div className="space-y-2">
-                 <Label className="text-[10px] font-bold text-slate-500 uppercase">Preferencias detectadas</Label>
-                 <Textarea 
-                    value={profile.preferencias}
-                    onChange={e => setProfile({...profile, preferencias: e.target.value})}
-                    className="bg-slate-950 border-slate-800 text-[11px] h-20 leading-relaxed italic"
-                    placeholder="Ej: Busca cuencos tibetanos de 7 metales para meditación profunda."
-                 />
-              </div>
-
-              <div className="space-y-2">
-                 <Label className="text-[10px] font-bold text-slate-500 uppercase">Perfil Psicológico</Label>
-                 <Textarea 
-                    value={profile.perfil_psicologico}
-                    onChange={e => setProfile({...profile, perfil_psicologico: e.target.value})}
-                    className="bg-slate-950 border-slate-800 text-[11px] h-24 leading-relaxed font-mono"
-                    placeholder="Ej: Cliente racional, pide especificaciones técnicas antes de hablar de precios."
-                 />
-              </div>
-
-              <Button onClick={saveManualProfile} className="w-full bg-slate-800 hover:bg-slate-700 text-xs h-8 border border-slate-700">
-                 <Save className="w-3 h-3 mr-2" /> Guardar Memoria
-              </Button>
-           </div>
+      <SheetContent className="w-full sm:max-w-5xl flex flex-row bg-slate-950 border-l border-slate-800 text-white p-0 overflow-hidden">
+        
+        {/* CHAT AREA (LEFT/CENTER) */}
+        <div className="flex-1 flex flex-col h-full bg-slate-950">
+          <ChatHeader 
+            lead={lead} 
+            isAiPaused={lead.ai_paused} 
+            sending={sending} 
+            onSendCommand={handleSendMessage} 
+          />
+          
+          <MessageList messages={messages} loading={loading} />
+          
+          <MessageInput 
+            onSendMessage={handleSendMessage} 
+            sending={sending} 
+            isAiPaused={lead.ai_paused} 
+          />
         </div>
+
+        {/* MEMORY PANEL (RIGHT) */}
+        <MemoryPanel 
+          currentAnalysis={lead}
+          isEditing={isEditingMemory}
+          setIsEditing={setIsEditingMemory}
+          memoryForm={memoryForm}
+          setMemoryForm={setMemoryForm}
+          onSave={saveMemory}
+          saving={sending}
+          onOpenReport={() => {
+             const lastAi = messages.filter(m => m.emisor === 'SAMURAI').pop();
+             setErrorContext({...errorContext, ia_response: lastAi?.mensaje || ''});
+             setIsReportOpen(true);
+          }}
+          onReset={() => toast.info("Funcionalidad de reset en desarrollo")}
+        />
+
+        {/* DIALOGS */}
+        <ReportDialog 
+          open={isReportOpen}
+          onOpenChange={setIsReportOpen}
+          errorContext={errorContext}
+          setErrorContext={setErrorContext}
+          onSubmit={handleReportCIA}
+          reporting={reporting}
+        />
+
       </SheetContent>
     </Sheet>
   );
