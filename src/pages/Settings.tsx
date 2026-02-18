@@ -45,11 +45,13 @@ const Settings = () => {
     try {
       const [configRes, followupRes] = await Promise.all([
         supabase.from('app_config').select('*'),
-        supabase.from('followup_config').select('*').single()
+        supabase.from('followup_config').select('*').maybeSingle()
       ]);
 
       if (configRes.data) setConfigs(configRes.data);
-      if (followupRes.data) setFollowupConfig(followupRes.data);
+      if (followupRes.data) {
+        setFollowupConfig(followupRes.data);
+      }
     } catch (err) {
       console.error("Fetch settings error", err);
     } finally {
@@ -72,20 +74,34 @@ const Settings = () => {
   const handleSaveAll = async () => {
     setSaving(true);
     try {
-      // 1. Guardar App Config
       const { error: configErr } = await supabase.from('app_config').upsert(configs);
       if (configErr) throw configErr;
 
-      // 2. Guardar Followup Config
-      const { error: followupErr } = await supabase.from('followup_config').upsert({
+      const followupPayload = {
         ...followupConfig,
-        id: followupConfig.id || undefined 
-      });
-      if (followupErr) throw followupErr;
+        updated_at: new Date().toISOString()
+      };
+
+      if (followupConfig.id) {
+        const { error: followupErr } = await supabase
+          .from('followup_config')
+          .update(followupPayload)
+          .eq('id', followupConfig.id);
+        if (followupErr) throw followupErr;
+      } else {
+        const { data: newRecord, error: insertErr } = await supabase
+          .from('followup_config')
+          .insert(followupPayload)
+          .select()
+          .single();
+        if (insertErr) throw insertErr;
+        setFollowupConfig(newRecord);
+      }
 
       toast.success('Configuración global actualizada correctamente');
       fetchAllData();
     } catch (err: any) {
+      console.error("Save error:", err);
       toast.error(`Error al guardar: ${err.message}`);
     } finally {
       setSaving(false);
@@ -128,7 +144,6 @@ const Settings = () => {
             <TabsTrigger value="secrets" className="data-[state=active]:bg-indigo-600"><Key className="w-4 h-4 mr-2" /> API Keys</TabsTrigger>
           </TabsList>
 
-          {/* TAB: E-COMMERCE */}
           <TabsContent value="ecommerce" className="mt-6 space-y-6">
              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <Card className="bg-slate-900 border-slate-800">
@@ -204,7 +219,6 @@ const Settings = () => {
              </div>
           </TabsContent>
 
-          {/* TAB: FOLLOW-UPS */}
           <TabsContent value="followups" className="mt-6 space-y-6">
              <Card className="bg-slate-900 border-slate-800 border-l-4 border-l-indigo-500">
                 <CardHeader>
@@ -317,7 +331,6 @@ const Settings = () => {
              </Card>
           </TabsContent>
 
-          {/* TAB: WEBHOOKS */}
           <TabsContent value="webhooks" className="mt-6 space-y-6">
              <Card className="bg-slate-900 border-slate-800 border-l-4 border-l-yellow-500">
                 <CardHeader>
@@ -357,7 +370,6 @@ const Settings = () => {
              </Card>
           </TabsContent>
           
-          {/* TAB: SECRETS */}
           <TabsContent value="secrets" className="mt-6 space-y-6">
              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <Card className="bg-slate-900 border-slate-800 border-l-4 border-l-blue-500">

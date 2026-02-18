@@ -5,8 +5,9 @@ import { useAuth } from '@/context/AuthContext';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Search, BookOpen, Upload, Loader2, Globe, RefreshCw, Zap, Info, Lock } from 'lucide-react';
+import { Search, BookOpen, Upload, Loader2, Globe, RefreshCw, Lock } from 'lucide-react';
 import { toast } from 'sonner';
 import { CreateResourceDialog } from '@/components/knowledge/CreateResourceDialog';
 import { DocumentCard } from '@/components/knowledge/DocumentCard';
@@ -151,7 +152,6 @@ const KnowledgeBase = () => {
     <Layout>
       <div className="max-w-6xl mx-auto space-y-8">
         
-        {/* BANNER INFORMATIVO DEL SITIO PRINCIPAL */}
         <Card className="bg-gradient-to-r from-indigo-900/20 to-purple-900/20 border-indigo-500/30 border-l-4 border-l-indigo-500">
           <div className="p-4 flex items-start gap-4">
             <div className="p-3 rounded-lg bg-indigo-500/10 shrink-0">
@@ -166,14 +166,13 @@ const KnowledgeBase = () => {
                 Esta es la Fuente de Verdad Maestra. El Samurai utiliza todo el contenido indexado del sitio oficial para responder con precisión absoluta.
               </p>
               <p className="text-xs text-slate-400 flex items-center gap-1">
-                <RefreshCw className="w-3 h-3 text-indigo-400 animate-spin-slow" /> 
+                <RefreshCw className="w-3 h-3 text-indigo-400" /> 
                 Actualización diaria automática activa. Este recurso no puede ser modificado manualmente para garantizar la integridad del ADN Samurai.
               </p>
             </div>
           </div>
         </Card>
 
-        {/* Header */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
             <h1 className="text-3xl font-bold text-white flex items-center gap-2">
@@ -208,7 +207,6 @@ const KnowledgeBase = () => {
           />
         </div>
 
-        {/* Search */}
         <Card className="bg-slate-900 border-slate-800">
             <div className="p-2 flex items-center">
             <Search className="w-5 h-5 text-slate-500 ml-2" />
@@ -221,7 +219,6 @@ const KnowledgeBase = () => {
             </div>
         </Card>
 
-        {/* Categories Tabs */}
         <Tabs value={activeCategory} onValueChange={setActiveCategory} className="w-full">
           <TabsList className="bg-slate-900 border border-slate-800 mb-6 flex-wrap h-auto p-1">
             <TabsTrigger value="websites" className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white flex gap-2">
