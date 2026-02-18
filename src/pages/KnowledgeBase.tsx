@@ -6,7 +6,7 @@ import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Search, BookOpen, Upload, Loader2, Globe, RefreshCw, Zap } from 'lucide-react';
+import { Search, BookOpen, Upload, Loader2, Globe, RefreshCw, Zap, Info, Lock } from 'lucide-react';
 import { toast } from 'sonner';
 import { CreateResourceDialog } from '@/components/knowledge/CreateResourceDialog';
 import { DocumentCard } from '@/components/knowledge/DocumentCard';
@@ -151,6 +151,28 @@ const KnowledgeBase = () => {
     <Layout>
       <div className="max-w-6xl mx-auto space-y-8">
         
+        {/* BANNER INFORMATIVO DEL SITIO PRINCIPAL */}
+        <Card className="bg-gradient-to-r from-indigo-900/20 to-purple-900/20 border-indigo-500/30 border-l-4 border-l-indigo-500">
+          <div className="p-4 flex items-start gap-4">
+            <div className="p-3 rounded-lg bg-indigo-500/10 shrink-0">
+              <Lock className="w-6 h-6 text-indigo-400" />
+            </div>
+            <div className="flex-1">
+              <h3 className="text-white font-bold mb-1 flex items-center gap-2">
+                Sitio Principal Protegido
+                <Badge className="bg-indigo-600 text-[9px]">AUTO-ACTUALIZACIÓN</Badge>
+              </h3>
+              <p className="text-sm text-slate-300 mb-2">
+                El sitio web <strong>theelephantbowl.com</strong> (incluyendo todas sus páginas de cursos, expertos, comunidad, etc.) se actualiza automáticamente cada 24 horas.
+              </p>
+              <p className="text-xs text-slate-400">
+                <Info className="w-3 h-3 inline mr-1" />
+                Este contenido NO puede ser modificado manualmente. Es la fuente de conocimiento principal del Samurai y se mantiene sincronizada automáticamente.
+              </p>
+            </div>
+          </div>
+        </Card>
+
         {/* Header */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
@@ -158,7 +180,7 @@ const KnowledgeBase = () => {
               <BookOpen className="w-8 h-8 text-indigo-500" />
               Base de Conocimiento
             </h1>
-            <p className="text-slate-400">Recursos de The Elephant Bowl (Talleres, Maestros e Instrumentos).</p>
+            <p className="text-slate-400">Recursos adicionales de talleres, maestros e instrumentos.</p>
           </div>
           
           <div className="flex gap-3">

@@ -43,7 +43,22 @@ Resumen Memoria: ${lead.summary || 'Sin historial previo.'}
         }
     }
 
-    // 3. ENSAMBLAJE MAESTRO (The Great Prompt)
+    // 3. OBTENER CONTENIDO DEL SITIO PRINCIPAL (NUEVO)
+    const { data: mainWebsiteData } = await supabaseClient
+        .from('main_website_content')
+        .select('url, title, content')
+        .eq('scrape_status', 'success')
+        .order('url', { ascending: true });
+
+    let mainWebsiteContext = "";
+    if (mainWebsiteData && mainWebsiteData.length > 0) {
+        mainWebsiteContext = "\n=== 📚 CONTENIDO DEL SITIO PRINCIPAL (theelephantbowl.com) ===\n";
+        mainWebsiteData.forEach(page => {
+            mainWebsiteContext += `\n[${page.title}]\nURL: ${page.url}\n${page.content.substring(0, 800)}...\n`;
+        });
+    }
+
+    // 4. ENSAMBLAJE MAESTRO (The Great Prompt)
     const fullSystemPrompt = `
 ${prompts['prompt_core'] || '# IDENTIDAD SAMURAI\nEres un experto en ventas.'}
 
@@ -52,6 +67,8 @@ ${prompts['prompt_technical'] || 'Responde de forma concisa.'}
 
 === 📚 CONTEXTO DEL NEGOCIO ===
 ${prompts['prompt_context'] || 'Vendemos instrumentos de sonoterapia.'}
+
+${mainWebsiteContext}
 
 === 🧠 ANALISIS PSICOLÓGICO Y PERFILADO ===
 ${prompts['prompt_psychology'] || 'Analiza el sentimiento del cliente.'}
