@@ -10,7 +10,8 @@ const DEFAULTS = {
   'prompt_core': `Eres Samurai, un asistente de ventas experto.`,
   'prompt_behavior': `Sé breve y profesional.`,
   'prompt_objections': `Responde dudas con certeza.`,
-  'prompt_psychology': `Adapta tu tono al cliente.`
+  'prompt_psychology': `Adapta tu tono al cliente.`,
+  'prompt_relearning': `` 
 };
 
 serve(async (req) => {
@@ -117,11 +118,38 @@ serve(async (req) => {
        ? `⚠️ RECONEXIÓN: Han pasado ${Math.round(timeGapHours)} horas desde la última charla. Inicia con un saludo amable y re-conecta con el cliente reconociendo que ha pasado un tiempo.`
        : `CONTINUIDAD: La charla es reciente. No repitas saludos formales si no es necesario.`;
 
-    // 4. RAG Y MEDIA (Simplificado para el ejemplo)
-    const mediaContext = "Consultar Media Manager para archivos.";
-    const learnedLessons = "Consultar Learning Log.";
+    // 4. RECUPERACIÓN DE CONOCIMIENTO Y MEDIA (RAG LITE)
+    
+    // 4.1 Media Assets (Imágenes, Catálogos con Triggers)
+    const { data: mediaAssets } = await supabaseClient
+        .from('media_assets')
+        .select('title, url, ai_instructions')
+        .not('ai_instructions', 'is', null); // Solo traemos los que tienen reglas
 
-    // 5. SYSTEM PROMPT MAESTRO (CON MEMORIA REFORZADA)
+    let mediaContextBlock = "No hay archivos multimedia configurados.";
+    if (mediaAssets && mediaAssets.length > 0) {
+        mediaContextBlock = mediaAssets.map(m => 
+            `🔴 [ARCHIVO: ${m.title}]\n   URL: ${m.url}\n   REGLA DE USO: ${m.ai_instructions}`
+        ).join('\n\n');
+    }
+
+    // 4.2 Base de Conocimiento (Documentos Texto)
+    // Nota: Esto es una búsqueda básica. En producción idealmente usarías Embeddings.
+    const { data: knowledgeDocs } = await supabaseClient
+        .from('knowledge_documents')
+        .select('title, content, description')
+        .order('created_at', { ascending: false })
+        .limit(5); // Limitamos a los 5 más recientes para no saturar el prompt
+
+    let knowledgeContextBlock = "No hay documentos base.";
+    if (knowledgeDocs && knowledgeDocs.length > 0) {
+        knowledgeContextBlock = knowledgeDocs.map(k => 
+            `📘 [DOC: ${k.title}]\nRESUMEN: ${k.description || 'Sin descripción'}\nFRAGMENTO: ${k.content ? k.content.substring(0, 800) : 'Contenido no indexado.'}`
+        ).join('\n\n');
+    }
+
+
+    // 5. SYSTEM PROMPT MAESTRO (CON TEXTO ENRIQUECIDO)
     const fullSystemPrompt = `
 === 🧠 IDENTIDAD & REGLAS DE MEMORIA ===
 ${prompts['prompt_core']}
@@ -136,15 +164,27 @@ ${timeInstruction}
 === 🕰️ HISTORIAL RECIENTE (Últimos 30 mensajes) ===
 ${chatHistoryText}
 
+=== 📸 MEDIA MANAGER (ARCHIVOS DISPONIBLES) ===
+Instrucciones: Si se cumple la "REGLA DE USO", envía la URL del archivo al final de tu mensaje.
+${mediaContextBlock}
+
+=== 📚 BASE DE CONOCIMIENTO (DATOS DUROS) ===
+Usa esta información para responder preguntas técnicas o de política.
+${knowledgeContextBlock}
+
 === 📜 PROTOCOLOS & COMPORTAMIENTO ===
 ${prompts['prompt_behavior']}
 ${prompts['prompt_objections']}
 ${prompts['prompt_psychology']}
 
+=== 🔄 LECCIONES APRENDIDAS (CORRECCIONES) ===
+${prompts['prompt_relearning'] || "Sin lecciones pendientes."}
+
 === ⚡ PROTOCOLO DE SALIDA ===
-1. Responde de forma natural basándote en la MEMORIA arriba descrita.
+1. Responde de forma natural basándote en la MEMORIA y el CONOCIMIENTO arriba descritos.
 2. Si el cliente ya dio su nombre, úsalo. Si ya preguntó un precio, no lo des de nuevo a menos que haya cambiado.
-3. AL FINAL, añade SIEMPRE el bloque de análisis para seguir aprendiendo:
+3. Si envías un archivo multimedia, pon la URL sola en la última línea.
+4. AL FINAL, añade SIEMPRE el bloque de análisis para seguir aprendiendo:
 [[ANALYSIS: {"mood": "...", "intent": "...", "summary": "ACTUALIZA EL RESUMEN AQUÍ..."}]]
     `;
 
@@ -155,7 +195,9 @@ ${prompts['prompt_psychology']}
         debug: {
             time_gap: timeGapHours,
             has_summary: !!leadSummary,
-            profile: { mood: leadMood, intent: buyingIntent }
+            profile: { mood: leadMood, intent: buyingIntent },
+            media_count: mediaAssets?.length || 0,
+            docs_count: knowledgeDocs?.length || 0
         }
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
