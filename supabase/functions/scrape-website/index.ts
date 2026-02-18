@@ -44,7 +44,7 @@ serve(async (req) => {
     $('iframe').remove();
     $('svg').remove();
     $('header').remove(); // Optional: remove header to reduce noise
-    $('footer').remove(); // Optional: remove footer
+    $('footer').remove();
 
     // 4. Extract text
     // We target the body or a specific main container if known
