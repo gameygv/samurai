@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { 
   LayoutDashboard, Brain, Settings as SettingsIcon, Database, LogOut, 
   Users, FileText, UserCircle, GraduationCap, MessageSquare, 
-  GitBranch, Link as LinkIcon, Image, Sparkles, BookOpen
+  GitBranch, Link as LinkIcon, Image, Sparkles, BookOpen, Clock
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/context/AuthContext';
@@ -67,6 +67,7 @@ const Layout = ({ children }: LayoutProps) => {
       title: "SISTEMA",
       items: [
         { icon: BookOpen, label: 'Manual de Ayuda', path: '/manual' },
+        { icon: Clock, label: 'Follow-ups Auto', path: '/settings?tab=followups' },
         { icon: LinkIcon, label: 'Integraciones', path: '/settings?tab=webhooks' },
         { icon: SettingsIcon, label: 'API Keys', path: '/settings?tab=secrets' },
       ]

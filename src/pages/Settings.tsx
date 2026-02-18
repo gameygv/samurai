@@ -353,25 +353,41 @@ const Settings = () => {
           </TabsContent>
           
           <TabsContent value="secrets" className="mt-6 space-y-6">
-             <Card className="bg-slate-900 border-slate-800">
+             {/* GEMINI API - PRINCIPAL */}
+             <Card className="bg-slate-900 border-slate-800 border-l-4 border-l-blue-500">
                 <CardHeader>
-                   <CardTitle className="text-white">API Keys & Tokens</CardTitle>
-                   <CardDescription>Tokens de seguridad para servicios externos.</CardDescription>
+                   <CardTitle className="text-white flex items-center gap-2">
+                      <Sparkles className="w-5 h-5 text-blue-400" /> Google Gemini API
+                      <Badge className="bg-blue-600 text-xs">PRINCIPAL</Badge>
+                   </CardTitle>
+                   <CardDescription>
+                      API Key de Gemini para el procesamiento principal del Samurai.
+                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                   <div className="space-y-1">
-                      <Label className="text-xs text-slate-500">OpenAI API Key (Opcional si usas Edge Functions)</Label>
+                   <div className="space-y-2">
+                      <Label className="text-blue-400 flex items-center gap-2">
+                         <Key className="w-4 h-4" /> Gemini API Key
+                      </Label>
                       <Input 
                         type="password"
-                        value={getValue('openai_api_key')}
-                        onChange={e => handleInputChange('openai_api_key', e.target.value, 'SECRETS')}
-                        className="bg-slate-950 border-slate-800 font-mono text-xs"
-                        placeholder="sk-..."
+                        value={getValue('gemini_api_key')}
+                        onChange={e => handleInputChange('gemini_api_key', e.target.value, 'SECRETS')}
+                        className="bg-slate-950 border-blue-500/30 font-mono text-xs focus:border-blue-500"
+                        placeholder="AIza..."
                       />
+                      <p className="text-[10px] text-slate-500 italic">
+                         Esta es la API principal que usa el Samurai para todas las conversaciones.
+                      </p>
+                   </div>
+
+                   <div className="bg-blue-500/10 border border-blue-500/20 rounded p-3 text-xs text-blue-400">
+                      <strong>ℹ️ Obtener API Key:</strong> Visita <a href="https://makersuite.google.com/app/apikey" target="_blank" className="underline">Google AI Studio</a> para generar tu clave.
                    </div>
                 </CardContent>
              </Card>
 
+             {/* OPENAI VISION - PENDIENTE */}
              <Card className="bg-indigo-900/10 border-indigo-500/20 border-l-4 border-l-indigo-500">
                 <CardHeader>
                    <CardTitle className="text-white flex items-center gap-2">
