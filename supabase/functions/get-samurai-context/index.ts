@@ -48,7 +48,6 @@ serve(async (req) => {
           buyingIntent = existingLead.buying_intent || "MEDIO";
           leadSummary = existingLead.summary || "No hay resumen previo.";
           
-          // Calcular tiempo desde última interacción
           if (existingLead.last_message_at) {
              const lastActive = new Date(existingLead.last_message_at).getTime();
              const now = new Date().getTime();
@@ -73,7 +72,6 @@ serve(async (req) => {
        }
     }
 
-    // Guardar mensaje INPUT
     if (currentLeadId && message) {
        await supabaseClient.from('conversaciones').insert({
           lead_id: currentLeadId,
@@ -95,7 +93,7 @@ serve(async (req) => {
        });
     }
 
-    // 3. HISTORIAL DE CHAT (MEMORIA RECIENTE)
+    // 3. HISTORIAL DE CHAT
     let chatHistoryText = "Sin historial reciente.";
     if (currentLeadId) {
        const { data: history } = await supabaseClient
@@ -113,33 +111,35 @@ serve(async (req) => {
        }
     }
 
-    // Instrucción de saludo si pasó mucho tiempo
     const timeInstruction = timeGapHours >= 12 
        ? `⚠️ RECONEXIÓN: Han pasado ${Math.round(timeGapHours)} horas desde la última charla. Inicia con un saludo amable y re-conecta con el cliente reconociendo que ha pasado un tiempo.`
        : `CONTINUIDAD: La charla es reciente. No repitas saludos formales si no es necesario.`;
 
-    // 4. RECUPERACIÓN DE CONOCIMIENTO Y MEDIA (RAG LITE)
+    // 4. ECOSISTEMA DIGITAL (The Elephant Bowl)
     
-    // 4.1 Media Assets (Imágenes, Catálogos con Triggers)
-    const { data: mediaAssets } = await supabaseClient
-        .from('media_assets')
-        .select('title, url, ai_instructions')
-        .not('ai_instructions', 'is', null); // Solo traemos los que tienen reglas
-
-    let mediaContextBlock = "No hay archivos multimedia configurados.";
-    if (mediaAssets && mediaAssets.length > 0) {
-        mediaContextBlock = mediaAssets.map(m => 
-            `🔴 [ARCHIVO: ${m.title}]\n   URL: ${m.url}\n   REGLA DE USO: ${m.ai_instructions}`
+    // 4.1 Sitios Web (Maestros, Talleres)
+    const { data: websites } = await supabaseClient
+        .from('knowledge_documents')
+        .select('title, external_link, description, content')
+        .eq('type', 'WEBSITE');
+    
+    let websiteContextBlock = "No hay sitios web registrados.";
+    if (websites && websites.length > 0) {
+        websiteContextBlock = websites.map(w => 
+           `🌐 [WEB: ${w.title}]\n` +
+           `   URL: ${w.external_link}\n` +
+           `   CUÁNDO COMPARTIR (Instrucción): ${w.description}\n` +
+           `   DATOS CLAVE DEL SITIO: ${w.content ? w.content.substring(0, 1000) : 'Sin datos extraídos.'}`
         ).join('\n\n');
     }
 
-    // 4.2 Base de Conocimiento (Documentos Texto)
-    // Nota: Esto es una búsqueda básica. En producción idealmente usarías Embeddings.
+    // 4.2 Documentos Generales (PDFs)
     const { data: knowledgeDocs } = await supabaseClient
         .from('knowledge_documents')
         .select('title, content, description')
+        .neq('type', 'WEBSITE') // Excluimos webs aquí
         .order('created_at', { ascending: false })
-        .limit(5); // Limitamos a los 5 más recientes para no saturar el prompt
+        .limit(5);
 
     let knowledgeContextBlock = "No hay documentos base.";
     if (knowledgeDocs && knowledgeDocs.length > 0) {
@@ -148,44 +148,57 @@ serve(async (req) => {
         ).join('\n\n');
     }
 
+    // 4.3 Media Assets (Imágenes)
+    const { data: mediaAssets } = await supabaseClient
+        .from('media_assets')
+        .select('title, url, ai_instructions')
+        .not('ai_instructions', 'is', null);
 
-    // 5. SYSTEM PROMPT MAESTRO (CON TEXTO ENRIQUECIDO)
+    let mediaContextBlock = "No hay archivos multimedia configurados.";
+    if (mediaAssets && mediaAssets.length > 0) {
+        mediaContextBlock = mediaAssets.map(m => 
+            `🔴 [ARCHIVO: ${m.title}]\n   URL: ${m.url}\n   REGLA DE USO: ${m.ai_instructions}`
+        ).join('\n\n');
+    }
+
+
     const fullSystemPrompt = `
 === 🧠 IDENTIDAD & REGLAS DE MEMORIA ===
 ${prompts['prompt_core']}
-- PROHIBICIÓN: No vuelvas a preguntar datos que ya conoces (Nombre, ciudad, presupuesto, etc).
-- RECONOCIMIENTO: Si el cliente ya te habló antes, trátalo como conocido, no como un extraño.
+- PROHIBICIÓN: No vuelvas a preguntar datos que ya conoces.
+- RECONOCIMIENTO: Si el cliente ya te habló antes, trátalo como conocido.
 
-=== 👤 PERFIL DEL CLIENTE (MEMORIA PROFUNDA) ===
-Resumen de lo que sabemos: ${leadSummary}
-Estado actual: Mood ${leadMood} | Intención ${buyingIntent}
+=== 👤 PERFIL DEL CLIENTE ===
+Resumen: ${leadSummary}
+Mood: ${leadMood} | Intent: ${buyingIntent}
 ${timeInstruction}
 
-=== 🕰️ HISTORIAL RECIENTE (Últimos 30 mensajes) ===
-${chatHistoryText}
+=== 🌐 ECOSISTEMA DIGITAL (The Elephant Bowl) ===
+Estos son los sitios oficiales de Maestros y Talleres. Úsalos como FUENTE PRIMARIA de verdad.
+Si el cliente pregunta algo específico de un maestro, consulta los "DATOS CLAVE" aquí abajo.
+Si se cumple la instrucción "CUÁNDO COMPARTIR", envía la URL.
 
-=== 📸 MEDIA MANAGER (ARCHIVOS DISPONIBLES) ===
-Instrucciones: Si se cumple la "REGLA DE USO", envía la URL del archivo al final de tu mensaje.
-${mediaContextBlock}
+${websiteContextBlock}
 
-=== 📚 BASE DE CONOCIMIENTO (DATOS DUROS) ===
-Usa esta información para responder preguntas técnicas o de política.
+=== 📚 DOCUMENTACIÓN TÉCNICA (Instrumentos/Políticas) ===
 ${knowledgeContextBlock}
 
-=== 📜 PROTOCOLOS & COMPORTAMIENTO ===
+=== 📸 MEDIA (Catálogos/Imágenes) ===
+${mediaContextBlock}
+
+=== 🕰️ HISTORIAL RECIENTE ===
+${chatHistoryText}
+
+=== 📜 PROTOCOLOS ===
 ${prompts['prompt_behavior']}
 ${prompts['prompt_objections']}
 ${prompts['prompt_psychology']}
 
-=== 🔄 LECCIONES APRENDIDAS (CORRECCIONES) ===
-${prompts['prompt_relearning'] || "Sin lecciones pendientes."}
-
 === ⚡ PROTOCOLO DE SALIDA ===
-1. Responde de forma natural basándote en la MEMORIA y el CONOCIMIENTO arriba descritos.
-2. Si el cliente ya dio su nombre, úsalo. Si ya preguntó un precio, no lo des de nuevo a menos que haya cambiado.
-3. Si envías un archivo multimedia, pon la URL sola en la última línea.
-4. AL FINAL, añade SIEMPRE el bloque de análisis para seguir aprendiendo:
-[[ANALYSIS: {"mood": "...", "intent": "...", "summary": "ACTUALIZA EL RESUMEN AQUÍ..."}]]
+1. Prioriza la información de los SITIOS WEB para preguntas sobre Talleres y Maestros.
+2. Si compartes un link, hazlo de forma natural: "Puedes ver más detalles del Maestro Juan aquí: [URL]".
+3. AL FINAL, añade SIEMPRE el bloque de análisis:
+[[ANALYSIS: {"mood": "...", "intent": "...", "summary": "ACTUALIZA EL RESUMEN..."}]]
     `;
 
     return new Response(
@@ -196,8 +209,7 @@ ${prompts['prompt_relearning'] || "Sin lecciones pendientes."}
             time_gap: timeGapHours,
             has_summary: !!leadSummary,
             profile: { mood: leadMood, intent: buyingIntent },
-            media_count: mediaAssets?.length || 0,
-            docs_count: knowledgeDocs?.length || 0
+            website_sources: websites?.length || 0
         }
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
