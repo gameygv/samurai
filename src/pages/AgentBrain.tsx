@@ -8,6 +8,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { 
   Save, Bot, Eye, Hammer, ScrollText, 
   Database, History, MessageSquare, Gift, RefreshCw, 
@@ -130,6 +131,7 @@ const AgentBrain = () => {
              <TabsTrigger value="part5" className="py-2 data-[state=active]:bg-indigo-600"><FlaskConical className="w-4 h-4 mr-2" /> Laboratorio</TabsTrigger>
           </TabsList>
 
+          {/* PARTE 1: SISTEMA (2 tarjetas) */}
           <TabsContent value="part1" className="mt-6">
              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <PromptCard 
@@ -149,6 +151,7 @@ const AgentBrain = () => {
              </div>
           </TabsContent>
 
+          {/* PARTE 2: CONTEXTO (2 tarjetas) */}
           <TabsContent value="part2" className="mt-6">
              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <PromptCard 
@@ -169,8 +172,9 @@ const AgentBrain = () => {
              </div>
           </TabsContent>
 
+          {/* PARTE 3: PSICOLOGÍA (1 tarjeta ancha) */}
           <TabsContent value="part3" className="mt-6">
-             <div className="grid grid-cols-1 md:grid-cols-1 gap-6">
+             <div className="grid grid-cols-1 gap-6">
                 <PromptCard 
                   title="Instrucciones de Perfilado" 
                   icon={Target} 
@@ -181,8 +185,9 @@ const AgentBrain = () => {
              </div>
           </TabsContent>
 
+          {/* PARTE 4: VISIÓN (1 tarjeta ancha) */}
           <TabsContent value="part4" className="mt-6">
-             <div className="grid grid-cols-1 md:grid-cols-1 gap-6">
+             <div className="grid grid-cols-1 gap-6">
                 <PromptCard 
                   title="Análisis de Multimedia" 
                   icon={Eye} 
@@ -193,6 +198,7 @@ const AgentBrain = () => {
              </div>
           </TabsContent>
           
+          {/* PARTE 5: LABORATORIO */}
           <TabsContent value="part5" className="mt-6">
              <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
                 <Card className="md:col-span-4 bg-slate-900 border-slate-800">
