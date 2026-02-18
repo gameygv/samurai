@@ -67,7 +67,7 @@ const Manual = () => {
                             <h3 className="font-bold text-white">#CIA</h3>
                          </div>
                          <p className="text-xs text-slate-400 mb-3">Úsalo para corregir al bot cuando se equivoque. Esto crea una "Lección Aprendida" en la base de datos.</p>
-                         <Badge variant="outline" className="text-[9px] border-yellow-500/30 text-yellow-400">Corrección IA</Badge>
+                         <Badge variant="outline" className="text-[9px] border-yellow-500/30 text-red-400">Corrección IA</Badge>
                       </div>
                    </div>
 

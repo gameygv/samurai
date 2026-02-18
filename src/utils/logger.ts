@@ -1,8 +1,8 @@
 import { supabase } from '@/integrations/supabase/client';
 
 export interface LogEntry {
-  action: 'LOGIN' | 'LOGOUT' | 'CREATE' | 'UPDATE' | 'DELETE' | 'ERROR' | 'TEST';
-  resource: 'AUTH' | 'USERS' | 'PROMPTS' | 'BRAIN' | 'SYSTEM';
+  action: 'LOGIN' | 'LOGOUT' | 'CREATE' | 'UPDATE' | 'DELETE' | 'ERROR' | 'TEST' | 'FOLLOWUP' | 'RESTART';
+  resource: 'AUTH' | 'USERS' | 'PROMPTS' | 'BRAIN' | 'SYSTEM' | 'LEADS';
   description: string;
   status: 'OK' | 'ERROR' | 'PENDING';
   metadata?: any;
