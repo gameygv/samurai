@@ -21,105 +21,59 @@ serve(async (req) => {
 
     if (!lead_id) throw new Error("Lead ID is required");
 
+    // Obtenemos el texto completo de la IA
     let fullText = typeof ai_json_response === 'string' ? ai_json_response : (ai_json_response?.reply || raw_text || "");
     let cleanText = fullText;
     let analysisData: any = null;
 
-    // Regex para capturar el bloque JSON de análisis avanzado
-    const analysisRegex = /\[\[ANALYSIS:\s*({[\s\S]*?})\s*\]\]/s;
-    const match = fullText.match(analysisRegex);
-
-    if (match && match[1]) {
+    // 1. LIMPIEZA Y EXTRACCIÓN DEL ANÁLISIS
+    // Buscamos el separador ---SYSTEM_ANALYSIS---
+    if (fullText.includes('---SYSTEM_ANALYSIS---')) {
+        const parts = fullText.split('---SYSTEM_ANALYSIS---');
+        cleanText = parts[0].trim(); // El mensaje humano
+        
         try {
-            analysisData = JSON.parse(match[1]);
-            cleanText = fullText.replace(match[0], '').trim();
+            // Intentamos parsear el JSON que viene después del separador
+            const jsonPart = parts[1].trim();
+            // Limpiamos posibles caracteres extraños que la IA pueda añadir (como bloques de código markdown)
+            const jsonCleaned = jsonPart.replace(/```json/g, '').replace(/```/g, '').trim();
+            analysisData = JSON.parse(jsonCleaned);
         } catch (e) {
-            console.error("[process-samurai-response] Error parsing analysis JSON", e);
+            console.error("[process-samurai-response] Error parsing system analysis", e);
+        }
+    } else {
+        // Soporte para el formato antiguo [[ANALYSIS: ...]] por si acaso
+        const analysisRegex = /\[\[ANALYSIS:\s*({[\s\S]*?})\s*\]\]/s;
+        const match = fullText.match(analysisRegex);
+        if (match && match[1]) {
+            try {
+                analysisData = JSON.parse(match[1]);
+                cleanText = fullText.replace(match[0], '').trim();
+            } catch (e) {
+                console.error("[process-samurai-response] Error parsing legacy analysis", e);
+            }
         }
     }
 
-    // 1. ACTUALIZACIÓN DEL PERFIL DEL LEAD (MEMORIA MAESTRA)
+    // 2. ACTUALIZACIÓN DEL PERFIL DEL LEAD (MEMORIA MAESTRA)
     if (analysisData) {
         const updateData: any = {
            last_ai_analysis: new Date().toISOString()
         };
         
-        // Mapeo de campos dinámicos
         if (analysisData.mood) updateData.estado_emocional_actual = analysisData.mood;
         if (analysisData.intent) updateData.buying_intent = analysisData.intent;
         if (analysisData.summary) updateData.summary = analysisData.summary;
-        if (analysisData.city) updateData.ciudad = analysisData.city;
-        if (analysisData.preferences) updateData.preferencias = analysisData.preferences;
-        if (analysisData.psychology) updateData.perfil_psicologico = analysisData.psychology;
         
-        // Si la IA decide que necesita un humano
         if (analysisData.handoff_required === true) {
             updateData.ai_paused = true;
-            
-            // Obtener configuración de auto-restart
-            const { data: followupConfig } = await supabaseClient
-                .from('followup_config')
-                .select('auto_restart_delay')
-                .single();
-            
-            const delayMinutes = followupConfig?.auto_restart_delay || 30;
-            const restartTime = new Date(Date.now() + delayMinutes * 60 * 1000);
-            updateData.auto_restart_scheduled_at = restartTime.toISOString();
             updateData.stop_requested_at = new Date().toISOString();
-            
-            // DISPARAR WEBHOOK A MAKE PARA AVISAR AL HUMANO
-            const { data: config } = await supabaseClient
-                .from('app_config')
-                .select('value')
-                .eq('key', 'webhook_human_handoff')
-                .single();
-
-            if (config?.value) {
-                console.log("[process-samurai-response] Disparando Webhook Humano...");
-                fetch(config.value, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        event: 'human_intervention_required',
-                        lead_id: lead_id,
-                        reason: analysisData.handoff_reason || 'Situación delicada',
-                        last_message: cleanText,
-                        auto_restart_at: restartTime.toISOString()
-                    })
-                }).catch(err => console.error("Error calling handoff webhook:", err));
-            }
         }
 
         await supabaseClient.from('leads').update(updateData).eq('id', lead_id);
     }
 
-    // 2. RESETEAR FOLLOW-UPS SI EL CLIENTE RESPONDE
-    if (is_client_message) {
-        await supabaseClient.from('leads').update({
-            followup_stage: 0,
-            next_followup_at: null,
-            last_message_at: new Date().toISOString()
-        }).eq('id', lead_id);
-    } else {
-        // Si es mensaje del bot, programar follow-up
-        const { data: followupConfig } = await supabaseClient
-            .from('followup_config')
-            .select('stage_1_delay, enabled')
-            .single();
-        
-        if (followupConfig?.enabled) {
-            const delayMinutes = followupConfig.stage_1_delay || 10;
-            const nextFollowup = new Date(Date.now() + delayMinutes * 60 * 1000);
-            
-            await supabaseClient.from('leads').update({
-                followup_stage: 1,
-                next_followup_at: nextFollowup.toISOString(),
-                last_bot_message_at: new Date().toISOString()
-            }).eq('id', lead_id);
-        }
-    }
-
-    // 3. GUARDAR CONVERSACIÓN
+    // 3. GUARDAR CONVERSACIÓN (GUARDAMOS EL TEXTO LIMPIO)
     await supabaseClient.from('conversaciones').insert({
         lead_id: lead_id,
         emisor: is_client_message ? 'CLIENTE' : 'SAMURAI',
@@ -128,10 +82,11 @@ serve(async (req) => {
         metadata: { analysis: analysisData }
     });
 
+    // 4. RESPUESTA AL CLIENTE (DEVOLVEMOS EL TEXTO LIMPIO)
     return new Response(
       JSON.stringify({ 
          success: true, 
-         reply: cleanText, 
+         reply: cleanText, // ESTO es lo que Make.com o tu sistema de WhatsApp debe usar
          handoff: analysisData?.handoff_required || false 
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

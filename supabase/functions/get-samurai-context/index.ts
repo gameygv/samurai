@@ -19,7 +19,6 @@ serve(async (req) => {
 
     const { message, lead_id, mode = 'LIVE' } = await req.json();
 
-    // 1. OBTENER TODAS LAS CONFIGURACIONES DE PROMPTS (Las 15 secciones del panel)
     const { data: configData } = await supabaseClient
         .from('app_config')
         .select('key, value')
@@ -28,7 +27,6 @@ serve(async (req) => {
     const prompts: any = {};
     configData?.forEach(i => prompts[i.key] = i.value);
 
-    // 2. OBTENER DATOS DEL LEAD (Contexto psicológico y memoria)
     let leadContext = "Nombre: Prospecto Anónimo\nUbicación: Desconocida";
     if (lead_id) {
         const { data: lead } = await supabaseClient.from('leads').select('*').eq('id', lead_id).single();
@@ -44,7 +42,6 @@ ESTADO EMOCIONAL: ${lead.estado_emocional_actual || 'NEUTRO'}
         }
     }
 
-    // 3. OBTENER CONTENIDO DEL SITIO PRINCIPAL (Fuente de Verdad Protegida)
     const { data: mainWebsiteData } = await supabaseClient
         .from('main_website_content')
         .select('url, title, content')
@@ -58,7 +55,6 @@ ESTADO EMOCIONAL: ${lead.estado_emocional_actual || 'NEUTRO'}
         });
     }
 
-    // 4. OBTENER DOCUMENTOS DE LA BASE DE CONOCIMIENTO (Talleres, Maestros, etc.)
     const { data: knowledgeDocs } = await supabaseClient
         .from('knowledge_documents')
         .select('title, content, type, category');
@@ -71,7 +67,6 @@ ESTADO EMOCIONAL: ${lead.estado_emocional_actual || 'NEUTRO'}
         });
     }
 
-    // 5. ENSAMBLAJE MAESTRO DE TODAS LAS CAPAS (The Great Samurai Brain)
     const fullSystemPrompt = `
 ${prompts['prompt_adn_core'] || '# ADN CORE\nEres Samurai, un cerrador de elite.'}
 
@@ -106,16 +101,18 @@ ${prompts['prompt_accion_post'] || ''}
 === 👤 CLIENTE ACTUAL ===
 ${leadContext}
 
-=== ⚡ INSTRUCCIÓN DE SALIDA CRÍTICA ===
+=== ⚡ INSTRUCCIÓN DE SALIDA CRÍTICA (MANDATORIO) ===
 1. Responde al cliente de forma DIRECTA, HUMANA y en TEXTO PLANO. 
-2. NO envíes un objeto JSON como respuesta al cliente.
-3. Al final de tu mensaje, añade OBLIGATORIAMENTE el bloque de análisis para el sistema de esta forma exacta:
-[[ANALYSIS: {
+2. NO envíes un objeto JSON completo.
+3. Al FINAL de tu mensaje humano, añade OBLIGATORIAMENTE el bloque de análisis del sistema separado por una línea de guiones, usando este formato exacto:
+
+---SYSTEM_ANALYSIS---
+{
   "mood": "FELIZ|NEUTRO|ENOJADO",
   "intent": "ALTO|MEDIO|BAJO",
   "summary": "Resumen actualizado de la situación",
   "handoff_required": false
-}]]
+}
     `;
 
     return new Response(
