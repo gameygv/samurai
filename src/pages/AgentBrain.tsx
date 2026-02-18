@@ -20,21 +20,21 @@ import { toast } from 'sonner';
 import { logActivity } from '@/utils/logger';
 
 const DEFAULTS = {
-  'prompt_adn_core': '# ADN CORE\nEres Samurai, un asistente de ventas de elite...',
-  'prompt_tecnico': '# FÓRMULA TÉCNICA (JSON STRICTO)\nResponde SIEMPRE en este formato JSON exacto...',
-  'prompt_protocolos': '# PROTOCOLOS\nSaluda brevemente. No seas redundante...',
-  'prompt_objeciones': '# MATRIZ DE OBJECIONES\nSi dice "caro" -> Resalta valor/durabilidad...',
-  'prompt_datos_crm': '# INYECCIÓN DE DATOS\nUsa los datos del contexto (Nombre, Ciudad)...',
-  'prompt_memoria': '# MEMORIA\nRevisa los últimos mensajes...',
-  'prompt_tono': '# TONO ADAPTATIVO\nWhatsApp = Casual, emojis...',
-  'prompt_upselling': '# UPSELLING\nSi compra X, ofrece Y con 10% descuento...',
-  'prompt_perfilado': '# PERFILADO PSICOLÓGICO\nAnaliza el texto del cliente...',
-  'prompt_estrategia_cierre': '# ESTRATEGIA DE CIERRE\nTu objetivo es mover al lead en el Funnel...',
-  'prompt_reaprendizaje': '# RE-APRENDIZAJE (MANDATORIO)\nLee las "LECCIONES APRENDIDAS"...',
-  'prompt_trigger_corregiria': '# TRIGGER APRENDIZAJE\nSi el humano interviene con #CORREGIRIA...',
-  'prompt_ojo_halcon': '# OJO DE HALCÓN\nBusca: Monto total, Fecha, CUIT/Razón Social...',
-  'prompt_match': '# MATCHING\nCompara el monto del comprobante con la deuda registrada...',
-  'prompt_accion_post': '# POST-VALIDACIÓN\nSi coincide: "Pago recibido, gracias {nombre}..."'
+  'prompt_adn_core': '# ADN CORE\nEres Samurai, un asistente de ventas de elite para The Elephant Bowl. Tu tono es profesional, místico y altamente persuasivo.',
+  'prompt_tecnico': '# FÓRMULA TÉCNICA (EXTRACCIÓN DE DATOS)\nResponde siempre en texto plano. Al final de tu respuesta, añade SIEMPRE el bloque de análisis oculto:\n\n[[ANALYSIS: {\n  "mood": "ENOJADO | FELIZ | NEUTRO | PRAGMATICO",\n  "intent": "ALTO | MEDIO | BAJO",\n  "summary": "Breve resumen de la necesidad actual",\n  "detected_name": "Nombre del cliente si lo menciona",\n  "detected_city": "Ubicación si la menciona",\n  "handoff_required": false\n}]]',
+  'prompt_protocolos': '# PROTOCOLOS\nSaluda brevemente. No seas redundante. Si el cliente pregunta algo que ya respondiste, sé más directo.',
+  'prompt_objeciones': '# MATRIZ DE OBJECIONES\nSi dice "caro" -> Resalta que son piezas únicas hechas a mano por maestros en el Tíbet.',
+  'prompt_datos_crm': '# INYECCIÓN DE DATOS\nUsa el nombre del cliente en el saludo si lo tienes disponible en el contexto.',
+  'prompt_memoria': '# MEMORIA\nRevisa los últimos 10 mensajes para no repetirte y mantener la coherencia del hilo.',
+  'prompt_tono': '# TONO ADAPTATIVO\nUsa emojis de forma moderada. Si el cliente es serio, sé serio. Si es cálido, sé cálido.',
+  'prompt_upselling': '# UPSELLING\nSi el cliente pregunta por un cuenco, sugiere siempre un mazo profesional o una funda de transporte.',
+  'prompt_perfilado': '# PERFILADO PSICOLÓGICO\nAnaliza si el cliente busca sanación, colección o decoración para adaptar tu discurso.',
+  'prompt_estrategia_cierre': '# ESTRATEGIA DE CIERRE\nTu objetivo es conseguir que el cliente agende una llamada de asesoría o visite la tienda online.',
+  'prompt_reaprendizaje': '# RE-APRENDIZAJE (MANDATORIO)\nLee siempre las instrucciones en #CIA para evitar errores cometidos en el pasado.',
+  'prompt_trigger_corregiria': '# TRIGGER APRENDIZAJE\nSi el humano usa el comando #CIA, detente y guarda la nueva instrucción.',
+  'prompt_ojo_halcon': '# OJO DE HALCÓN\nAnaliza las fotos de comprobantes buscando el monto, la fecha y el banco emisor.',
+  'prompt_match': '# MATCHING\nVerifica que el monto del comprobante coincida con el total de la orden del cliente.',
+  'prompt_accion_post': '# POST-VALIDACIÓN\nUna vez validado el pago, agradece y dile que el equipo de logística se contactará pronto.'
 };
 
 const AgentBrain = () => {
@@ -58,11 +58,15 @@ const AgentBrain = () => {
     setLoading(true);
     try {
       const { data, error } = await supabase.from('app_config').select('key, value').eq('category', 'PROMPT');
-      if (!error && data) {
+      if (!error && data && data.length > 0) {
         const dbPrompts: Record<string, string> = { ...DEFAULTS };
         data.forEach((item: any) => { dbPrompts[item.key] = item.value; });
         setPrompts(dbPrompts);
+      } else {
+        setPrompts(DEFAULTS);
       }
+    } catch (err) {
+      console.error("Error fetching prompts", err);
     } finally {
       setLoading(false);
     }
@@ -81,7 +85,7 @@ const AgentBrain = () => {
       const { error } = await supabase.from('app_config').upsert(updates);
       if (error) throw error;
       
-      await logActivity({ action: 'UPDATE', resource: 'BRAIN', description: 'Cerebro Samurai actualizado', status: 'OK' });
+      await logActivity({ action: 'UPDATE', resource: 'BRAIN', description: 'Cerebro Samurai actualizado (Prompts)', status: 'OK' });
       toast.success('Estrategia del Samurai guardada correctamente.');
     } catch (err: any) {
       toast.error('Error al guardar: ' + err.message);
@@ -120,7 +124,7 @@ const AgentBrain = () => {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold text-white">Cerebro del Samurai</h1>
-            <p className="text-slate-400">La inteligencia se divide en 4 pilares maestros. Configúralos con precisión.</p>
+            <p className="text-slate-400">Configura los pilares de inteligencia para una atención perfecta.</p>
           </div>
           <Button onClick={handleSave} disabled={saving} className="bg-red-600 hover:bg-red-700 shadow-lg shadow-red-900/20 px-8">
              {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
@@ -137,140 +141,135 @@ const AgentBrain = () => {
              <TabsTrigger value="part5" className="py-2 data-[state=active]:bg-indigo-600"><FlaskConical className="w-4 h-4 mr-2" /> Laboratorio</TabsTrigger>
           </TabsList>
 
-          {/* PARTE 1: SISTEMA (4 tarjetas en grid 2x2) */}
           <TabsContent value="part1" className="mt-6">
              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <PromptCard 
                   title="1.1 ADN CORE" 
                   icon={Sparkles} 
-                  description="Aquí defines la esencia del bot. Su nombre, su rol como Samurai, y los valores innegociables de la marca."
+                  description="Esencia, nombre y valores del bot."
                   value={prompts['prompt_adn_core']} 
                   onChange={(v:any) => setPrompts({...prompts, prompt_adn_core: v})} 
                 />
                 <PromptCard 
-                  title="1.2 TÉCNICO (TEXTO PLANO)" 
+                  title="1.2 TÉCNICO (ANALISIS)" 
                   icon={Terminal} 
-                  description="Formato de respuesta: TEXTO PLANO obligatorio. Sin JSON. La IA sabe que debe enviar una imagen, pone el título al final."
+                  description="Define cómo la IA debe extraer el nombre, ciudad y estado emocional del cliente en un bloque JSON oculto."
                   value={prompts['prompt_tecnico']} 
                   onChange={(v:any) => setPrompts({...prompts, prompt_tecnico: v})} 
                 />
                 <PromptCard 
                   title="1.3 PROTOCOLOS" 
                   icon={FileText} 
-                  description="Define cómo reacciona ante saludos, despedidas o situaciones estándar."
+                  description="Comportamiento ante saludos y despedidas."
                   value={prompts['prompt_protocolos']} 
                   onChange={(v:any) => setPrompts({...prompts, prompt_protocolos: v})} 
                 />
                 <PromptCard 
                   title="1.4 OBJECIONES" 
                   icon={ShieldAlert} 
-                  description="Matriz de combate. Instrucciones para la vuelta a dudas sobre precios, tiempos de entrega o competencia."
+                  description="Estrategias ante dudas o quejas."
                   value={prompts['prompt_objeciones']} 
                   onChange={(v:any) => setPrompts({...prompts, prompt_objeciones: v})} 
                 />
              </div>
           </TabsContent>
 
-          {/* PARTE 2: CONTEXTO (4 tarjetas en grid 2x2) */}
           <TabsContent value="part2" className="mt-6">
              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <PromptCard 
                   title="2.1 DATOS CRM" 
                   icon={Database} 
-                  description="Cómo usar la información de Kommo. Cómo llamar al cliente por su nombre."
+                  description="Uso de variables de cliente (Nombre, ID)."
                   value={prompts['prompt_datos_crm']} 
                   onChange={(v:any) => setPrompts({...prompts, prompt_datos_crm: v})} 
                 />
                 <PromptCard 
                   title="2.2 MEMORIA" 
                   icon={History} 
-                  description="Reglas para que la IA no olvide lo que se dijo hace 5 minutos."
+                  description="Reglas de persistencia del hilo de chat."
                   value={prompts['prompt_memoria']} 
                   onChange={(v:any) => setPrompts({...prompts, prompt_memoria: v})} 
                 />
                 <PromptCard 
                   title="2.3 TONO" 
                   icon={MessageSquare} 
-                  description="Cómo sonar empático si el cliente está frustrado o profesional si el cliente es pragmático."
+                  description="Empatía y estilo de comunicación."
                   value={prompts['prompt_tono']} 
                   onChange={(v:any) => setPrompts({...prompts, prompt_tono: v})} 
                 />
                 <PromptCard 
                   title="2.4 UPSELLING" 
                   icon={TrendingUp} 
-                  description="Lógica comercial. ¿Cuándo debe intentar vender algo más?"
+                  description="Lógica para ofrecer productos adicionales."
                   value={prompts['prompt_upselling']} 
                   onChange={(v:any) => setPrompts({...prompts, prompt_upselling: v})} 
                 />
              </div>
           </TabsContent>
 
-          {/* PARTE 3: PSICOLOGÍA (4 tarjetas, 1 ancha arriba + 3 abajo) */}
           <TabsContent value="part3" className="mt-6 space-y-6">
              <div className="grid grid-cols-1 gap-6">
                 <PromptCard 
                   title="3.1 PERFILADO PSICOLÓGICO" 
                   icon={Target} 
-                  description="Instrucciones para que la IA analice la personalidad del cliente basándose en su forma de escribir."
+                  description="Análisis profundo de la intención del lead."
                   value={prompts['prompt_perfilado']} 
                   onChange={(v:any) => setPrompts({...prompts, prompt_perfilado: v})} 
                 />
              </div>
              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <PromptCard 
-                  title="3.2 ESTRATEGIA DE CIERRE" 
+                  title="3.2 CIERRE" 
                   icon={Zap} 
-                  description="Cómo mover al lead a través del embudo. Identificar en qué etapa está y empujarlo a la siguiente."
+                  description="Estrategias de conversión."
                   value={prompts['prompt_estrategia_cierre']} 
                   onChange={(v:any) => setPrompts({...prompts, prompt_estrategia_cierre: v})} 
                 />
                 <PromptCard 
-                  title="3.3 RE-APRENDIZAJE (CORRECCIONES)" 
+                  title="3.3 RE-APRENDIZAJE" 
                   icon={RefreshCw} 
-                  description="Cómo integrar las nuevas reglas de oro que tú validas en el Learning Log."
+                  description="Inyección de reglas desde la Bitácora."
                   value={prompts['prompt_reaprendizaje']} 
                   onChange={(v:any) => setPrompts({...prompts, prompt_reaprendizaje: v})} 
                 />
                 <PromptCard 
-                  title="3.4 TRIGGER #CORREGIRIA" 
+                  title="3.4 TRIGGER #CIA" 
                   icon={AlertTriangle} 
-                  description="Define qué situaciones activan el reporte de error manual."
+                  description="Situaciones que requieren corrección humana."
                   value={prompts['prompt_trigger_corregiria']} 
                   onChange={(v:any) => setPrompts({...prompts, prompt_trigger_corregiria: v})} 
                 />
              </div>
           </TabsContent>
 
-          {/* PARTE 4: VISIÓN (3 tarjetas) */}
           <TabsContent value="part4" className="mt-6">
              <div className="grid grid-cols-1 gap-6 mb-6">
                 <PromptCard 
-                  title="4.1 OJO DE HALCÓN (ANÁLISIS DE IMAGEN)" 
+                  title="4.1 ANÁLISIS DE IMAGEN" 
                   icon={Eye} 
-                  description="La joya de la corona. Define cómo la IA debe 'mirar' una foto."
+                  description="Cómo interpretar fotos enviadas por el cliente."
                   value={prompts['prompt_ojo_halcon']} 
                   onChange={(v:any) => setPrompts({...prompts, prompt_ojo_halcon: v})} 
                 />
              </div>
              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <PromptCard 
-                  title="4.2 MATCH" 
+                  title="4.2 MATCH PAGOS" 
                   icon={CheckCheck} 
-                  description="Cómo comparar el texto extraído de la imagen con la deuda real del cliente."
+                  description="Validación de comprobantes bancarios."
                   value={prompts['prompt_match']} 
                   onChange={(v:any) => setPrompts({...prompts, prompt_match: v})} 
                 />
                 <PromptCard 
-                  title="4.3 ACCIÓN POST" 
+                  title="4.3 CONFIRMACIÓN" 
                   icon={Gift} 
-                  description="Qué hacer inmediatamente después de validar un pago. Confirmar o pedir a un humano."
+                  description="Respuesta post-validación de pago."
                   value={prompts['prompt_accion_post']} 
                   onChange={(v:any) => setPrompts({...prompts, prompt_accion_post: v})} 
                 />
              </div>
           </TabsContent>
           
-          {/* PARTE 5: LABORATORIO */}
           <TabsContent value="part5" className="mt-6">
              <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
                 <Card className="md:col-span-4 bg-slate-900 border-slate-800">
@@ -278,7 +277,7 @@ const AgentBrain = () => {
                       <CardTitle className="text-white flex items-center gap-2">
                          <Terminal className="w-5 h-5 text-indigo-400" /> Simulator
                       </CardTitle>
-                      <CardDescription>Prueba cómo se construye el prompt final.</CardDescription>
+                      <CardDescription>Visualiza el ensamble final del cerebro.</CardDescription>
                    </CardHeader>
                    <CardContent className="space-y-4">
                       <div className="space-y-2">
@@ -286,7 +285,7 @@ const AgentBrain = () => {
                         <Input 
                            value={testInput} 
                            onChange={e => setTestInput(e.target.value)} 
-                           placeholder="Ej: Hola, ¿qué precio tienen los cuencos?"
+                           placeholder="Ej: Hola, me llamo Juan y estoy en Madrid..."
                            className="bg-slate-950 border-slate-800 text-white" 
                         />
                       </div>
@@ -294,24 +293,16 @@ const AgentBrain = () => {
                          {testing ? <Loader2 className="w-4 h-4 mr-2 animate-spin"/> : <Zap className="w-4 h-4 mr-2" />}
                          Ensamblar Prompt
                       </Button>
-                      <div className="p-3 bg-indigo-500/10 border border-indigo-500/20 rounded text-[10px] text-indigo-300">
-                         <Info className="w-3 h-3 inline mr-1" /> Esto simula la llamada que hace el bot de WhatsApp al servidor.
-                      </div>
                    </CardContent>
                 </Card>
 
                 <Card className="md:col-span-8 bg-black border-slate-800 shadow-inner">
                    <div className="p-4 flex items-center justify-between border-b border-slate-800">
-                      <span className="text-[10px] font-mono text-slate-500 uppercase tracking-widest">Debug Output: final_system_prompt</span>
-                      <div className="flex gap-1">
-                         <div className="w-2 h-2 rounded-full bg-slate-800"></div>
-                         <div className="w-2 h-2 rounded-full bg-slate-800"></div>
-                         <div className="w-2 h-2 rounded-full bg-slate-800"></div>
-                      </div>
+                      <span className="text-[10px] font-mono text-slate-500 uppercase tracking-widest">Debug: final_system_prompt</span>
                    </div>
                    <CardContent className="p-0">
                       <div className="p-6 font-mono text-[11px] text-slate-400 overflow-y-auto max-h-[500px] leading-relaxed whitespace-pre-wrap">
-                         {testOutput || "// Ingresa un mensaje y presiona 'Ensamblar Prompt' para ver el resultado de la fusión de todas las capas superiores."}
+                         {testOutput || "// Los datos del cliente y los prompts se fusionan aquí para enviarse a la IA."}
                       </div>
                    </CardContent>
                 </Card>
@@ -330,7 +321,6 @@ const PromptCard = ({ title, icon: Icon, description, value, onChange, readOnly 
          <CardTitle className="text-base text-white flex items-center gap-2">
             <Icon className="w-5 h-5 text-red-500"/> {title}
          </CardTitle>
-         {readOnly && <Badge variant="secondary" className="text-[9px] bg-indigo-500/10 text-indigo-400">Sólo Lectura</Badge>}
       </div>
       <CardDescription className="text-slate-500 text-xs">{description}</CardDescription>
     </CardHeader>
@@ -340,7 +330,7 @@ const PromptCard = ({ title, icon: Icon, description, value, onChange, readOnly 
         onChange={e => onChange(e.target.value)} 
         readOnly={readOnly}
         className={`h-full min-h-[200px] bg-slate-950/50 border-slate-800 font-mono text-xs text-slate-300 leading-relaxed focus-visible:ring-red-600/50 ${readOnly ? 'opacity-70 grayscale' : ''}`}
-        placeholder="Ingresa las instrucciones aquí..."
+        placeholder="Instrucciones del Samurai..."
       />
     </CardContent>
   </Card>
