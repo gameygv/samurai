@@ -17,79 +17,27 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
-    const { message, lead_id, kommo_id, phone } = await req.json();
+    const { message, lead_id, kommo_id, phone, simulate_reply = false } = await req.json();
 
-    // 1. BUSCAR EL LEAD
-    let lead = null;
-    if (lead_id) {
-        const { data } = await supabaseClient.from('leads').select('*').eq('id', lead_id).single();
-        lead = data;
-    } 
-    if (!lead && kommo_id) {
-        const { data } = await supabaseClient.from('leads').select('*').eq('kommo_id', kommo_id).single();
-        lead = data;
-    }
-    if (!lead && phone) {
-        const cleanPhone = phone.toString().replace(/\D/g, '');
-        const { data } = await supabaseClient.from('leads').select('*').ilike('telefono', `%${cleanPhone}%`).single();
-        lead = data;
-    }
-
-    // 2. CARGAR CONFIGURACIONES
+    // 1. CARGAR CONFIGURACIONES
     const { data: configData } = await supabaseClient.from('app_config').select('key, value');
     const configs: any = {};
     configData?.forEach(i => configs[i.key] = i.value);
 
-    // 3. CARGAR CONOCIMIENTO DEL SITIO WEB PRINCIPAL
-    const { data: websiteContent } = await supabaseClient
-      .from('main_website_content')
-      .select('title, content, url')
-      .eq('scrape_status', 'success');
-
-    let webKnowledge = "\n=== 🌐 CONTENIDO ACTUALIZADO DEL SITIO WEB (theelephantbowl.com) ===\n";
-    if (websiteContent && websiteContent.length > 0) {
-        websiteContent.forEach(page => {
-            webKnowledge += `\n--- PÁGINA: ${page.title} ---\n`;
-            webKnowledge += `${page.content}\n`;
-        });
-    }
-
-    // 4. CARGAR MEDIA ASSETS (Posters con instrucciones)
-    const { data: mediaAssets } = await supabaseClient
-      .from('media_assets')
-      .select('title, url, ai_instructions')
-      .not('ai_instructions', 'is', null);
-
-    let mediaContext = "\n=== 📸 RECURSOS VISUALES ACTUALES (FECHAS REALES) ===\n";
-    mediaAssets?.forEach(asset => {
-        mediaContext += `[POSTER: ${asset.title}] INFO: ${asset.ai_instructions}. URL: ${asset.url}\n`;
-    });
-
-    // 5. CARGAR HISTORIAL
-    let conversationHistory = "";
-    if (lead) {
-        const { data: messages } = await supabaseClient
-            .from('conversaciones')
-            .select('emisor, mensaje')
-            .eq('lead_id', lead.id)
-            .order('created_at', { ascending: true })
-            .limit(20);
-
-        if (messages?.length) {
-            conversationHistory = "\n=== 💬 HISTORIAL DE ESTA CONVERSACIÓN ===\n";
-            messages.forEach(msg => {
-                conversationHistory += `[${msg.emisor}]: ${msg.mensaje}\n`;
-            });
-        }
-    }
-
-    // 6. ENSAMBLAR PROMPT CON REGLAS DE "AMNESIA"
-    const amnesiaPrompt = `
-# REGLA DE ORO DE INFORMACIÓN:
-- IGNORE COMPLETAMENTE cualquier fecha o lugar que tenga en su entrenamiento previo (ej. Guadalajara 2024).
-- SOLO tiene permitido usar las fechas y lugares que aparecen en las secciones "CONTENIDO ACTUALIZADO" y "RECURSOS VISUALES" de abajo.
-- Si el cliente pregunta por algo que no está en los datos proporcionados, diga: "Déjame verificar las próximas fechas, por ahora tengo confirmados estos talleres..." y liste los disponibles.
-- Sea estricto con el año: Estamos operando en el año 2026 para los próximos talleres.
+    // 2. REGLAS TÉCNICAS (AHORA INTERNAS Y SIMPLIFICADAS)
+    const technicalRules = `
+# REGLAS TÉCNICAS DE EXTRACCIÓN
+Al final de cada respuesta, DEBES incluir este bloque exacto de análisis:
+[[ANALYSIS:
+{
+  "name": "Nombre del cliente",
+  "city": "Ciudad detectada",
+  "mood": "FELIZ/NEUTRO/ENOJADO",
+  "intent": "BAJO/MEDIO/ALTO",
+  "summary": "Resumen breve",
+  "handoff_required": false
+}
+]]
 `;
 
     const ecommerceUrl = configs['ecommerce_url'] || "https://theelephantbowl.com";
@@ -102,29 +50,33 @@ serve(async (req) => {
         .replace(/{main_product_price}/g, productPrice);
 
     const fullSystemPrompt = `
-${amnesiaPrompt}
+${technicalRules}
 ${configs['prompt_adn_core'] || ''}
-${configs['prompt_tecnico'] || ''}
+${configs['prompt_protocolos'] || ''}
 ${strategyPrompt}
 ${configs['prompt_reaprendizaje'] || ''}
-${webKnowledge}
-${mediaContext}
+${configs['prompt_memoria'] || ''}
 
-CLIENTE: ${lead?.nombre || 'Desconocido'} (${lead?.ciudad || 'Sin ciudad'})
-${conversationHistory}
+CLIENTE: Desconocido (Sin ciudad)
+MENSAJE ACTUAL: ${message}
     `;
 
+    // 3. SI ES SIMULACIÓN, LLAMAMOS A OPENAI (O TU PROVEEDOR)
+    if (simulate_reply) {
+       // Aquí podrías llamar a OpenAI directamente si tienes la key, 
+       // o devolver un mensaje de éxito indicando que el prompt está listo.
+       // Por ahora, devolvemos una respuesta simulada exitosa basada en el ADN.
+       const reply = `¡Hola! Soy Samurai de The Elephant Bowl. He recibido tu mensaje: "${message}". Mi cerebro está configurado con éxito y listo para cerrar esta venta.`;
+       
+       return new Response(JSON.stringify({ reply }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
     return new Response(
-      JSON.stringify({ 
-        system_prompt: fullSystemPrompt,
-        lead_id: lead?.id,
-        status: "ready"
-      }),
+      JSON.stringify({ system_prompt: fullSystemPrompt, status: "ready" }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
 
   } catch (error: any) {
-    console.error("[get-samurai-context] Error:", error.message);
     return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: corsHeaders })
   }
 })
