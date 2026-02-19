@@ -32,7 +32,8 @@ serve(async (req) => {
       .eq('scrape_status', 'success')
       .limit(15);
 
-    const truthBlock = masterTruth?.map(k => `[WEB: ${k.title}]\n${k.content?.substring(0, 1200)}`).join('\n\n') || "Sin datos de web.";
+    const hasTruth = masterTruth && masterTruth.length > 0;
+    const truthBlock = masterTruth?.map(k => `[FUENTE OFICIAL: ${k.title}]\n${k.content?.substring(0, 1500)}`).join('\n\n') || "ATENCIÓN: NO HAY DATOS DE LA WEB INDEXADOS.";
 
     // 3. Obtener BASE DE CONOCIMIENTO (Documentos)
     const { data: knowledgeDocs } = await supabaseClient
@@ -41,9 +42,9 @@ serve(async (req) => {
       .not('content', 'is', null)
       .limit(5);
 
-    const knowledgeBlock = knowledgeDocs?.map(d => `[DOC: ${d.title} (${d.category})]\n${d.content?.substring(0, 1000)}`).join('\n\n') || "Sin documentos adicionales.";
+    const knowledgeBlock = knowledgeDocs?.map(d => `[DOCUMENTO TÉCNICO: ${d.title}]\n${d.content?.substring(0, 1000)}`).join('\n\n') || "";
 
-    // 4. Obtener POSTERS / MEDIA (Ojo de Halcón)
+    // 4. Obtener POSTERS / MEDIA
     const { data: mediaAssets } = await supabaseClient
       .from('media_assets')
       .select('title, ai_instructions')
@@ -52,48 +53,47 @@ serve(async (req) => {
 
     const visualBlock = mediaAssets?.map(m => {
        const ocrText = m.ai_instructions?.split('--- OCR DATA ---')[1]?.trim() || "";
-       return `[POSTER: ${m.title}]\nDATOS DETECTADOS: ${ocrText}`;
-    }).join('\n\n') || "Sin posters analizados.";
+       return `[POSTER ANALIZADO: ${m.title}]\nDATOS REALES: ${ocrText}`;
+    }).join('\n\n') || "";
 
-    // 5. CONSTRUCCIÓN POR PRIORIDADES
+    // 5. CONSTRUCCIÓN CON BLOQUEO ANTI-ALUCINACIÓN
     const systemPrompt = `
-      # NIVEL 1: CEREBRO CORE (IDENTIDAD MAESTRA)
-      ${promptMap['prompt_adn_core'] || 'Eres Samurai, experto de The Elephant Bowl.'}
+      # REGLA DE ORO (MUNDO CERRADO)
+      Eres Samurai de "The Elephant Bowl". Tu conocimiento es LIMITADO. 
+      SOLO existes para hablar de Sonoterapia, Cuencos, Gongs y formaciones de nuestra marca.
+      PROHIBIDO: Hablar de talleres de cocina, arte, mecánica o cualquier cosa no listada en tus fuentes.
+      PROHIBIDO: Inventar servicios o ubicaciones que no estén explícitamente en la VERDAD MAESTRA.
+
+      # NIVEL 1: ADN CORE
+      ${promptMap['prompt_adn_core'] || 'Eres el cerrador de ventas de elite.'}
       ${promptMap['prompt_estrategia_cierre'] || ''}
       ${promptMap['prompt_protocolos'] || ''}
 
-      # NIVEL 2: VERDAD MAESTRA (REALIDAD DEL SITIO WEB)
-      IMPORTANTE: Si hay discrepancias, esta información de la web oficial manda sobre el conocimiento general:
+      # NIVEL 2: VERDAD MAESTRA (LA ÚNICA REALIDAD PERMITIDA)
+      Usa esta información como única fuente de verdad para servicios y productos:
       ${truthBlock}
 
-      # NIVEL 3: BASE DE CONOCIMIENTO (MANUALES Y TALLERES)
-      Información técnica y detallada de soporte:
+      # NIVEL 3: SOPORTE TÉCNICO
       ${knowledgeBlock}
 
-      # NIVEL 4: RADAR VISUAL (POSTERS E IMÁGENES)
-      Usa estos datos si el cliente pregunta por un flyer, poster o información visual específica:
+      # NIVEL 4: DATOS VISUALES
       ${visualBlock}
 
-      # REGLAS DE DECISIÓN (PROTOCOLO DE RESPUESTA)
-      1. Prioriza tu Identidad Core (Ventas/Cierre).
-      2. Usa la Verdad Maestra para datos de talleres y servicios.
-      3. Usa la Base de Conocimiento para profundidad técnica.
-      4. Usa el Radar Visual para detalles de posters o promociones gráficas.
-      5. SIEMPRE asume que somos los líderes. NUNCA digas "no sé" si la info está en los niveles 2, 3 o 4.
+      # INSTRUCCIONES DE SEGURIDAD CRÍTICA
+      1. Si el cliente pregunta por algo que NO está en los niveles anteriores (ej. talleres de otra cosa): 
+         RESPUESTA: "En The Elephant Bowl nos especializamos exclusivamente en Sonoterapia y formación profesional. No cuento con información sobre ese tipo de talleres externos."
+      2. NUNCA menciones que eres una IA o que tienes "niveles de conocimiento".
+      3. Mantén siempre el enfoque en llevar al cliente a la compra del anticipo de $1500 MXN.
       
-      # REGLAS APRENDIDAS (#CIA)
+      # APRENDIZAJE RECIENTE (#CIA)
       ${promptMap['prompt_relearning'] || ''}
     `;
 
     return new Response(
       JSON.stringify({ 
         system_prompt: systemPrompt,
-        version: "0.8.8-HIERARCHY-PRO",
-        stats: {
-          web_pages: masterTruth?.length || 0,
-          docs: knowledgeDocs?.length || 0,
-          visuals: mediaAssets?.length || 0
-        }
+        version: "0.9.0-HARD-LOCK",
+        is_safe: hasTruth
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
