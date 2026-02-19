@@ -43,35 +43,63 @@ serve(async (req) => {
         return new Response(JSON.stringify({ success: true, content: data.choices?.[0]?.message?.content }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    // MODO TEXTO + IMÁGENES: Scraping estándar
+    // MODO TEXTO + IMÁGENES: Scraping estándar mejorado
     console.log("[scrape-website] Scraping profundo de:", url);
-    const response = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) SamuraiBot/1.0' } });
+    
+    const response = await fetch(url, { 
+      headers: { 
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+        'Accept-Language': 'es-ES,es;q=0.9,en;q=0.8',
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache'
+      } 
+    });
+
+    if (!response.ok) {
+      throw new Error(`Error HTTP: ${response.status} - No se pudo acceder a la página.`);
+    }
+
     const html = await response.text();
     const $ = cheerio.load(html);
     
-    // 1. Extraer Imágenes
+    // 1. Extraer Imágenes con lógica multivariable (Lazy-loading friendly)
     const images: string[] = [];
     $('img').each((_, el) => {
-       const src = $(el).attr('src');
-       if (src && src.startsWith('http') && !src.includes('logo') && !src.includes('icon')) {
-          images.push(src);
+       const src = $(el).attr('src') || $(el).attr('data-src') || $(el).attr('data-lazy-src') || $(el).attr('srcset')?.split(' ')[0];
+       
+       if (src && src.startsWith('http')) {
+          const lowerSrc = src.toLowerCase();
+          // Ignorar logos, iconos y avatares comunes
+          const isIcon = lowerSrc.includes('logo') || lowerSrc.includes('icon') || lowerSrc.includes('avatar') || lowerSrc.includes('favicon');
+          
+          if (!isIcon) {
+            images.push(src);
+          }
        }
     });
 
-    // 2. Extraer Texto Limpio
-    $('script, style, noscript, iframe, header, footer, nav').remove();
+    // 2. Extraer Texto Limpio (Mejorado para evitar el error de "No se ha podido encontrar la página")
+    // Si detectamos texto de error común, lanzamos alerta
+    const bodyText = $('body').text();
+    if (bodyText.includes('No se ha podido encontrar la página') || bodyText.includes('404 Not Found')) {
+       console.warn("[scrape-website] Alerta: Página devolvió contenido de error 404.");
+    }
+
+    $('script, style, noscript, iframe, header, footer, nav, .error-404').remove();
     let text = $('body').text().replace(/\s+/g, ' ').trim();
 
     return new Response(
       JSON.stringify({ 
         success: true, 
-        content: text.substring(0, 10000), 
-        images: [...new Set(images)].slice(0, 15) // Top 15 imágenes únicas
+        content: text.substring(0, 15000), 
+        images: [...new Set(images)].slice(0, 30) // Hasta 30 imágenes únicas
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
 
   } catch (error: any) {
+    console.error("[scrape-website] Error Crítico:", error.message);
     return new Response(JSON.stringify({ success: false, error: error.message }), { status: 200, headers: corsHeaders })
   }
 })

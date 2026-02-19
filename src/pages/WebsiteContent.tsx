@@ -16,19 +16,19 @@ import { toast } from 'sonner';
 
 const CORE_URLS = [
   { url: 'https://theelephantbowl.com/', title: 'Home / Inicio' },
-  { url: 'https://theelephantbowl.com/formacion-sonoterapia', title: 'Formación Sonoterapia' },
-  { url: 'https://theelephantbowl.com/maestros', title: 'Maestros y Guías' },
-  { url: 'https://theelephantbowl.com/eventos', title: 'Calendario de Eventos' },
-  { url: 'https://theelephantbowl.com/talleres', title: 'Talleres Presenciales' },
-  { url: 'https://theelephantbowl.com/instrumentos', title: 'Catálogo de Instrumentos' },
-  { url: 'https://theelephantbowl.com/cuencos-de-cuarzo', title: 'Cuencos de Cuarzo' },
-  { url: 'https://theelephantbowl.com/gongs', title: 'Gongs Pro' },
-  { url: 'https://theelephantbowl.com/quienes-somos', title: 'Nuestra Historia' },
-  { url: 'https://theelephantbowl.com/testimonios', title: 'Experiencias y Testimonios' },
-  { url: 'https://theelephantbowl.com/tienda', title: 'E-commerce / Tienda' },
-  { url: 'https://theelephantbowl.com/politicas', title: 'Políticas y Garantías' },
-  { url: 'https://theelephantbowl.com/certificaciones', title: 'Certificaciones Internacionales' },
-  { url: 'https://theelephantbowl.com/preguntas-frecuentes', title: 'FAQ / Ayuda' }
+  { url: 'https://theelephantbowl.com/formacion-sonoterapia/', title: 'Formación Sonoterapia' },
+  { url: 'https://theelephantbowl.com/maestros/', title: 'Maestros y Guías' },
+  { url: 'https://theelephantbowl.com/eventos/', title: 'Calendario de Eventos' },
+  { url: 'https://theelephantbowl.com/talleres/', title: 'Talleres Presenciales' },
+  { url: 'https://theelephantbowl.com/instrumentos/', title: 'Catálogo de Instrumentos' },
+  { url: 'https://theelephantbowl.com/cuencos-de-cuarzo/', title: 'Cuencos de Cuarzo' },
+  { url: 'https://theelephantbowl.com/gongs/', title: 'Gongs Pro' },
+  { url: 'https://theelephantbowl.com/quienes-somos/', title: 'Nuestra Historia' },
+  { url: 'https://theelephantbowl.com/testimonios/', title: 'Experiencias y Testimonios' },
+  { url: 'https://theelephantbowl.com/tienda/', title: 'E-commerce / Tienda' },
+  { url: 'https://theelephantbowl.com/politicas/', title: 'Políticas y Garantías' },
+  { url: 'https://theelephantbowl.com/certificaciones/', title: 'Certificaciones Internacionales' },
+  { url: 'https://theelephantbowl.com/preguntas-frecuentes/', title: 'FAQ / Ayuda' }
 ];
 
 const WebsiteContent = () => {
@@ -69,13 +69,16 @@ const WebsiteContent = () => {
   const handleInitCoreUrls = async () => {
      setSyncing(true);
      try {
+        // Limpiamos primero por si acaso hay duplicados corruptos
+        await supabase.from('main_website_content').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+        
         const payload = CORE_URLS.map(page => ({
            ...page,
            scrape_status: 'pending'
         }));
         const { error } = await supabase.from('main_website_content').insert(payload);
         if (error) throw error;
-        toast.success("Fuentes de Verdad inyectadas.");
+        toast.success("Fuentes de Verdad inyectadas con URLs corregidas.");
         fetchPages();
      } catch (err: any) {
         toast.error("Error: " + err.message);
@@ -87,30 +90,35 @@ const WebsiteContent = () => {
   const handleSyncSingle = async (pageId: string, url: string) => {
     setSyncingId(pageId);
     setDetectedImages([]);
+    const tid = toast.loading(`Sincronizando ${url}...`);
+    
     try {
       const { data, error } = await supabase.functions.invoke('scrape-website', {
         body: { url }
       });
       
-      if (error || !data.success) throw new Error(data?.error || "Error de scraping");
+      if (error || !data.success) throw new Error(data?.error || "Error de conexión con el sitio.");
+
+      const isErrorPage = data.content.includes('No se ha podido encontrar la página');
 
       await supabase.from('main_website_content').update({
         content: data.content,
         content_length: data.content.length,
-        scrape_status: 'success',
+        scrape_status: isErrorPage ? 'error' : 'success',
+        error_message: isErrorPage ? 'Página devolvió 404' : null,
         last_scraped_at: new Date().toISOString()
       }).eq('id', pageId);
 
       if (data.images && data.images.length > 0) {
          setDetectedImages(data.images);
-         toast.success(`Sincronización completa. Se detectaron ${data.images.length} imágenes.`);
+         toast.success(`Sincronización completa. Detectadas ${data.images.length} imágenes de contenido.`, { id: tid });
       } else {
-         toast.success("Texto sincronizado correctamente.");
+         toast.success("Texto sincronizado correctamente. No se detectaron imágenes de contenido.", { id: tid });
       }
       
       fetchPages();
     } catch (err: any) {
-      toast.error(`Error: ${err.message}`);
+      toast.error(`Error: ${err.message}`, { id: tid });
     } finally {
       setSyncingId(null);
     }
@@ -127,7 +135,7 @@ const WebsiteContent = () => {
         });
 
         if (error) throw error;
-        toast.success("Imagen enviada al Media Manager. Ahora puedes ir allá y aplicar OCR.");
+        toast.success("Imagen enviada al Media Manager.");
      } catch (err: any) {
         toast.error("Error al importar imagen.");
      } finally {
@@ -137,11 +145,11 @@ const WebsiteContent = () => {
 
   const handleSyncAll = async () => {
     setSyncing(true);
-    toast.info("Iniciando lote de sincronización...");
+    toast.info("Iniciando lote de sincronización masiva...");
     try {
       const { data, error } = await supabase.functions.invoke('scrape-main-website', {});
       if (error) throw error;
-      toast.success(`Lote completado: ${data.successful} páginas.`);
+      toast.success(`Lote completado: ${data.successful} páginas procesadas.`);
       fetchPages();
     } catch (err: any) {
       toast.error(`Fallo: ${err.message}`);
@@ -168,14 +176,12 @@ const WebsiteContent = () => {
             <p className="text-slate-400">Control de indexación y visión de theelephantbowl.com</p>
           </div>
           <div className="flex gap-3">
-            {pages.length === 0 && (
-               <Button onClick={handleInitCoreUrls} variant="outline" className="border-indigo-500 text-indigo-400">
-                  <DatabaseZap className="w-4 h-4 mr-2" /> Inyectar 14 URLs Críticas
-               </Button>
-            )}
+            <Button onClick={handleInitCoreUrls} variant="outline" className="border-indigo-500/30 text-indigo-400 hover:bg-indigo-500/10">
+               <RefreshCw className="w-4 h-4 mr-2" /> Reiniciar URLs Críticas
+            </Button>
             <Button onClick={handleSyncAll} disabled={syncing || pages.length === 0} className="bg-indigo-600 hover:bg-indigo-700 shadow-lg shadow-indigo-900/20">
               {syncing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />} 
-              {syncing ? 'Procesando Lote...' : 'Sincronizar Lote'}
+              Sincronizar Lote
             </Button>
           </div>
         </div>
@@ -246,7 +252,7 @@ const WebsiteContent = () => {
                            </div>
                         </div>
                         <Badge className={selectedPage.scrape_status === 'success' ? 'bg-green-600/20 text-green-500 border-green-500/30' : 'bg-red-600/20 text-red-500'}>
-                           {selectedPage.scrape_status === 'success' ? '✓ INDEXADO' : '⚠ PENDIENTE'}
+                           {selectedPage.scrape_status === 'success' ? '✓ INDEXADO' : '⚠ ERROR'}
                         </Badge>
                      </div>
                   </CardHeader>
@@ -265,6 +271,12 @@ const WebsiteContent = () => {
 
                      <TabsContent value="texto" className="flex-1 p-6 min-h-0 m-0">
                         <ScrollArea className="h-full bg-black rounded-xl border border-slate-800 p-6 shadow-inner">
+                           {selectedPage.scrape_status === 'error' && (
+                              <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded text-red-500 text-xs flex items-center gap-2">
+                                 <AlertCircle className="w-4 h-4" /> 
+                                 Error detectado: La URL parece haber cambiado o no existe. Pulsa "Reiniciar URLs Críticas".
+                              </div>
+                           )}
                            {selectedPage.content ? (
                               <p className="text-sm text-slate-300 font-mono whitespace-pre-wrap leading-relaxed">
                                  {selectedPage.content}
@@ -272,7 +284,7 @@ const WebsiteContent = () => {
                            ) : (
                               <div className="h-full flex flex-col items-center justify-center text-slate-600 italic">
                                  <RefreshCw className="w-8 h-8 mb-4 opacity-20" />
-                                 Página vacía. Pulsa sincronizar en la lista lateral.
+                                 Página vacía. Pulsa sincronizar para leer la web.
                               </div>
                            )}
                         </ScrollArea>
@@ -283,7 +295,7 @@ const WebsiteContent = () => {
                            <div className="bg-indigo-500/5 p-4 rounded-lg border border-indigo-500/20 flex items-start gap-3">
                               <Scan className="w-5 h-5 text-indigo-400 shrink-0 mt-0.5" />
                               <p className="text-xs text-slate-400 leading-relaxed">
-                                 Abajo se muestran las imágenes encontradas en esta página. Importa las que contengan información crítica (posters, banners, tablas) al <strong>Media Manager</strong> para procesarlas con el Ojo de Halcón.
+                                 He filtrado logotipos e iconos pequeños. Abajo ves las fotos de contenido real. Impórtalas para que el Samurai las analice con su Ojo de Halcón.
                               </p>
                            </div>
                            
@@ -292,7 +304,7 @@ const WebsiteContent = () => {
                                  {detectedImages.length === 0 ? (
                                     <div className="col-span-full py-20 text-center border-2 border-dashed border-slate-800 rounded-xl">
                                        <ImageIcon className="w-12 h-12 text-slate-800 mx-auto mb-4" />
-                                       <p className="text-slate-500 text-sm italic">Sincroniza la página para detectar imágenes nuevas.</p>
+                                       <p className="text-slate-500 text-sm italic">Sincroniza la página para detectar fotos.</p>
                                     </div>
                                  ) : detectedImages.map((img, i) => (
                                     <Card key={i} className="bg-slate-950 border-slate-800 overflow-hidden group">
