@@ -21,24 +21,20 @@ serve(async (req) => {
 
     let lead = null;
     
-    // 1. INTENTAR ENCONTRAR EL LEAD POR ID
+    // 1. IDENTIFICACIÓN DEL LEAD
     if (lead_id) {
         const { data } = await supabaseClient.from('leads').select('*').eq('id', lead_id).single();
         lead = data;
     } 
-
-    // 2. SI NO HAY ID, BUSCAR POR KOMMO_ID
     if (!lead && kommo_id) {
         const { data } = await supabaseClient.from('leads').select('*').eq('kommo_id', kommo_id).single();
         lead = data;
     }
 
-    // 3. SI NO HAY KOMMO_ID, BUSCAR POR TELÉFONO (LIMPIO)
     const rawPhone = phone ? phone.toString() : null;
     const cleanPhone = rawPhone ? rawPhone.replace(/\D/g, '') : null;
 
     if (!lead && cleanPhone) {
-        // Buscamos coincidencia parcial o total del teléfono limpio
         const { data } = await supabaseClient
             .from('leads')
             .select('*')
@@ -48,7 +44,7 @@ serve(async (req) => {
         lead = data;
     }
 
-    // 4. SI SIGUE SIN EXISTIR, LO CREAMOS (USANDO UPSERT PARA SEGURIDAD)
+    // CREACIÓN SI NO EXISTE
     if (!lead) {
         const { data: upsertedLead, error: upsertError } = await supabaseClient.from('leads').upsert({
             nombre: name || 'Nuevo Lead WhatsApp',
@@ -58,9 +54,7 @@ serve(async (req) => {
         }, { onConflict: 'telefono' }).select().single();
         
         if (upsertError) {
-            // Si el upsert falló por concurrencia, intentamos una última búsqueda
             const { data: retryData } = await supabaseClient.from('leads').select('*').eq('telefono', rawPhone).single();
-            if (!retryData) throw upsertError;
             lead = retryData;
         } else {
             lead = upsertedLead;
@@ -69,11 +63,12 @@ serve(async (req) => {
 
     if (!lead) throw new Error("No se pudo identificar ni crear el lead.");
 
-    // PROCESAMIENTO DE RESPUESTA IA
+    // 2. PROCESAMIENTO DE RESPUESTA IA Y EXTRACCIÓN DE IDENTIDAD
     let fullText = typeof ai_json_response === 'string' ? ai_json_response : (ai_json_response?.reply || "");
     let cleanText = fullText;
     let analysisData: any = null;
 
+    // Detectar bloque de análisis
     const separators = ['---SYSTEM_ANALYSIS---', '[[ANALYSIS:', '---ANALYSIS---'];
     for (const sep of separators) {
         if (fullText.includes(sep)) {
@@ -87,30 +82,48 @@ serve(async (req) => {
         }
     }
 
-    const updateData: any = { last_message_at: new Date().toISOString() };
+    const updateData: any = { 
+        last_message_at: new Date().toISOString()
+    };
 
-    // PROGRAMACIÓN AUTOMÁTICA DE FOLLOW-UP
-    if (!is_client_message) {
+    // 3. ACTUALIZAR FICHA DEL LEAD CON DATOS DETECTADOS
+    if (analysisData) {
+        updateData.last_ai_analysis = new Date().toISOString();
+        if (analysisData.mood) updateData.estado_emocional_actual = analysisData.mood;
+        if (analysisData.intent) updateData.buying_intent = analysisData.intent;
+        if (analysisData.summary) updateData.summary = analysisData.summary;
+        
+        // ¡IMPORTANTE! Actualizar nombre y ciudad si se detectan
+        if (analysisData.name && (!lead.nombre || lead.nombre.includes('Nuevo Lead'))) {
+            updateData.nombre = analysisData.name;
+        }
+        if (analysisData.city && !lead.ciudad) {
+            updateData.ciudad = analysisData.city;
+        }
+        
+        if (analysisData.handoff_required === true) updateData.ai_paused = true;
+    }
+
+    // Desactivar follow-up si el cliente respondió
+    if (is_client_message) {
+        updateData.next_followup_at = null;
+    } else {
+        // Programar follow-up si es el bot quien habla
         const { data: config } = await supabaseClient.from('followup_config').select('*').single();
         if (config && config.enabled) {
             const nextTime = new Date(Date.now() + config.stage_1_delay * 60 * 1000);
             updateData.next_followup_at = nextTime.toISOString();
             updateData.followup_stage = 1;
         }
-    } else {
-        updateData.next_followup_at = null;
-    }
-
-    if (analysisData) {
-        updateData.last_ai_analysis = new Date().toISOString();
-        if (analysisData.mood) updateData.estado_emocional_actual = analysisData.mood;
-        if (analysisData.intent) updateData.buying_intent = analysisData.intent;
-        if (analysisData.summary) updateData.summary = analysisData.summary;
-        if (analysisData.handoff_required === true) updateData.ai_paused = true;
     }
 
     await supabaseClient.from('leads').update(updateData).eq('id', lead.id);
-    await supabaseClient.from('conversaciones').insert({ lead_id: lead.id, emisor: is_client_message ? 'CLIENTE' : 'SAMURAI', mensaje: cleanText, platform: 'API' });
+    await supabaseClient.from('conversaciones').insert({ 
+        lead_id: lead.id, 
+        emisor: is_client_message ? 'CLIENTE' : 'SAMURAI', 
+        mensaje: cleanText, 
+        platform: 'API' 
+    });
 
     return new Response(JSON.stringify({ success: true, reply: cleanText, lead_id: lead.id }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
   } catch (error: any) {

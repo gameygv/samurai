@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { 
   Archive as ArchiveIcon, Search, Loader2, MessageSquare, 
-  Calendar, User, Bot, ArrowRight, Filter
+  Calendar, User, Bot, ArrowRight, Filter, RefreshCw
 } from 'lucide-react';
 import { toast } from 'sonner';
 import ChatViewer from '@/components/ChatViewer';
@@ -118,7 +118,9 @@ const Archive = () => {
                            </div>
                            <div className="flex flex-col">
                               <span className="font-bold text-slate-200">{lead.nombre || 'Desconocido'}</span>
-                              <span className="text-[10px] text-slate-500 font-mono">{lead.telefono}</span>
+                              <span className="text-[10px] text-slate-500 font-mono">
+                                {lead.telefono || <span className="text-red-500/50 italic">Número no detectado</span>}
+                              </span>
                            </div>
                         </div>
                       </TableCell>
@@ -164,9 +166,5 @@ const Archive = () => {
     </Layout>
   );
 };
-
-const RefreshCw = ({ className }: { className?: string }) => (
-   <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>
-);
 
 export default Archive;
