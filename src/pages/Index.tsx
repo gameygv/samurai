@@ -3,7 +3,9 @@ import Layout from '@/components/Layout';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { SystemStatus } from '@/components/SystemStatus';
+import { cn } from '@/lib/utils';
 import { 
   Database, Shield, Activity, Terminal, AlertTriangle, 
   CheckCircle2, MessageSquare, TrendingUp, Clock, Loader2,
@@ -107,6 +109,16 @@ const Index = () => {
      if (data) setHandoffs(data);
   };
 
+  if (loading) {
+    return (
+      <Layout>
+        <div className="flex h-[80vh] items-center justify-center">
+          <Loader2 className="w-10 h-10 animate-spin text-indigo-500" />
+        </div>
+      </Layout>
+    );
+  }
+
   return (
     <Layout>
       <div className="space-y-8 pb-12">
@@ -132,7 +144,6 @@ const Index = () => {
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
           <div className="lg:col-span-8 space-y-8">
-             {/* Handoff Section */}
              {handoffs.length > 0 && (
                 <Card className="bg-red-900/10 border-red-500/30 border-l-4 border-l-red-500">
                    <CardHeader className="py-3">
@@ -211,7 +222,7 @@ const StatCard = ({ title, value, icon: Icon, color, bg, footer }: any) => (
   <Card className="bg-slate-900 border-slate-800 p-6 hover:border-indigo-500/30 transition-all group">
     <div className="flex justify-between items-start">
       <div><p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{title}</p><h3 className="text-3xl font-bold text-white mt-2">{value}</h3></div>
-      <div className={`p-3 rounded-xl ${bg} ${color} group-hover:rotate-12 transition-transform shadow-inner`}><Icon className="w-6 h-6" /></div>
+      <div className={cn("p-3 rounded-xl shadow-inner", bg, color, "group-hover:rotate-12 transition-transform")}><Icon className="w-6 h-6" /></div>
     </div>
     <p className="mt-4 text-[9px] text-slate-600 font-mono uppercase tracking-tighter">{footer}</p>
   </Card>
@@ -220,7 +231,7 @@ const StatCard = ({ title, value, icon: Icon, color, bg, footer }: any) => (
 const MiniTable = ({ title, icon: Icon, color, items, isTask }: any) => (
   <Card className="bg-slate-900 border-slate-800 shadow-xl overflow-hidden">
     <CardHeader className="border-b border-slate-800 py-3 bg-slate-950/20">
-       <CardTitle className="text-white text-[10px] uppercase tracking-widest flex items-center gap-2"><Icon className={`w-4 h-4 ${color}`} /> {title}</CardTitle>
+       <CardTitle className="text-white text-[10px] uppercase tracking-widest flex items-center gap-2"><Icon className={cn("w-4 h-4", color)} /> {title}</CardTitle>
     </CardHeader>
     <CardContent className="p-0">
        <div className="divide-y divide-slate-800">

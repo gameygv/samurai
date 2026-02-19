@@ -4,7 +4,7 @@ import {
   LayoutDashboard, Brain, Settings as SettingsIcon, Database, LogOut, 
   Users, FileText, UserCircle, GraduationCap, MessageSquare, 
   GitBranch, Link as LinkIcon, Image, Sparkles, BookOpen, Clock,
-  Archive
+  Archive, Globe
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/context/AuthContext';
@@ -49,6 +49,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
       items: [
         { icon: GraduationCap, label: 'Aprendizaje IA', path: '/learning' },
         { icon: Database, label: 'Base Conocimiento', path: '/knowledge' },
+        { icon: Globe, label: 'Sitio Web Principal', path: '/website-content' },
         { icon: Image, label: 'Media Manager', path: '/media' },
       ]
     },

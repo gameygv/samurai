@@ -8,9 +8,10 @@ import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { Image, FileText, Video, Upload, Trash2, ExternalLink, Loader2, Copy, AlertTriangle, Bot, Edit, Zap, WifiOff, Scan, FileSearch } from 'lucide-react';
+import { Image, FileText, Video, Upload, Trash2, ExternalLink, Loader2, Copy, AlertTriangle, Bot, Edit, Zap, WifiOff, Scan, FileSearch, Eye } from 'lucide-react';
 import { toast } from 'sonner';
 import { logActivity } from '@/utils/logger';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 
 const MediaManager = () => {
   const [assets, setAssets] = useState<any[]>([]);
@@ -63,8 +64,7 @@ const MediaManager = () => {
 
         const detectedText = data.content;
         
-        // Guardamos el texto extraído en una sección especial de las instrucciones o metadatos
-        // Para este MVP, lo concatenamos a las instrucciones con un tag claro
+        // Guardamos el texto extraído en una sección especial de las instrucciones
         const cleanInstructions = asset.ai_instructions?.split('--- OCR DATA ---')[0] || asset.ai_instructions || '';
         const newInstructions = `${cleanInstructions}\n\n--- OCR DATA ---\n${detectedText}`;
 
@@ -166,6 +166,17 @@ const MediaManager = () => {
      setUploadInstructions('');
   };
 
+  const getOcrData = (instructions: string) => {
+    if (!instructions) return null;
+    const parts = instructions.split('--- OCR DATA ---');
+    return parts.length > 1 ? parts[1].trim() : null;
+  };
+
+  const getCleanInstructions = (instructions: string) => {
+    if (!instructions) return '';
+    return instructions.split('--- OCR DATA ---')[0].trim();
+  };
+
   return (
     <Layout>
       <div className="max-w-7xl mx-auto space-y-6">
@@ -229,35 +240,75 @@ const MediaManager = () => {
            </DialogContent>
         </Dialog>
 
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {loading ? (
              <div className="col-span-full flex justify-center py-10"><Loader2 className="w-8 h-8 animate-spin text-indigo-500" /></div>
           ) : (
              assets.map((asset) => {
-                const ocrData = asset.ai_instructions?.split('--- OCR DATA ---')[1];
+                const ocrData = getOcrData(asset.ai_instructions);
+                const cleanInstructions = getCleanInstructions(asset.ai_instructions);
+                
                 return (
-                  <Card key={asset.id} className="bg-slate-900 border-slate-800 group overflow-hidden hover:border-indigo-500 transition-all">
+                  <Card key={asset.id} className="bg-slate-900 border-slate-800 group overflow-hidden hover:border-indigo-500 transition-all flex flex-col">
                     <div className="aspect-square bg-slate-950 relative flex items-center justify-center border-b border-slate-800">
-                       {asset.type === 'IMAGE' ? <img src={asset.url} className="object-cover w-full h-full opacity-80" /> : <FileText className="w-12 h-12 text-slate-600" />}
+                       {asset.type === 'IMAGE' ? (
+                         <img src={asset.url} className="object-cover w-full h-full opacity-80" alt={asset.title} />
+                       ) : (
+                         <FileText className="w-12 h-12 text-slate-600" />
+                       )}
                        <div className="absolute inset-0 bg-black/80 opacity-0 group-hover:opacity-100 transition-all flex flex-col items-center justify-center gap-2 p-4">
-                          <Button variant="secondary" size="sm" className="w-full" onClick={() => { setEditingAsset(asset); setEditTitle(asset.title); setEditInstructions(asset.ai_instructions || ''); }}><Edit className="w-3 h-3 mr-2" /> Editar</Button>
+                          <Button variant="secondary" size="sm" className="w-full" onClick={() => { setEditingAsset(asset); setEditTitle(asset.title); setEditInstructions(asset.ai_instructions || ''); }}>
+                            <Edit className="w-3 h-3 mr-2" /> Editar
+                          </Button>
                           {asset.type === 'IMAGE' && (
-                             <Button variant="secondary" size="sm" className="w-full bg-indigo-600 text-white" onClick={() => handleScanOcr(asset)} disabled={scanningId === asset.id}>
-                                {scanningId === asset.id ? <Loader2 className="w-3 h-3 animate-spin"/> : <Scan className="w-3 h-3 mr-2" />} OCR Scan
+                             <Button 
+                               variant="secondary" 
+                               size="sm" 
+                               className="w-full bg-indigo-600 text-white hover:bg-indigo-700" 
+                               onClick={() => handleScanOcr(asset)} 
+                               disabled={scanningId === asset.id}
+                             >
+                                {scanningId === asset.id ? <Loader2 className="w-3 h-3 animate-spin"/> : <Scan className="w-3 h-3 mr-2" />} 
+                                {ocrData ? 'Re-escanear' : 'Escanear OCR'}
                              </Button>
                           )}
-                          <Button variant="destructive" size="sm" className="w-full" onClick={() => deleteAsset(asset.id)}><Trash2 className="w-3 h-3 mr-2" /> Borrar</Button>
+                          <Button variant="destructive" size="sm" className="w-full" onClick={() => deleteAsset(asset.id)}>
+                            <Trash2 className="w-3 h-3 mr-2" /> Borrar
+                          </Button>
                        </div>
                     </div>
-                    <div className="p-3">
-                       <p className="text-xs font-bold text-white truncate mb-1">{asset.title}</p>
-                       {ocrData ? (
-                          <div className="bg-slate-950 p-1.5 rounded border border-indigo-500/20 mt-2">
-                             <p className="text-[9px] text-indigo-400 font-bold uppercase flex items-center gap-1 mb-1"><FileSearch className="w-3 h-3"/> Texto Detectado</p>
-                             <p className="text-[9px] text-slate-500 line-clamp-3 italic">{ocrData}</p>
+                    
+                    <div className="p-4 flex-1 flex flex-col">
+                       <p className="text-sm font-bold text-white truncate mb-2">{asset.title}</p>
+                       
+                       {cleanInstructions && (
+                          <div className="mb-2">
+                             <p className="text-[9px] text-slate-500 uppercase font-bold mb-1">Instrucciones IA:</p>
+                             <p className="text-[10px] text-slate-400 line-clamp-2 italic">"{cleanInstructions}"</p>
                           </div>
-                       ) : (
-                          <p className="text-[10px] text-slate-500 line-clamp-1 italic">{asset.ai_instructions?.substring(0, 50) || 'Sin instrucciones'}</p>
+                       )}
+                       
+                       {ocrData ? (
+                          <Accordion type="single" collapsible className="mt-auto">
+                            <AccordionItem value="ocr" className="border-none">
+                              <AccordionTrigger className="py-2 px-3 bg-indigo-500/10 border border-indigo-500/20 rounded hover:bg-indigo-500/20 transition-colors">
+                                <div className="flex items-center gap-2">
+                                  <Eye className="w-3 h-3 text-indigo-400" />
+                                  <span className="text-[9px] text-indigo-400 font-bold uppercase">Texto Detectado</span>
+                                </div>
+                              </AccordionTrigger>
+                              <AccordionContent className="pt-2">
+                                <div className="bg-slate-950 p-3 rounded border border-slate-800 max-h-[200px] overflow-y-auto">
+                                  <p className="text-[10px] text-slate-300 font-mono leading-relaxed whitespace-pre-wrap">{ocrData}</p>
+                                </div>
+                              </AccordionContent>
+                            </AccordionItem>
+                          </Accordion>
+                       ) : asset.type === 'IMAGE' && (
+                          <div className="mt-auto bg-slate-950/50 p-2 rounded border border-dashed border-slate-800 flex items-center justify-center gap-2 text-slate-600">
+                             <AlertTriangle className="w-3 h-3" />
+                             <span className="text-[9px] italic">Sin escaneo OCR</span>
+                          </div>
                        )}
                     </div>
                   </Card>

@@ -9,9 +9,10 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
-import { Webhook, Key, Save, Loader2, ShoppingCart, Globe, ShieldAlert, Database, Eye, Sparkles, Clock, Zap, Calendar, Package } from 'lucide-react';
+import { Webhook, Key, Save, Loader2, ShoppingCart, Globe, ShieldAlert, Database, Eye, Sparkles, Clock, Zap, Calendar, Package, Play } from 'lucide-react';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
+import { cn } from '@/lib/utils';
 
 const Settings = () => {
   const [searchParams, setSearchParams] = useSearchParams();
