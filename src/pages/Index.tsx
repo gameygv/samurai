@@ -248,6 +248,6 @@ const MiniTable = ({ title, icon: Icon, color, items }: any) => (
   </Card>
 );
 
-import { Settings as SettingsIcon } from 'lucide-react';
+import { Settings as SettingsIcon, Image as ImageIcon } from 'lucide-react';
 
 export default Index;
