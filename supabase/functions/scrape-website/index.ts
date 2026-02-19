@@ -1,4 +1,4 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
+import { serve } from "https://deno.land/std@0.190.0/http/server.ts"
 import * as cheerio from "https://esm.sh/cheerio@1.0.0-rc.12"
 
 const corsHeaders = {
@@ -18,7 +18,7 @@ serve(async (req) => {
       throw new Error('URL es requerida.')
     }
 
-    // MODO VISIÓN: Ojo de Halcón (Ya configurado con OpenAI)
+    // MODO VISIÓN: Ojo de Halcón
     if (mode === 'VISION') {
         const openAiKey = Deno.env.get('OPENAI_API_KEY');
         if (!openAiKey) throw new Error("OPENAI_API_KEY no configurada.");
@@ -31,7 +31,7 @@ serve(async (req) => {
                 messages: [{
                     role: "user",
                     content: [
-                        { type: "text", text: "Analiza esta imagen para el sistema Samurai. Extrae todo el texto relevante (precios, fechas, nombres, bancos). Si es un comprobante, detalla la transferencia. Si es un poster, detalla el evento." },
+                        { type: "text", text: "Analiza esta imagen. Extrae precios, fechas y datos de transferencia si es un comprobante." },
                         { type: "image_url", image_url: { url: url } }
                     ]
                 }],
@@ -43,63 +43,72 @@ serve(async (req) => {
         return new Response(JSON.stringify({ success: true, content: data.choices?.[0]?.message?.content }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    // MODO TEXTO + IMÁGENES: Scraping estándar mejorado
-    console.log("[scrape-website] Scraping profundo de:", url);
+    // MODO TEXTO + IMÁGENES: Mejorado
+    console.log(`[scrape-website] Intentando conexión con: ${url}`);
     
+    // Forzamos URL absoluta y añadimos timestamp para evitar cache
+    const targetUrl = new URL(url);
+    const baseUrl = `${targetUrl.protocol}//${targetUrl.host}`;
+
     const response = await fetch(url, { 
       headers: { 
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
         'Accept-Language': 'es-ES,es;q=0.9,en;q=0.8',
         'Cache-Control': 'no-cache',
-        'Pragma': 'no-cache'
+        'Upgrade-Insecure-Requests': '1'
       } 
     });
 
     if (!response.ok) {
-      throw new Error(`Error HTTP: ${response.status} - No se pudo acceder a la página.`);
+      throw new Error(`El sitio respondió con error ${response.status}. Puede que la URL esté mal o el sitio bloquee bots.`);
     }
 
     const html = await response.text();
     const $ = cheerio.load(html);
     
-    // 1. Extraer Imágenes con lógica multivariable (Lazy-loading friendly)
+    // 1. Extraer Imágenes con resolución de URLs relativas
     const images: string[] = [];
     $('img').each((_, el) => {
-       const src = $(el).attr('src') || $(el).attr('data-src') || $(el).attr('data-lazy-src') || $(el).attr('srcset')?.split(' ')[0];
+       let src = $(el).attr('src') || $(el).attr('data-src') || $(el).attr('data-lazy-src') || $(el).attr('srcset')?.split(' ')[0];
        
-       if (src && src.startsWith('http')) {
+       if (src) {
+          // Si la URL es relativa (/img/test.jpg), la convertimos en absoluta
+          if (src.startsWith('/')) {
+             src = `${baseUrl}${src}`;
+          } else if (!src.startsWith('http')) {
+             src = `${baseUrl}/${src}`;
+          }
+
           const lowerSrc = src.toLowerCase();
-          // Ignorar logos, iconos y avatares comunes
-          const isIcon = lowerSrc.includes('logo') || lowerSrc.includes('icon') || lowerSrc.includes('avatar') || lowerSrc.includes('favicon');
+          const isIcon = lowerSrc.includes('logo') || lowerSrc.includes('icon') || lowerSrc.includes('avatar') || lowerSrc.includes('favicon') || lowerSrc.includes('svg');
           
-          if (!isIcon) {
+          // Filtramos imágenes muy pequeñas o de sistema
+          if (!isIcon && !src.includes('base64')) {
             images.push(src);
           }
        }
     });
 
-    // 2. Extraer Texto Limpio (Mejorado para evitar el error de "No se ha podido encontrar la página")
-    // Si detectamos texto de error común, lanzamos alerta
-    const bodyText = $('body').text();
-    if (bodyText.includes('No se ha podido encontrar la página') || bodyText.includes('404 Not Found')) {
-       console.warn("[scrape-website] Alerta: Página devolvió contenido de error 404.");
-    }
-
-    $('script, style, noscript, iframe, header, footer, nav, .error-404').remove();
+    // 2. Extraer Texto
+    $('script, style, noscript, iframe, header, footer, nav').remove();
     let text = $('body').text().replace(/\s+/g, ' ').trim();
+
+    if (text.length < 100) {
+       throw new Error("La página se leyó pero no tiene contenido útil (posible bloqueo de contenido).");
+    }
 
     return new Response(
       JSON.stringify({ 
         success: true, 
         content: text.substring(0, 15000), 
-        images: [...new Set(images)].slice(0, 30) // Hasta 30 imágenes únicas
+        images: [...new Set(images)].slice(0, 40)
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
 
   } catch (error: any) {
-    console.error("[scrape-website] Error Crítico:", error.message);
+    console.error("[scrape-website] Error:", error.message);
     return new Response(JSON.stringify({ success: false, error: error.message }), { status: 200, headers: corsHeaders })
   }
 })

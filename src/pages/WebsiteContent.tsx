@@ -69,7 +69,6 @@ const WebsiteContent = () => {
   const handleInitCoreUrls = async () => {
      setSyncing(true);
      try {
-        // Limpiamos primero por si acaso hay duplicados corruptos
         await supabase.from('main_website_content').delete().neq('id', '00000000-0000-0000-0000-000000000000');
         
         const payload = CORE_URLS.map(page => ({
@@ -78,7 +77,7 @@ const WebsiteContent = () => {
         }));
         const { error } = await supabase.from('main_website_content').insert(payload);
         if (error) throw error;
-        toast.success("Fuentes de Verdad inyectadas con URLs corregidas.");
+        toast.success("Fuentes de Verdad inyectadas.");
         fetchPages();
      } catch (err: any) {
         toast.error("Error: " + err.message);
@@ -90,14 +89,15 @@ const WebsiteContent = () => {
   const handleSyncSingle = async (pageId: string, url: string) => {
     setSyncingId(pageId);
     setDetectedImages([]);
-    const tid = toast.loading(`Sincronizando ${url}...`);
+    const tid = toast.loading(`Contactando con el sitio web...`);
     
     try {
       const { data, error } = await supabase.functions.invoke('scrape-website', {
         body: { url }
       });
       
-      if (error || !data.success) throw new Error(data?.error || "Error de conexión con el sitio.");
+      if (error) throw new Error("Error de red con el servidor de funciones.");
+      if (!data || data.success === false) throw new Error(data?.error || "El sitio web bloqueó la conexión.");
 
       const isErrorPage = data.content.includes('No se ha podido encontrar la página');
 
@@ -111,14 +111,14 @@ const WebsiteContent = () => {
 
       if (data.images && data.images.length > 0) {
          setDetectedImages(data.images);
-         toast.success(`Sincronización completa. Detectadas ${data.images.length} imágenes de contenido.`, { id: tid });
+         toast.success(`Sincronización completa. ¡${data.images.length} fotos encontradas!`, { id: tid });
       } else {
-         toast.success("Texto sincronizado correctamente. No se detectaron imágenes de contenido.", { id: tid });
+         toast.success("Texto sincronizado. No se detectaron fotos grandes.", { id: tid });
       }
       
       fetchPages();
     } catch (err: any) {
-      toast.error(`Error: ${err.message}`, { id: tid });
+      toast.error(err.message, { id: tid });
     } finally {
       setSyncingId(null);
     }
@@ -274,7 +274,7 @@ const WebsiteContent = () => {
                            {selectedPage.scrape_status === 'error' && (
                               <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded text-red-500 text-xs flex items-center gap-2">
                                  <AlertCircle className="w-4 h-4" /> 
-                                 Error detectado: La URL parece haber cambiado o no existe. Pulsa "Reiniciar URLs Críticas".
+                                 Error detectado: La URL parece haber cambiado o no existe.
                               </div>
                            )}
                            {selectedPage.content ? (
@@ -295,7 +295,7 @@ const WebsiteContent = () => {
                            <div className="bg-indigo-500/5 p-4 rounded-lg border border-indigo-500/20 flex items-start gap-3">
                               <Scan className="w-5 h-5 text-indigo-400 shrink-0 mt-0.5" />
                               <p className="text-xs text-slate-400 leading-relaxed">
-                                 He filtrado logotipos e iconos pequeños. Abajo ves las fotos de contenido real. Impórtalas para que el Samurai las analice con su Ojo de Halcón.
+                                 He filtrado logotipos e iconos. Abajo ves las fotos reales del sitio. Impórtalas para que el Samurai las analice con su Ojo de Halcón.
                               </p>
                            </div>
                            
