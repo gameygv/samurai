@@ -6,6 +6,7 @@ import { MessageList } from './chat/MessageList';
 import { MessageInput } from './chat/MessageInput';
 import { MemoryPanel } from './chat/MemoryPanel';
 import { toast } from 'sonner';
+import { triggerMakeWebhook } from '@/utils/makeService';
 
 interface ChatViewerProps {
   lead: any;
@@ -25,7 +26,9 @@ const ChatViewer = ({ lead, open, onOpenChange }: ChatViewerProps) => {
     mood: lead.estado_emocional_actual || 'NEUTRO',
     buying_intent: lead.buying_intent || 'BAJO',
     followup_stage: lead.followup_stage || 0,
-    next_followup_at: lead.next_followup_at || null
+    next_followup_at: lead.next_followup_at || null,
+    ciudad: lead.ciudad || '',
+    perfil_psicologico: lead.perfil_psicologico || ''
   });
 
   useEffect(() => {
@@ -36,7 +39,9 @@ const ChatViewer = ({ lead, open, onOpenChange }: ChatViewerProps) => {
         mood: lead.estado_emocional_actual || 'NEUTRO',
         buying_intent: lead.buying_intent || 'BAJO',
         followup_stage: lead.followup_stage || 0,
-        next_followup_at: lead.next_followup_at || null
+        next_followup_at: lead.next_followup_at || null,
+        ciudad: lead.ciudad || '',
+        perfil_psicologico: lead.perfil_psicologico || ''
       });
     }
   }, [open, lead]);
@@ -56,6 +61,7 @@ const ChatViewer = ({ lead, open, onOpenChange }: ChatViewerProps) => {
   const handleSendMessage = async (text: string) => {
     setSending(true);
     try {
+      // 1. Guardar localmente
       const { error } = await supabase.from('conversaciones').insert({
         lead_id: lead.id,
         mensaje: text,
@@ -64,6 +70,17 @@ const ChatViewer = ({ lead, open, onOpenChange }: ChatViewerProps) => {
       });
 
       if (error) throw error;
+      
+      // 2. Enviar a Make (Si hay webhook configurado)
+      // Usamos el webhook de ventas como fallback si no hay uno específico de chat
+      await triggerMakeWebhook('webhook_sale', {
+        type: 'outgoing_message',
+        lead_id: lead.id,
+        phone: lead.telefono,
+        message: text,
+        kommo_id: lead.kommo_id
+      });
+
       fetchMessages();
       
       if (text.includes('#STOP') || text.includes('#START')) {
@@ -88,7 +105,9 @@ const ChatViewer = ({ lead, open, onOpenChange }: ChatViewerProps) => {
               estado_emocional_actual: memoryForm.mood,
               buying_intent: memoryForm.buying_intent,
               followup_stage: memoryForm.followup_stage,
-              next_followup_at: memoryForm.next_followup_at
+              next_followup_at: memoryForm.next_followup_at,
+              ciudad: memoryForm.ciudad,
+              perfil_psicologico: memoryForm.perfil_psicologico
            })
            .eq('id', lead.id);
         
@@ -105,13 +124,8 @@ const ChatViewer = ({ lead, open, onOpenChange }: ChatViewerProps) => {
   const handleToggleFollowup = async () => {
     try {
       const isCurrentlyPaused = lead.ai_paused;
-      const { error } = await supabase
-        .from('leads')
-        .update({ ai_paused: !isCurrentlyPaused })
-        .eq('id', lead.id);
-      
-      if (error) throw error;
-      toast.success(!isCurrentlyPaused ? 'IA Pausada (#STOP)' : 'IA Reactivada (#START)');
+      const cmd = isCurrentlyPaused ? '#START' : '#STOP';
+      await handleSendMessage(cmd);
     } catch (err: any) {
       toast.error('Error al cambiar estado de la IA');
     }

@@ -32,68 +32,33 @@ serve(async (req) => {
       .eq('scrape_status', 'success')
       .limit(15);
 
-    const hasTruth = masterTruth && masterTruth.length > 0;
-    const truthBlock = masterTruth?.map(k => `[FUENTE OFICIAL: ${k.title}]\n${k.content?.substring(0, 1500)}`).join('\n\n') || "ATENCIÓN: NO HAY DATOS DE LA WEB INDEXADOS.";
+    const truthBlock = masterTruth?.map(k => `[DATOS WEB OFICIAL: ${k.title}]\n${k.content?.substring(0, 1500)}`).join('\n\n') || "ATENCIÓN: SISTEMA WEB FUERA DE LÍNEA. USA SOLO TU ADN CORE.";
 
-    // 3. Obtener BASE DE CONOCIMIENTO (Documentos)
-    const { data: knowledgeDocs } = await supabaseClient
-      .from('knowledge_documents')
-      .select('title, category, content')
-      .not('content', 'is', null)
-      .limit(5);
-
-    const knowledgeBlock = knowledgeDocs?.map(d => `[DOCUMENTO TÉCNICO: ${d.title}]\n${d.content?.substring(0, 1000)}`).join('\n\n') || "";
-
-    // 4. Obtener POSTERS / MEDIA
-    const { data: mediaAssets } = await supabaseClient
-      .from('media_assets')
-      .select('title, ai_instructions')
-      .ilike('ai_instructions', '%OCR DATA%')
-      .limit(5);
-
-    const visualBlock = mediaAssets?.map(m => {
-       const ocrText = m.ai_instructions?.split('--- OCR DATA ---')[1]?.trim() || "";
-       return `[POSTER ANALIZADO: ${m.title}]\nDATOS REALES: ${ocrText}`;
-    }).join('\n\n') || "";
-
-    // 5. CONSTRUCCIÓN CON BLOQUEO ANTI-ALUCINACIÓN
+    // 3. CONSTRUCCIÓN POR PRIORIDAD ABSOLUTA
     const systemPrompt = `
-      # REGLA DE ORO (MUNDO CERRADO)
-      Eres Samurai de "The Elephant Bowl". Tu conocimiento es LIMITADO. 
-      SOLO existes para hablar de Sonoterapia, Cuencos, Gongs y formaciones de nuestra marca.
-      PROHIBIDO: Hablar de talleres de cocina, arte, mecánica o cualquier cosa no listada en tus fuentes.
-      PROHIBIDO: Inventar servicios o ubicaciones que no estén explícitamente en la VERDAD MAESTRA.
-
-      # NIVEL 1: ADN CORE
+      # IDENTIDAD CRÍTICA (NIVEL 0)
+      TU NOMBRE ES SAM. Preséntate SIEMPRE como "Sam", asesor experto de The Elephant Bowl.
       ${promptMap['prompt_adn_core'] || 'Eres el cerrador de ventas de elite.'}
+
+      # REGLAS DE NEGOCIO (NIVEL 1)
       ${promptMap['prompt_estrategia_cierre'] || ''}
       ${promptMap['prompt_protocolos'] || ''}
 
-      # NIVEL 2: VERDAD MAESTRA (LA ÚNICA REALIDAD PERMITIDA)
-      Usa esta información como única fuente de verdad para servicios y productos:
+      # VERDAD MAESTRA (NIVEL 2)
+      SI ESTA SECCIÓN TIENE DATOS, ÚSALOS COMO VERDAD ABSOLUTA SOBRE TALLERES Y PRECIOS:
       ${truthBlock}
 
-      # NIVEL 3: SOPORTE TÉCNICO
-      ${knowledgeBlock}
-
-      # NIVEL 4: DATOS VISUALES
-      ${visualBlock}
-
-      # INSTRUCCIONES DE SEGURIDAD CRÍTICA
-      1. Si el cliente pregunta por algo que NO está en los niveles anteriores (ej. talleres de otra cosa): 
-         RESPUESTA: "En The Elephant Bowl nos especializamos exclusivamente en Sonoterapia y formación profesional. No cuento con información sobre ese tipo de talleres externos."
-      2. NUNCA menciones que eres una IA o que tienes "niveles de conocimiento".
-      3. Mantén siempre el enfoque en llevar al cliente a la compra del anticipo de $1500 MXN.
-      
-      # APRENDIZAJE RECIENTE (#CIA)
-      ${promptMap['prompt_relearning'] || ''}
+      # PROTOCOLO ANTI-ALUCINACIÓN
+      1. Si no hay datos en el NIVEL 2 sobre un taller específico, di: "Esa fecha aún no está confirmada en nuestra web oficial, pero puedo hablarte de nuestra metodología de Sonoterapia que nos hace únicos."
+      2. NUNCA inventes talleres en ciudades que no veas en el NIVEL 2.
+      3. Tu objetivo es que paguen el anticipo de $1500 MXN usando el link de la tienda.
     `;
 
     return new Response(
       JSON.stringify({ 
         system_prompt: systemPrompt,
-        version: "0.9.0-HARD-LOCK",
-        is_safe: hasTruth
+        version: "0.9.5-IDENTITY-PRO",
+        has_truth: masterTruth && masterTruth.length > 0
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )

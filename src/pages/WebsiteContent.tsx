@@ -99,12 +99,13 @@ const WebsiteContent = () => {
       if (error) throw new Error("Fallo crítico en el servidor de sincronización.");
       if (!data || data.success === false) throw new Error(data?.error || "El sitio web bloqueó el acceso.");
 
-      // Si el contenido es demasiado corto, probablemente es un error
-      if (data.content.length < 200) throw new Error("El sitio web devolvió una página vacía o de error.");
+      // Validación segura de contenido
+      const content = data.content || "";
+      if (content.length < 50) throw new Error("El sitio web devolvió contenido insuficiente o está protegido.");
 
       await supabase.from('main_website_content').update({
-        content: data.content,
-        content_length: data.content.length,
+        content: content,
+        content_length: content.length,
         scrape_status: 'success',
         error_message: null,
         last_scraped_at: new Date().toISOString()
@@ -112,9 +113,9 @@ const WebsiteContent = () => {
 
       if (data.images && data.images.length > 0) {
          setDetectedImages(data.images);
-         toast.success(`¡Sincronizado! Se detectaron ${data.images.length} imágenes de interés.`, { id: tid });
+         toast.success(`¡Sincronizado! Se detectaron ${data.images.length} imágenes.`, { id: tid });
       } else {
-         toast.success("Contenido de texto actualizado correctamente.", { id: tid });
+         toast.success("Contenido actualizado correctamente.", { id: tid });
       }
       
       fetchPages();
@@ -135,10 +136,10 @@ const WebsiteContent = () => {
      setImportingImage(imageUrl);
      try {
         const { error } = await supabase.from('media_assets').insert({
-           title: `Importado de ${selectedPage.title}`,
+           title: `Importado de ${selectedPage?.title || 'Web'}`,
            url: imageUrl,
            type: 'IMAGE',
-           ai_instructions: `VINCULADO A: ${selectedPage.title}\nURL ORIGEN: ${selectedPage.url}`
+           ai_instructions: `VINCULADO A: ${selectedPage?.title}\nURL ORIGEN: ${selectedPage?.url}`
         });
 
         if (error) throw error;
@@ -281,7 +282,7 @@ const WebsiteContent = () => {
                            {selectedPage.scrape_status === 'error' && (
                               <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded text-red-500 text-xs flex items-center gap-2">
                                  <AlertCircle className="w-4 h-4" /> 
-                                 Error detectado: {selectedPage.error_message || 'Fallo de conexión'}. Pulsa sincronizar para reintentar.
+                                 Error detectado: {selectedPage.error_message || 'Fallo de conexión'}.
                               </div>
                            )}
                            {selectedPage.content ? (
@@ -289,9 +290,9 @@ const WebsiteContent = () => {
                                  {selectedPage.content}
                               </p>
                            ) : (
-                              <div className="h-full flex flex-col items-center justify-center text-slate-600 italic">
-                                 <RefreshCw className="w-8 h-8 mb-4 opacity-20" />
-                                 Página vacía. Pulsa sincronizar para leer la web.
+                              <div className="h-full flex flex-col items-center justify-center text-slate-600 italic text-center gap-4">
+                                 <RefreshCw className="w-8 h-8 opacity-20" />
+                                 <p>Página sin contenido indexado.<br/>Pulsa el botón de refrescar arriba a la derecha.</p>
                               </div>
                            )}
                         </ScrollArea>
@@ -302,16 +303,16 @@ const WebsiteContent = () => {
                            <div className="bg-indigo-500/5 p-4 rounded-lg border border-indigo-500/20 flex items-start gap-3">
                               <Scan className="w-5 h-5 text-indigo-400 shrink-0 mt-0.5" />
                               <p className="text-xs text-slate-400 leading-relaxed">
-                                 Abajo ves las fotos reales detectadas en esta página. Impórtalas para que el Samurai las conozca.
+                                 Imágenes detectadas en tiempo real.
                               </p>
                            </div>
                            
                            <ScrollArea className="flex-1">
                               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                                 {detectedImages.length === 0 ? (
+                                 {(detectedImages || []).length === 0 ? (
                                     <div className="col-span-full py-20 text-center border-2 border-dashed border-slate-800 rounded-xl">
                                        <ImageIcon className="w-12 h-12 text-slate-800 mx-auto mb-4" />
-                                       <p className="text-slate-500 text-sm italic">Sin fotos detectadas aún.</p>
+                                       <p className="text-slate-500 text-sm italic">Sin fotos detectadas.</p>
                                     </div>
                                  ) : detectedImages.map((img, i) => (
                                     <Card key={i} className="bg-slate-950 border-slate-800 overflow-hidden group">
