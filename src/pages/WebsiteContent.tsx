@@ -16,19 +16,19 @@ import { toast } from 'sonner';
 
 const CORE_URLS = [
   { url: 'https://theelephantbowl.com/', title: 'Home / Inicio' },
-  { url: 'https://theelephantbowl.com/formacion-sonoterapia/', title: 'Formación Sonoterapia' },
-  { url: 'https://theelephantbowl.com/maestros/', title: 'Maestros y Guías' },
-  { url: 'https://theelephantbowl.com/calendario/', title: 'Calendario de Eventos' },
-  { url: 'https://theelephantbowl.com/talleres/', title: 'Talleres Presenciales' },
-  { url: 'https://theelephantbowl.com/instrumentos/', title: 'Catálogo de Instrumentos' },
-  { url: 'https://theelephantbowl.com/cuencos-de-cuarzo/', title: 'Cuencos de Cuarzo' },
-  { url: 'https://theelephantbowl.com/gongs/', title: 'Gongs Pro' },
-  { url: 'https://theelephantbowl.com/quienes-somos/', title: 'Nuestra Historia' },
-  { url: 'https://theelephantbowl.com/testimonios/', title: 'Experiencias y Testimonios' },
-  { url: 'https://theelephantbowl.com/tienda/', title: 'E-commerce / Tienda' },
-  { url: 'https://theelephantbowl.com/politicas/', title: 'Políticas y Garantías' },
-  { url: 'https://theelephantbowl.com/certificaciones/', title: 'Certificaciones Internacionales' },
-  { url: 'https://theelephantbowl.com/preguntas-frecuentes/', title: 'FAQ / Ayuda' }
+  { url: 'https://theelephantbowl.com/cursos/', title: 'Página Principal de Cursos' },
+  { url: 'https://theelephantbowl.com/curso-nivel-1/', title: 'Curso Nivel 1' },
+  { url: 'https://theelephantbowl.com/curso-nivel-2/', title: 'Curso Nivel 2' },
+  { url: 'https://theelephantbowl.com/curso-nivel-3/', title: 'Curso Nivel 3' },
+  { url: 'https://theelephantbowl.com/curso-online-conviertete-en-cuencoterapeuta/', title: 'Curso Online: Cuencoterapeuta' },
+  { url: 'https://theelephantbowl.com/curso-online-la-psicoacustica/', title: 'Curso Online: Psicoacústica' },
+  { url: 'https://theelephantbowl.com/curso-online-facilitadores-de-cuencos/', title: 'Curso Online: Facilitadores' },
+  { url: 'https://theelephantbowl.com/comunidad/', title: 'Comunidad' },
+  { url: 'https://theelephantbowl.com/historia/', title: 'Nuestra Historia' },
+  { url: 'https://theelephantbowl.com/expertos/', title: 'Expertos y Guías' },
+  { url: 'https://theelephantbowl.com/biblioteca/', title: 'Biblioteca de Recursos' },
+  { url: 'https://theelephantbowl.com/ubicaciones/', title: 'Ubicaciones' },
+  { url: 'https://theelephantbowl.com/contacto/', title: 'Contacto' }
 ];
 
 const WebsiteContent = () => {
