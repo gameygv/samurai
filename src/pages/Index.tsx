@@ -5,11 +5,12 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { SystemStatus } from '@/components/SystemStatus';
+import { BrainHealthCard } from '@/components/dashboard/BrainHealthCard';
 import { cn } from '@/lib/utils';
 import { 
   Database, Shield, Activity, Terminal, AlertTriangle, 
   CheckCircle2, MessageSquare, TrendingUp, Clock, Loader2,
-  Zap, Brain, RefreshCw, Send, ArrowRight, UserCheck, ShieldAlert, BarChart3, Users2, DollarSign, Globe, Eye
+  Zap, Brain, RefreshCw, Send, ArrowRight, UserCheck, ShieldAlert, BarChart3, Users2, DollarSign, Globe, Eye, Image as ImageIcon, Settings as SettingsIcon
 } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Cell } from 'recharts';
 import { toast } from 'sonner';
@@ -24,7 +25,12 @@ const Index = () => {
     scheduledRestarts: 0,
     identifiedLeads: 0,
     totalLeads: 0,
-    webHealth: 0
+  });
+  const [brainHealth, setBrainHealth] = useState({
+    adnCoreStatus: 'missing' as 'ok' | 'missing',
+    ciaRules: 0,
+    webHealth: 0,
+    overallStatus: 'Sync Required' as 'Operational' | 'Degraded' | 'Sync Required'
   });
   const [funnelData, setFunnelData] = useState<any[]>([]);
   const [recentChats, setRecentChats] = useState<any[]>([]);
@@ -46,14 +52,16 @@ const Index = () => {
 
   const fetchData = async () => {
     try {
-      const [errorsRes, pendingRes, versionsRes, logsRes, followupsRes, leadsRes, webRes] = await Promise.all([
+      const [errorsRes, pendingRes, versionsRes, logsRes, followupsRes, leadsRes, webRes, validatedCiaRes, adnPromptRes] = await Promise.all([
         supabase.from('errores_ia').select('count', { count: 'exact', head: true }),
         supabase.from('errores_ia').select('count', { count: 'exact', head: true }).eq('estado_correccion', 'REPORTADA'),
         supabase.from('versiones_prompts_aprendidas').select('*').order('created_at', { ascending: true }),
         supabase.from('activity_logs').select('*').order('created_at', { ascending: false }).limit(10),
         supabase.from('leads').select('count', { count: 'exact', head: true }).not('next_followup_at', 'is', null),
         supabase.from('leads').select('*'),
-        supabase.from('main_website_content').select('scrape_status')
+        supabase.from('main_website_content').select('scrape_status'),
+        supabase.from('errores_ia').select('count', { count: 'exact', head: true }).eq('estado_correccion', 'VALIDADA'),
+        supabase.from('app_config').select('key').eq('key', 'prompt_adn_core').limit(1).maybeSingle()
       ]);
 
       const leads = leadsRes.data || [];
@@ -63,7 +71,23 @@ const Index = () => {
       const healthyPages = webPages.filter(p => p.scrape_status === 'success').length;
       const webHealth = webPages.length > 0 ? Math.round((healthyPages / webPages.length) * 100) : 0;
 
-      // Generar datos del Funnel
+      const adnCoreStatus = adnPromptRes.data ? 'ok' : 'missing';
+      const ciaRules = validatedCiaRes.count || 0;
+      
+      let overallStatus: 'Operational' | 'Degraded' | 'Sync Required' = 'Operational';
+      if (webHealth < 50 || adnCoreStatus === 'missing') {
+        overallStatus = 'Sync Required';
+      } else if (webHealth < 80) {
+        overallStatus = 'Degraded';
+      }
+
+      setBrainHealth({
+        adnCoreStatus,
+        ciaRules,
+        webHealth,
+        overallStatus
+      });
+
       const funnel = [
         { name: 'Nuevos', value: leads.length, color: '#6366f1' },
         { name: 'Calificados', value: leads.filter(l => l.buying_intent === 'MEDIO' || l.buying_intent === 'ALTO').length, color: '#818cf8' },
@@ -81,7 +105,6 @@ const Index = () => {
         scheduledRestarts: 0,
         identifiedLeads: identified,
         totalLeads: leads.length,
-        webHealth
       });
     } catch (err) {
       console.error("Dashboard error:", err);
@@ -115,7 +138,7 @@ const Index = () => {
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           <StatCard title="Alertas #CIA" value={stats.totalErrors} icon={AlertTriangle} color="text-red-500" bg="bg-red-500/10" footer="Correcciones Detectadas" />
-          <StatCard title="Verdad Maestra" value={`${stats.webHealth}%`} icon={Globe} color="text-indigo-500" bg="bg-indigo-500/10" footer="Indexación Web" />
+          <StatCard title="Verdad Maestra" value={`${brainHealth.webHealth}%`} icon={Globe} color="text-indigo-500" bg="bg-indigo-500/10" footer="Indexación Web" />
           <StatCard title="Follow-ups" value={stats.activeFollowups} icon={RefreshCw} color="text-blue-500" bg="bg-blue-500/10" footer="Reintentos en cola" />
           <StatCard title="Identificados" value={stats.identifiedLeads} icon={UserCheck} color="text-green-500" bg="bg-green-500/10" footer={`de ${stats.totalLeads} prospectos`} />
         </div>
@@ -123,7 +146,6 @@ const Index = () => {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
           <div className="lg:col-span-8 space-y-8">
              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                {/* GRÁFICA DE EMBUDO */}
                 <Card className="bg-slate-900 border-slate-800 flex flex-col">
                   <CardHeader className="py-4 border-b border-slate-800">
                      <CardTitle className="text-white text-sm flex items-center gap-2 uppercase tracking-tighter">
@@ -146,7 +168,6 @@ const Index = () => {
                   </CardContent>
                 </Card>
 
-                {/* VERDAD MAESTRA STATUS */}
                 <Card className="bg-slate-900 border-slate-800 flex flex-col">
                   <CardHeader className="py-4 border-b border-slate-800">
                      <CardTitle className="text-white text-sm flex items-center gap-2 uppercase tracking-tighter">
@@ -157,13 +178,13 @@ const Index = () => {
                      <div className="relative w-32 h-32 mb-4">
                         <svg className="w-full h-full" viewBox="0 0 100 100">
                            <circle className="text-slate-800 stroke-current" strokeWidth="8" fill="transparent" r="40" cx="50" cy="50" />
-                           <circle className="text-indigo-500 stroke-current" strokeWidth="8" strokeDasharray={`${stats.webHealth * 2.51} 251.2`} strokeLinecap="round" fill="transparent" r="40" cx="50" cy="50" style={{ transform: 'rotate(-90deg)', transformOrigin: '50% 50%' }} />
+                           <circle className="text-indigo-500 stroke-current" strokeWidth="8" strokeDasharray={`${brainHealth.webHealth * 2.51} 251.2`} strokeLinecap="round" fill="transparent" r="40" cx="50" cy="50" style={{ transform: 'rotate(-90deg)', transformOrigin: '50% 50%' }} />
                         </svg>
                         <div className="absolute inset-0 flex items-center justify-center">
-                           <span className="text-2xl font-bold text-white">{stats.webHealth}%</span>
+                           <span className="text-2xl font-bold text-white">{brainHealth.webHealth}%</span>
                         </div>
                      </div>
-                     <p className="text-xs text-slate-400">Tu Samurai está operando con el {stats.webHealth}% del conocimiento web oficial indexado.</p>
+                     <p className="text-xs text-slate-400">Tu Samurai está operando con el {brainHealth.webHealth}% del conocimiento web oficial indexado.</p>
                      <Button variant="link" className="text-indigo-400 text-[10px] mt-2 uppercase font-bold tracking-widest" onClick={() => window.location.href='/website-content'}>
                         Optimizar Verdad <ArrowRight className="w-3 h-3 ml-1" />
                      </Button>
@@ -187,6 +208,7 @@ const Index = () => {
 
           <div className="lg:col-span-4 space-y-6">
             <SystemStatus />
+            <BrainHealthCard health={brainHealth} />
             <Card className="bg-black border-slate-800 font-mono text-[10px] shadow-2xl flex flex-col rounded-xl overflow-hidden min-h-[400px]">
               <div className="px-4 py-3 border-b border-slate-800 bg-slate-900/80 flex items-center justify-between">
                  <div className="flex items-center gap-2 text-slate-500"><Terminal className="w-4 h-4" /><span className="font-bold uppercase tracking-tighter">Kernel Logs</span></div>
@@ -247,7 +269,5 @@ const MiniTable = ({ title, icon: Icon, color, items }: any) => (
     </CardContent>
   </Card>
 );
-
-import { Settings as SettingsIcon, Image as ImageIcon } from 'lucide-react';
 
 export default Index;
