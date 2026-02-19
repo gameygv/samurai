@@ -17,19 +17,45 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
-    const { ai_json_response, lead_id, kommo_id, is_client_message = false } = await req.json();
+    const { ai_json_response, lead_id, kommo_id, phone, name, is_client_message = false } = await req.json();
 
-    // 1. IDENTIFICAR AL LEAD
+    // 1. IDENTIFICAR AL LEAD (Lógica de búsqueda mejorada)
     let lead = null;
+    
+    // Intento 1: Por ID interno
     if (lead_id) {
         const { data } = await supabaseClient.from('leads').select('*').eq('id', lead_id).single();
         lead = data;
-    } else if (kommo_id) {
+    } 
+    
+    // Intento 2: Por Kommo ID
+    if (!lead && kommo_id) {
         const { data } = await supabaseClient.from('leads').select('*').eq('kommo_id', kommo_id).single();
         lead = data;
     }
 
-    if (!lead) throw new Error("Lead not found.");
+    // Intento 3: Por Teléfono (Crucial para conversaciones de WhatsApp sin ID)
+    if (!lead && phone) {
+        const cleanPhone = phone.toString().replace(/\D/g, ''); // Limpiar caracteres no numéricos
+        const { data } = await supabaseClient.from('leads').select('*').ilike('telefono', `%${cleanPhone}%`).single();
+        lead = data;
+    }
+
+    // Intento 4: Auto-creación si no existe (Para leads nuevos de WhatsApp)
+    if (!lead && (phone || kommo_id)) {
+        console.log("[process-samurai-response] Lead no encontrado, creando uno nuevo...");
+        const { data: newLead, error: createError } = await supabaseClient.from('leads').insert({
+            nombre: name || 'Nuevo Lead WhatsApp',
+            telefono: phone || 'Sin teléfono',
+            kommo_id: kommo_id || null,
+            last_message_at: new Date().toISOString()
+        }).select().single();
+
+        if (createError) throw createError;
+        lead = newLead;
+    }
+
+    if (!lead) throw new Error("Lead not found and cannot be created without phone or ID.");
 
     // 2. LIMPIAR EL TEXTO Y EXTRAER METADATOS
     let fullText = typeof ai_json_response === 'string' ? ai_json_response : (ai_json_response?.reply || "");
@@ -57,27 +83,26 @@ serve(async (req) => {
     }
 
     // 3. ACTUALIZAR DASHBOARD (RADAR DE LEADS)
-    if (analysisData) {
-        const updateData: any = { 
-            last_ai_analysis: new Date().toISOString() 
-        };
+    const updateData: any = { 
+        last_message_at: new Date().toISOString() 
+    };
 
-        // Mapeo inteligente de campos detectados por la IA
+    if (analysisData) {
+        updateData.last_ai_analysis = new Date().toISOString();
         if (analysisData.mood) updateData.estado_emocional_actual = analysisData.mood;
         if (analysisData.intent) updateData.buying_intent = analysisData.intent;
         if (analysisData.summary) updateData.summary = analysisData.summary;
         if (analysisData.handoff_required === true) updateData.ai_paused = true;
         
-        // ¡NUEVO!: Actualizar Nombre y Ciudad
-        if (analysisData.detected_name && (!lead.nombre || lead.nombre.includes('Cliente'))) {
+        if (analysisData.detected_name && (!lead.nombre || lead.nombre.includes('Nuevo Lead'))) {
             updateData.nombre = analysisData.detected_name;
         }
         if (analysisData.detected_city) {
             updateData.ciudad = analysisData.detected_city;
         }
-
-        await supabaseClient.from('leads').update(updateData).eq('id', lead.id);
     }
+
+    await supabaseClient.from('leads').update(updateData).eq('id', lead.id);
 
     // 4. GUARDAR EN HISTORIAL
     await supabaseClient.from('conversaciones').insert({
@@ -91,6 +116,7 @@ serve(async (req) => {
       JSON.stringify({ 
          success: true, 
          reply: cleanText,
+         lead_id: lead.id,
          handoff: analysisData?.handoff_required || false 
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
