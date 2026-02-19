@@ -26,9 +26,6 @@ serve(async (req) => {
     const promptMap = configs?.reduce((acc, curr) => ({ ...acc, [curr.key]: curr.value }), {}) || {};
 
     // 2. OBTENER CONOCIMIENTO ADICIONAL (Base de Conocimiento y Media)
-    // Se omite la "Verdad Maestra" (main_website_content) temporalmente.
-
-    // Fetch from Knowledge Base
     const { data: knowledgeDocs } = await supabaseClient
       .from('knowledge_documents')
       .select('title, description, content, category')
@@ -40,7 +37,6 @@ serve(async (req) => {
       `CONTENIDO: ${k.content || 'No especificado'}`
     ).join('\n\n') || "No hay documentos adicionales en la base de conocimiento.";
 
-    // Fetch from Media Manager
     const { data: mediaAssets } = await supabaseClient
       .from('media_assets')
       .select('title, ai_instructions')
@@ -52,25 +48,15 @@ serve(async (req) => {
       `INSTRUCCIONES: ${m.ai_instructions}`
     ).join('\n\n') || "No hay assets de media con instrucciones.";
 
-    // 3. CONSTRUCCIÓN DEL CEREBRO TEMPORAL (SIN VERDAD MAESTRA)
+    // 3. CONSTRUCCIÓN DEL CEREBRO DINÁMICO (SIN VERDAD MAESTRA)
+    // Ahora se usan todos los componentes del panel del cerebro.
     const systemPrompt = `
 <INSTRUCTIONS>
-# TU IDENTIDAD
-- Tu nombre es Sam. Eres un asesor experto y el único punto de contacto para The Elephant Bowl.
-- Preséntate SIEMPRE como "Hola, soy Sam de The Elephant Bowl, ¿cómo puedo ayudarte?".
-- Tu única misión es guiar a los clientes para que se inscriban en formaciones o compren instrumentos, utilizando la información del CONTEXTO.
+${promptMap['prompt_adn_core'] || '# ADN CORE\nEres un asistente de ventas para The Elephant Bowl.'}
 
-# REGLAS DE COMUNICACIÓN
-- Sé amable, profesional y directo.
-- NUNCA menciones que eres una IA.
-- NUNCA ofrezcas información sobre temas no relacionados con The Elephant Bowl.
-- Si no encuentras la respuesta en el CONTEXTO, di: "No tengo esa información en este momento, pero puedo ayudarte con nuestros talleres de sonoterapia y cuencos de cuarzo."
+${promptMap['prompt_estrategia_cierre'] || '# ESTRATEGIA DE CIERRE\nTu objetivo es cerrar la venta.'}
 
-# PROCESO DE VENTA
-- Tu objetivo final es que el cliente pague el anticipo de $1500 MXN.
-- Guía la conversación hacia la venta, resolviendo dudas con la información del CONTEXTO.
-- ${promptMap['prompt_estrategia_cierre'] || ''}
-- ${promptMap['prompt_protocolos'] || ''}
+${promptMap['prompt_protocolos'] || '# PROTOCOLOS\nSigue las reglas de la empresa.'}
 </INSTRUCTIONS>
 
 <CONTEXT>
@@ -85,7 +71,7 @@ ${mediaBlock}
     return new Response(
       JSON.stringify({ 
         system_prompt: systemPrompt,
-        version: "1.1.0-TEMPORARY_BRAIN",
+        version: "1.2.0-DYNAMIC_BRAIN",
         has_truth: false // Explícitamente desactivado
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
