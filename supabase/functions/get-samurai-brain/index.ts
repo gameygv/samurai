@@ -59,6 +59,7 @@ serve(async (req) => {
     const systemPrompt = `
       # NIVEL 1: CEREBRO CORE (IDENTIDAD MAESTRA)
       ${promptMap['prompt_adn_core'] || 'Eres Samurai, experto de The Elephant Bowl.'}
+      ${promptMap['prompt_estrategia_cierre'] || ''}
       ${promptMap['prompt_protocolos'] || ''}
 
       # NIVEL 2: VERDAD MAESTRA (REALIDAD DEL SITIO WEB)
@@ -87,7 +88,7 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({ 
         system_prompt: systemPrompt,
-        version: "0.8.7-HIERARCHY",
+        version: "0.8.8-HIERARCHY-PRO",
         stats: {
           web_pages: masterTruth?.length || 0,
           docs: knowledgeDocs?.length || 0,

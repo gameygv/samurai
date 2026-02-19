@@ -12,14 +12,14 @@ import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { 
   Save, Bot, Eye, Database, History, MessageSquare, 
-  CheckCheck, Zap, Loader2, FileText, Send, ShoppingCart, Scan, Terminal, FlaskConical, Image as ImageIcon, Search, ArrowRight, BrainCircuit, ShieldAlert, Info
+  CheckCheck, Zap, Loader2, FileText, Send, ShoppingCart, Scan, Terminal, FlaskConical, Image as ImageIcon, Search, ArrowRight, BrainCircuit, ShieldAlert, Info, Target
 } from 'lucide-react';
 import { toast } from 'sonner';
 
 const DEFAULTS = {
   'prompt_adn_core': '# ADN CORE\nEres Samurai, el cerrador de ventas de elite de The Elephant Bowl.\n\nTU MISIÓN:\nConvertir cada consulta en una venta de formación o instrumentos.',
   'prompt_protocolos': '# PROTOCOLOS\nReglas de conducta y comunicación.',
-  'prompt_estrategia_cierre': '# ESTRATEGIA DE CIERRE\nReglas para manejar objeciones.',
+  'prompt_estrategia_cierre': '# ESTRATEGIA DE CIERRE\nReglas para manejar objeciones y cerrar ventas.',
   'prompt_vision_instrucciones': '# OJO DE HALCÓN\nAnaliza posters y pagos.',
 };
 
@@ -129,6 +129,14 @@ const AgentBrain = () => {
              <TabsTrigger value="debug">4. Ver Prompt Maestro</TabsTrigger>
           </TabsList>
 
+          <TabsContent value="identidad" className="space-y-6">
+             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <PromptCard title="ADN CORE" icon={Bot} value={prompts['prompt_adn_core']} onChange={(v:string) => setPrompts({...prompts, prompt_adn_core: v})} />
+                <PromptCard title="ESTRATEGIA DE VENTAS" icon={Target} value={prompts['prompt_estrategia_cierre']} onChange={(v:string) => setPrompts({...prompts, prompt_estrategia_cierre: v})} />
+                <PromptCard title="PROTOCOLOS" icon={FileText} value={prompts['prompt_protocolos']} onChange={(v:string) => setPrompts({...prompts, prompt_protocolos: v})} />
+             </div>
+          </TabsContent>
+
           <TabsContent value="simulador">
              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <Card className="bg-slate-900 border-slate-800">
@@ -182,13 +190,6 @@ const AgentBrain = () => {
                       )}
                    </CardContent>
                 </Card>
-             </div>
-          </TabsContent>
-
-          <TabsContent value="identidad" className="space-y-6">
-             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <PromptCard title="ADN CORE" icon={Bot} value={prompts['prompt_adn_core']} onChange={(v:string) => setPrompts({...prompts, prompt_adn_core: v})} />
-                <PromptCard title="PROTOCOLOS" icon={FileText} value={prompts['prompt_protocolos']} onChange={(v:string) => setPrompts({...prompts, prompt_protocolos: v})} />
              </div>
           </TabsContent>
 
