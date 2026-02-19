@@ -84,29 +84,22 @@ const AgentBrain = () => {
   const handleSave = async () => {
     setSaving(true);
     try {
-      // Primero, borrar los prompts existentes para evitar duplicados o conflictos.
-      const keysToDelete = Object.keys(prompts);
-      const { error: deleteError } = await supabase
-        .from('app_config')
-        .delete()
-        .in('key', keysToDelete);
-
-      if (deleteError) throw deleteError;
-
-      // Luego, insertar los nuevos valores.
-      const newPromptsToInsert = Object.entries(prompts).map(([key, value]) => ({
+      const promptsToSave = Object.entries(prompts).map(([key, value]) => ({
         key,
         value,
-        category: 'PROMPT'
+        category: 'PROMPT',
       }));
 
-      const { error: insertError } = await supabase.from('app_config').insert(newPromptsToInsert);
+      const { error } = await supabase
+        .from('app_config')
+        .upsert(promptsToSave, { onConflict: 'key' });
 
-      if (insertError) throw insertError;
+      if (error) throw error;
 
       toast.success('Cerebro actualizado correctamente.');
       fetchPrompts();
     } catch (err: any) {
+      console.error("Save Error:", err);
       toast.error(`Error al guardar: ${err.message}`);
     } finally {
       setSaving(false);
