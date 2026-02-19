@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts"
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -11,20 +12,37 @@ serve(async (req) => {
   }
 
   try {
-    const { message, simulate_reply = false, custom_adn, context } = await req.json();
-    
+    const supabaseClient = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+    )
+
+    const { message, simulate_reply = false } = await req.json();
+
     if (simulate_reply) {
-       // Simulamos la respuesta usando el ADN y el CONTEXTO recuperado
-       const name = custom_adn?.includes('eres Sam') ? "Sam" : "Samurai";
-       
-       let reply = `[SIMULACIÓN ACTIVADA]\n\nHola, soy ${name}. `;
-       
-       if (context && context.length > 0) {
-          reply += `He consultado nuestra Verdad Maestra y encontré información sobre: "${context}". `;
-          reply += `Basado en esto, te confirmo que ${message.toLowerCase().includes('taller') ? 'tenemos vacantes disponibles para los próximos eventos mencionados en la web' : 'puedo ayudarte con esa consulta técnica sobre sonoterapia'}.`;
-       } else {
-          reply += `He buscado en mi memoria pero no encuentro datos específicos sobre esa consulta en la web indexada. ¿Podrías ser más específico o quieres que consulte el manual?`;
-       }
+       // 1. Obtener el Prompt Maestro real que genera el sistema
+       const brainResponse = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/get-samurai-brain`, {
+          headers: { 'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}` }
+       });
+       const { system_prompt } = await brainResponse.json();
+
+       // 2. Llamar a OpenAI para una simulación real
+       const openAiKey = Deno.env.get('OPENAI_API_KEY');
+       const aiResponse = await fetch("https://api.openai.com/v1/chat/completions", {
+          method: "POST",
+          headers: { "Authorization": `Bearer ${openAiKey}`, "Content-Type": "application/json" },
+          body: JSON.stringify({
+             model: "gpt-4o-mini",
+             messages: [
+                { role: "system", content: system_prompt },
+                { role: "user", content: message }
+             ],
+             temperature: 0.3 // Baja temperatura para evitar alucinaciones
+          })
+       });
+
+       const aiData = await aiResponse.json();
+       const reply = aiData.choices?.[0]?.message?.content || "Error en simulación de IA.";
 
        return new Response(JSON.stringify({ reply }), { 
           headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
