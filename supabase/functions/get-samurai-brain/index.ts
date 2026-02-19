@@ -17,7 +17,7 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
-    // 1. Obtener todos los prompts del sistema
+    // 1. Obtener PROMPTS (Cerebro Core)
     const { data: configs } = await supabaseClient
       .from('app_config')
       .select('key, value')
@@ -25,40 +25,74 @@ serve(async (req) => {
 
     const promptMap = configs?.reduce((acc, curr) => ({ ...acc, [curr.key]: curr.value }), {}) || {};
 
-    // 2. Obtener la Verdad Maestra (Solo lo más importante para no saturar tokens)
-    const { data: knowledge } = await supabaseClient
+    // 2. Obtener VERDAD MAESTRA (Sitio Web)
+    const { data: masterTruth } = await supabaseClient
       .from('main_website_content')
       .select('title, content')
       .eq('scrape_status', 'success')
-      .limit(10);
+      .limit(15);
 
-    const masterTruth = knowledge?.map(k => `[FUENTE: ${k.title}]\n${k.content?.substring(0, 1000)}`).join('\n\n') || "No hay conocimiento indexado aún.";
+    const truthBlock = masterTruth?.map(k => `[WEB: ${k.title}]\n${k.content?.substring(0, 1200)}`).join('\n\n') || "Sin datos de web.";
 
-    // 3. Construir el Prompt Maestro
+    // 3. Obtener BASE DE CONOCIMIENTO (Documentos)
+    const { data: knowledgeDocs } = await supabaseClient
+      .from('knowledge_documents')
+      .select('title, category, content')
+      .not('content', 'is', null)
+      .limit(5);
+
+    const knowledgeBlock = knowledgeDocs?.map(d => `[DOC: ${d.title} (${d.category})]\n${d.content?.substring(0, 1000)}`).join('\n\n') || "Sin documentos adicionales.";
+
+    // 4. Obtener POSTERS / MEDIA (Ojo de Halcón)
+    const { data: mediaAssets } = await supabaseClient
+      .from('media_assets')
+      .select('title, ai_instructions')
+      .ilike('ai_instructions', '%OCR DATA%')
+      .limit(5);
+
+    const visualBlock = mediaAssets?.map(m => {
+       const ocrText = m.ai_instructions?.split('--- OCR DATA ---')[1]?.trim() || "";
+       return `[POSTER: ${m.title}]\nDATOS DETECTADOS: ${ocrText}`;
+    }).join('\n\n') || "Sin posters analizados.";
+
+    // 5. CONSTRUCCIÓN POR PRIORIDADES
     const systemPrompt = `
+      # NIVEL 1: CEREBRO CORE (IDENTIDAD MAESTRA)
       ${promptMap['prompt_adn_core'] || 'Eres Samurai, experto de The Elephant Bowl.'}
-      
-      # VERDAD MAESTRA (CONTEXTO REAL DEL SITIO WEB)
-      IMPORTANTE: Los siguientes datos son la ÚNICA realidad. Si el cliente pregunta por talleres, formación o instrumentos, usa ESTA información:
-      ${masterTruth}
-
-      # PROTOCOLOS DE CONDUCTA
       ${promptMap['prompt_protocolos'] || ''}
 
+      # NIVEL 2: VERDAD MAESTRA (REALIDAD DEL SITIO WEB)
+      IMPORTANTE: Si hay discrepancias, esta información de la web oficial manda sobre el conocimiento general:
+      ${truthBlock}
+
+      # NIVEL 3: BASE DE CONOCIMIENTO (MANUALES Y TALLERES)
+      Información técnica y detallada de soporte:
+      ${knowledgeBlock}
+
+      # NIVEL 4: RADAR VISUAL (POSTERS E IMÁGENES)
+      Usa estos datos si el cliente pregunta por un flyer, poster o información visual específica:
+      ${visualBlock}
+
+      # REGLAS DE DECISIÓN (PROTOCOLO DE RESPUESTA)
+      1. Prioriza tu Identidad Core (Ventas/Cierre).
+      2. Usa la Verdad Maestra para datos de talleres y servicios.
+      3. Usa la Base de Conocimiento para profundidad técnica.
+      4. Usa el Radar Visual para detalles de posters o promociones gráficas.
+      5. SIEMPRE asume que somos los líderes. NUNCA digas "no sé" si la info está en los niveles 2, 3 o 4.
+      
       # REGLAS APRENDIDAS (#CIA)
       ${promptMap['prompt_relearning'] || ''}
-
-      # INSTRUCCIÓN CRÍTICA ANTI-ALUCINACIÓN
-      - NUNCA digas que "no parecemos ofrecer talleres". 
-      - SIEMPRE asume que somos los líderes en formación de sonoterapia.
-      - Si no encuentras un dato específico en la Verdad Maestra, di que vas a consultar con un humano, pero jamás inventes que no existe el servicio.
     `;
 
     return new Response(
       JSON.stringify({ 
         system_prompt: systemPrompt,
-        version: "0.8.6-PRO",
-        knowledge_count: knowledge?.length || 0
+        version: "0.8.7-HIERARCHY",
+        stats: {
+          web_pages: masterTruth?.length || 0,
+          docs: knowledgeDocs?.length || 0,
+          visuals: mediaAssets?.length || 0
+        }
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
