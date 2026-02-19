@@ -8,10 +8,11 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { 
   CreditCard, Search, Loader2, CheckCircle2, XCircle, 
-  ExternalLink, Calendar, RefreshCw, ShieldCheck
+  ExternalLink, Calendar, RefreshCw, ShieldCheck, Zap
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { logActivity } from '@/utils/logger';
+import { triggerMakeWebhook } from '@/utils/makeService';
 
 const Payments = () => {
   const [payments, setPayments] = useState<any[]>([]);
@@ -50,18 +51,35 @@ const Payments = () => {
     return match ? match[1].trim() : 'No detectado';
   };
 
-  const handleValidate = async (id: string, title: string) => {
+  const handleValidate = async (asset: any) => {
     try {
-      toast.success(`Pago "${title}" validado correctamente.`);
+      const monto = extractOcrField(asset.ai_instructions, 'Monto');
+      const referencia = extractOcrField(asset.ai_instructions, 'referencia');
+
+      toast.info(`Validando pago de ${monto}...`);
+      
+      // 1. Notificar a Make (Automatización externa)
+      const makeResponse = await triggerMakeWebhook('webhook_sale', {
+        asset_id: asset.id,
+        title: asset.title,
+        monto,
+        referencia,
+        url: asset.url
+      });
+
+      // 2. Registrar en Logs
       await logActivity({
         action: 'UPDATE',
         resource: 'SYSTEM',
-        description: `Pago validado: ${title}`,
-        status: 'OK'
+        description: `Pago VALIDADO: ${asset.title} (${monto})`,
+        status: 'OK',
+        metadata: { make_response: makeResponse }
       });
+
+      toast.success(`Venta procesada correctamente.`);
       fetchPayments();
     } catch (err: any) {
-      toast.error('Fallo al validar');
+      toast.error('Fallo al procesar validación');
     }
   };
 
@@ -163,7 +181,7 @@ const Payments = () => {
                             <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500 hover:bg-red-500/10" title="Rechazar">
                                <XCircle className="w-4 h-4" />
                             </Button>
-                            <Button size="sm" className="bg-green-600 hover:bg-green-700 h-8 text-[10px] font-bold" onClick={() => handleValidate(p.id, p.title)}>
+                            <Button size="sm" className="bg-green-600 hover:bg-green-700 h-8 text-[10px] font-bold" onClick={() => handleValidate(p)}>
                                VALIDAR PAGO <CheckCircle2 className="w-3 h-3 ml-2" />
                             </Button>
                          </div>

@@ -6,7 +6,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { BrainCircuit, Edit2, X, Save, Loader2, Bot, TrendingUp, AlertCircle, RotateCcw, Clock, Play, Pause, ShieldAlert, Zap, Calendar, Trash2, RefreshCcw, MapPin, User } from 'lucide-react';
+import { BrainCircuit, Edit2, X, Save, Loader2, Bot, TrendingUp, AlertCircle, RotateCcw, Clock, Play, Pause, ShieldAlert, Zap, Calendar, Trash2, RefreshCcw, MapPin, User, FileText } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
@@ -32,13 +32,6 @@ export const MemoryPanel = ({
   const [isReporting, setIsReporting] = useState(false);
   const [flushing, setFlushing] = useState(false);
 
-  const getMoodColor = (mood: string) => {
-    const m = mood?.toUpperCase() || 'NEUTRO';
-    if (m.includes('ENOJADO')) return 'text-red-500 border-red-500/50 bg-red-500/10';
-    if (m.includes('FELIZ')) return 'text-green-500 border-green-500/50 bg-green-500/10';
-    return 'text-slate-400 border-slate-700 bg-slate-800';
-  };
-
   const handleSaveCorrection = async () => {
     if (!correctionText.trim()) return;
     setIsReporting(true);
@@ -63,26 +56,18 @@ export const MemoryPanel = ({
   };
 
   const handleFlushMemory = async () => {
-    if (!confirm("¿Deseas borrar la memoria de este lead? Esto eliminará el resumen y el análisis emocional para que la IA lo re-analice desde cero.")) return;
+    if (!confirm("¿Deseas borrar la memoria de este lead?")) return;
     setFlushing(true);
     try {
-      const { error } = await supabase
-        .from('leads')
-        .update({
-          summary: null,
-          estado_emocional_actual: 'NEUTRO',
-          buying_intent: 'BAJO',
-          last_ai_analysis: null,
-          perfil_psicologico: null,
-          ciudad: null
-        })
-        .eq('id', currentAnalysis.id);
-
-      if (error) throw error;
-      toast.success('Memoria del lead reseteada correctamente.');
+      await supabase.from('leads').update({
+        summary: null,
+        estado_emocional_actual: 'NEUTRO',
+        buying_intent: 'BAJO',
+        perfil_psicologico: null,
+        ciudad: null
+      }).eq('id', currentAnalysis.id);
+      toast.success('Memoria reseteada.');
       window.location.reload();
-    } catch (err: any) {
-      toast.error('Error al resetear memoria');
     } finally {
       setFlushing(false);
     }
@@ -99,144 +84,107 @@ export const MemoryPanel = ({
                  <ShieldAlert className="w-3 h-3" /> #CorregirIA
               </h4>
            </div>
-           <div className="space-y-2">
-              <Textarea 
-                value={correctionText}
-                onChange={e => setCorrectionText(e.target.value)}
-                placeholder="Escribe la observación técnica..."
-                className="bg-slate-950 border-slate-800 text-xs min-h-[80px] focus:border-yellow-500/50 transition-colors"
-              />
-              <Button 
-                onClick={handleSaveCorrection} 
-                disabled={isReporting || !correctionText.trim()}
-                className="w-full h-8 text-[10px] bg-yellow-600 hover:bg-yellow-700 text-white font-bold"
-              >
-                {isReporting ? <Loader2 className="w-3 h-3 animate-spin mr-2" /> : <Zap className="w-3 h-3 mr-2" />}
-                Guardar Observación
-              </Button>
-           </div>
+           <Textarea 
+             value={correctionText}
+             onChange={e => setCorrectionText(e.target.value)}
+             placeholder="Ej: No ofrezcas descuento todavía..."
+             className="bg-slate-950 border-slate-800 text-xs min-h-[60px]"
+           />
+           <Button onClick={handleSaveCorrection} disabled={isReporting || !correctionText.trim()} className="w-full h-8 text-[10px] bg-yellow-600 font-bold">
+             {isReporting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Zap className="w-3 h-3 mr-2" />} Guardar Regla
+           </Button>
         </div>
 
-        {/* 2. DATOS DE IDENTIDAD (EDITABLES) */}
-        <div className="border-t border-slate-800 pt-6">
-           <div className="flex items-center justify-between mb-4">
+        {/* 2. IDENTIDAD & UBICACIÓN */}
+        <div className="border-t border-slate-800 pt-6 space-y-4">
+           <div className="flex items-center justify-between">
               <h4 className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest flex items-center gap-2">
-                  <User className="w-3 h-3" /> Identidad Detectada
+                  <User className="w-3 h-3" /> Perfil de Prospecto
               </h4>
-              {!isEditing && (
-                 <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setIsEditing(true)}>
-                    <Edit2 className="w-3 h-3" />
-                 </Button>
-              )}
+              {!isEditing && <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setIsEditing(true)}><Edit2 className="w-3 h-3" /></Button>}
            </div>
-           
            <div className="space-y-3">
               <div className="space-y-1">
-                 <Label className="text-[9px] text-slate-500 uppercase">Nombre</Label>
+                 <Label className="text-[9px] text-slate-500 uppercase">Intención de Compra</Label>
                  {isEditing ? (
-                    <Input 
-                      value={memoryForm.nombre} 
-                      onChange={e => setMemoryForm({...memoryForm, nombre: e.target.value})}
-                      className="h-7 text-xs bg-slate-950 border-slate-800"
-                    />
+                    <Select value={memoryForm.buying_intent} onValueChange={v => setMemoryForm({...memoryForm, buying_intent: v})}>
+                       <SelectTrigger className="h-7 text-xs bg-slate-950 border-slate-800"><SelectValue /></SelectTrigger>
+                       <SelectContent className="bg-slate-900 text-white">
+                          <SelectItem value="BAJO">Bajo</SelectItem>
+                          <SelectItem value="MEDIO">Medio</SelectItem>
+                          <SelectItem value="ALTO">Alto 🔥</SelectItem>
+                       </SelectContent>
+                    </Select>
                  ) : (
-                    <div className="text-xs text-slate-200 font-bold">{currentAnalysis.nombre || 'No detectado'}</div>
+                    <Badge className={currentAnalysis.buying_intent === 'ALTO' ? 'bg-green-600' : 'bg-slate-800'}>{currentAnalysis.buying_intent || 'BAJO'}</Badge>
                  )}
               </div>
               <div className="space-y-1">
-                 <Label className="text-[9px] text-slate-500 uppercase">Ciudad / Ubicación</Label>
+                 <Label className="text-[9px] text-slate-500 uppercase">Ubicación</Label>
                  {isEditing ? (
-                    <Input 
-                      value={memoryForm.ciudad} 
-                      onChange={e => setMemoryForm({...memoryForm, ciudad: e.target.value})}
-                      className="h-7 text-xs bg-slate-950 border-slate-800"
-                      placeholder="Ej: Torreón"
-                    />
+                    <Input value={memoryForm.ciudad || ''} onChange={e => setMemoryForm({...memoryForm, ciudad: e.target.value})} className="h-7 text-xs bg-slate-950 border-slate-800" />
                  ) : (
-                    <div className="text-xs text-indigo-400 font-bold flex items-center gap-1">
-                       <MapPin className="w-3 h-3" /> {currentAnalysis.ciudad || 'No detectada'}
-                    </div>
+                    <div className="text-xs text-slate-300 flex items-center gap-1"><MapPin className="w-3 h-3 text-red-500" /> {currentAnalysis.ciudad || 'Pendiente'}</div>
                  )}
               </div>
            </div>
         </div>
 
-        {/* 3. CONTROL DE FOLLOW-UP */}
-        <div className="border-t border-slate-800 pt-6">
-           <h4 className="text-[10px] font-bold text-blue-500 uppercase tracking-widest flex items-center gap-2 mb-4">
-               <Clock className="w-3 h-3" /> Control de Follow-up
+        {/* 3. PERFIL PSICOGRÁFICO */}
+        <div className="border-t border-slate-800 pt-6 space-y-3">
+           <h4 className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest flex items-center gap-2">
+               <BrainCircuit className="w-3 h-3" /> Perfil Psicográfico
            </h4>
-           
-           <Card className="bg-slate-950 border-slate-800 shadow-none mb-4 overflow-hidden">
-             <CardContent className="p-3 space-y-4">
-                <div className="space-y-1">
-                   <Label className="text-[10px] text-slate-500 uppercase">Stage Actual</Label>
-                   {isEditing ? (
-                      <Input 
-                        type="number" 
-                        value={memoryForm.followup_stage} 
-                        onChange={e => setMemoryForm({...memoryForm, followup_stage: parseInt(e.target.value)})}
-                        className="h-7 text-xs bg-slate-900 border-slate-700"
-                      />
-                   ) : (
-                      <div className="text-xs text-white font-mono">STAGE {currentAnalysis.followup_stage || 0}</div>
-                   )}
-                </div>
-
-                <Button 
-                  variant="outline" 
-                  className={`w-full h-7 text-[10px] ${currentAnalysis.ai_paused ? 'border-green-500 text-green-500' : 'border-red-500 text-red-500'}`}
-                  onClick={onToggleFollowup}
-                >
-                   {currentAnalysis.ai_paused ? <Play className="w-3 h-3 mr-1"/> : <Pause className="w-3 h-3 mr-1"/>}
-                   {currentAnalysis.ai_paused ? 'Reactivar IA' : 'Pausar IA (#STOP)'}
-                </Button>
-             </CardContent>
-           </Card>
+           {isEditing ? (
+              <Textarea 
+                value={memoryForm.perfil_psicologico || ''}
+                onChange={e => setMemoryForm({...memoryForm, perfil_psicologico: e.target.value})}
+                className="bg-slate-950 border-slate-800 text-[10px] min-h-[100px]"
+                placeholder="Notas sobre el comportamiento del cliente..."
+              />
+           ) : (
+              <div className="bg-slate-950 p-3 rounded border border-slate-800 text-[10px] text-slate-400 italic leading-relaxed">
+                 {currentAnalysis.perfil_psicologico || "Samurai aún no ha definido un perfil psicográfico para este lead."}
+              </div>
+           )}
         </div>
 
-        {/* 4. MEMORIA VIVA */}
+        {/* 4. RESUMEN VIVO */}
+        <div className="border-t border-slate-800 pt-6 space-y-3">
+           <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest flex items-center gap-2">
+               <FileText className="w-3 h-3" /> Resumen de Charla
+           </h4>
+           {isEditing ? (
+              <Textarea 
+                value={memoryForm.summary || ''}
+                onChange={e => setMemoryForm({...memoryForm, summary: e.target.value})}
+                className="bg-slate-950 border-slate-800 text-[10px] h-20"
+              />
+           ) : (
+              <p className="text-[11px] text-slate-300 leading-relaxed">"{currentAnalysis.summary || 'Sin resumen...'}"</p>
+           )}
+        </div>
+
+        {/* 5. CONTROLES DE IA */}
         <div className="border-t border-slate-800 pt-6">
-           <div className="flex items-center justify-between mb-4">
-             <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest flex items-center gap-2">
-               <BrainCircuit className="w-3 h-3" /> Análisis de Perfil
-             </h4>
-             <div className="flex gap-1">
-                <Button variant="ghost" size="icon" className="h-6 w-6 text-red-500/50 hover:text-red-500" title="Borrar memoria" onClick={handleFlushMemory} disabled={flushing}>
-                  {flushing ? <Loader2 className="w-3 h-3 animate-spin"/> : <RotateCcw className="w-3 h-3" />}
-                </Button>
-                {isEditing && (
-                  <div className="flex gap-1">
-                    <Button variant="ghost" size="icon" className="h-6 w-6 text-red-400 hover:text-red-300" onClick={() => setIsEditing(false)}>
-                      <X className="w-3 h-3" />
-                    </Button>
-                    <Button variant="ghost" size="icon" className="h-6 w-6 text-green-400 hover:text-green-300" onClick={onSave} disabled={saving}>
-                      {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
-                    </Button>
-                  </div>
-                )}
-             </div>
-           </div>
-
-           <Card className="bg-slate-950 border-slate-800 shadow-none">
-             <CardContent className="p-3 space-y-4">
-               <div className="space-y-1">
-                 <Label className="text-[10px] text-slate-400 block uppercase tracking-wide">Resumen Contextual</Label>
-                 {isEditing ? (
-                   <Textarea
-                     value={memoryForm.summary}
-                     onChange={e => setMemoryForm({ ...memoryForm, summary: e.target.value })}
-                     className="bg-slate-950 border-slate-700 text-xs h-24 font-mono mt-1"
-                   />
-                 ) : (
-                   <p className="text-xs text-slate-300 italic leading-relaxed bg-slate-950 p-2 rounded border border-slate-800">
-                     "{currentAnalysis?.summary || 'Sin resumen...'}"
-                   </p>
-                 )}
-               </div>
-             </CardContent>
-           </Card>
+           <Button 
+             variant="outline" 
+             className={`w-full h-8 text-[10px] ${currentAnalysis.ai_paused ? 'border-green-500 text-green-500' : 'border-red-500 text-red-500'}`}
+             onClick={onToggleFollowup}
+           >
+              {currentAnalysis.ai_paused ? <Play className="w-3 h-3 mr-1"/> : <Pause className="w-3 h-3 mr-1"/>}
+              {currentAnalysis.ai_paused ? 'Reactivar Samurai (#START)' : 'Pausar Samurai (#STOP)'}
+           </Button>
+           <Button variant="ghost" className="w-full mt-2 text-[9px] text-slate-600 hover:text-red-500" onClick={handleFlushMemory} disabled={flushing}>
+              <RotateCcw className="w-3 h-3 mr-1" /> Resetear Memoria
+           </Button>
         </div>
+
+        {isEditing && (
+           <Button onClick={onSave} disabled={saving} className="w-full bg-indigo-600 h-9 font-bold">
+              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4 mr-2" />} Guardar Cambios
+           </Button>
+        )}
       </div>
     </div>
   );
