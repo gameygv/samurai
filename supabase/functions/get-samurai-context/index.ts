@@ -1,5 +1,4 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts"
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -12,22 +11,31 @@ serve(async (req) => {
   }
 
   try {
-    const { message, simulate_reply = false, custom_adn } = await req.json();
+    const { message, simulate_reply = false, custom_adn, context } = await req.json();
     
-    // Si es simulación, tratamos de emular el comportamiento según el ADN recibido
-    if (simulate_reply && custom_adn) {
-       let name = "Samurai";
-       if (custom_adn.toLowerCase().includes('presentate como "sam"') || custom_adn.toLowerCase().includes('eres sam')) {
-          name = "Sam";
+    if (simulate_reply) {
+       // Simulamos la respuesta usando el ADN y el CONTEXTO recuperado
+       const name = custom_adn?.includes('eres Sam') ? "Sam" : "Samurai";
+       
+       let reply = `[SIMULACIÓN ACTIVADA]\n\nHola, soy ${name}. `;
+       
+       if (context && context.length > 0) {
+          reply += `He consultado nuestra Verdad Maestra y encontré información sobre: "${context}". `;
+          reply += `Basado en esto, te confirmo que ${message.toLowerCase().includes('taller') ? 'tenemos vacantes disponibles para los próximos eventos mencionados en la web' : 'puedo ayudarte con esa consulta técnica sobre sonoterapia'}.`;
+       } else {
+          reply += `He buscado en mi memoria pero no encuentro datos específicos sobre esa consulta en la web indexada. ¿Podrías ser más específico o quieres que consulte el manual?`;
        }
 
-       const reply = `¡Hola! Soy ${name} de The Elephant Bowl. He procesado tu mensaje: "${message}". Mi cerebro está aplicando ahora mismo las reglas de ADN que configuraste. ¿En qué más puedo ayudarte con la cuencoterapia?`;
-       
-       return new Response(JSON.stringify({ reply }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+       return new Response(JSON.stringify({ reply }), { 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+       });
     }
 
     return new Response(JSON.stringify({ status: "ok" }), { headers: corsHeaders })
   } catch (error: any) {
-    return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: corsHeaders })
+    return new Response(JSON.stringify({ error: error.message }), { 
+      status: 500, 
+      headers: corsHeaders 
+    })
   }
 })
