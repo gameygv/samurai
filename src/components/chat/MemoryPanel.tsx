@@ -6,7 +6,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { BrainCircuit, Edit2, X, Save, Loader2, Bot, TrendingUp, AlertCircle, RotateCcw, Clock, Play, Pause, ShieldAlert, Zap, Calendar } from 'lucide-react';
+import { BrainCircuit, Edit2, X, Save, Loader2, Bot, TrendingUp, AlertCircle, RotateCcw, Clock, Play, Pause, ShieldAlert, Zap, Calendar, Trash2, RefreshCcw } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
@@ -30,6 +30,7 @@ export const MemoryPanel = ({
 
   const [correctionText, setCorrectionText] = useState('');
   const [isReporting, setIsReporting] = useState(false);
+  const [flushing, setFlushing] = useState(false);
 
   const getMoodColor = (mood: string) => {
     const m = mood?.toUpperCase() || 'NEUTRO';
@@ -61,7 +62,30 @@ export const MemoryPanel = ({
     }
   };
 
-  const hasActiveFollowup = currentAnalysis?.next_followup_at && !currentAnalysis?.ai_paused;
+  const handleFlushMemory = async () => {
+    if (!confirm("¿Deseas borrar la memoria de este lead? Esto eliminará el resumen y el análisis emocional para que la IA lo re-analice desde cero.")) return;
+    setFlushing(true);
+    try {
+      const { error } = await supabase
+        .from('leads')
+        .update({
+          summary: null,
+          estado_emocional_actual: 'NEUTRO',
+          buying_intent: 'BAJO',
+          last_ai_analysis: null,
+          perfil_psicologico: null
+        })
+        .eq('id', currentAnalysis.id);
+
+      if (error) throw error;
+      toast.success('Memoria del lead reseteada correctamente.');
+      window.location.reload(); // Recargar para ver cambios
+    } catch (err: any) {
+      toast.error('Error al resetear memoria');
+    } finally {
+      setFlushing(false);
+    }
+  };
 
   return (
     <div className="w-[300px] bg-slate-900/30 flex flex-col overflow-y-auto border-l border-slate-800">
@@ -148,20 +172,25 @@ export const MemoryPanel = ({
              <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest flex items-center gap-2">
                <BrainCircuit className="w-3 h-3" /> Análisis de Perfil
              </h4>
-             {!isEditing ? (
-               <Button variant="ghost" size="icon" className="h-6 w-6 text-slate-500 hover:text-white" onClick={() => setIsEditing(true)}>
-                 <Edit2 className="w-3 h-3" />
-               </Button>
-             ) : (
-               <div className="flex gap-1">
-                 <Button variant="ghost" size="icon" className="h-6 w-6 text-red-400 hover:text-red-300" onClick={() => setIsEditing(false)}>
-                   <X className="w-3 h-3" />
-                 </Button>
-                 <Button variant="ghost" size="icon" className="h-6 w-6 text-green-400 hover:text-green-300" onClick={onSave} disabled={saving}>
-                   {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
-                 </Button>
-               </div>
-             )}
+             <div className="flex gap-1">
+                <Button variant="ghost" size="icon" className="h-6 w-6 text-red-500/50 hover:text-red-500" title="Borrar memoria" onClick={handleFlushMemory} disabled={flushing}>
+                  {flushing ? <Loader2 className="w-3 h-3 animate-spin"/> : <RotateCcw className="w-3 h-3" />}
+                </Button>
+                {!isEditing ? (
+                  <Button variant="ghost" size="icon" className="h-6 w-6 text-slate-500 hover:text-white" onClick={() => setIsEditing(true)}>
+                    <Edit2 className="w-3 h-3" />
+                  </Button>
+                ) : (
+                  <div className="flex gap-1">
+                    <Button variant="ghost" size="icon" className="h-6 w-6 text-red-400 hover:text-red-300" onClick={() => setIsEditing(false)}>
+                      <X className="w-3 h-3" />
+                    </Button>
+                    <Button variant="ghost" size="icon" className="h-6 w-6 text-green-400 hover:text-green-300" onClick={onSave} disabled={saving}>
+                      {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
+                    </Button>
+                  </div>
+                )}
+             </div>
            </div>
 
            <Card className="bg-slate-950 border-slate-800 shadow-none">

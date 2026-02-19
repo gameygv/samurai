@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { Image, FileText, Video, Upload, Trash2, ExternalLink, Loader2, Copy, AlertTriangle, Bot, Edit, Zap, WifiOff } from 'lucide-react';
+import { Image, FileText, Video, Upload, Trash2, ExternalLink, Loader2, Copy, AlertTriangle, Bot, Edit, Zap, WifiOff, Scan } from 'lucide-react';
 import { toast } from 'sonner';
 import { logActivity } from '@/utils/logger';
 
@@ -16,6 +16,7 @@ const MediaManager = () => {
   const [assets, setAssets] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
+  const [scanningId, setScanningId] = useState<string | null>(null);
   const [schemaError, setSchemaError] = useState(false);
   
   // Upload State
@@ -51,14 +52,41 @@ const MediaManager = () => {
       if (data) setAssets(data);
     } catch (error: any) {
       console.error("Fetch assets error:", error);
-      if (error.code === 'PGRST204') {
-        toast.error('Error de base de datos: Falta la columna ai_instructions');
-      } else {
-        toast.error('Error cargando archivos multimedia');
-      }
+      toast.error('Error cargando archivos multimedia');
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleScanOcr = async (asset: any) => {
+     if (asset.type !== 'IMAGE') return toast.error("OCR solo disponible para imágenes");
+     setScanningId(asset.id);
+     
+     try {
+        // Invocamos la función de scraping que ahora soporta visión si se le envía una URL de imagen
+        const { data, error } = await supabase.functions.invoke('scrape-website', {
+           body: { url: asset.url, mode: 'VISION' }
+        });
+
+        if (error || !data.success) throw new Error(data.error || "Fallo en el escaneo visual");
+
+        const detectedText = data.content;
+        
+        // Actualizamos la descripción con el texto detectado para que el Samurai lo sepa
+        const { error: updateErr } = await supabase
+           .from('media_assets')
+           .update({ ai_instructions: `FECHAS Y DATOS DETECTADOS EN IMAGEN: ${detectedText}` })
+           .eq('id', asset.id);
+
+        if (updateErr) throw updateErr;
+
+        toast.success("Poster escaneado correctamente. Samurai ahora conoce los datos de la imagen.");
+        fetchAssets();
+     } catch (err: any) {
+        toast.error(`Error de visión: ${err.message}`);
+     } finally {
+        setScanningId(null);
+     }
   };
 
   const handleUpload = async (e: React.FormEvent) => {
@@ -99,25 +127,13 @@ const MediaManager = () => {
 
       if (dbError) throw dbError;
 
-      await logActivity({
-        action: 'CREATE',
-        resource: 'SYSTEM',
-        description: `Media subido: ${title || selectedFile.name}`,
-        status: 'OK'
-      });
-
       toast.success('Archivo subido e indexado');
       setIsUploadOpen(false);
       resetForm();
       fetchAssets();
 
     } catch (error: any) {
-      console.error("Upload error:", error);
-      let msg = error.message;
-      if (error.code === 'PGRST204') {
-        msg = "Falta la columna 'ai_instructions' en la base de datos. Por favor ejecuta el SQL de reparación.";
-      }
-      toast.error(msg);
+      toast.error(error.message);
     } finally {
       setUploading(false);
     }
@@ -207,7 +223,6 @@ const MediaManager = () => {
                            <div className="flex flex-col items-center gap-2">
                               <FileText className="w-8 h-8 text-green-500" />
                               <span className="text-green-400 font-mono text-sm">{selectedFile.name}</span>
-                              <span className="text-xs text-slate-500">{(selectedFile.size / 1024).toFixed(1)} KB</span>
                            </div>
                         ) : (
                            <div className="flex flex-col items-center gap-2 text-slate-500 group-hover:text-indigo-400 transition-colors">
@@ -237,7 +252,6 @@ const MediaManager = () => {
                      className="bg-slate-950 border-slate-800 min-h-[80px] font-mono text-xs focus:border-yellow-500/50 transition-colors"
                      placeholder="Ej: Enviar esta imagen cuando el cliente pregunte por precios de mayoreo o quiera ver el catálogo completo."
                   />
-                  <p className="text-[10px] text-slate-500">Si dejas esto vacío, la IA ignorará este archivo y solo servirá de repositorio.</p>
                 </div>
                 <Button type="submit" className="w-full bg-indigo-600" disabled={uploading || !selectedFile}>
                   {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Subir e Indexar'}
@@ -246,20 +260,6 @@ const MediaManager = () => {
             </DialogContent>
           </Dialog>
         </div>
-
-        {/* Schema Error Alert */}
-        {schemaError && (
-          <div className="bg-red-500/10 border border-red-500/20 p-4 rounded-lg flex items-start gap-3">
-            <WifiOff className="w-5 h-5 text-red-500 mt-0.5" />
-            <div className="text-sm text-red-400">
-               <p className="font-bold">Error de Estructura detectado</p>
-               <p>Falta la columna 'ai_instructions' en la tabla 'media_assets'.</p>
-               <p className="mt-2 text-white font-mono bg-red-900/40 p-2 rounded text-xs">
-                 ALTER TABLE public.media_assets ADD COLUMN ai_instructions TEXT;
-               </p>
-            </div>
-          </div>
-        )}
 
         {/* Edit Dialog */}
         <Dialog open={!!editingAsset} onOpenChange={(open) => !open && setEditingAsset(null)}>
@@ -292,11 +292,6 @@ const MediaManager = () => {
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
           {loading ? (
              <div className="col-span-full flex justify-center py-10"><Loader2 className="w-8 h-8 animate-spin text-indigo-500" /></div>
-          ) : assets.length === 0 ? (
-             <div className="col-span-full flex flex-col items-center justify-center py-16 text-slate-500 border-2 border-dashed border-slate-800 rounded-lg bg-slate-900/50">
-                <AlertTriangle className="w-10 h-10 mb-4 text-slate-600" />
-                <p>{schemaError ? "Error de conexión con la tabla." : "No hay archivos multimedia."}</p>
-             </div>
           ) : (
              assets.map((asset) => (
                 <Card key={asset.id} className={`bg-slate-900 border-slate-800 group overflow-hidden hover:border-indigo-500/50 transition-all flex flex-col relative ${asset.ai_instructions ? 'ring-1 ring-green-500/20' : ''}`}>
@@ -324,6 +319,11 @@ const MediaManager = () => {
                          <div className="flex gap-2">
                             <Button variant="secondary" size="icon" className="h-8 w-8 rounded-full" onClick={() => window.open(asset.url, '_blank')}><ExternalLink className="w-4 h-4" /></Button>
                             <Button variant="secondary" size="icon" className="h-8 w-8 rounded-full" onClick={() => copyUrl(asset.url)}><Copy className="w-4 h-4" /></Button>
+                            {asset.type === 'IMAGE' && (
+                               <Button variant="secondary" size="icon" className="h-8 w-8 rounded-full bg-indigo-600 text-white" title="Escanear Texto (OCR)" onClick={() => handleScanOcr(asset)} disabled={scanningId === asset.id}>
+                                  {scanningId === asset.id ? <Loader2 className="w-4 h-4 animate-spin"/> : <Scan className="w-4 h-4" />}
+                               </Button>
+                            )}
                          </div>
                          <Button variant="destructive" size="sm" className="h-7 text-[10px] w-full" onClick={() => deleteAsset(asset.id)}><Trash2 className="w-3 h-3 mr-1" /> Eliminar</Button>
                          <Button 

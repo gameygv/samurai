@@ -10,6 +10,7 @@ import {
   Zap, Brain, RefreshCw, Send, ArrowRight
 } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { toast } from 'sonner';
 
 const Index = () => {
   const [stats, setStats] = useState({
@@ -24,6 +25,7 @@ const Index = () => {
   const [upcomingTasks, setUpcomingTasks] = useState<any[]>([]);
   const [chartData, setChartData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<'checking' | 'connected' | 'error'>('checking');
   const [latency, setLatency] = useState<number>(0);
 
@@ -56,6 +58,24 @@ const Index = () => {
      setLatency(Math.round(end - start));
   };
 
+  const handleMasterRefresh = async () => {
+    setRefreshing(true);
+    toast.info("Iniciando Sincronización Maestra de todo el Cerebro...");
+    try {
+      // Ejecutar ambos scrapings y sincronizaciones
+      await Promise.all([
+        supabase.functions.invoke('scrape-main-website', {}),
+        supabase.functions.invoke('auto-sync-knowledge', {})
+      ]);
+      toast.success("¡Cerebro refrescado! Todas las fuentes (Web y Bitácora) están actualizadas.");
+      fetchData();
+    } catch (err: any) {
+      toast.error("Fallo en la sincronización maestra: " + err.message);
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   const fetchData = async () => {
     try {
       const [errorsRes, pendingRes, versionsRes, logsRes, followupsRes, restartsRes] = await Promise.all([
@@ -82,13 +102,6 @@ const Index = () => {
           accuracy: v.test_accuracy_nuevo || 70,
         }));
         setChartData(mappedData);
-      } else {
-         setChartData([
-            { name: 'v0.1', accuracy: 65 },
-            { name: 'v0.3', accuracy: 78 },
-            { name: 'v0.5', accuracy: 82 },
-            { name: 'v0.8', accuracy: 88 }
-         ]);
       }
 
       setConnectionStatus('connected');
@@ -109,7 +122,6 @@ const Index = () => {
   };
 
   const fetchUpcomingTasks = async () => {
-     // Obtener leads que tienen acciones programadas
      const { data: followups } = await supabase
         .from('leads')
         .select('id, nombre, next_followup_at, auto_restart_scheduled_at, followup_stage')
@@ -128,13 +140,24 @@ const Index = () => {
             <h1 className="text-3xl font-bold text-white tracking-tight">Samurai Control Center</h1>
             <p className="text-slate-400">Estado de la red neuronal y flujos de trabajo.</p>
           </div>
-          <div className="flex items-center gap-3 bg-slate-900/50 p-2 px-4 rounded-full border border-slate-800 shadow-inner">
-            <div className={`w-2 h-2 rounded-full ${connectionStatus === 'connected' ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`}></div>
-            <span className="text-xs font-mono text-slate-300 uppercase tracking-widest flex items-center gap-2">
-               Core: {connectionStatus === 'connected' ? 'Synced' : 'Offline'}
-               <span className="text-slate-600">|</span>
-               {latency}ms
-            </span>
+          <div className="flex items-center gap-4">
+            <Button 
+               variant="outline" 
+               className="border-indigo-500/30 text-indigo-400 hover:bg-indigo-500/10 h-10"
+               onClick={handleMasterRefresh}
+               disabled={refreshing}
+            >
+               {refreshing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />}
+               Sincronización Maestra
+            </Button>
+            <div className="flex items-center gap-3 bg-slate-900/50 p-2 px-4 rounded-full border border-slate-800 shadow-inner h-10">
+               <div className={`w-2 h-2 rounded-full ${connectionStatus === 'connected' ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`}></div>
+               <span className="text-xs font-mono text-slate-300 uppercase tracking-widest flex items-center gap-2">
+                  Core: {connectionStatus === 'connected' ? 'Synced' : 'Offline'}
+                  <span className="text-slate-600">|</span>
+                  {latency}ms
+               </span>
+            </div>
           </div>
         </div>
 
