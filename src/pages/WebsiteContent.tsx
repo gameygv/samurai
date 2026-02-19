@@ -18,7 +18,7 @@ const CORE_URLS = [
   { url: 'https://theelephantbowl.com/', title: 'Home / Inicio' },
   { url: 'https://theelephantbowl.com/formacion-sonoterapia/', title: 'Formación Sonoterapia' },
   { url: 'https://theelephantbowl.com/maestros/', title: 'Maestros y Guías' },
-  { url: 'https://theelephantbowl.com/eventos/', title: 'Calendario de Eventos' },
+  { url: 'https://theelephantbowl.com/calendario/', title: 'Calendario de Eventos' },
   { url: 'https://theelephantbowl.com/talleres/', title: 'Talleres Presenciales' },
   { url: 'https://theelephantbowl.com/instrumentos/', title: 'Catálogo de Instrumentos' },
   { url: 'https://theelephantbowl.com/cuencos-de-cuarzo/', title: 'Cuencos de Cuarzo' },
