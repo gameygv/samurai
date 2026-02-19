@@ -10,11 +10,11 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { 
-  Save, Bot, Eye, Hammer, ScrollText, 
+  Save, Bot, Eye, ScrollText, 
   Database, History, MessageSquare, Gift, RefreshCw, 
   CheckCheck, Zap, FlaskConical, 
-  Play, Loader2, Terminal, Info, BrainCircuit, Target, ScanEye,
-  AlertTriangle, BookOpen, Sparkles, ShieldAlert, TrendingUp, FileText
+  Loader2, Terminal, BrainCircuit, Target, ScanEye,
+  AlertTriangle, Sparkles, ShieldAlert, TrendingUp, FileText
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { logActivity } from '@/utils/logger';
@@ -48,7 +48,7 @@ Responde INMEDIATAMENTE con este formato exacto:
 
 {ecommerce_url}/checkout/?add-to-cart={main_product_id}
 
-El anticipo es de ${main_product_price} MXN. Una vez que completes el pago, recibirás la confirmación y todos los detalles del curso."
+El anticipo es de {main_product_price} MXN. Una vez que completes el pago, recibirás la confirmación y todos los detalles del curso."
 
 REGLA #3: NO PIDAS MÁS DATOS
 - NO pidas nombre completo si ya lo tienes.
@@ -73,7 +73,6 @@ const AgentBrain = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   
-  // Test State
   const [testing, setTesting] = useState(false);
   const [testInput, setTestInput] = useState("");
   const [testOutput, setTestOutput] = useState<string | null>(null);
