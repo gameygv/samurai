@@ -7,9 +7,26 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
-import { Globe, Loader2, RefreshCw, ExternalLink, CheckCircle2, AlertCircle, Search, FileText, Plus } from 'lucide-react';
+import { Globe, Loader2, RefreshCw, ExternalLink, CheckCircle2, AlertCircle, Search, FileText, Plus, DatabaseZap } from 'lucide-react';
 import { toast } from 'sonner';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+
+const CORE_URLS = [
+  { url: 'https://theelephantbowl.com/', title: 'Home / Inicio' },
+  { url: 'https://theelephantbowl.com/formacion-sonoterapia', title: 'Formación Sonoterapia' },
+  { url: 'https://theelephantbowl.com/maestros', title: 'Maestros y Guías' },
+  { url: 'https://theelephantbowl.com/eventos', title: 'Calendario de Eventos' },
+  { url: 'https://theelephantbowl.com/talleres', title: 'Talleres Presenciales' },
+  { url: 'https://theelephantbowl.com/instrumentos', title: 'Catálogo de Instrumentos' },
+  { url: 'https://theelephantbowl.com/cuencos-de-cuarzo', title: 'Cuencos de Cuarzo' },
+  { url: 'https://theelephantbowl.com/gongs', title: 'Gongs Pro' },
+  { url: 'https://theelephantbowl.com/quienes-somos', title: 'Nuestra Historia' },
+  { url: 'https://theelephantbowl.com/testimonios', title: 'Experiencias y Testimonios' },
+  { url: 'https://theelephantbowl.com/tienda', title: 'E-commerce / Tienda' },
+  { url: 'https://theelephantbowl.com/politicas', title: 'Políticas y Garantías' },
+  { url: 'https://theelephantbowl.com/certificaciones', title: 'Certificaciones Internacionales' },
+  { url: 'https://theelephantbowl.com/preguntas-frecuentes', title: 'FAQ / Ayuda' }
+];
 
 const WebsiteContent = () => {
   const [pages, setPages] = useState<any[]>([]);
@@ -17,7 +34,6 @@ const WebsiteContent = () => {
   const [syncing, setSyncing] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   
-  // New URL State
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [newUrl, setNewUrl] = useState('');
   const [newTitle, setNewTitle] = useState('');
@@ -43,35 +59,36 @@ const WebsiteContent = () => {
     }
   };
 
-  const handleAddUrl = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newUrl.startsWith('http')) return toast.error("La URL debe ser válida");
-    
-    setSyncing(true);
-    try {
-       const { error } = await supabase.from('main_website_content').insert([
-          { url: newUrl, title: newTitle || 'Página Manual', scrape_status: 'pending' }
-       ]);
-       if (error) throw error;
-       toast.success("URL añadida a la cola de indexación.");
-       setIsAddOpen(false);
-       setNewUrl('');
-       setNewTitle('');
-       fetchPages();
-    } catch (err: any) {
-       toast.error("Error al añadir URL: " + err.message);
-    } finally {
-       setSyncing(false);
-    }
+  const handleInitCoreUrls = async () => {
+     setSyncing(true);
+     try {
+        const payload = CORE_URLS.map(page => ({
+           ...page,
+           scrape_status: 'pending'
+        }));
+
+        const { error } = await supabase.from('main_website_content').insert(payload);
+        if (error) throw error;
+
+        toast.success("Las 14 URLs críticas han sido inyectadas. Ahora puedes sincronizar.");
+        fetchPages();
+     } catch (err: any) {
+        toast.error("Error al inyectar URLs: " + err.message);
+     } finally {
+        setSyncing(false);
+     }
   };
 
   const handleSyncAll = async () => {
+    if (pages.length === 0) return toast.warning("Primero inyecta las 14 URLs base.");
+    
     setSyncing(true);
-    toast.info("Sincronizando sitio principal...");
+    toast.info("Iniciando sincronización masiva...");
     try {
       const { data, error } = await supabase.functions.invoke('scrape-main-website', {});
       if (error) throw error;
-      toast.success(`Sincronización finalizada. Éxito: ${data.successful}`);
+      
+      toast.success(`Sincronización completada: ${data.successful} páginas actualizadas.`);
       fetchPages();
     } catch (err: any) {
       toast.error(`Error de sincronización: ${err.message}`);
@@ -94,31 +111,15 @@ const WebsiteContent = () => {
               <Globe className="w-8 h-8 text-indigo-500" />
               Sitio Web Principal
             </h1>
-            <p className="text-slate-400">Contenido indexado de theelephantbowl.com</p>
+            <p className="text-slate-400">Contenido indexado para el ADN Samurai.</p>
           </div>
           <div className="flex gap-3">
-            <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
-               <DialogTrigger asChild>
-                  <Button variant="outline" className="border-indigo-500 text-indigo-400">
-                     <Plus className="w-4 h-4 mr-2" /> Añadir URL
-                  </Button>
-               </DialogTrigger>
-               <DialogContent className="bg-slate-900 border-slate-800 text-white">
-                  <DialogHeader><DialogTitle>Nueva página para indexar</DialogTitle></DialogHeader>
-                  <form onSubmit={handleAddUrl} className="space-y-4 pt-4">
-                     <div className="space-y-2">
-                        <Label>URL Completa</Label>
-                        <Input value={newUrl} onChange={e => setNewUrl(e.target.value)} placeholder="https://..." className="bg-slate-950 border-slate-800" />
-                     </div>
-                     <div className="space-y-2">
-                        <Label>Título (Opcional)</Label>
-                        <Input value={newTitle} onChange={e => setNewTitle(e.target.value)} placeholder="Ej: Taller Gongs Mayo" className="bg-slate-950 border-slate-800" />
-                     </div>
-                     <Button type="submit" className="w-full bg-indigo-600" disabled={syncing}>Guardar en Cola</Button>
-                  </form>
-               </DialogContent>
-            </Dialog>
-            <Button onClick={handleSyncAll} disabled={syncing} className="bg-indigo-600 hover:bg-indigo-700">
+            {pages.length === 0 && (
+               <Button onClick={handleInitCoreUrls} variant="outline" className="border-indigo-500 text-indigo-400 shadow-lg shadow-indigo-900/20">
+                  <DatabaseZap className="w-4 h-4 mr-2" /> Inyectar 14 URLs Base
+               </Button>
+            )}
+            <Button onClick={handleSyncAll} disabled={syncing || pages.length === 0} className="bg-indigo-600 hover:bg-indigo-700">
               {syncing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />} Sincronizar Todo
             </Button>
           </div>
@@ -127,7 +128,7 @@ const WebsiteContent = () => {
         <Card className="bg-slate-900 border-slate-800">
           <CardHeader className="border-b border-slate-800 flex flex-row items-center justify-between">
              <CardTitle className="text-white text-sm uppercase tracking-widest flex items-center gap-2">
-                Páginas Indexadas ({filteredPages.length})
+                Fuentes de Verdad ({filteredPages.length})
              </CardTitle>
              <div className="relative w-64">
                 <Search className="absolute left-2 top-2.5 h-4 w-4 text-slate-500" />
@@ -135,26 +136,45 @@ const WebsiteContent = () => {
              </div>
           </CardHeader>
           <CardContent className="p-4">
-            <Accordion type="single" collapsible className="space-y-2">
-              {filteredPages.map((page, index) => (
-                <AccordionItem key={page.id} value={`page-${index}`} className="bg-slate-950 border border-slate-800 rounded-lg overflow-hidden">
-                  <AccordionTrigger className="px-4 py-3">
-                    <div className="flex items-center justify-between w-full pr-4">
-                      <div className="flex items-center gap-3">
-                        <div className={`w-2 h-2 rounded-full ${page.scrape_status === 'success' ? 'bg-green-500' : 'bg-red-500'}`} />
-                        <span className="text-sm font-bold text-white truncate max-w-[200px]">{page.title || page.url}</span>
+            {loading ? (
+               <div className="flex justify-center py-20"><Loader2 className="w-8 h-8 animate-spin text-indigo-500" /></div>
+            ) : pages.length === 0 ? (
+               <div className="text-center py-20 border-2 border-dashed border-slate-800 rounded-xl space-y-4">
+                  <Globe className="w-12 h-12 text-slate-700 mx-auto" />
+                  <p className="text-slate-500">No hay contenido indexado. Usa el botón superior para cargar las 14 URLs de The Elephant Bowl.</p>
+               </div>
+            ) : (
+              <Accordion type="single" collapsible className="space-y-2">
+                {filteredPages.map((page, index) => (
+                  <AccordionItem key={page.id} value={`page-${index}`} className="bg-slate-950 border border-slate-800 rounded-lg overflow-hidden group">
+                    <AccordionTrigger className="px-4 py-3 hover:bg-slate-900 transition-colors">
+                      <div className="flex items-center justify-between w-full pr-4">
+                        <div className="flex items-center gap-3">
+                          <div className={`w-2 h-2 rounded-full ${page.scrape_status === 'success' ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.4)]' : 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.4)]'}`} />
+                          <div className="text-left">
+                             <span className="text-sm font-bold text-white group-hover:text-indigo-400 transition-colors">{page.title || page.url}</span>
+                             <p className="text-[10px] text-slate-500 font-mono mt-0.5">{page.url}</p>
+                          </div>
+                        </div>
+                        <Badge variant="outline" className="text-[9px] border-slate-700 text-slate-400">{page.content_length || 0} chars</Badge>
                       </div>
-                      <Badge variant="outline" className="text-[9px] border-slate-700 text-slate-400">{page.content_length || 0} chars</Badge>
-                    </div>
-                  </AccordionTrigger>
-                  <AccordionContent className="px-4 pb-4">
-                    <div className="bg-slate-900 border border-slate-800 rounded p-4 max-h-[300px] overflow-y-auto">
-                      <p className="text-xs text-slate-300 font-mono leading-relaxed">{page.content || 'Sin contenido'}</p>
-                    </div>
-                  </AccordionContent>
-                </AccordionItem>
-              ))}
-            </Accordion>
+                    </AccordionTrigger>
+                    <AccordionContent className="px-4 pb-4">
+                      <div className="bg-slate-900 border border-slate-800 rounded p-4 max-h-[400px] overflow-y-auto mt-2">
+                        {page.content ? (
+                           <p className="text-xs text-slate-300 font-mono leading-relaxed whitespace-pre-wrap">{page.content}</p>
+                        ) : (
+                           <div className="flex items-center gap-2 text-slate-600 italic text-xs">
+                              <AlertCircle className="w-4 h-4" />
+                              Página pendiente de sincronización.
+                           </div>
+                        )}
+                      </div>
+                    </AccordionContent>
+                  </AccordionItem>
+                ))}
+              </Accordion>
+            )}
           </CardContent>
         </Card>
       </div>
