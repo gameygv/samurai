@@ -12,7 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { 
   Save, Bot, Eye, Database, History, MessageSquare, 
   CheckCheck, Zap, FlaskConical, Loader2, Terminal, 
-  Target, Sparkles, ShieldAlert, FileText, Send
+  Target, Sparkles, ShieldAlert, FileText, Send, Scan
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { logActivity } from '@/utils/logger';
@@ -39,6 +39,11 @@ const AgentBrain = () => {
   const [testing, setTesting] = useState(false);
   const [testInput, setTestInput] = useState("");
   const [testOutput, setTestOutput] = useState<string | null>(null);
+
+  // Vision Test State
+  const [visionUrl, setVisionUrl] = useState("");
+  const [visionResult, setVisionResult] = useState<string | null>(null);
+  const [scanning, setScanning] = useState(false);
 
   useEffect(() => {
     fetchPrompts();
@@ -87,17 +92,34 @@ const AgentBrain = () => {
     setTesting(true);
     setTestOutput(null);
     try {
-        // En lugar de solo el prompt, simulamos una respuesta real llamando a la lógica de la IA
         const { data, error } = await supabase.functions.invoke('get-samurai-context', {
             body: { message: testInput, simulate_reply: true }
         });
         if (error) throw error;
-        setTestOutput(data.reply || "Simulación exitosa (El Samurai respondería adecuadamente).");
+        setTestOutput(data.reply || "Simulación exitosa.");
     } catch (err: any) {
         toast.error('Error en simulación: ' + err.message);
     } finally {
         setTesting(false);
     }
+  };
+
+  const handleTestVision = async () => {
+     if (!visionUrl) return toast.warning("Ingresa una URL de imagen.");
+     setScanning(true);
+     setVisionResult(null);
+     try {
+        const { data, error } = await supabase.functions.invoke('scrape-website', {
+           body: { url: visionUrl, mode: 'VISION' }
+        });
+        if (error) throw error;
+        setVisionResult(data.content || "No se detectó texto.");
+        toast.success("Análisis de visión completado.");
+     } catch (err: any) {
+        toast.error('Error de visión: ' + err.message);
+     } finally {
+        setScanning(false);
+     }
   };
 
   if (loading) return <Layout><div className="flex h-[80vh] items-center justify-center"><Loader2 className="animate-spin text-red-600 w-10 h-10" /></div></Layout>;
@@ -140,13 +162,39 @@ const AgentBrain = () => {
           </TabsContent>
 
           <TabsContent value="ojodehalcon" className="mt-6">
-             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                <PromptCard title="VISIÓN" icon={Eye} description="Interpretación de imágenes." value={prompts['prompt_ojo_halcon']} onChange={(v:any) => setPrompts({...prompts, prompt_ojo_halcon: v})} />
-                <PromptCard title="MATCH PAGOS" icon={CheckCheck} description="Validación de transferencias." value={prompts['prompt_match']} onChange={(v:any) => setPrompts({...prompts, prompt_match: v})} />
-                <PromptCard title="POST-VENTA" icon={MessageSquare} description="Respuesta tras éxito." value={prompts['prompt_accion_post']} onChange={(v:any) => setPrompts({...prompts, prompt_accion_post: v})} />
+             <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
+                <div className="md:col-span-8 grid grid-cols-1 md:grid-cols-2 gap-6">
+                   <PromptCard title="VISIÓN" icon={Eye} description="Interpretación de imágenes." value={prompts['prompt_ojo_halcon']} onChange={(v:any) => setPrompts({...prompts, prompt_ojo_halcon: v})} />
+                   <PromptCard title="MATCH PAGOS" icon={CheckCheck} description="Validación de transferencias." value={prompts['prompt_match']} onChange={(v:any) => setPrompts({...prompts, prompt_match: v})} />
+                </div>
+                <div className="md:col-span-4 space-y-6">
+                   <Card className="bg-slate-900 border-slate-800 border-l-4 border-l-indigo-500">
+                      <CardHeader>
+                         <CardTitle className="text-white text-sm flex items-center gap-2"><Scan className="w-4 h-4 text-indigo-400" /> Simulador de Visión</CardTitle>
+                         <CardDescription>Prueba cómo el Samurai lee imágenes y posters.</CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                         <div className="space-y-2">
+                            <Label className="text-xs text-slate-400">URL de Imagen</Label>
+                            <Input value={visionUrl} onChange={e => setVisionUrl(e.target.value)} placeholder="https://..." className="bg-slate-950 border-slate-800 text-xs" />
+                         </div>
+                         <Button onClick={handleTestVision} className="w-full bg-indigo-600" disabled={scanning || !visionUrl}>
+                            {scanning ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Eye className="w-4 h-4 mr-2" />}
+                            Escanear Imagen
+                         </Button>
+                         {visionResult && (
+                            <div className="mt-4 p-3 bg-slate-950 border border-slate-800 rounded font-mono text-[10px] text-green-400 whitespace-pre-wrap max-h-[200px] overflow-y-auto">
+                               {visionResult}
+                            </div>
+                         )}
+                      </CardContent>
+                   </Card>
+                   <PromptCard title="POST-VENTA" icon={MessageSquare} description="Respuesta tras éxito." value={prompts['prompt_accion_post']} onChange={(v:any) => setPrompts({...prompts, prompt_accion_post: v})} />
+                </div>
              </div>
           </TabsContent>
           
+          {/* Simulador de Chat Content ... */}
           <TabsContent value="simulador" className="mt-6">
              <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
                 <Card className="md:col-span-4 bg-slate-900 border-slate-800">
