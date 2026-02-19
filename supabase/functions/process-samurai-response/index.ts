@@ -17,9 +17,17 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
-    const { client_message, ai_response, kommo_id, phone, name } = await req.json();
+    // Extract data from URL query parameters
+    const url = new URL(req.url);
+    const kommo_id = url.searchParams.get('kommo_id');
+    const phone = url.searchParams.get('phone');
+    const name = url.searchParams.get('name');
+    const client_message = url.searchParams.get('client_message');
+
+    // Get the AI response from the raw request body
+    const ai_response = await req.text();
     
-    if (!ai_response) throw new Error("El parámetro 'ai_response' es requerido.");
+    if (!ai_response) throw new Error("La respuesta de la IA (en el cuerpo del request) es requerida.");
 
     // --- 1. IDENTIFICAR O CREAR LEAD ---
     let lead = null;
@@ -44,7 +52,6 @@ serve(async (req) => {
     if (!lead) throw new Error("No se pudo identificar ni crear el lead (Datos insuficientes).");
 
     // --- 2. GUARDAR CONVERSACIÓN ---
-    // El mensaje del cliente ahora es opcional para compatibilidad con Make.com
     if (client_message) {
       await supabaseClient.from('conversaciones').insert({ 
           lead_id: lead.id, 
