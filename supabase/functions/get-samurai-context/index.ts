@@ -17,43 +17,84 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
-    const { message, simulate_reply = false } = await req.json();
+    const { message, prompts, simulate_reply = false } = await req.json();
 
-    if (simulate_reply) {
-       // 1. Obtener el Prompt Maestro real que genera el sistema
-       const brainResponse = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/get-samurai-brain`, {
-          headers: { 'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}` }
-       });
-       const { system_prompt } = await brainResponse.json();
-
-       // 2. Llamar a OpenAI para una simulación real
-       const openAiKey = Deno.env.get('OPENAI_API_KEY');
-       const aiResponse = await fetch("https://api.openai.com/v1/chat/completions", {
-          method: "POST",
-          headers: { "Authorization": `Bearer ${openAiKey}`, "Content-Type": "application/json" },
-          body: JSON.stringify({
-             model: "gpt-4o-mini",
-             messages: [
-                { role: "system", content: system_prompt },
-                { role: "user", content: message }
-             ],
-             temperature: 0.3 // Baja temperatura para evitar alucinaciones
-          })
-       });
-
-       const aiData = await aiResponse.json();
-       const reply = aiData.choices?.[0]?.message?.content || "Error en simulación de IA.";
-
-       return new Response(JSON.stringify({ reply }), { 
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-       });
+    if (!simulate_reply) {
+      return new Response(JSON.stringify({ status: "ok" }), { headers: corsHeaders })
+    }
+    if (!message) {
+      throw new Error("El mensaje de prueba es requerido.");
     }
 
-    return new Response(JSON.stringify({ status: "ok" }), { headers: corsHeaders })
+    // --- CONSTRUCCIÓN DEL CEREBRO PARA SIMULACIÓN ---
+    let system_prompt;
+    if (prompts && Object.keys(prompts).length > 0) {
+      console.log("[get-samurai-context] Usando prompts del frontend para simulación.");
+      
+      const { data: knowledgeDocs } = await supabaseClient
+        .from('knowledge_documents').select('title, description, content, category').limit(20);
+      const knowledgeBlock = knowledgeDocs?.map(k => `[RECURSO: ${k.title} | CATEGORÍA: ${k.category}]\nINSTRUCCIÓN DE USO: ${k.description || 'N/A'}\nCONTENIDO: ${k.content || 'N/A'}`).join('\n\n') || "";
+
+      const { data: mediaAssets } = await supabaseClient
+        .from('media_assets').select('title, ai_instructions').not('ai_instructions', 'is', null).limit(10);
+      const mediaBlock = mediaAssets?.map(m => `[MEDIA: ${m.title}]\nINSTRUCCIONES: ${m.ai_instructions}`).join('\n\n') || "";
+
+      system_prompt = `
+<INSTRUCTIONS>
+${prompts['prompt_adn_core'] || ''}
+${prompts['prompt_estrategia_cierre'] || ''}
+${prompts['prompt_protocolos'] || ''}
+</INSTRUCTIONS>
+<CONTEXT>
+# BASE DE CONOCIMIENTO ADICIONAL
+${knowledgeBlock}
+# MEDIA MANAGER (IMÁGENES Y POSTERS)
+${mediaBlock}
+</CONTEXT>
+      `;
+    } else {
+      console.log("[get-samurai-context] Obteniendo cerebro guardado para simulación.");
+      const brainResponse = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/get-samurai-brain`, {
+         headers: { 'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}` }
+      });
+      const brainData = await brainResponse.json();
+      system_prompt = brainData.system_prompt;
+    }
+    
+    // --- LLAMADA A OPENAI ---
+    const openAiKey = Deno.env.get('OPENAI_API_KEY');
+    if (!openAiKey) throw new Error("OPENAI_API_KEY no está configurada.");
+
+    const aiResponse = await fetch("https://api.openai.com/v1/chat/completions", {
+       method: "POST",
+       headers: { "Authorization": `Bearer ${openAiKey}`, "Content-Type": "application/json" },
+       body: JSON.stringify({
+          model: "gpt-4o-mini",
+          messages: [
+             { role: "system", content: system_prompt },
+             { role: "user", content: message }
+          ],
+          temperature: 0.2
+       })
+    });
+
+    if (!aiResponse.ok) {
+      const errorBody = await aiResponse.text();
+      throw new Error(`OpenAI API Error: ${aiResponse.status} ${errorBody}`);
+    }
+
+    const aiData = await aiResponse.json();
+    const reply = aiData.choices?.[0]?.message?.content || "La IA no generó una respuesta.";
+
+    return new Response(JSON.stringify({ reply, system_prompt }), { 
+       headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+    });
+
   } catch (error: any) {
+    console.error("[get-samurai-context] Error:", error.message);
     return new Response(JSON.stringify({ error: error.message }), { 
       status: 500, 
-      headers: corsHeaders 
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     })
   }
 })

@@ -15,6 +15,7 @@ import {
   CheckCheck, Zap, Loader2, FileText, Send, ShoppingCart, Scan, Terminal, FlaskConical, Image as ImageIcon, Search, ArrowRight, BrainCircuit, ShieldAlert, Info, Target
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 
 const DEFAULTS = {
   'prompt_adn_core': '# ADN CORE\nEres Samurai, el cerrador de ventas de elite de The Elephant Bowl.\n\nTU MISIÓN:\nConvertir cada consulta en una venta de formación o instrumentos.',
@@ -34,7 +35,7 @@ const AgentBrain = () => {
   
   // Simulation State
   const [testMessage, setTestMessage] = useState("");
-  const [testResult, setTestResult] = useState<any>(null);
+  const [testResult, setTestResult] = useState<{ reply: string; system_prompt: string } | null>(null);
   const [testing, setTesting] = useState(false);
 
   useEffect(() => {
@@ -62,13 +63,13 @@ const AgentBrain = () => {
   const handleRunSimulation = async () => {
      if (!testMessage.trim()) return;
      setTesting(true);
+     setTestResult(null);
      try {
         const { data, error } = await supabase.functions.invoke('get-samurai-context', {
            body: { 
              message: testMessage, 
              simulate_reply: true,
-             custom_adn: prompts['prompt_adn_core'],
-             context: "Verdad Maestra Nivel 2" 
+             prompts: prompts
            }
         });
         if (error) throw error;
@@ -167,20 +168,28 @@ const AgentBrain = () => {
                       </CardTitle>
                    </CardHeader>
                    <CardContent>
-                      {testResult ? (
+                      {testing ? (
+                        <div className="h-48 flex flex-col items-center justify-center text-slate-500">
+                          <Loader2 className="w-8 h-8 mb-2 animate-spin" />
+                          <p className="text-xs italic">Samurai está pensando...</p>
+                        </div>
+                      ) : testResult ? (
                          <div className="space-y-4">
                             <div className="p-4 bg-slate-900 rounded border border-slate-800">
                                <p className="text-xs text-slate-300 italic leading-relaxed">{testResult.reply}</p>
                             </div>
-                            <div className="space-y-2">
-                               <p className="text-[10px] text-slate-500 uppercase font-bold tracking-widest">Análisis de Jerarquía:</p>
-                               <div className="flex flex-wrap gap-2">
-                                  <Badge className="bg-green-600">Nivel 1: OK</Badge>
-                                  <Badge className="bg-green-600">Nivel 2: OK</Badge>
-                                  <Badge className="bg-slate-700">Nivel 3: Salteado</Badge>
-                                  <Badge className="bg-slate-700">Nivel 4: N/A</Badge>
-                               </div>
-                            </div>
+                            <Accordion type="single" collapsible className="w-full">
+                              <AccordionItem value="item-1" className="border-slate-800">
+                                <AccordionTrigger className="text-xs text-slate-400 hover:no-underline">Ver Prompt de Simulación</AccordionTrigger>
+                                <AccordionContent>
+                                  <ScrollArea className="h-[200px] rounded bg-black p-2">
+                                    <pre className="text-[9px] text-slate-500 font-mono whitespace-pre-wrap">
+                                      {testResult.system_prompt}
+                                    </pre>
+                                  </ScrollArea>
+                                </AccordionContent>
+                              </AccordionItem>
+                            </Accordion>
                          </div>
                       ) : (
                          <div className="h-48 flex flex-col items-center justify-center text-slate-700">
