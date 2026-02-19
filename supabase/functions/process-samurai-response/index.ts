@@ -20,32 +20,56 @@ serve(async (req) => {
     const { ai_json_response, lead_id, kommo_id, phone, name, is_client_message = false } = await req.json();
 
     let lead = null;
+    
+    // 1. INTENTAR ENCONTRAR EL LEAD POR ID
     if (lead_id) {
         const { data } = await supabaseClient.from('leads').select('*').eq('id', lead_id).single();
         lead = data;
     } 
+
+    // 2. SI NO HAY ID, BUSCAR POR KOMMO_ID
     if (!lead && kommo_id) {
         const { data } = await supabaseClient.from('leads').select('*').eq('kommo_id', kommo_id).single();
         lead = data;
     }
-    if (!lead && phone) {
-        const cleanPhone = phone.toString().replace(/\D/g, '');
-        const { data } = await supabaseClient.from('leads').select('*').ilike('telefono', `%${cleanPhone}%`).single();
+
+    // 3. SI NO HAY KOMMO_ID, BUSCAR POR TELÉFONO (LIMPIO)
+    const rawPhone = phone ? phone.toString() : null;
+    const cleanPhone = rawPhone ? rawPhone.replace(/\D/g, '') : null;
+
+    if (!lead && cleanPhone) {
+        // Buscamos coincidencia parcial o total del teléfono limpio
+        const { data } = await supabaseClient
+            .from('leads')
+            .select('*')
+            .or(`telefono.ilike.%${cleanPhone}%,telefono.ilike.%${rawPhone}%`)
+            .limit(1)
+            .maybeSingle();
         lead = data;
     }
-    if (!lead && (phone || kommo_id)) {
-        const { data: newLead, error: createError } = await supabaseClient.from('leads').insert({
+
+    // 4. SI SIGUE SIN EXISTIR, LO CREAMOS (USANDO UPSERT PARA SEGURIDAD)
+    if (!lead) {
+        const { data: upsertedLead, error: upsertError } = await supabaseClient.from('leads').upsert({
             nombre: name || 'Nuevo Lead WhatsApp',
-            telefono: phone || null,
+            telefono: rawPhone,
             kommo_id: kommo_id || null,
             last_message_at: new Date().toISOString()
-        }).select().single();
-        if (createError) throw createError;
-        lead = newLead;
+        }, { onConflict: 'telefono' }).select().single();
+        
+        if (upsertError) {
+            // Si el upsert falló por concurrencia, intentamos una última búsqueda
+            const { data: retryData } = await supabaseClient.from('leads').select('*').eq('telefono', rawPhone).single();
+            if (!retryData) throw upsertError;
+            lead = retryData;
+        } else {
+            lead = upsertedLead;
+        }
     }
 
-    if (!lead) throw new Error("Lead not found.");
+    if (!lead) throw new Error("No se pudo identificar ni crear el lead.");
 
+    // PROCESAMIENTO DE RESPUESTA IA
     let fullText = typeof ai_json_response === 'string' ? ai_json_response : (ai_json_response?.reply || "");
     let cleanText = fullText;
     let analysisData: any = null;
@@ -65,17 +89,15 @@ serve(async (req) => {
 
     const updateData: any = { last_message_at: new Date().toISOString() };
 
-    // PROGRAMACIÓN AUTOMÁTICA DE FOLLOW-UP (SI ES RESPUESTA DE LA IA)
+    // PROGRAMACIÓN AUTOMÁTICA DE FOLLOW-UP
     if (!is_client_message) {
         const { data: config } = await supabaseClient.from('followup_config').select('*').single();
         if (config && config.enabled) {
-            // Programar Stage 1
             const nextTime = new Date(Date.now() + config.stage_1_delay * 60 * 1000);
             updateData.next_followup_at = nextTime.toISOString();
             updateData.followup_stage = 1;
         }
     } else {
-        // SI EL CLIENTE RESPONDE, DETENER EL TEMPORIZADOR HASTA LA PRÓXIMA RESPUESTA DE LA IA
         updateData.next_followup_at = null;
     }
 
@@ -92,6 +114,7 @@ serve(async (req) => {
 
     return new Response(JSON.stringify({ success: true, reply: cleanText, lead_id: lead.id }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
   } catch (error: any) {
+    console.error("[process-samurai-response] Error:", error.message);
     return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: corsHeaders })
   }
 })
