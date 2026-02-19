@@ -6,7 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { MessageSquare, Search, Loader2, Phone, Zap, BrainCircuit, Clock, MapPin } from 'lucide-react';
+import { MessageSquare, Search, Loader2, Phone, Zap, BrainCircuit, Clock, MapPin, UserCheck, Brain } from 'lucide-react';
 import { toast } from 'sonner';
 import ChatViewer from '@/components/ChatViewer';
 
@@ -59,36 +59,7 @@ const Leads = () => {
     l.telefono?.includes(searchTerm)
   );
 
-  const getFollowupBadge = (lead: any) => {
-    if (!lead.next_followup_at) return null;
-    
-    const nextTime = new Date(lead.next_followup_at);
-    const now = new Date();
-    const diffMinutes = Math.floor((nextTime.getTime() - now.getTime()) / 60000);
-    
-    if (diffMinutes < 0) {
-      return <Badge className="bg-red-600 text-[9px] h-4 px-1">Vencido</Badge>;
-    } else if (diffMinutes < 60) {
-      return <Badge className="bg-yellow-600 text-[9px] h-4 px-1">{diffMinutes}min</Badge>;
-    } else {
-      const hours = Math.floor(diffMinutes / 60);
-      return <Badge className="bg-blue-600 text-[9px] h-4 px-1">{hours}h</Badge>;
-    }
-  };
-
-  const getAutoRestartBadge = (lead: any) => {
-    if (!lead.auto_restart_scheduled_at) return null;
-    
-    const restartTime = new Date(lead.auto_restart_scheduled_at);
-    const now = new Date();
-    const diffMinutes = Math.floor((restartTime.getTime() - now.getTime()) / 60000);
-    
-    if (diffMinutes < 0) {
-      return <Badge className="bg-green-600 text-[9px] h-4 px-1 animate-pulse">Reactivando...</Badge>;
-    } else {
-      return <Badge className="bg-orange-600 text-[9px] h-4 px-1">Restart en {diffMinutes}min</Badge>;
-    }
-  };
+  const isIdentified = (lead: any) => lead.nombre && !lead.nombre.includes('Nuevo Lead');
 
   return (
     <Layout>
@@ -97,11 +68,11 @@ const Leads = () => {
           <div>
              <h1 className="text-3xl font-bold text-white mb-2 flex items-center gap-2">
                 Radar de Leads
-                <Badge variant="outline" className="bg-green-500/10 text-green-500 border-green-500/20 text-[10px] animate-pulse">
+                <Badge variant="outline" className="bg-green-500/10 text-green-500 border-green-500/20 text-[10px]">
                    <Zap className="w-3 h-3 mr-1" /> LIVE
                 </Badge>
              </h1>
-             <p className="text-slate-400">Monitoreo en tiempo real de interacciones y perfiles psicológicos.</p>
+             <p className="text-slate-400">Monitoreo en tiempo real de interacciones y perfiles psicográficos.</p>
           </div>
           <div className="relative w-full md:w-64">
             <Search className="absolute left-2 top-2.5 h-4 w-4 text-slate-500" />
@@ -116,88 +87,80 @@ const Leads = () => {
 
         <Card className="bg-slate-900 border-slate-800">
           <CardHeader className="border-b border-slate-800">
-            <CardTitle className="text-white flex items-center gap-2">
-              <MessageSquare className="w-5 h-5 text-indigo-400" />
-              Últimos Leads Activos
+            <CardTitle className="text-white flex items-center gap-2 text-sm uppercase tracking-widest">
+              <MessageSquare className="w-4 h-4 text-indigo-400" />
+              Últimos Prospectos Activos
             </CardTitle>
           </CardHeader>
           <CardContent className="p-0">
             <Table>
               <TableHeader>
                 <TableRow className="border-slate-800 hover:bg-slate-900">
-                  <TableHead className="text-slate-400">Cliente</TableHead>
-                  <TableHead className="text-slate-400">Ubicación</TableHead>
-                  <TableHead className="text-slate-400">Estado Emocional</TableHead>
-                  <TableHead className="text-slate-400">Intención de Compra</TableHead>
-                  <TableHead className="text-slate-400">Follow-up</TableHead>
-                  <TableHead className="text-slate-400 text-right">Acciones</TableHead>
+                  <TableHead className="text-slate-400 text-[10px] uppercase">Cliente</TableHead>
+                  <TableHead className="text-slate-400 text-[10px] uppercase">Ubicación</TableHead>
+                  <TableHead className="text-slate-400 text-[10px] uppercase text-center">IA Analysis</TableHead>
+                  <TableHead className="text-slate-400 text-[10px] uppercase">Intención</TableHead>
+                  <TableHead className="text-slate-400 text-[10px] uppercase">Estado IA</TableHead>
+                  <TableHead className="text-slate-400 text-[10px] uppercase text-right">Acciones</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {loading ? (
-                   <TableRow>
-                      <TableCell colSpan={6} className="text-center h-24 text-slate-500">
-                         <Loader2 className="w-6 h-6 animate-spin mx-auto" />
-                      </TableCell>
-                   </TableRow>
+                   <TableRow><TableCell colSpan={6} className="text-center h-32"><Loader2 className="w-6 h-6 animate-spin mx-auto text-indigo-600" /></TableCell></TableRow>
                 ) : filteredLeads.map((lead) => (
-                  <TableRow key={lead.id} className="border-slate-800 hover:bg-slate-800/50">
+                  <TableRow key={lead.id} className="border-slate-800 hover:bg-slate-800/30 transition-colors">
                     <TableCell>
                       <div className="flex flex-col">
-                         <span className="font-bold text-slate-200 flex items-center gap-2">
+                         <span className={`font-bold flex items-center gap-2 ${isIdentified(lead) ? 'text-indigo-400' : 'text-slate-300'}`}>
+                            {isIdentified(lead) && <UserCheck className="w-3.5 h-3.5" />}
                             {lead.nombre || 'Desconocido'}
-                            {lead.ai_paused && <Badge variant="destructive" className="h-4 px-1 text-[9px]">PAUSADO</Badge>}
+                            {lead.ai_paused && <Badge variant="destructive" className="h-4 px-1 text-[8px] bg-red-600">STOP</Badge>}
                          </span>
-                         <span className="text-xs text-slate-500 mt-1 flex items-center gap-1">
-                            <Phone className="w-3 h-3" /> 
-                            {lead.telefono && lead.telefono !== 'Sin teléfono' ? lead.telefono : <span className="italic text-red-500/50">Número no detectado</span>}
-                         </span>
+                         <span className="text-[10px] text-slate-500 mt-0.5 font-mono">{lead.telefono || 'Sin número'}</span>
                       </div>
                     </TableCell>
                     <TableCell>
                        <div className="flex items-center gap-1.5">
                           <MapPin className="w-3 h-3 text-red-500" />
-                          <span className="text-sm text-slate-300 font-bold">{lead.ciudad || 'Detectando...'}</span>
+                          <span className="text-xs text-slate-300 font-bold">{lead.ciudad || 'Detectando...'}</span>
                        </div>
                     </TableCell>
-                    <TableCell>
-                       <Badge variant="outline" className={`
-                          ${lead.estado_emocional_actual === 'ENOJADO' ? 'border-red-500 text-red-500 bg-red-500/10' :
-                            lead.estado_emocional_actual === 'FELIZ' ? 'border-green-500 text-green-500 bg-green-500/10' :
-                            'border-slate-600 text-slate-500'}
-                       `}>
-                          {lead.estado_emocional_actual || 'NEUTRO'}
-                       </Badge>
-                    </TableCell>
-                    <TableCell>
-                       <div className="flex flex-col gap-1 w-[120px]">
-                          <div className="flex justify-between text-[10px] text-slate-500 font-mono">
-                             <span>SCORE</span>
-                             <span>{lead.buying_intent || 'BAJO'}</span>
+                    <TableCell className="text-center">
+                       {lead.summary ? (
+                          <div className="flex justify-center" title={lead.summary}>
+                             <Brain className="w-5 h-5 text-indigo-500 animate-pulse" />
                           </div>
-                          <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
-                             <div className="h-full bg-indigo-500" style={{ width: `${lead.confidence_score || 10}%` }} />
+                       ) : (
+                          <span className="text-[9px] text-slate-700 italic">Sin datos</span>
+                       )}
+                    </TableCell>
+                    <TableCell>
+                       <div className="flex flex-col gap-1 w-[100px]">
+                          <div className="flex justify-between text-[8px] text-slate-500 font-bold uppercase">
+                             <span>INTENT</span>
+                             <span className={lead.buying_intent === 'ALTO' ? 'text-green-500' : 'text-slate-500'}>{lead.buying_intent || 'BAJO'}</span>
+                          </div>
+                          <div className="h-1 bg-slate-800 rounded-full overflow-hidden">
+                             <div className={`h-full ${lead.buying_intent === 'ALTO' ? 'bg-green-500' : 'bg-indigo-500'}`} style={{ width: `${lead.confidence_score || 10}%` }} />
                           </div>
                        </div>
                     </TableCell>
                     <TableCell>
-                       <div className="flex flex-col gap-1">
-                          {lead.ai_paused && lead.auto_restart_scheduled_at && getAutoRestartBadge(lead)}
-                          {!lead.ai_paused && lead.next_followup_at && (
-                            <div className="flex items-center gap-1">
-                              <Clock className="w-3 h-3 text-blue-400" />
-                              {getFollowupBadge(lead)}
-                              <span className="text-[9px] text-slate-600">Stage {lead.followup_stage || 1}</span>
-                            </div>
-                          )}
-                          {!lead.ai_paused && !lead.next_followup_at && (
-                            <span className="text-[9px] text-slate-600 italic">Sin programar</span>
-                          )}
-                       </div>
+                       {!lead.ai_paused ? (
+                          <div className="flex items-center gap-1.5">
+                             <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></div>
+                             <span className="text-[10px] text-slate-400 uppercase font-bold tracking-tighter">Samurai Active</span>
+                          </div>
+                       ) : (
+                          <div className="flex items-center gap-1.5">
+                             <div className="w-1.5 h-1.5 rounded-full bg-red-500"></div>
+                             <span className="text-[10px] text-red-500 uppercase font-bold tracking-tighter">Paused</span>
+                          </div>
+                       )}
                     </TableCell>
                     <TableCell className="text-right">
-                       <Button size="sm" className="bg-indigo-600 hover:bg-indigo-700 h-8" onClick={() => handleOpenChat(lead)}>
-                          <BrainCircuit className="w-3 h-3 mr-2" /> Analizar
+                       <Button size="sm" className="bg-indigo-600 hover:bg-indigo-700 h-8 text-[10px] font-bold" onClick={() => handleOpenChat(lead)}>
+                          DETALLES <BrainCircuit className="w-3 h-3 ml-2" />
                        </Button>
                     </TableCell>
                   </TableRow>
@@ -207,13 +170,7 @@ const Leads = () => {
           </CardContent>
         </Card>
 
-        {selectedLead && (
-          <ChatViewer 
-            lead={selectedLead} 
-            open={isChatOpen} 
-            onOpenChange={setIsChatOpen} 
-          />
-        )}
+        {selectedLead && <ChatViewer lead={selectedLead} open={isChatOpen} onOpenChange={setIsChatOpen} />}
       </div>
     </Layout>
   );
