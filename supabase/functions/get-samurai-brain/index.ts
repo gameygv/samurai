@@ -11,77 +11,76 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders })
   }
 
+  console.log("[get-samurai-brain] Generando Identidad Maestra...");
+
   try {
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
-    // 1. Obtener PROMPTS (Cerebro Core)
+    // 1. OBTENER PROMPTS DE IDENTIDAD (Filtrado robusto)
     const { data: configs } = await supabaseClient
       .from('app_config')
-      .select('key, value')
-      .eq('category', 'PROMPT');
+      .select('key, value');
 
-    const promptMap: { [key: string]: string } = {};
-    if (configs) {
-        for (const row of configs) {
-            promptMap[row.key] = row.value;
-        }
-    }
+    const p = (key: string) => configs?.find(c => c.key === key)?.value || "";
 
-    // 2. OBTENER CONOCIMIENTO ADICIONAL (Base de Conocimiento y Media)
-    const { data: knowledgeDocs } = await supabaseClient
-      .from('knowledge_documents')
-      .select('title, description, content, category')
-      .limit(20);
+    // 2. OBTENER VERDAD MAESTRA (Contenido de theelephantbowl.com)
+    const { data: webContent } = await supabaseClient
+      .from('main_website_content')
+      .select('title, content')
+      .eq('scrape_status', 'success');
 
-    const knowledgeBlock = knowledgeDocs?.map(k => 
-      `[RECURSO: ${k.title} | CATEGORÍA: ${k.category}]\n` +
-      `INSTRUCCIÓN DE USO: ${k.description || 'No especificada'}\n` +
-      `CONTENIDO: ${k.content || 'No especificado'}`
-    ).join('\n\n') || "No hay documentos adicionales en la base de conocimiento.";
+    const truthBlock = webContent?.map(w => `[FUENTE OFICIAL: ${w.title}]\n${w.content}`).join('\n\n') 
+      || "ERROR: No hay Verdad Maestra indexada. Notifica al administrador.";
 
-    const { data: mediaAssets } = await supabaseClient
-      .from('media_assets')
-      .select('title, ai_instructions')
-      .not('ai_instructions', 'is', null)
-      .limit(10);
+    // 3. OBTENER REGLAS #CIA (Aprendizaje)
+    const { data: ciaRules } = await supabaseClient
+      .from('errores_ia')
+      .select('categoria, correccion_sugerida')
+      .eq('estado_correccion', 'VALIDADA');
 
-    const mediaBlock = mediaAssets?.map(m => 
-      `[MEDIA: ${m.title}]\n` +
-      `INSTRUCCIONES: ${m.ai_instructions}`
-    ).join('\n\n') || "No hay assets de media con instrucciones.";
+    const ciaBlock = ciaRules?.map(r => `[#CIA - REGLA ${r.categoria}]: ${r.correccion_sugerida}`).join('\n')
+      || "No hay reglas de aprendizaje activas.";
 
-    // 3. CONSTRUCCIÓN DEL CEREBRO DINÁMICO (SIN VERDAD MAESTRA)
+    // 4. CONSTRUCCIÓN DEL CEREBRO SUPREMO
     const systemPrompt = `
-<INSTRUCTIONS>
-${promptMap['prompt_adn_core'] ?? '# ADN CORE\nEres un asistente de ventas para The Elephant Bowl.'}
+# IDENTIDAD MAESTRA: SAMURAI (The Elephant Bowl)
+${p('prompt_adn_core') || 'Eres Samurai, el cerrador de ventas de elite de The Elephant Bowl.'}
 
-${promptMap['prompt_estrategia_cierre'] ?? '# ESTRATEGIA DE CIERRE\nTu objetivo es cerrar la venta.'}
+# ESTRATEGIA DE CONVERSIÓN
+${p('prompt_estrategia_cierre') || 'Tu objetivo es que el cliente compre formación o instrumentos.'}
 
-${promptMap['prompt_protocolos'] ?? '# PROTOCOLOS\nSigue las reglas de la empresa.'}
-</INSTRUCTIONS>
+# PROTOCOLOS DE CONDUCTA
+${p('prompt_protocolos') || 'Mantén un tono profesional, experto y místico.'}
 
-<CONTEXT>
-# BASE DE CONOCIMIENTO ADICIONAL
-${knowledgeBlock}
+# REGLAS DE APRENDIZAJE (#CIA)
+IMPORTANTE: Estas reglas son correcciones a errores que cometiste en el pasado. NO las ignores.
+${ciaBlock}
 
-# MEDIA MANAGER (IMÁGENES Y POSTERS)
-${mediaBlock}
-</CONTEXT>
+# FUENTE DE VERDAD ABSOLUTA (CONTEXTO DEL SITIO WEB)
+Toda tu información debe basarse UNICAMENTE en estos datos. Si el dato no está aquí, no lo inventes.
+${truthBlock}
+
+# INSTRUCCIONES DE VISIÓN (OJO DE HALCÓN)
+${p('prompt_vision_instrucciones')}
+
+# REGLA DE ORO
+Bajo ninguna circunstancia respondas sobre temas ajenos a The Elephant Bowl (como mecánica, arte general, etc). Eres un especialista en Sonoterapia y Cuencos.
     `;
 
     return new Response(
       JSON.stringify({ 
         system_prompt: systemPrompt,
-        version: "1.3.0-STABLE_BRAIN",
-        has_truth: false
+        version: "2.0.0-IRON_IDENTITY",
+        timestamp: new Date().toISOString()
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
 
   } catch (error: any) {
+    console.error("[get-samurai-brain] Error fatal:", error.message);
     return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: corsHeaders })
   }
 })

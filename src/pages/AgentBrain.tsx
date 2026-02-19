@@ -114,8 +114,8 @@ const AgentBrain = () => {
            <div className="p-4 flex items-center gap-4">
               <ShieldAlert className="w-8 h-8 text-red-500 shrink-0" />
               <div>
-                 <h3 className="text-white font-bold text-sm">Protección Anti-Alucinaciones Activa</h3>
-                 <p className="text-xs text-slate-400">El sistema prioriza la Verdad Maestra. Usa el simulador para verificar la jerarquía.</p>
+                 <h3 className="text-white font-bold text-sm">Identidad Samurai Blindada v2.0</h3>
+                 <p className="text-xs text-slate-400">El sistema ahora inyecta automáticamente la Verdad Maestra y Reglas #CIA para evitar alucinaciones.</p>
               </div>
            </div>
         </Card>
