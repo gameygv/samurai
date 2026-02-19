@@ -11,84 +11,65 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders })
   }
 
+  console.log("[get-samurai-context] Reconstruyendo cerebro para Make.com...");
+
   try {
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
-    const { message, prompts, simulate_reply = false } = await req.json();
+    // --- CONSTRUCCIÓN DEL CEREBRO ---
+    const { data: configs } = await supabaseClient.from('app_config').select('key, value');
+    const p = (key: string) => configs?.find(c => c.key === key)?.value || "";
 
-    if (!simulate_reply) {
-      return new Response(JSON.stringify({ status: "ok" }), { headers: corsHeaders })
-    }
-    if (!message) {
-      throw new Error("El mensaje de prueba es requerido.");
-    }
+    const { data: webContent } = await supabaseClient
+      .from('main_website_content')
+      .select('title, content')
+      .eq('scrape_status', 'success');
+    const truthBlock = webContent?.map(w => `[FUENTE OFICIAL: ${w.title}]\n${w.content}`).join('\n\n') 
+      || "ERROR: No hay Verdad Maestra indexada.";
 
-    // --- CONSTRUCCIÓN DEL CEREBRO PARA SIMULACIÓN ---
-    let system_prompt;
-    if (prompts && Object.keys(prompts).length > 0) {
-      console.log("[get-samurai-context] Usando prompts del frontend para simulación.");
-      
-      const { data: knowledgeDocs } = await supabaseClient
-        .from('knowledge_documents').select('title, description, content, category').limit(20);
-      const knowledgeBlock = knowledgeDocs?.map(k => `[RECURSO: ${k.title} | CATEGORÍA: ${k.category}]\nINSTRUCCIÓN DE USO: ${k.description || 'N/A'}\nCONTENIDO: ${k.content || 'N/A'}`).join('\n\n') || "";
+    const { data: ciaRules } = await supabaseClient
+      .from('errores_ia')
+      .select('categoria, correccion_sugerida')
+      .eq('estado_correccion', 'VALIDADA');
+    const ciaBlock = ciaRules?.map(r => `[#CIA - REGLA ${r.categoria}]: ${r.correccion_sugerida}`).join('\n')
+      || "No hay reglas de aprendizaje activas.";
 
-      const { data: mediaAssets } = await supabaseClient
-        .from('media_assets').select('title, ai_instructions').not('ai_instructions', 'is', null).limit(10);
-      const mediaBlock = mediaAssets?.map(m => `[MEDIA: ${m.title}]\nINSTRUCCIONES: ${m.ai_instructions}`).join('\n\n') || "";
+    const systemPrompt = `
+# IDENTIDAD MAESTRA: SAMURAI (The Elephant Bowl)
+${p('prompt_adn_core') || 'Eres Samurai, el cerrador de ventas de elite de The Elephant Bowl.'}
 
-      system_prompt = `
-<INSTRUCTIONS>
-${prompts['prompt_adn_core'] ?? ''}
-${prompts['prompt_estrategia_cierre'] ?? ''}
-${prompts['prompt_protocolos'] ?? ''}
-</INSTRUCTIONS>
-<CONTEXT>
-# BASE DE CONOCIMIENTO ADICIONAL
-${knowledgeBlock}
-# MEDIA MANAGER (IMÁGENES Y POSTERS)
-${mediaBlock}
-</CONTEXT>
-      `;
-    } else {
-      console.log("[get-samurai-context] Obteniendo cerebro guardado para simulación.");
-      const brainResponse = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/get-samurai-brain`, {
-         headers: { 'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}` }
-      });
-      const brainData = await brainResponse.json();
-      system_prompt = brainData.system_prompt;
-    }
-    
-    // --- LLAMADA A OPENAI ---
-    const openAiKey = Deno.env.get('OPENAI_API_KEY');
-    if (!openAiKey) throw new Error("OPENAI_API_KEY no está configurada.");
+# ESTRATEGIA DE CONVERSIÓN
+${p('prompt_estrategia_cierre') || 'Tu objetivo es que el cliente compre formación o instrumentos.'}
 
-    const aiResponse = await fetch("https://api.openai.com/v1/chat/completions", {
-       method: "POST",
-       headers: { "Authorization": `Bearer ${openAiKey}`, "Content-Type": "application/json" },
-       body: JSON.stringify({
-          model: "gpt-4o-mini",
-          messages: [
-             { role: "system", content: system_prompt },
-             { role: "user", content: message }
-          ],
-          temperature: 0.2
-       })
-    });
+# PROTOCOLOS DE CONDUCTA
+${p('prompt_protocolos') || 'Mantén un tono profesional, experto y místico.'}
 
-    if (!aiResponse.ok) {
-      const errorBody = await aiResponse.text();
-      throw new Error(`OpenAI API Error: ${aiResponse.status} ${errorBody}`);
-    }
+# REGLAS DE APRENDIZAJE (#CIA)
+IMPORTANTE: Estas reglas son correcciones a errores que cometiste en el pasado. NO las ignores.
+${ciaBlock}
 
-    const aiData = await aiResponse.json();
-    const reply = aiData.choices?.[0]?.message?.content || "La IA no generó una respuesta.";
+# FUENTE DE VERDAD ABSOLUTA (CONTEXTO DEL SITIO WEB)
+Toda tu información debe basarse UNICAMENTE en estos datos. Si el dato no está aquí, no lo inventes.
+${truthBlock}
 
-    return new Response(JSON.stringify({ reply, system_prompt }), { 
-       headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-    });
+# INSTRUCCIONES DE VISIÓN (OJO DE HALCÓN)
+${p('prompt_vision_instrucciones')}
+
+# REGLA DE ORO
+Bajo ninguna circunstancia respondas sobre temas ajenos a The Elephant Bowl (como mecánica, arte general, etc). Eres un especialista en Sonoterapia y Cuencos.
+    `;
+
+    return new Response(
+      JSON.stringify({ 
+        system_prompt: systemPrompt,
+        version: "2.1.0-MAKE_COMPATIBLE",
+        timestamp: new Date().toISOString()
+      }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    )
 
   } catch (error: any) {
     console.error("[get-samurai-context] Error:", error.message);
