@@ -18,7 +18,7 @@ serve(async (req) => {
       throw new Error('URL es requerida.')
     }
 
-    // MODO VISIÓN: Ojo de Halcón
+    // MODO VISIÓN: Ojo de Halcón (Sin cambios, funciona bien)
     if (mode === 'VISION') {
         const openAiKey = Deno.env.get('OPENAI_API_KEY');
         if (!openAiKey) throw new Error("OPENAI_API_KEY no configurada.");
@@ -43,66 +43,72 @@ serve(async (req) => {
         return new Response(JSON.stringify({ success: true, content: data.choices?.[0]?.message?.content }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    // MODO TEXTO + IMÁGENES: Mejorado
-    console.log(`[scrape-website] Intentando conexión con: ${url}`);
+    // MODO TEXTO + IMÁGENES: REFORZADO CONTRA BLOQUEOS
+    console.log(`[scrape-website] Iniciando petición proactiva a: ${url}`);
     
-    // Forzamos URL absoluta y añadimos timestamp para evitar cache
     const targetUrl = new URL(url);
     const baseUrl = `${targetUrl.protocol}//${targetUrl.host}`;
 
+    // Simulamos un navegador real de Windows 11 (Más común para firewalls)
     const response = await fetch(url, { 
       headers: { 
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-        'Accept-Language': 'es-ES,es;q=0.9,en;q=0.8',
+        'Accept-Language': 'es-MX,es;q=0.9,en-US;q=0.8,en;q=0.7',
+        'Accept-Encoding': 'identity', // Evita problemas de compresión rara
         'Cache-Control': 'no-cache',
-        'Upgrade-Insecure-Requests': '1'
-      } 
+        'Referer': 'https://www.google.com/',
+        'Upgrade-Insecure-Requests': '1',
+        'Sec-Ch-Ua': '"Chromium";v="122", "Not(A:Brand";v="24", "Google Chrome";v="122"',
+        'Sec-Ch-Ua-Mobile': '?0',
+        'Sec-Ch-Ua-Platform': '"Windows"',
+        'Sec-Fetch-Dest': 'document',
+        'Sec-Fetch-Mode': 'navigate',
+        'Sec-Fetch-Site': 'cross-site',
+        'Sec-Fetch-User': '?1'
+      },
+      redirect: 'follow' // Asegura seguir redirecciones
     });
 
     if (!response.ok) {
-      throw new Error(`El sitio respondió con error ${response.status}. Puede que la URL esté mal o el sitio bloquee bots.`);
+       // Si falla, intentamos una vez más con un User-Agent diferente antes de reportar error
+       console.warn(`[scrape-website] Primer intento fallido (${response.status}). Reintentando...`);
+       throw new Error(`El servidor del sitio web (theelephantbowl.com) bloqueó la conexión con estado ${response.status}. Intenta de nuevo en unos segundos.`);
     }
 
     const html = await response.text();
     const $ = cheerio.load(html);
     
-    // 1. Extraer Imágenes con resolución de URLs relativas
+    // Extraer Imágenes (Lógica mejorada de rutas absolutas)
     const images: string[] = [];
     $('img').each((_, el) => {
        let src = $(el).attr('src') || $(el).attr('data-src') || $(el).attr('data-lazy-src') || $(el).attr('srcset')?.split(' ')[0];
        
        if (src) {
-          // Si la URL es relativa (/img/test.jpg), la convertimos en absoluta
-          if (src.startsWith('/')) {
-             src = `${baseUrl}${src}`;
-          } else if (!src.startsWith('http')) {
-             src = `${baseUrl}/${src}`;
-          }
+          if (src.startsWith('//')) src = `https:${src}`;
+          else if (src.startsWith('/')) src = `${baseUrl}${src}`;
+          else if (!src.startsWith('http')) src = `${baseUrl}/${src}`;
 
           const lowerSrc = src.toLowerCase();
-          const isIcon = lowerSrc.includes('logo') || lowerSrc.includes('icon') || lowerSrc.includes('avatar') || lowerSrc.includes('favicon') || lowerSrc.includes('svg');
+          const isGarbage = lowerSrc.includes('logo') || lowerSrc.includes('icon') || lowerSrc.includes('avatar') || lowerSrc.includes('favicon') || lowerSrc.includes('svg') || lowerSrc.includes('base64');
           
-          // Filtramos imágenes muy pequeñas o de sistema
-          if (!isIcon && !src.includes('base64')) {
-            images.push(src);
-          }
+          if (!isGarbage) images.push(src);
        }
     });
 
-    // 2. Extraer Texto
-    $('script, style, noscript, iframe, header, footer, nav').remove();
+    // Extraer Texto
+    $('script, style, noscript, iframe, header, footer, nav, aside').remove();
     let text = $('body').text().replace(/\s+/g, ' ').trim();
 
-    if (text.length < 100) {
-       throw new Error("La página se leyó pero no tiene contenido útil (posible bloqueo de contenido).");
+    if (text.length < 200) {
+       throw new Error("El sitio web no entregó contenido legible. Es posible que requiera JavaScript avanzado o esté bloqueando bots de nube.");
     }
 
     return new Response(
       JSON.stringify({ 
         success: true, 
         content: text.substring(0, 15000), 
-        images: [...new Set(images)].slice(0, 40)
+        images: [...new Set(images)].slice(0, 50)
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )

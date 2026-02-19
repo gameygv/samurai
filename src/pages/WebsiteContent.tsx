@@ -89,36 +89,43 @@ const WebsiteContent = () => {
   const handleSyncSingle = async (pageId: string, url: string) => {
     setSyncingId(pageId);
     setDetectedImages([]);
-    const tid = toast.loading(`Contactando con el sitio web...`);
+    const tid = toast.loading(`Actualizando Verdad Maestra: ${url}...`);
     
     try {
       const { data, error } = await supabase.functions.invoke('scrape-website', {
         body: { url }
       });
       
-      if (error) throw new Error("Error de red con el servidor de funciones.");
-      if (!data || data.success === false) throw new Error(data?.error || "El sitio web bloqueó la conexión.");
+      if (error) throw new Error("Fallo crítico en el servidor de sincronización.");
+      if (!data || data.success === false) throw new Error(data?.error || "El sitio web bloqueó el acceso.");
 
-      const isErrorPage = data.content.includes('No se ha podido encontrar la página');
+      // Si el contenido es demasiado corto, probablemente es un error
+      if (data.content.length < 200) throw new Error("El sitio web devolvió una página vacía o de error.");
 
       await supabase.from('main_website_content').update({
         content: data.content,
         content_length: data.content.length,
-        scrape_status: isErrorPage ? 'error' : 'success',
-        error_message: isErrorPage ? 'Página devolvió 404' : null,
+        scrape_status: 'success',
+        error_message: null,
         last_scraped_at: new Date().toISOString()
       }).eq('id', pageId);
 
       if (data.images && data.images.length > 0) {
          setDetectedImages(data.images);
-         toast.success(`Sincronización completa. ¡${data.images.length} fotos encontradas!`, { id: tid });
+         toast.success(`¡Sincronizado! Se detectaron ${data.images.length} imágenes de interés.`, { id: tid });
       } else {
-         toast.success("Texto sincronizado. No se detectaron fotos grandes.", { id: tid });
+         toast.success("Contenido de texto actualizado correctamente.", { id: tid });
       }
       
       fetchPages();
     } catch (err: any) {
+      console.error("Sync error:", err);
       toast.error(err.message, { id: tid });
+      await supabase.from('main_website_content').update({
+        scrape_status: 'error',
+        error_message: err.message
+      }).eq('id', pageId);
+      fetchPages();
     } finally {
       setSyncingId(null);
     }
@@ -145,14 +152,14 @@ const WebsiteContent = () => {
 
   const handleSyncAll = async () => {
     setSyncing(true);
-    toast.info("Iniciando lote de sincronización masiva...");
+    toast.info("Iniciando sincronización masiva de todas las fuentes...");
     try {
       const { data, error } = await supabase.functions.invoke('scrape-main-website', {});
       if (error) throw error;
-      toast.success(`Lote completado: ${data.successful} páginas procesadas.`);
+      toast.success(`Proceso finalizado: ${data.successful} páginas actualizadas.`);
       fetchPages();
     } catch (err: any) {
-      toast.error(`Fallo: ${err.message}`);
+      toast.error(`Fallo masivo: ${err.message}`);
     } finally {
       setSyncing(false);
     }
@@ -274,7 +281,7 @@ const WebsiteContent = () => {
                            {selectedPage.scrape_status === 'error' && (
                               <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded text-red-500 text-xs flex items-center gap-2">
                                  <AlertCircle className="w-4 h-4" /> 
-                                 Error detectado: La URL parece haber cambiado o no existe.
+                                 Error detectado: {selectedPage.error_message || 'Fallo de conexión'}. Pulsa sincronizar para reintentar.
                               </div>
                            )}
                            {selectedPage.content ? (
@@ -295,7 +302,7 @@ const WebsiteContent = () => {
                            <div className="bg-indigo-500/5 p-4 rounded-lg border border-indigo-500/20 flex items-start gap-3">
                               <Scan className="w-5 h-5 text-indigo-400 shrink-0 mt-0.5" />
                               <p className="text-xs text-slate-400 leading-relaxed">
-                                 He filtrado logotipos e iconos. Abajo ves las fotos reales del sitio. Impórtalas para que el Samurai las analice con su Ojo de Halcón.
+                                 Abajo ves las fotos reales detectadas en esta página. Impórtalas para que el Samurai las conozca.
                               </p>
                            </div>
                            
@@ -304,7 +311,7 @@ const WebsiteContent = () => {
                                  {detectedImages.length === 0 ? (
                                     <div className="col-span-full py-20 text-center border-2 border-dashed border-slate-800 rounded-xl">
                                        <ImageIcon className="w-12 h-12 text-slate-800 mx-auto mb-4" />
-                                       <p className="text-slate-500 text-sm italic">Sincroniza la página para detectar fotos.</p>
+                                       <p className="text-slate-500 text-sm italic">Sin fotos detectadas aún.</p>
                                     </div>
                                  ) : detectedImages.map((img, i) => (
                                     <Card key={i} className="bg-slate-950 border-slate-800 overflow-hidden group">
