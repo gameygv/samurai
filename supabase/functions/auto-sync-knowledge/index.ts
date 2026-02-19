@@ -1,16 +1,16 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
+import { serve } from "https://deno.land/std@0.177.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0'
-import * as cheerio from "https://esm.sh/cheerio@1.0.0-rc.12"
+import { corsHeaders } from '../_shared/cors.ts'
+import { cheerio } from 'https://deno.land/x/cheerio@1.0.7/mod.ts'
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
+const BROWSER_USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36';
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders })
+    return new Response('ok', { headers: corsHeaders })
   }
+
+  console.log("[auto-sync-knowledge] Iniciando proceso de sincronización de conocimiento...");
 
   try {
     const supabaseClient = createClient(
@@ -18,26 +18,26 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
-    // 1. Obtener todos los sitios web activos
     const { data: websites, error: fetchError } = await supabaseClient
       .from('knowledge_documents')
       .select('id, title, external_link')
-      .eq('type', 'WEBSITE');
+      .eq('type', 'WEBSITE')
+      .not('external_link', 'is', null);
 
     if (fetchError) throw fetchError;
     if (!websites || websites.length === 0) {
-        return new Response(JSON.stringify({ message: "No websites to sync." }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        return new Response(JSON.stringify({ message: "No hay sitios web en la base de conocimiento para sincronizar." }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     const results = [];
 
-    // 2. Iterar y Scrapear (Secuencial para no saturar memoria)
     for (const site of websites) {
         try {
-            console.log(`Syncing: ${site.title} (${site.external_link})`);
+            if (!site.external_link) continue;
+            console.log(`[auto-sync-knowledge] Sincronizando: ${site.title} (${site.external_link})`);
             
             const response = await fetch(site.external_link, {
-                headers: { 'User-Agent': 'Mozilla/5.0 (compatible; SamuraiBot/1.0; +http://dyad.sh)' }
+                headers: { 'User-Agent': BROWSER_USER_AGENT }
             });
 
             if (!response.ok) {
@@ -48,15 +48,10 @@ serve(async (req) => {
             const html = await response.text();
             const $ = cheerio.load(html);
 
-            // Limpieza
-            $('script').remove(); $('style').remove(); $('noscript').remove(); 
-            $('iframe').remove(); $('svg').remove(); $('header').remove(); $('footer').remove();
-
-            let text = $('body').text();
-            text = text.replace(/\s+/g, ' ').trim();
+            $('script, style, nav, footer, header').remove();
+            let text = $('body').text().replace(/\s\s+/g, ' ').trim();
             const truncatedText = text.substring(0, 5000);
 
-            // Actualizar DB
             await supabaseClient
                 .from('knowledge_documents')
                 .update({ 
@@ -68,16 +63,15 @@ serve(async (req) => {
             results.push({ id: site.id, title: site.title, status: 'ok', length: truncatedText.length });
 
         } catch (err) {
-            console.error(`Error processing ${site.title}:`, err);
+            console.error(`[auto-sync-knowledge] Error procesando ${site.title}:`, err);
             results.push({ id: site.id, title: site.title, status: 'error', error: err.message });
         }
     }
 
-    // 3. Log Global de la operación
     await supabaseClient.from('activity_logs').insert({
         action: 'UPDATE',
         resource: 'BRAIN',
-        description: `Auto-Sync completado: ${results.filter(r => r.status === 'ok').length}/${websites.length} sitios actualizados.`,
+        description: `Sincronización de conocimiento: ${results.filter(r => r.status === 'ok').length}/${websites.length} sitios actualizados.`,
         status: 'OK',
         metadata: { results }
     });
@@ -88,7 +82,7 @@ serve(async (req) => {
     )
 
   } catch (error) {
-    console.error("Auto-Sync Error:", error);
+    console.error("[auto-sync-knowledge] Error crítico:", error);
     return new Response(
       JSON.stringify({ success: false, error: error.message }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
