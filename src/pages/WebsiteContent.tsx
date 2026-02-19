@@ -5,6 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
 import { Globe, Loader2, RefreshCw, ExternalLink, CheckCircle2, AlertCircle, Search, FileText, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
@@ -14,6 +16,11 @@ const WebsiteContent = () => {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  
+  // New URL State
+  const [isAddOpen, setIsAddOpen] = useState(false);
+  const [newUrl, setNewUrl] = useState('');
+  const [newTitle, setNewTitle] = useState('');
 
   useEffect(() => {
     fetchPages();
@@ -36,44 +43,35 @@ const WebsiteContent = () => {
     }
   };
 
-  const handleInitDatabase = async () => {
-     setSyncing(true);
-     try {
-        const { error } = await supabase.from('main_website_content').insert([
-           { url: 'https://theelephantbowl.com', title: 'Home', scrape_status: 'pending' },
-           { url: 'https://theelephantbowl.com/formacion-sonoterapia', title: 'Formación', scrape_status: 'pending' }
-        ]);
-        if (error) throw error;
-        toast.success("Base de datos inicializada con URLs base.");
-        fetchPages();
-     } catch (err: any) {
-        toast.error("Error al inicializar: " + err.message);
-     } finally {
-        setSyncing(false);
-     }
+  const handleAddUrl = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newUrl.startsWith('http')) return toast.error("La URL debe ser válida");
+    
+    setSyncing(true);
+    try {
+       const { error } = await supabase.from('main_website_content').insert([
+          { url: newUrl, title: newTitle || 'Página Manual', scrape_status: 'pending' }
+       ]);
+       if (error) throw error;
+       toast.success("URL añadida a la cola de indexación.");
+       setIsAddOpen(false);
+       setNewUrl('');
+       setNewTitle('');
+       fetchPages();
+    } catch (err: any) {
+       toast.error("Error al añadir URL: " + err.message);
+    } finally {
+       setSyncing(false);
+    }
   };
 
   const handleSyncAll = async () => {
-    if (pages.length === 0) {
-       toast.warning("Primero inicializa las URLs base.");
-       return;
-    }
-    
     setSyncing(true);
-    toast.info("Iniciando sincronización del sitio principal...");
+    toast.info("Sincronizando sitio principal...");
     try {
       const { data, error } = await supabase.functions.invoke('scrape-main-website', {});
       if (error) throw error;
-      
-      const successCount = data.successful || 0;
-      const failCount = data.failed || 0;
-      
-      if (failCount > 0) {
-        toast.warning(`Sincronización completada. Éxito: ${successCount}, Errores: ${failCount}`);
-      } else {
-        toast.success(`¡Sitio actualizado! ${successCount} páginas sincronizadas.`);
-      }
-      
+      toast.success(`Sincronización finalizada. Éxito: ${data.successful}`);
       fetchPages();
     } catch (err: any) {
       toast.error(`Error de sincronización: ${err.message}`);
@@ -99,107 +97,64 @@ const WebsiteContent = () => {
             <p className="text-slate-400">Contenido indexado de theelephantbowl.com</p>
           </div>
           <div className="flex gap-3">
-            {pages.length === 0 && (
-               <Button onClick={handleInitDatabase} variant="outline" className="border-indigo-500 text-indigo-400">
-                  <Plus className="w-4 h-4 mr-2" /> Inicializar URLs
-               </Button>
-            )}
-            <Button 
-              onClick={handleSyncAll} 
-              disabled={syncing || pages.length === 0}
-              className="bg-indigo-600 hover:bg-indigo-700"
-            >
-              {syncing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />}
-              Sincronizar Sitio
+            <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
+               <DialogTrigger asChild>
+                  <Button variant="outline" className="border-indigo-500 text-indigo-400">
+                     <Plus className="w-4 h-4 mr-2" /> Añadir URL
+                  </Button>
+               </DialogTrigger>
+               <DialogContent className="bg-slate-900 border-slate-800 text-white">
+                  <DialogHeader><DialogTitle>Nueva página para indexar</DialogTitle></DialogHeader>
+                  <form onSubmit={handleAddUrl} className="space-y-4 pt-4">
+                     <div className="space-y-2">
+                        <Label>URL Completa</Label>
+                        <Input value={newUrl} onChange={e => setNewUrl(e.target.value)} placeholder="https://..." className="bg-slate-950 border-slate-800" />
+                     </div>
+                     <div className="space-y-2">
+                        <Label>Título (Opcional)</Label>
+                        <Input value={newTitle} onChange={e => setNewTitle(e.target.value)} placeholder="Ej: Taller Gongs Mayo" className="bg-slate-950 border-slate-800" />
+                     </div>
+                     <Button type="submit" className="w-full bg-indigo-600" disabled={syncing}>Guardar en Cola</Button>
+                  </form>
+               </DialogContent>
+            </Dialog>
+            <Button onClick={handleSyncAll} disabled={syncing} className="bg-indigo-600 hover:bg-indigo-700">
+              {syncing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />} Sincronizar Todo
             </Button>
           </div>
         </div>
 
         <Card className="bg-slate-900 border-slate-800">
-          <CardHeader className="border-b border-slate-800">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-white text-sm uppercase tracking-widest flex items-center gap-2">
-                <FileText className="w-4 h-4 text-indigo-400" />
+          <CardHeader className="border-b border-slate-800 flex flex-row items-center justify-between">
+             <CardTitle className="text-white text-sm uppercase tracking-widest flex items-center gap-2">
                 Páginas Indexadas ({filteredPages.length})
-              </CardTitle>
-              <div className="relative w-64">
+             </CardTitle>
+             <div className="relative w-64">
                 <Search className="absolute left-2 top-2.5 h-4 w-4 text-slate-500" />
-                <Input 
-                  placeholder="Buscar en contenido..." 
-                  className="pl-8 bg-slate-950 border-slate-800 text-white h-9"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                />
-              </div>
-            </div>
+                <Input placeholder="Buscar..." className="pl-8 bg-slate-950 border-slate-800 text-white h-9" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+             </div>
           </CardHeader>
           <CardContent className="p-4">
-            {loading ? (
-              <div className="flex justify-center py-12">
-                <Loader2 className="w-8 h-8 animate-spin text-indigo-500" />
-              </div>
-            ) : pages.length === 0 ? (
-               <div className="text-center py-16 space-y-4">
-                  <Globe className="w-12 h-12 text-slate-800 mx-auto" />
-                  <div className="max-w-xs mx-auto">
-                     <p className="text-slate-500 text-sm">No hay URLs registradas para sincronizar. Usa el botón superior para inicializar las páginas base del sitio.</p>
-                  </div>
-               </div>
-            ) : (
-              <Accordion type="single" collapsible className="space-y-2">
-                {filteredPages.map((page, index) => (
-                  <AccordionItem 
-                    key={page.id} 
-                    value={`page-${index}`}
-                    className="bg-slate-950 border border-slate-800 rounded-lg overflow-hidden"
-                  >
-                    <AccordionTrigger className="px-4 py-3 hover:bg-slate-900/50 transition-colors">
-                      <div className="flex items-center justify-between w-full pr-4">
-                        <div className="flex items-center gap-3">
-                          <div className={`w-2 h-2 rounded-full ${page.scrape_status === 'success' ? 'bg-green-500' : 'bg-red-500'}`} />
-                          <div className="text-left">
-                            <p className="text-sm font-bold text-white">{page.title || 'Cargando...'}</p>
-                            <p className="text-xs text-slate-500 font-mono">{page.url}</p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <Badge variant="outline" className="text-[9px] border-slate-700 text-slate-400">
-                            {page.content_length || 0} chars
-                          </Badge>
-                          {page.scrape_status === 'success' ? (
-                            <CheckCircle2 className="w-4 h-4 text-green-500" />
-                          ) : (
-                            <AlertCircle className="w-4 h-4 text-red-500" />
-                          )}
-                        </div>
+            <Accordion type="single" collapsible className="space-y-2">
+              {filteredPages.map((page, index) => (
+                <AccordionItem key={page.id} value={`page-${index}`} className="bg-slate-950 border border-slate-800 rounded-lg overflow-hidden">
+                  <AccordionTrigger className="px-4 py-3">
+                    <div className="flex items-center justify-between w-full pr-4">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-2 h-2 rounded-full ${page.scrape_status === 'success' ? 'bg-green-500' : 'bg-red-500'}`} />
+                        <span className="text-sm font-bold text-white truncate max-w-[200px]">{page.title || page.url}</span>
                       </div>
-                    </AccordionTrigger>
-                    <AccordionContent className="px-4 pb-4">
-                      <div className="space-y-3 pt-2">
-                        <div className="flex items-center justify-between text-xs">
-                          <span className="text-slate-500">
-                            Última sincronización: {page.last_scraped_at ? new Date(page.last_scraped_at).toLocaleString() : 'Nunca'}
-                          </span>
-                          <Button 
-                            variant="ghost" 
-                            size="sm" 
-                            className="h-7 text-xs"
-                            onClick={() => window.open(page.url, '_blank')}
-                          >
-                            <ExternalLink className="w-3 h-3 mr-1" /> Ver Original
-                          </Button>
-                        </div>
-                        <div className="bg-slate-900 border border-slate-800 rounded p-4 max-h-[400px] overflow-y-auto">
-                          <p className="text-xs text-slate-300 font-mono leading-relaxed whitespace-pre-wrap">
-                            {page.content || 'Sin contenido extraído'}
-                          </p>
-                        </div>
-                      </div>
-                    </AccordionContent>
-                  </AccordionItem>
-                ))}
-              </Accordion>
-            )}
+                      <Badge variant="outline" className="text-[9px] border-slate-700 text-slate-400">{page.content_length || 0} chars</Badge>
+                    </div>
+                  </AccordionTrigger>
+                  <AccordionContent className="px-4 pb-4">
+                    <div className="bg-slate-900 border border-slate-800 rounded p-4 max-h-[300px] overflow-y-auto">
+                      <p className="text-xs text-slate-300 font-mono leading-relaxed">{page.content || 'Sin contenido'}</p>
+                    </div>
+                  </AccordionContent>
+                </AccordionItem>
+              ))}
+            </Accordion>
           </CardContent>
         </Card>
       </div>
