@@ -9,9 +9,9 @@ import { cn } from '@/lib/utils';
 import { 
   Database, Shield, Activity, Terminal, AlertTriangle, 
   CheckCircle2, MessageSquare, TrendingUp, Clock, Loader2,
-  Zap, Brain, RefreshCw, Send, ArrowRight, UserCheck, ShieldAlert
+  Zap, Brain, RefreshCw, Send, ArrowRight, UserCheck, ShieldAlert, BarChart3, Users2, DollarSign
 } from 'lucide-react';
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Cell } from 'recharts';
 import { toast } from 'sonner';
 
 const Index = () => {
@@ -25,12 +25,12 @@ const Index = () => {
     identifiedLeads: 0,
     totalLeads: 0
   });
+  const [funnelData, setFunnelData] = useState<any[]>([]);
   const [recentChats, setRecentChats] = useState<any[]>([]);
   const [upcomingTasks, setUpcomingTasks] = useState<any[]>([]);
   const [handoffs, setHandoffs] = useState<any[]>([]);
   const [chartData, setChartData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
   const [latency, setLatency] = useState<number>(0);
 
   useEffect(() => {
@@ -39,18 +39,6 @@ const Index = () => {
     fetchUpcomingTasks();
     fetchHandoffs();
     measureLatency();
-    
-    const logChannel = supabase
-      .channel('logs-dashboard')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'activity_logs' }, (payload) => {
-        setStats(prev => ({
-          ...prev,
-          recentLogs: [payload.new, ...prev.recentLogs].slice(0, 15)
-        }));
-      })
-      .subscribe();
-
-    return () => { supabase.removeChannel(logChannel); };
   }, []);
 
   const measureLatency = async () => {
@@ -71,7 +59,17 @@ const Index = () => {
         supabase.from('leads').select('*')
       ]);
 
-      const identified = (leadsRes.data || []).filter(l => l.nombre && !l.nombre.includes('Nuevo Lead')).length;
+      const leads = leadsRes.data || [];
+      const identified = leads.filter(l => l.nombre && !l.nombre.includes('Nuevo Lead')).length;
+
+      // Generar datos del Funnel
+      const funnel = [
+        { name: 'Nuevos', value: leads.length, color: '#6366f1' },
+        { name: 'Calificados', value: leads.filter(l => l.buying_intent === 'MEDIO' || l.buying_intent === 'ALTO').length, color: '#818cf8' },
+        { name: 'En Cierre', value: leads.filter(l => l.buying_intent === 'ALTO').length, color: '#c084fc' },
+        { name: 'Ventas', value: leads.filter(l => l.buying_intent === 'CLOSED' || l.confidence_score > 90).length, color: '#22c55e' }
+      ];
+      setFunnelData(funnel);
 
       setStats({
         totalErrors: errorsRes.count || 0,
@@ -81,7 +79,7 @@ const Index = () => {
         activeFollowups: followupsRes.count || 0,
         scheduledRestarts: 0,
         identifiedLeads: identified,
-        totalLeads: (leadsRes.data || []).length
+        totalLeads: leads.length
       });
 
       if (versionsRes.data && versionsRes.data.length > 0) {
@@ -109,15 +107,7 @@ const Index = () => {
      if (data) setHandoffs(data);
   };
 
-  if (loading) {
-    return (
-      <Layout>
-        <div className="flex h-[80vh] items-center justify-center">
-          <Loader2 className="w-10 h-10 animate-spin text-indigo-500" />
-        </div>
-      </Layout>
-    );
-  }
+  if (loading) return <Layout><div className="flex h-[80vh] items-center justify-center"><Loader2 className="w-10 h-10 animate-spin text-indigo-500" /></div></Layout>;
 
   return (
     <Layout>
@@ -167,26 +157,51 @@ const Index = () => {
                 </Card>
              )}
 
-             <Card className="bg-slate-900 border-slate-800 overflow-hidden shadow-2xl flex flex-col">
-               <CardHeader className="border-b border-slate-800 bg-slate-950/30 flex flex-row items-center justify-between">
-                  <CardTitle className="text-white text-lg flex items-center gap-2">
-                     <TrendingUp className="w-5 h-5 text-indigo-400" /> Curva de Precisión
-                  </CardTitle>
-                  <Badge className="bg-indigo-600">v0.8 AI Active</Badge>
-               </CardHeader>
-               <CardContent className="p-6 h-[250px] w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                     <AreaChart data={chartData}>
-                        <defs><linearGradient id="colorAcc" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#6366f1" stopOpacity={0.3}/><stop offset="95%" stopColor="#6366f1" stopOpacity={0}/></linearGradient></defs>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
-                        <XAxis dataKey="name" stroke="#64748b" fontSize={10} tickLine={false} axisLine={false} />
-                        <YAxis stroke="#64748b" fontSize={10} tickLine={false} axisLine={false} tickFormatter={(v) => `${v}%`} domain={[60, 100]} />
-                        <Tooltip contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b', borderRadius: '8px' }} itemStyle={{ color: '#818cf8', fontWeight: 'bold' }} />
-                        <Area type="monotone" dataKey="accuracy" stroke="#6366f1" strokeWidth={3} fillOpacity={1} fill="url(#colorAcc)" />
-                     </AreaChart>
-                  </ResponsiveContainer>
-               </CardContent>
-             </Card>
+             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                {/* GRÁFICA DE EMBUDO */}
+                <Card className="bg-slate-900 border-slate-800 flex flex-col">
+                  <CardHeader className="py-4 border-b border-slate-800">
+                     <CardTitle className="text-white text-sm flex items-center gap-2 uppercase tracking-tighter">
+                        <BarChart3 className="w-4 h-4 text-indigo-400" /> Embudo de Conversión
+                     </CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-6 h-[250px]">
+                     <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={funnelData} layout="vertical" margin={{ left: -20 }}>
+                           <XAxis type="number" hide />
+                           <YAxis dataKey="name" type="category" stroke="#94a3b8" fontSize={10} width={80} />
+                           <Tooltip cursor={{ fill: 'rgba(255,255,255,0.05)' }} contentStyle={{ backgroundColor: '#0f172a', border: 'none', borderRadius: '8px', fontSize: '10px' }} />
+                           <Bar dataKey="value" radius={[0, 4, 4, 0]}>
+                              {funnelData.map((entry, index) => (
+                                 <Cell key={`cell-${index}`} fill={entry.color} />
+                              ))}
+                           </Bar>
+                        </BarChart>
+                     </ResponsiveContainer>
+                  </CardContent>
+                </Card>
+
+                {/* GRÁFICA DE PRECISIÓN */}
+                <Card className="bg-slate-900 border-slate-800 overflow-hidden shadow-2xl flex flex-col">
+                  <CardHeader className="border-b border-slate-800 flex flex-row items-center justify-between">
+                     <CardTitle className="text-white text-sm flex items-center gap-2 uppercase tracking-tighter">
+                        <TrendingUp className="w-4 h-4 text-emerald-400" /> Curva de Precisión
+                     </CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-6 h-[250px] w-full">
+                     <ResponsiveContainer width="100%" height="100%">
+                        <AreaChart data={chartData}>
+                           <defs><linearGradient id="colorAcc" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#6366f1" stopOpacity={0.3}/><stop offset="95%" stopColor="#6366f1" stopOpacity={0}/></linearGradient></defs>
+                           <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
+                           <XAxis dataKey="name" stroke="#64748b" fontSize={10} tickLine={false} axisLine={false} />
+                           <YAxis stroke="#64748b" fontSize={10} tickLine={false} axisLine={false} tickFormatter={(v) => `${v}%`} domain={[60, 100]} />
+                           <Tooltip contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b', borderRadius: '8px' }} itemStyle={{ color: '#818cf8', fontWeight: 'bold' }} />
+                           <Area type="monotone" dataKey="accuracy" stroke="#6366f1" strokeWidth={3} fillOpacity={1} fill="url(#colorAcc)" />
+                        </AreaChart>
+                     </ResponsiveContainer>
+                  </CardContent>
+                </Card>
+             </div>
 
              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <MiniTable title="Live Feed" icon={MessageSquare} color="text-emerald-400" items={recentChats} />
