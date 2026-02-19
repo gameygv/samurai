@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { 
   Save, Bot, Eye, Database, History, MessageSquare, 
-  CheckCheck, Zap, Loader2, FileText, Send, ShoppingCart, Scan, Terminal, FlaskConical
+  CheckCheck, Zap, Loader2, FileText, Send, ShoppingCart, Scan, Terminal, FlaskConical, Image as ImageIcon, Search
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -30,10 +30,16 @@ const AgentBrain = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   
+  // Text Simulation State
   const [testing, setTesting] = useState(false);
   const [testInput, setTestInput] = useState("");
   const [testOutput, setTestOutput] = useState<string | null>(null);
   const [showFullPrompt, setShowFullPrompt] = useState(false);
+
+  // Vision Simulation State
+  const [visionTesting, setVisionTesting] = useState(false);
+  const [visionUrl, setVisionUrl] = useState("");
+  const [visionResult, setVisionResult] = useState<string | null>(null);
 
   useEffect(() => {
     fetchPrompts();
@@ -85,6 +91,26 @@ const AgentBrain = () => {
     }
   };
 
+  const handleTestVision = async () => {
+    if (!visionUrl) return toast.warning("Pega una URL de imagen para probar.");
+    setVisionTesting(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('scrape-website', {
+        body: { url: visionUrl, mode: 'VISION' }
+      });
+
+      if (error) throw error;
+      if (!data?.success) throw new Error(data?.error || "Error desconocido en visión");
+
+      setVisionResult(data.content);
+      toast.success("Análisis de Ojo de Halcón completado");
+    } catch (err: any) {
+      toast.error("Error en visión: " + err.message);
+    } finally {
+      setVisionTesting(false);
+    }
+  };
+
   if (loading) return <Layout><div className="flex h-[80vh] items-center justify-center"><Loader2 className="animate-spin text-indigo-500 w-10 h-10" /></div></Layout>;
 
   return (
@@ -121,7 +147,58 @@ const AgentBrain = () => {
           </TabsContent>
 
           <TabsContent value="ojo-de-halcon" className="space-y-6">
-             <PromptCard title="INSTRUCCIONES DE VISIÓN" icon={Scan} value={prompts['prompt_vision_instrucciones']} onChange={(v:string) => setPrompts({...prompts, prompt_vision_instrucciones: v})} />
+             <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
+                <div className="md:col-span-7">
+                   <PromptCard title="INSTRUCCIONES DE VISIÓN" icon={Scan} value={prompts['prompt_vision_instrucciones']} onChange={(v:string) => setPrompts({...prompts, prompt_vision_instrucciones: v})} />
+                </div>
+                <div className="md:col-span-5 space-y-4">
+                   <Card className="bg-slate-900 border-slate-800">
+                      <CardHeader>
+                         <CardTitle className="text-sm text-white flex items-center gap-2">
+                            <Eye className="w-4 h-4 text-blue-400" /> Simulador de Visión
+                         </CardTitle>
+                         <CardDescription>Prueba cómo el Ojo de Halcón analiza un poster o comprobante.</CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                         <div className="space-y-2">
+                            <Label className="text-xs text-slate-400">URL de Imagen</Label>
+                            <Input 
+                               value={visionUrl}
+                               onChange={e => setVisionUrl(e.target.value)}
+                               placeholder="https://.../poster-evento.jpg"
+                               className="bg-slate-950 border-slate-800 text-xs"
+                            />
+                         </div>
+                         <Button 
+                            onClick={handleTestVision} 
+                            disabled={visionTesting || !visionUrl} 
+                            className="w-full bg-blue-600 hover:bg-blue-700"
+                         >
+                            {visionTesting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Search className="w-4 h-4 mr-2" />}
+                            Analizar Imagen con OpenAI
+                         </Button>
+
+                         {visionUrl && (
+                            <div className="aspect-video rounded border border-slate-800 bg-black overflow-hidden relative">
+                               <img src={visionUrl} alt="Preview" className="w-full h-full object-contain opacity-50" />
+                               <div className="absolute inset-0 flex items-center justify-center">
+                                  <ImageIcon className="w-8 h-8 text-slate-800" />
+                               </div>
+                            </div>
+                         )}
+
+                         {visionResult && (
+                            <div className="space-y-2 animate-in fade-in slide-in-from-top-2">
+                               <Label className="text-[10px] text-blue-400 font-bold uppercase">Resultado OCR / Análisis:</Label>
+                               <div className="bg-black border border-blue-500/20 p-3 rounded text-[10px] text-slate-300 font-mono whitespace-pre-wrap leading-relaxed max-h-[200px] overflow-y-auto">
+                                  {visionResult}
+                               </div>
+                            </div>
+                         )}
+                      </CardContent>
+                   </Card>
+                </div>
+             </div>
           </TabsContent>
 
           <TabsContent value="simulador" className="space-y-6">
