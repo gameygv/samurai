@@ -19,7 +19,6 @@ serve(async (req) => {
 
     const { client_message, ai_response, kommo_id, phone, name } = await req.json();
     
-    if (!client_message) throw new Error("El parámetro 'client_message' es requerido.");
     if (!ai_response) throw new Error("El parámetro 'ai_response' es requerido.");
 
     // --- 1. IDENTIFICAR O CREAR LEAD ---
@@ -45,12 +44,16 @@ serve(async (req) => {
     if (!lead) throw new Error("No se pudo identificar ni crear el lead (Datos insuficientes).");
 
     // --- 2. GUARDAR CONVERSACIÓN ---
-    await supabaseClient.from('conversaciones').insert({ 
-        lead_id: lead.id, 
-        emisor: 'CLIENTE', 
-        mensaje: client_message, 
-        platform: 'API' 
-    });
+    // El mensaje del cliente ahora es opcional para compatibilidad con Make.com
+    if (client_message) {
+      await supabaseClient.from('conversaciones').insert({ 
+          lead_id: lead.id, 
+          emisor: 'CLIENTE', 
+          mensaje: client_message, 
+          platform: 'API' 
+      });
+    }
+    
     await supabaseClient.from('conversaciones').insert({ 
         lead_id: lead.id, 
         emisor: 'SAMURAI', 
