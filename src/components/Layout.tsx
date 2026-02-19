@@ -3,7 +3,8 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { 
   LayoutDashboard, Brain, Settings as SettingsIcon, Database, LogOut, 
   Users, FileText, UserCircle, GraduationCap, MessageSquare, 
-  GitBranch, Link as LinkIcon, Image, Sparkles, BookOpen, Clock
+  GitBranch, Link as LinkIcon, Image, Sparkles, BookOpen, Clock,
+  Archive
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/context/AuthContext';
@@ -17,13 +18,9 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/avatar";
 
-interface LayoutProps {
-  children: React.ReactNode;
-}
-
-const Layout = ({ children }: LayoutProps) => {
+const Layout = ({ children }: { children: React.ReactNode }) => {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, profile, signOut } = useAuth();
@@ -59,7 +56,8 @@ const Layout = ({ children }: LayoutProps) => {
       title: "GESTIÓN",
       items: [
         { icon: Users, label: 'Usuarios', path: '/users' },
-        { icon: MessageSquare, label: 'Leads & Chats', path: '/leads' },
+        { icon: MessageSquare, label: 'Radar de Leads', path: '/leads' },
+        { icon: Archive, label: 'Archivo de Chats', path: '/archive' },
         { icon: FileText, label: 'Logs & Actividad', path: '/logs' },
       ]
     },
@@ -180,5 +178,9 @@ const Layout = ({ children }: LayoutProps) => {
     </div>
   );
 };
+
+const Avatar = ({ children, className }: any) => <div className={cn("rounded-full overflow-hidden", className)}>{children}</div>;
+const AvatarFallback = ({ children, className }: any) => <div className={cn("flex items-center justify-center w-full h-full", className)}>{children}</div>;
+const AvatarImage = ({ src }: any) => <img src={src} className="w-full h-full object-cover" />;
 
 export default Layout;
