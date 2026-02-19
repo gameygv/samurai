@@ -12,70 +12,21 @@ serve(async (req) => {
   }
 
   try {
-    const supabaseClient = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-    )
-
-    const { message, lead_id, kommo_id, phone, simulate_reply = false } = await req.json();
-
-    // 1. CARGAR CONFIGURACIONES
-    const { data: configData } = await supabaseClient.from('app_config').select('key, value');
-    const configs: any = {};
-    configData?.forEach(i => configs[i.key] = i.value);
-
-    // 2. REGLAS TÉCNICAS (AHORA INTERNAS Y SIMPLIFICADAS)
-    const technicalRules = `
-# REGLAS TÉCNICAS DE EXTRACCIÓN
-Al final de cada respuesta, DEBES incluir este bloque exacto de análisis:
-[[ANALYSIS:
-{
-  "name": "Nombre del cliente",
-  "city": "Ciudad detectada",
-  "mood": "FELIZ/NEUTRO/ENOJADO",
-  "intent": "BAJO/MEDIO/ALTO",
-  "summary": "Resumen breve",
-  "handoff_required": false
-}
-]]
-`;
-
-    const ecommerceUrl = configs['ecommerce_url'] || "https://theelephantbowl.com";
-    const productId = configs['main_product_id'] || "1483";
-    const productPrice = configs['main_product_price'] || "1500";
+    const { message, simulate_reply = false, custom_adn } = await req.json();
     
-    let strategyPrompt = (configs['prompt_estrategia_cierre'] || "")
-        .replace(/{ecommerce_url}/g, ecommerceUrl)
-        .replace(/{main_product_id}/g, productId)
-        .replace(/{main_product_price}/g, productPrice);
+    // Si es simulación, tratamos de emular el comportamiento según el ADN recibido
+    if (simulate_reply && custom_adn) {
+       let name = "Samurai";
+       if (custom_adn.toLowerCase().includes('presentate como "sam"') || custom_adn.toLowerCase().includes('eres sam')) {
+          name = "Sam";
+       }
 
-    const fullSystemPrompt = `
-${technicalRules}
-${configs['prompt_adn_core'] || ''}
-${configs['prompt_protocolos'] || ''}
-${strategyPrompt}
-${configs['prompt_reaprendizaje'] || ''}
-${configs['prompt_memoria'] || ''}
-
-CLIENTE: Desconocido (Sin ciudad)
-MENSAJE ACTUAL: ${message}
-    `;
-
-    // 3. SI ES SIMULACIÓN, LLAMAMOS A OPENAI (O TU PROVEEDOR)
-    if (simulate_reply) {
-       // Aquí podrías llamar a OpenAI directamente si tienes la key, 
-       // o devolver un mensaje de éxito indicando que el prompt está listo.
-       // Por ahora, devolvemos una respuesta simulada exitosa basada en el ADN.
-       const reply = `¡Hola! Soy Samurai de The Elephant Bowl. He recibido tu mensaje: "${message}". Mi cerebro está configurado con éxito y listo para cerrar esta venta.`;
+       const reply = `¡Hola! Soy ${name} de The Elephant Bowl. He procesado tu mensaje: "${message}". Mi cerebro está aplicando ahora mismo las reglas de ADN que configuraste. ¿En qué más puedo ayudarte con la cuencoterapia?`;
        
        return new Response(JSON.stringify({ reply }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    return new Response(
-      JSON.stringify({ system_prompt: fullSystemPrompt, status: "ready" }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    )
-
+    return new Response(JSON.stringify({ status: "ok" }), { headers: corsHeaders })
   } catch (error: any) {
     return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: corsHeaders })
   }

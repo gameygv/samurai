@@ -12,7 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { 
   Save, Bot, Eye, Database, History, MessageSquare, 
   CheckCheck, Zap, FlaskConical, Loader2, Terminal, 
-  Target, Sparkles, ShieldAlert, FileText, Send, Scan
+  Target, Sparkles, ShieldAlert, FileText, Send, Scan, Upload
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { logActivity } from '@/utils/logger';
@@ -42,6 +42,7 @@ const AgentBrain = () => {
 
   // Vision Test State
   const [visionUrl, setVisionUrl] = useState("");
+  const [visionFile, setVisionFile] = useState<File | null>(null);
   const [visionResult, setVisionResult] = useState<string | null>(null);
   const [scanning, setScanning] = useState(false);
 
@@ -65,10 +66,6 @@ const AgentBrain = () => {
     }
   };
 
-  const handleTabChange = (value: string) => {
-     setSearchParams({ tab: value });
-  };
-
   const handleSave = async () => {
     setSaving(true);
     try {
@@ -77,8 +74,6 @@ const AgentBrain = () => {
       }));
       const { error } = await supabase.from('app_config').upsert(updates);
       if (error) throw error;
-      
-      await logActivity({ action: 'UPDATE', resource: 'BRAIN', description: 'Cerebro Samurai simplificado', status: 'OK' });
       toast.success('Configuración del Samurai guardada.');
     } catch (err: any) {
       toast.error('Error al guardar: ' + err.message);
@@ -88,15 +83,16 @@ const AgentBrain = () => {
   };
 
   const handleRunSimulation = async () => {
-    if (!testInput) return toast.warning("Ingresa un mensaje para simular.");
+    if (!testInput) return toast.warning("Ingresa un mensaje.");
     setTesting(true);
     setTestOutput(null);
     try {
+        // Ahora sí enviamos el ADN real a la simulación
         const { data, error } = await supabase.functions.invoke('get-samurai-context', {
-            body: { message: testInput, simulate_reply: true }
+            body: { message: testInput, simulate_reply: true, custom_adn: prompts['prompt_adn_core'] }
         });
         if (error) throw error;
-        setTestOutput(data.reply || "Simulación exitosa.");
+        setTestOutput(data.reply);
     } catch (err: any) {
         toast.error('Error en simulación: ' + err.message);
     } finally {
@@ -105,15 +101,27 @@ const AgentBrain = () => {
   };
 
   const handleTestVision = async () => {
-     if (!visionUrl) return toast.warning("Ingresa una URL de imagen.");
+     let finalUrl = visionUrl;
      setScanning(true);
      setVisionResult(null);
+
      try {
+        if (visionFile) {
+           const fileExt = visionFile.name.split('.').pop();
+           const fileName = `temp-${Date.now()}.${fileExt}`;
+           const { error: uploadError } = await supabase.storage.from('media').upload(`temp/${fileName}`, visionFile);
+           if (uploadError) throw uploadError;
+           const { data: { publicUrl } } = supabase.storage.from('media').getPublicUrl(`temp/${fileName}`);
+           finalUrl = publicUrl;
+        }
+
+        if (!finalUrl) throw new Error("Debes subir un archivo o pegar una URL.");
+
         const { data, error } = await supabase.functions.invoke('scrape-website', {
-           body: { url: visionUrl, mode: 'VISION' }
+           body: { url: finalUrl, mode: 'VISION' }
         });
         if (error) throw error;
-        setVisionResult(data.content || "No se detectó texto.");
+        setVisionResult(data.content);
         toast.success("Análisis de visión completado.");
      } catch (err: any) {
         toast.error('Error de visión: ' + err.message);
@@ -122,126 +130,76 @@ const AgentBrain = () => {
      }
   };
 
-  if (loading) return <Layout><div className="flex h-[80vh] items-center justify-center"><Loader2 className="animate-spin text-red-600 w-10 h-10" /></div></Layout>;
-
   return (
     <Layout>
       <div className="max-w-7xl mx-auto space-y-8 pb-12">
         <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-white">Cerebro del Samurai</h1>
-            <p className="text-slate-400">Panel simplificado de inteligencia y comportamiento.</p>
-          </div>
-          <Button onClick={handleSave} disabled={saving} className="bg-red-600 hover:bg-red-700 shadow-lg shadow-red-900/20 px-8">
-             {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
-             Guardar Cerebro
+          <h1 className="text-3xl font-bold text-white">Cerebro del Samurai</h1>
+          <Button onClick={handleSave} disabled={saving} className="bg-red-600 px-8">
+             {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />} Guardar Cerebro
           </Button>
         </div>
 
-        <Tabs value={initialTab} onValueChange={handleTabChange} className="w-full">
-          <TabsList className="bg-slate-900 border border-slate-800 p-1 w-full justify-start overflow-x-auto h-auto">
-             <TabsTrigger value="identidad" className="py-2"><Sparkles className="w-4 h-4 mr-2" /> 1. Identidad</TabsTrigger>
-             <TabsTrigger value="ventas" className="py-2"><Zap className="w-4 h-4 mr-2" /> 2. Ventas</TabsTrigger>
-             <TabsTrigger value="ojodehalcon" className="py-2"><Eye className="w-4 h-4 mr-2" /> 3. Ojo de Halcón</TabsTrigger>
-             <TabsTrigger value="simulador" className="py-2 data-[state=active]:bg-indigo-600"><FlaskConical className="w-4 h-4 mr-2" /> 4. Simulador</TabsTrigger>
+        <Tabs value={initialTab} onValueChange={v => setSearchParams({ tab: v })}>
+          <TabsList className="bg-slate-900 border border-slate-800 p-1">
+             <TabsTrigger value="identidad">1. Identidad</TabsTrigger>
+             <TabsTrigger value="ventas">2. Ventas</TabsTrigger>
+             <TabsTrigger value="ojodehalcon">3. Ojo de Halcón</TabsTrigger>
+             <TabsTrigger value="simulador" className="data-[state=active]:bg-indigo-600">4. Simulador</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="identidad" className="mt-6">
-             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <PromptCard title="ADN CORE" icon={Bot} description="Esencia y personalidad." value={prompts['prompt_adn_core']} onChange={(v:any) => setPrompts({...prompts, prompt_adn_core: v})} />
-                <PromptCard title="PROTOCOLOS" icon={FileText} description="Reglas de interacción." value={prompts['prompt_protocolos']} onChange={(v:any) => setPrompts({...prompts, prompt_protocolos: v})} />
-                <PromptCard title="MEMORIA" icon={History} description="Cómo recordar al cliente." value={prompts['prompt_memoria']} onChange={(v:any) => setPrompts({...prompts, prompt_memoria: v})} />
-                <PromptCard title="BITÁCORA" icon={Database} description="Reglas de re-aprendizaje." value={prompts['prompt_reaprendizaje']} onChange={(v:any) => setPrompts({...prompts, prompt_reaprendizaje: v})} />
-             </div>
+          <TabsContent value="identidad" className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+             <PromptCard title="ADN CORE" icon={Bot} value={prompts['prompt_adn_core']} onChange={(v:any) => setPrompts({...prompts, prompt_adn_core: v})} />
+             <PromptCard title="PROTOCOLOS" icon={FileText} value={prompts['prompt_protocolos']} onChange={(v:any) => setPrompts({...prompts, prompt_protocolos: v})} />
           </TabsContent>
 
-          <TabsContent value="ventas" className="mt-6">
-             <div className="grid grid-cols-1 gap-6">
-                <PromptCard title="ESTRATEGIA DE CIERRE" icon={Zap} description="Reglas maestras de conversión y links de pago." value={prompts['prompt_estrategia_cierre']} onChange={(v:any) => setPrompts({...prompts, prompt_estrategia_cierre: v})} />
+          <TabsContent value="ojodehalcon" className="mt-6 grid grid-cols-1 md:grid-cols-12 gap-6">
+             <div className="md:col-span-8 space-y-6">
+                <PromptCard title="VISIÓN" icon={Eye} value={prompts['prompt_ojo_halcon']} onChange={(v:any) => setPrompts({...prompts, prompt_ojo_halcon: v})} />
              </div>
-          </TabsContent>
-
-          <TabsContent value="ojodehalcon" className="mt-6">
-             <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
-                <div className="md:col-span-8 grid grid-cols-1 md:grid-cols-2 gap-6">
-                   <PromptCard title="VISIÓN" icon={Eye} description="Interpretación de imágenes." value={prompts['prompt_ojo_halcon']} onChange={(v:any) => setPrompts({...prompts, prompt_ojo_halcon: v})} />
-                   <PromptCard title="MATCH PAGOS" icon={CheckCheck} description="Validación de transferencias." value={prompts['prompt_match']} onChange={(v:any) => setPrompts({...prompts, prompt_match: v})} />
-                </div>
-                <div className="md:col-span-4 space-y-6">
-                   <Card className="bg-slate-900 border-slate-800 border-l-4 border-l-indigo-500">
-                      <CardHeader>
-                         <CardTitle className="text-white text-sm flex items-center gap-2"><Scan className="w-4 h-4 text-indigo-400" /> Simulador de Visión</CardTitle>
-                         <CardDescription>Prueba cómo el Samurai lee imágenes y posters.</CardDescription>
-                      </CardHeader>
-                      <CardContent className="space-y-4">
-                         <div className="space-y-2">
-                            <Label className="text-xs text-slate-400">URL de Imagen</Label>
-                            <Input value={visionUrl} onChange={e => setVisionUrl(e.target.value)} placeholder="https://..." className="bg-slate-950 border-slate-800 text-xs" />
-                         </div>
-                         <Button onClick={handleTestVision} className="w-full bg-indigo-600" disabled={scanning || !visionUrl}>
-                            {scanning ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Eye className="w-4 h-4 mr-2" />}
-                            Escanear Imagen
-                         </Button>
-                         {visionResult && (
-                            <div className="mt-4 p-3 bg-slate-950 border border-slate-800 rounded font-mono text-[10px] text-green-400 whitespace-pre-wrap max-h-[200px] overflow-y-auto">
-                               {visionResult}
-                            </div>
-                         )}
-                      </CardContent>
-                   </Card>
-                   <PromptCard title="POST-VENTA" icon={MessageSquare} description="Respuesta tras éxito." value={prompts['prompt_accion_post']} onChange={(v:any) => setPrompts({...prompts, prompt_accion_post: v})} />
-                </div>
-             </div>
-          </TabsContent>
-          
-          {/* Simulador de Chat Content ... */}
-          <TabsContent value="simulador" className="mt-6">
-             <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
-                <Card className="md:col-span-4 bg-slate-900 border-slate-800">
+             <div className="md:col-span-4 space-y-6">
+                <Card className="bg-slate-900 border-slate-800 border-l-4 border-l-indigo-500">
                    <CardHeader>
-                      <CardTitle className="text-white flex items-center gap-2"><MessageSquare className="w-5 h-5 text-indigo-400" /> Chat de Prueba</CardTitle>
-                      <CardDescription>Escribe como si fueras un cliente para ver qué responde el Samurai.</CardDescription>
+                      <CardTitle className="text-sm text-white flex items-center gap-2"><Eye className="w-4 h-4 text-indigo-400" /> Analizar Pago / Poster</CardTitle>
                    </CardHeader>
                    <CardContent className="space-y-4">
                       <div className="space-y-2">
-                        <Label className="text-slate-400">Tu mensaje</Label>
-                        <Input value={testInput} onChange={e => setTestInput(e.target.value)} placeholder="Ej: Hola, quiero inscribirme..." className="bg-slate-950 border-slate-800 text-white" />
+                         <Label className="text-xs text-slate-400">Opción 1: Subir Archivo</Label>
+                         <Input type="file" onChange={e => setVisionFile(e.target.files?.[0] || null)} className="bg-slate-950 border-slate-800 text-xs" />
                       </div>
-                      <Button onClick={handleRunSimulation} className="w-full bg-indigo-600" disabled={testing}>
-                         {testing ? <Loader2 className="w-4 h-4 mr-2 animate-spin"/> : <Send className="w-4 h-4 mr-2" />}
-                         Simular Respuesta
+                      <div className="space-y-2">
+                         <Label className="text-xs text-slate-500">O URL de imagen</Label>
+                         <Input value={visionUrl} onChange={e => setVisionUrl(e.target.value)} placeholder="https://..." className="bg-slate-950 border-slate-800 text-xs" />
+                      </div>
+                      <Button onClick={handleTestVision} className="w-full bg-indigo-600" disabled={scanning}>
+                         {scanning ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Scan className="w-4 h-4 mr-2" />} Escanear Pago
                       </Button>
-                   </CardContent>
-                </Card>
-
-                <Card className="md:col-span-8 bg-black border-slate-800 shadow-inner min-h-[400px]">
-                   <div className="p-4 border-b border-slate-800 flex items-center justify-between">
-                      <span className="text-[10px] font-mono text-slate-500 uppercase tracking-widest">Vista Previa del Samurai</span>
-                      <div className="flex gap-1"><div className="w-2 h-2 rounded-full bg-red-500/40"></div><div className="w-2 h-2 rounded-full bg-yellow-500/40"></div><div className="w-2 h-2 rounded-full bg-green-500/40"></div></div>
-                   </div>
-                   <CardContent className="p-6">
-                      {testOutput ? (
-                         <div className="animate-in fade-in slide-in-from-bottom-2">
-                            <div className="flex gap-3 items-start mb-6">
-                               <div className="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center text-xs text-slate-400 shrink-0">TU</div>
-                               <div className="bg-slate-800 p-3 rounded-2xl rounded-tl-none text-xs text-slate-300">{testInput}</div>
-                            </div>
-                            <div className="flex gap-3 items-start">
-                               <div className="w-8 h-8 rounded-full bg-red-600 flex items-center justify-center text-[10px] text-white font-bold shrink-0">侍</div>
-                               <div className="bg-red-600/10 border border-red-600/20 p-4 rounded-2xl rounded-tl-none text-xs text-white leading-relaxed whitespace-pre-wrap">
-                                  {testOutput}
-                               </div>
-                            </div>
-                         </div>
-                      ) : (
-                         <div className="flex flex-col items-center justify-center h-[300px] text-slate-600 space-y-2">
-                            <Terminal className="w-12 h-12 opacity-20" />
-                            <p className="text-xs italic">Escribe un mensaje a la izquierda para iniciar la simulación.</p>
+                      {visionResult && (
+                         <div className="mt-4 p-3 bg-slate-950 border border-indigo-500/30 rounded font-mono text-[10px] text-indigo-300 whitespace-pre-wrap max-h-[300px] overflow-y-auto">
+                            {visionResult}
                          </div>
                       )}
                    </CardContent>
                 </Card>
              </div>
+          </TabsContent>
+
+          <TabsContent value="simulador" className="mt-6 grid grid-cols-1 md:grid-cols-12 gap-6">
+             <Card className="md:col-span-4 bg-slate-900 border-slate-800">
+                <CardContent className="pt-6 space-y-4">
+                   <Label>Tu mensaje como cliente</Label>
+                   <Input value={testInput} onChange={e => setTestInput(e.target.value)} placeholder="Ej: Hola Sam..." className="bg-slate-950 border-slate-800" />
+                   <Button onClick={handleRunSimulation} className="w-full bg-indigo-600" disabled={testing}>Simular Respuesta</Button>
+                </CardContent>
+             </Card>
+             <Card className="md:col-span-8 bg-black border-slate-800 p-6 min-h-[300px]">
+                {testOutput ? (
+                   <div className="flex gap-3">
+                      <div className="w-8 h-8 rounded-full bg-red-600 flex items-center justify-center text-xs text-white font-bold">侍</div>
+                      <div className="bg-red-600/10 border border-red-600/20 p-4 rounded-2xl text-xs text-white whitespace-pre-wrap flex-1">{testOutput}</div>
+                   </div>
+                ) : <p className="text-slate-600 italic text-center py-20 text-xs">Esperando simulación...</p>}
+             </Card>
           </TabsContent>
         </Tabs>
       </div>
@@ -249,15 +207,10 @@ const AgentBrain = () => {
   );
 };
 
-const PromptCard = ({ title, icon: Icon, description, value, onChange }: any) => (
-  <Card className="bg-slate-900 border-slate-800 flex flex-col h-full shadow-lg hover:border-slate-700 transition-colors">
-    <CardHeader className="pb-3">
-      <CardTitle className="text-base text-white flex items-center gap-2"><Icon className="w-5 h-5 text-red-500"/> {title}</CardTitle>
-      <CardDescription className="text-slate-500 text-xs">{description}</CardDescription>
-    </CardHeader>
-    <CardContent className="flex-1">
-      <Textarea value={value} onChange={e => onChange(e.target.value)} className="h-full min-h-[200px] bg-slate-950/50 border-slate-800 font-mono text-xs text-slate-300 leading-relaxed focus-visible:ring-red-600/50" placeholder="Instrucciones del Samurai..." />
-    </CardContent>
+const PromptCard = ({ title, icon: Icon, value, onChange }: any) => (
+  <Card className="bg-slate-900 border-slate-800 flex flex-col h-full">
+    <CardHeader className="pb-3"><CardTitle className="text-sm text-white flex items-center gap-2"><Icon className="w-4 h-4 text-red-500"/> {title}</CardTitle></CardHeader>
+    <CardContent className="flex-1"><Textarea value={value} onChange={e => onChange(e.target.value)} className="h-full min-h-[300px] bg-slate-950 border-slate-800 font-mono text-xs" /></CardContent>
   </Card>
 );
 

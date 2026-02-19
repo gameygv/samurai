@@ -18,12 +18,10 @@ serve(async (req) => {
       throw new Error('URL is required')
     }
 
-    // MODO VISIÓN: Escaneo de Posters mediante IA
+    // MODO VISIÓN: Análisis de Comprobantes de Pago y Posters
     if (mode === 'VISION') {
-        console.log(`[Vision] Escaneando imagen: ${url}`);
-        
         const openAiKey = Deno.env.get('OPENAI_API_KEY');
-        if (!openAiKey) throw new Error("OPENAI_API_KEY no configurada en Supabase.");
+        if (!openAiKey) throw new Error("OPENAI_API_KEY no configurada.");
 
         const response = await fetch("https://api.openai.com/v1/chat/completions", {
             method: "POST",
@@ -37,17 +35,20 @@ serve(async (req) => {
                     {
                         role: "user",
                         content: [
-                            { type: "text", text: "Extrae todo el texto de este poster de cursos. Enfócate en: Ciudad, Fechas, Nombre del Curso y Precio. Devuelve solo el texto plano extraído." },
+                            { 
+                              type: "text", 
+                              text: "Actúa como un analista de pagos. Extrae del comprobante: 1. Monto total, 2. Fecha y hora, 3. Banco emisor, 4. Número de referencia. Además, indica si el comprobante parece legítimo o si ves alteraciones sospechosas. Devuelve el análisis estructurado y claro." 
+                            },
                             { type: "image_url", image_url: { url: url } }
                         ]
                     }
                 ],
-                max_tokens: 500
+                max_tokens: 800
             })
         });
 
         const data = await response.json();
-        const content = data.choices?.[0]?.message?.content || "No se detectó texto.";
+        const content = data.choices?.[0]?.message?.content || "No se detectó información.";
 
         return new Response(
             JSON.stringify({ success: true, content, length: content.length }),
@@ -55,36 +56,19 @@ serve(async (req) => {
         );
     }
 
-    // MODO TEXTO: Scraping estándar de sitios web
-    console.log(`[Scrape] Scraping URL: ${url}`);
-    const response = await fetch(url, {
-        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; SamuraiBot/1.0)' }
-    });
-
-    if (!response.ok) throw new Error(`Error HTTP: ${response.status}`);
-
+    // MODO TEXTO: Scraping estándar
+    const response = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 (compatible; SamuraiBot/1.0)' } });
     const html = await response.text();
     const $ = cheerio.load(html);
-
-    $('script, style, noscript, iframe, svg, header, footer').remove();
+    $('script, style, noscript').remove();
     let text = $('body').text().replace(/\s+/g, ' ').trim();
-    const truncatedText = text.substring(0, 5000);
 
     return new Response(
-      JSON.stringify({ 
-        success: true, 
-        title: $('title').text() || url,
-        content: truncatedText,
-        length: truncatedText.length
-      }),
+      JSON.stringify({ success: true, content: text.substring(0, 5000) }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
 
   } catch (error) {
-    console.error("Operation Error:", error);
-    return new Response(
-      JSON.stringify({ success: false, error: error.message }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    )
+    return new Response(JSON.stringify({ success: false, error: error.message }), { status: 500, headers: corsHeaders })
   }
 })
