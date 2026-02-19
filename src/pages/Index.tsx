@@ -7,7 +7,7 @@ import { SystemStatus } from '@/components/SystemStatus';
 import { 
   Database, Shield, Activity, Terminal, AlertTriangle, 
   CheckCircle2, MessageSquare, TrendingUp, Clock, Loader2,
-  Zap, Brain, RefreshCw, Send, ArrowRight, UserCheck
+  Zap, Brain, RefreshCw, Send, ArrowRight, UserCheck, ShieldAlert
 } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { toast } from 'sonner';
@@ -25,16 +25,17 @@ const Index = () => {
   });
   const [recentChats, setRecentChats] = useState<any[]>([]);
   const [upcomingTasks, setUpcomingTasks] = useState<any[]>([]);
+  const [handoffs, setHandoffs] = useState<any[]>([]);
   const [chartData, setChartData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [connectionStatus, setConnectionStatus] = useState<'checking' | 'connected' | 'error'>('checking');
   const [latency, setLatency] = useState<number>(0);
 
   useEffect(() => {
     fetchData();
     fetchRecentChats();
     fetchUpcomingTasks();
+    fetchHandoffs();
     measureLatency();
     
     const logChannel = supabase
@@ -55,23 +56,6 @@ const Index = () => {
      await supabase.from('profiles').select('count', { count: 'exact', head: true });
      const end = performance.now();
      setLatency(Math.round(end - start));
-  };
-
-  const handleMasterRefresh = async () => {
-    setRefreshing(true);
-    toast.info("Sincronizando todas las fuentes del Cerebro...");
-    try {
-      await Promise.all([
-        supabase.functions.invoke('scrape-main-website', {}),
-        supabase.functions.invoke('auto-sync-knowledge', {})
-      ]);
-      toast.success("¡Cerebro refrescado y sincronizado!");
-      fetchData();
-    } catch (err: any) {
-      toast.error("Fallo en sincronización: " + err.message);
-    } finally {
-      setRefreshing(false);
-    }
   };
 
   const fetchData = async () => {
@@ -101,10 +85,8 @@ const Index = () => {
       if (versionsRes.data && versionsRes.data.length > 0) {
         setChartData(versionsRes.data.map((v, i) => ({ name: v.version_numero || `v${i}`, accuracy: v.test_accuracy_nuevo || 70 })));
       }
-
-      setConnectionStatus('connected');
     } catch (err) {
-      setConnectionStatus('error');
+      console.error("Dashboard error:", err);
     } finally {
       setLoading(false);
     }
@@ -120,6 +102,11 @@ const Index = () => {
      if (data) setUpcomingTasks(data);
   };
 
+  const fetchHandoffs = async () => {
+     const { data } = await supabase.from('leads').select('*').eq('ai_paused', true).order('last_message_at', { ascending: false }).limit(3);
+     if (data) setHandoffs(data);
+  };
+
   return (
     <Layout>
       <div className="space-y-8 pb-12">
@@ -128,17 +115,11 @@ const Index = () => {
             <h1 className="text-3xl font-bold text-white tracking-tight">Samurai Control Center</h1>
             <p className="text-slate-400">Estado de la red neuronal y flujos de trabajo.</p>
           </div>
-          <div className="flex items-center gap-4">
-            <Button variant="outline" className="border-indigo-500/30 text-indigo-400 hover:bg-indigo-500/10 h-10" onClick={handleMasterRefresh} disabled={refreshing}>
-               {refreshing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />}
-               Sincronizar Cerebro
-            </Button>
-            <div className="flex items-center gap-3 bg-slate-900/50 p-2 px-4 rounded-full border border-slate-800 h-10 shadow-lg">
-               <div className={`w-2 h-2 rounded-full ${connectionStatus === 'connected' ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`}></div>
-               <span className="text-[10px] font-mono text-slate-300 uppercase tracking-widest">
-                  SYNC: {latency}ms
-               </span>
-            </div>
+          <div className="flex items-center gap-3 bg-slate-900/50 p-2 px-4 rounded-full border border-slate-800 h-10 shadow-lg">
+             <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
+             <span className="text-[10px] font-mono text-slate-300 uppercase tracking-widest">
+                SYNC: {latency}ms
+             </span>
           </div>
         </div>
 
@@ -151,6 +132,30 @@ const Index = () => {
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
           <div className="lg:col-span-8 space-y-8">
+             {/* Handoff Section */}
+             {handoffs.length > 0 && (
+                <Card className="bg-red-900/10 border-red-500/30 border-l-4 border-l-red-500">
+                   <CardHeader className="py-3">
+                      <CardTitle className="text-xs text-red-500 font-bold uppercase tracking-widest flex items-center gap-2">
+                         <ShieldAlert className="w-4 h-4" /> Cola de Handoff (Urgente)
+                      </CardTitle>
+                   </CardHeader>
+                   <CardContent className="p-3 pt-0">
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                         {handoffs.map(h => (
+                            <div key={h.id} className="bg-slate-950/50 p-3 rounded-lg border border-slate-800 flex justify-between items-center group cursor-pointer hover:border-red-500/50 transition-all">
+                               <div>
+                                  <p className="text-[10px] font-bold text-white truncate max-w-[100px]">{h.nombre || 'Desconocido'}</p>
+                                  <p className="text-[9px] text-slate-500 font-mono mt-0.5">{new Date(h.last_message_at).toLocaleTimeString()}</p>
+                               </div>
+                               <ArrowRight className="w-3 h-3 text-slate-700 group-hover:text-red-500 group-hover:translate-x-1 transition-all" />
+                            </div>
+                         ))}
+                      </div>
+                   </CardContent>
+                </Card>
+             )}
+
              <Card className="bg-slate-900 border-slate-800 overflow-hidden shadow-2xl flex flex-col">
                <CardHeader className="border-b border-slate-800 bg-slate-950/30 flex flex-row items-center justify-between">
                   <CardTitle className="text-white text-lg flex items-center gap-2">

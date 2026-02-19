@@ -34,6 +34,7 @@ const Settings = () => {
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [runningFollowups, setRunningFollowups] = useState(false);
 
   useEffect(() => {
     fetchAllData();
@@ -56,6 +57,20 @@ const Settings = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleRunFollowupsNow = async () => {
+     setRunningFollowups(true);
+     toast.info("Iniciando ejecución manual de Follow-ups...");
+     try {
+        const { data, error } = await supabase.functions.invoke('process-followups', {});
+        if (error) throw error;
+        toast.success(`Ejecución completada: ${data.followups_sent} follow-ups y ${data.leads_restarted} reinicios.`);
+     } catch (err: any) {
+        toast.error("Fallo al ejecutar follow-ups: " + err.message);
+     } finally {
+        setRunningFollowups(false);
+     }
   };
 
   const handleInputChange = (key: string, value: string, category: string = 'SYSTEM') => {
@@ -163,62 +178,155 @@ const Settings = () => {
                          </CardTitle>
                          <CardDescription>Configuración de reintentos inteligentes y auto-reactivación post #STOP</CardDescription>
                       </div>
-                      <div className="flex items-center gap-3 bg-slate-950 p-2 px-4 rounded-full border border-slate-800">
-                         <span className={cn("text-[10px] font-bold uppercase tracking-widest", !followupConfig.enabled ? "text-red-500" : "text-slate-600")}>Pasivo</span>
-                         <Switch 
-                            checked={followupConfig?.enabled || false}
-                            onCheckedChange={(checked) => handleFollowupChange('enabled', checked)}
-                         />
-                         <span className={cn("text-[10px] font-bold uppercase tracking-widest", followupConfig.enabled ? "text-green-500" : "text-slate-600")}>Proactivo</span>
+                      <div className="flex flex-col md:flex-row items-end md:items-center gap-4">
+                         <Button 
+                           variant="outline" 
+                           size="sm" 
+                           className="h-8 border-indigo-500/50 text-indigo-400 hover:bg-indigo-500/10"
+                           onClick={handleRunFollowupsNow}
+                           disabled={runningFollowups}
+                         >
+                            {runningFollowups ? <Loader2 className="w-3 h-3 mr-2 animate-spin" /> : <Play className="w-3 h-3 mr-2" />}
+                            Ejecutar Ahora
+                         </Button>
+                         <div className="flex items-center gap-3 bg-slate-950 p-2 px-4 rounded-full border border-slate-800">
+                            <span className={cn("text-[10px] font-bold uppercase tracking-widest", !followupConfig.enabled ? "text-red-500" : "text-slate-600")}>Pasivo</span>
+                            <Switch 
+                               checked={followupConfig?.enabled || false}
+                               onCheckedChange={(checked) => handleFollowupChange('enabled', checked)}
+                            />
+                            <span className={cn("text-[10px] font-bold uppercase tracking-widest", followupConfig.enabled ? "text-green-500" : "text-slate-600")}>Proactivo</span>
+                         </div>
                       </div>
                    </div>
                 </CardHeader>
                 <CardContent className="space-y-6">
-                   {/* Rest of the content remains the same */}
-                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <div className="space-y-2">
-                         <Label className="text-xs text-slate-400">Stage 1 (minutos)</Label>
-                         <Input 
-                            type="number"
-                            value={followupConfig?.stage_1_delay || 15}
-                            onChange={e => handleFollowupChange('stage_1_delay', parseInt(e.target.value))}
-                            className="bg-slate-950 border-slate-800"
-                         />
+                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div className="space-y-4">
+                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div className="space-y-2">
+                               <Label className="text-xs text-slate-400">Stage 1 (minutos)</Label>
+                               <Input 
+                                  type="number"
+                                  value={followupConfig?.stage_1_delay || 15}
+                                  onChange={e => handleFollowupChange('stage_1_delay', parseInt(e.target.value))}
+                                  className="bg-slate-950 border-slate-800"
+                               />
+                            </div>
+                            <div className="space-y-2">
+                               <Label className="text-xs text-slate-400">Stage 2 (minutos)</Label>
+                               <Input 
+                                  type="number"
+                                  value={followupConfig?.stage_2_delay || 60}
+                                  onChange={e => handleFollowupChange('stage_2_delay', parseInt(e.target.value))}
+                                  className="bg-slate-950 border-slate-800"
+                               />
+                            </div>
+                            <div className="space-y-2">
+                               <Label className="text-xs text-slate-400">Stage 3 (minutos)</Label>
+                               <Input 
+                                  type="number"
+                                  value={followupConfig?.stage_3_delay || 1440}
+                                  onChange={e => handleFollowupChange('stage_3_delay', parseInt(e.target.value))}
+                                  className="bg-slate-950 border-slate-800"
+                               />
+                            </div>
+                         </div>
+                         <div className="space-y-4 bg-red-500/5 border border-red-500/20 rounded-lg p-4">
+                            <Label className="text-sm font-bold text-white flex items-center gap-2">
+                               <Zap className="w-4 h-4 text-red-500" /> Auto-Reactivación Post #STOP (minutos)
+                            </Label>
+                            <Input 
+                               type="number"
+                               value={followupConfig?.auto_restart_delay || 30}
+                               onChange={e => handleFollowupChange('auto_restart_delay', parseInt(e.target.value))}
+                               className="bg-slate-950 border-slate-800"
+                            />
+                            <p className="text-[10px] text-slate-500">Tiempo para que la IA retome la charla tras un comando #STOP manual.</p>
+                         </div>
                       </div>
-                      <div className="space-y-2">
-                         <Label className="text-xs text-slate-400">Stage 2 (minutos)</Label>
-                         <Input 
-                            type="number"
-                            value={followupConfig?.stage_2_delay || 60}
-                            onChange={e => handleFollowupChange('stage_2_delay', parseInt(e.target.value))}
-                            className="bg-slate-950 border-slate-800"
-                         />
-                      </div>
-                      <div className="space-y-2">
-                         <Label className="text-xs text-slate-400">Stage 3 (minutos)</Label>
-                         <Input 
-                            type="number"
-                            value={followupConfig?.stage_3_delay || 1440}
-                            onChange={e => handleFollowupChange('stage_3_delay', parseInt(e.target.value))}
-                            className="bg-slate-950 border-slate-800"
-                         />
+
+                      <div className="space-y-4 bg-slate-950/50 p-4 rounded-lg border border-slate-800">
+                         <Label className="text-sm font-bold text-white flex items-center gap-2">
+                            <Calendar className="w-4 h-4 text-indigo-400" /> Ventana de Actividad
+                         </Label>
+                         <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                               <Label className="text-xs text-slate-500">Hora Inicio</Label>
+                               <Input 
+                                  type="number"
+                                  value={followupConfig?.start_hour || 9}
+                                  onChange={e => handleFollowupChange('start_hour', parseInt(e.target.value))}
+                                  className="bg-slate-950 border-slate-800"
+                               />
+                            </div>
+                            <div className="space-y-2">
+                               <Label className="text-xs text-slate-500">Hora Fin</Label>
+                               <Input 
+                                  type="number"
+                                  value={followupConfig?.end_hour || 20}
+                                  onChange={e => handleFollowupChange('end_hour', parseInt(e.target.value))}
+                                  className="bg-slate-950 border-slate-800"
+                               />
+                            </div>
+                         </div>
+                         <div className="space-y-2">
+                            <Label className="text-xs text-slate-500">Días Permitidos</Label>
+                            <div className="flex flex-wrap gap-2">
+                               {daysOfWeek.map(day => (
+                                  <Badge 
+                                     key={day.value}
+                                     variant={followupConfig?.allowed_days?.includes(day.value) ? 'default' : 'outline'}
+                                     className={cn("cursor-pointer", followupConfig?.allowed_days?.includes(day.value) ? "bg-indigo-600" : "text-slate-500")}
+                                     onClick={() => {
+                                        const current = followupConfig?.allowed_days || [];
+                                        const next = current.includes(day.value) 
+                                           ? current.filter((d:string) => d !== day.value)
+                                           : [...current, day.value];
+                                        handleFollowupChange('allowed_days', next);
+                                     }}
+                                  >
+                                     {day.label}
+                                  </Badge>
+                               ))}
+                            </div>
+                         </div>
                       </div>
                    </div>
-                   <div className="space-y-4 bg-red-500/5 border border-red-500/20 rounded-lg p-4">
-                      <Label className="text-sm font-bold text-white flex items-center gap-2">
-                         <Zap className="w-4 h-4 text-red-500" /> Auto-Reactivación Post #STOP (minutos)
-                      </Label>
-                      <Input 
-                         type="number"
-                         value={followupConfig?.auto_restart_delay || 30}
-                         onChange={e => handleFollowupChange('auto_restart_delay', parseInt(e.target.value))}
-                         className="bg-slate-950 border-slate-800"
-                      />
+
+                   <div className="space-y-4">
+                      <Label className="text-sm font-bold text-white">Estrategia de Mensajes</Label>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                         <div className="space-y-2">
+                            <Label className="text-[10px] text-slate-500 uppercase">Mensaje Stage 1</Label>
+                            <Textarea 
+                               value={followupConfig?.stage_1_message || ''}
+                               onChange={e => handleFollowupChange('stage_1_message', e.target.value)}
+                               className="bg-slate-950 border-slate-800 text-xs h-24"
+                            />
+                         </div>
+                         <div className="space-y-2">
+                            <Label className="text-[10px] text-slate-500 uppercase">Mensaje Stage 2</Label>
+                            <Textarea 
+                               value={followupConfig?.stage_2_message || ''}
+                               onChange={e => handleFollowupChange('stage_2_message', e.target.value)}
+                               className="bg-slate-950 border-slate-800 text-xs h-24"
+                            />
+                         </div>
+                         <div className="space-y-2">
+                            <Label className="text-[10px] text-slate-500 uppercase">Mensaje Stage 3</Label>
+                            <Textarea 
+                               value={followupConfig?.stage_3_message || ''}
+                               onChange={e => handleFollowupChange('stage_3_message', e.target.value)}
+                               className="bg-slate-950 border-slate-800 text-xs h-24"
+                            />
+                         </div>
+                      </div>
                    </div>
                 </CardContent>
              </Card>
           </TabsContent>
-          {/* Other TabsContent remain the same */}
+
           <TabsContent value="ecommerce" className="mt-6 space-y-6">
              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <Card className="bg-slate-900 border-slate-800">
@@ -274,6 +382,44 @@ const Settings = () => {
                    </CardContent>
                 </Card>
              </div>
+          </TabsContent>
+
+          <TabsContent value="webhooks" className="mt-6">
+             <Card className="bg-slate-900 border-slate-800">
+                <CardHeader>
+                   <CardTitle className="text-sm text-white">Integración Make.com (Webhooks)</CardTitle>
+                   <CardDescription>Puntos de enlace para automatización externa.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                   <div className="space-y-1">
+                      <Label className="text-xs text-slate-500">Webhook: Notificar Venta</Label>
+                      <Input 
+                         value={getValue('webhook_sale')} 
+                         onChange={e => handleInputChange('webhook_sale', e.target.value, 'WEBHOOK')}
+                         className="bg-slate-950 border-slate-800" 
+                      />
+                   </div>
+                </CardContent>
+             </Card>
+          </TabsContent>
+          
+          <TabsContent value="secrets" className="mt-6">
+             <Card className="bg-slate-900 border-slate-800">
+                <CardHeader>
+                   <CardTitle className="text-sm text-white">API Keys & Tokens</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                   <div className="space-y-1">
+                      <Label className="text-xs text-slate-500">Kommo API Token</Label>
+                      <Input 
+                         type="password"
+                         value={getValue('kommo_token')} 
+                         onChange={e => handleInputChange('kommo_token', e.target.value, 'SECRET')}
+                         className="bg-slate-950 border-slate-800" 
+                      />
+                   </div>
+                </CardContent>
+             </Card>
           </TabsContent>
         </Tabs>
       </div>
