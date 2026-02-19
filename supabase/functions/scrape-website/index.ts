@@ -7,6 +7,7 @@ const corsHeaders = {
 }
 
 serve(async (req) => {
+  // Manejo de CORS
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders })
   }
@@ -15,13 +16,21 @@ serve(async (req) => {
     const { url, mode } = await req.json()
 
     if (!url) {
-      throw new Error('URL is required')
+      throw new Error('URL del asset es requerida.')
     }
 
-    // MODO VISIÓN: Análisis de Comprobantes de Pago y Posters
+    // MODO VISIÓN: Ojo de Halcón
     if (mode === 'VISION') {
         const openAiKey = Deno.env.get('OPENAI_API_KEY');
-        if (!openAiKey) throw new Error("OPENAI_API_KEY no configurada.");
+        
+        if (!openAiKey) {
+           return new Response(
+              JSON.stringify({ success: false, error: "CRÍTICO: OPENAI_API_KEY no configurada en Supabase > Edge Functions > Manage Secrets." }),
+              { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+           );
+        }
+
+        console.log("[scrape-website] Iniciando análisis de visión para:", url);
 
         const response = await fetch("https://api.openai.com/v1/chat/completions", {
             method: "POST",
@@ -37,18 +46,23 @@ serve(async (req) => {
                         content: [
                             { 
                               type: "text", 
-                              text: "Actúa como un analista de pagos. Extrae del comprobante: 1. Monto total, 2. Fecha y hora, 3. Banco emisor, 4. Número de referencia. Además, indica si el comprobante parece legítimo o si ves alteraciones sospechosas. Devuelve el análisis estructurado y claro." 
+                              text: "Actúa como el Ojo de Halcón del sistema Samurai. Analiza esta imagen. Si es un COMPROBANTE DE PAGO, extrae: Banco, Monto, Fecha y Referencia. Si es un POSTER DE EVENTO, extrae: Nombre del evento, Maestro, Fecha, Lugar y Precios. Devuelve la información de forma estructurada y breve para que la IA la aprenda." 
                             },
                             { type: "image_url", image_url: { url: url } }
                         ]
                     }
                 ],
-                max_tokens: 800
+                max_tokens: 1000
             })
         });
 
+        if (!response.ok) {
+           const errText = await response.text();
+           throw new Error(`OpenAI Error (${response.status}): ${errText}`);
+        }
+
         const data = await response.json();
-        const content = data.choices?.[0]?.message?.content || "No se detectó información.";
+        const content = data.choices?.[0]?.message?.content || "No se detectó información en la imagen.";
 
         return new Response(
             JSON.stringify({ success: true, content, length: content.length }),
@@ -57,18 +71,24 @@ serve(async (req) => {
     }
 
     // MODO TEXTO: Scraping estándar
+    console.log("[scrape-website] Scraping texto de:", url);
     const response = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 (compatible; SamuraiBot/1.0)' } });
     const html = await response.text();
     const $ = cheerio.load(html);
-    $('script, style, noscript').remove();
+    
+    $('script, style, noscript, iframe, header, footer, nav').remove();
     let text = $('body').text().replace(/\s+/g, ' ').trim();
 
     return new Response(
-      JSON.stringify({ success: true, content: text.substring(0, 5000) }),
+      JSON.stringify({ success: true, content: text.substring(0, 8000) }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
 
-  } catch (error) {
-    return new Response(JSON.stringify({ success: false, error: error.message }), { status: 500, headers: corsHeaders })
+  } catch (error: any) {
+    console.error("[scrape-website] Error:", error.message);
+    return new Response(
+      JSON.stringify({ success: false, error: error.message }), 
+      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    )
   }
 })
