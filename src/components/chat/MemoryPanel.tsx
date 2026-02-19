@@ -6,7 +6,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { BrainCircuit, Edit2, X, Save, Loader2, Bot, TrendingUp, AlertCircle, RotateCcw, Clock, Play, Pause, ShieldAlert, Zap, Calendar, Trash2, RefreshCcw } from 'lucide-react';
+import { BrainCircuit, Edit2, X, Save, Loader2, Bot, TrendingUp, AlertCircle, RotateCcw, Clock, Play, Pause, ShieldAlert, Zap, Calendar, Trash2, RefreshCcw, MapPin, User } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
@@ -73,13 +73,14 @@ export const MemoryPanel = ({
           estado_emocional_actual: 'NEUTRO',
           buying_intent: 'BAJO',
           last_ai_analysis: null,
-          perfil_psicologico: null
+          perfil_psicologico: null,
+          ciudad: null
         })
         .eq('id', currentAnalysis.id);
 
       if (error) throw error;
       toast.success('Memoria del lead reseteada correctamente.');
-      window.location.reload(); // Recargar para ver cambios
+      window.location.reload();
     } catch (err: any) {
       toast.error('Error al resetear memoria');
     } finally {
@@ -116,7 +117,51 @@ export const MemoryPanel = ({
            </div>
         </div>
 
-        {/* 2. CONTROL INDIVIDUAL DE FOLLOW-UP */}
+        {/* 2. DATOS DE IDENTIDAD (EDITABLES) */}
+        <div className="border-t border-slate-800 pt-6">
+           <div className="flex items-center justify-between mb-4">
+              <h4 className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest flex items-center gap-2">
+                  <User className="w-3 h-3" /> Identidad Detectada
+              </h4>
+              {!isEditing && (
+                 <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setIsEditing(true)}>
+                    <Edit2 className="w-3 h-3" />
+                 </Button>
+              )}
+           </div>
+           
+           <div className="space-y-3">
+              <div className="space-y-1">
+                 <Label className="text-[9px] text-slate-500 uppercase">Nombre</Label>
+                 {isEditing ? (
+                    <Input 
+                      value={memoryForm.nombre} 
+                      onChange={e => setMemoryForm({...memoryForm, nombre: e.target.value})}
+                      className="h-7 text-xs bg-slate-950 border-slate-800"
+                    />
+                 ) : (
+                    <div className="text-xs text-slate-200 font-bold">{currentAnalysis.nombre || 'No detectado'}</div>
+                 )}
+              </div>
+              <div className="space-y-1">
+                 <Label className="text-[9px] text-slate-500 uppercase">Ciudad / Ubicación</Label>
+                 {isEditing ? (
+                    <Input 
+                      value={memoryForm.ciudad} 
+                      onChange={e => setMemoryForm({...memoryForm, ciudad: e.target.value})}
+                      className="h-7 text-xs bg-slate-950 border-slate-800"
+                      placeholder="Ej: Torreón"
+                    />
+                 ) : (
+                    <div className="text-xs text-indigo-400 font-bold flex items-center gap-1">
+                       <MapPin className="w-3 h-3" /> {currentAnalysis.ciudad || 'No detectada'}
+                    </div>
+                 )}
+              </div>
+           </div>
+        </div>
+
+        {/* 3. CONTROL DE FOLLOW-UP */}
         <div className="border-t border-slate-800 pt-6">
            <h4 className="text-[10px] font-bold text-blue-500 uppercase tracking-widest flex items-center gap-2 mb-4">
                <Clock className="w-3 h-3" /> Control de Follow-up
@@ -138,22 +183,6 @@ export const MemoryPanel = ({
                    )}
                 </div>
 
-                <div className="space-y-1">
-                   <Label className="text-[10px] text-slate-500 uppercase">Próximo Envío</Label>
-                   {isEditing ? (
-                      <Input 
-                        type="datetime-local" 
-                        value={memoryForm.next_followup_at ? new Date(memoryForm.next_followup_at).toISOString().slice(0, 16) : ''} 
-                        onChange={e => setMemoryForm({...memoryForm, next_followup_at: e.target.value})}
-                        className="h-7 text-xs bg-slate-900 border-slate-700"
-                      />
-                   ) : (
-                      <div className="text-[10px] text-blue-400 font-mono">
-                         {currentAnalysis.next_followup_at ? new Date(currentAnalysis.next_followup_at).toLocaleString() : 'No programado'}
-                      </div>
-                   )}
-                </div>
-
                 <Button 
                   variant="outline" 
                   className={`w-full h-7 text-[10px] ${currentAnalysis.ai_paused ? 'border-green-500 text-green-500' : 'border-red-500 text-red-500'}`}
@@ -166,7 +195,7 @@ export const MemoryPanel = ({
            </Card>
         </div>
 
-        {/* 3. MEMORIA VIVA */}
+        {/* 4. MEMORIA VIVA */}
         <div className="border-t border-slate-800 pt-6">
            <div className="flex items-center justify-between mb-4">
              <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest flex items-center gap-2">
@@ -176,11 +205,7 @@ export const MemoryPanel = ({
                 <Button variant="ghost" size="icon" className="h-6 w-6 text-red-500/50 hover:text-red-500" title="Borrar memoria" onClick={handleFlushMemory} disabled={flushing}>
                   {flushing ? <Loader2 className="w-3 h-3 animate-spin"/> : <RotateCcw className="w-3 h-3" />}
                 </Button>
-                {!isEditing ? (
-                  <Button variant="ghost" size="icon" className="h-6 w-6 text-slate-500 hover:text-white" onClick={() => setIsEditing(true)}>
-                    <Edit2 className="w-3 h-3" />
-                  </Button>
-                ) : (
+                {isEditing && (
                   <div className="flex gap-1">
                     <Button variant="ghost" size="icon" className="h-6 w-6 text-red-400 hover:text-red-300" onClick={() => setIsEditing(false)}>
                       <X className="w-3 h-3" />
@@ -196,26 +221,7 @@ export const MemoryPanel = ({
            <Card className="bg-slate-950 border-slate-800 shadow-none">
              <CardContent className="p-3 space-y-4">
                <div className="space-y-1">
-                 <Label className="text-[10px] text-slate-400 block uppercase tracking-wide">Estado Emocional</Label>
-                 {isEditing ? (
-                   <Select value={memoryForm.mood} onValueChange={v => setMemoryForm({ ...memoryForm, mood: v })}>
-                     <SelectTrigger className="h-7 text-xs bg-slate-900 border-slate-700"><SelectValue /></SelectTrigger>
-                     <SelectContent className="bg-slate-900 border-slate-700 text-white">
-                       <SelectItem value="NEUTRO">Neutro</SelectItem>
-                       <SelectItem value="FELIZ">Feliz / Satisfecho</SelectItem>
-                       <SelectItem value="ENOJADO">Enojado / Molesto</SelectItem>
-                       <SelectItem value="PRAGMATICO">Pragmático</SelectItem>
-                     </SelectContent>
-                   </Select>
-                 ) : (
-                   <Badge variant="outline" className={`w-full justify-center py-1 ${getMoodColor(currentAnalysis?.estado_emocional_actual)}`}>
-                     {currentAnalysis?.estado_emocional_actual || 'NEUTRO'}
-                   </Badge>
-                 )}
-               </div>
-
-               <div className="space-y-1">
-                 <Label className="text-[10px] text-slate-400 uppercase tracking-wide">Resumen Contextual</Label>
+                 <Label className="text-[10px] text-slate-400 block uppercase tracking-wide">Resumen Contextual</Label>
                  {isEditing ? (
                    <Textarea
                      value={memoryForm.summary}
