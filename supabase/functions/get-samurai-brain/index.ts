@@ -25,16 +25,34 @@ serve(async (req) => {
 
     const promptMap = configs?.reduce((acc, curr) => ({ ...acc, [curr.key]: curr.value }), {}) || {};
 
-    // 2. Obtener VERDAD MAESTRA (Sitio Web)
-    const { data: masterTruth } = await supabaseClient
-      .from('main_website_content')
-      .select('title, content')
-      .eq('scrape_status', 'success')
-      .limit(15);
+    // 2. OBTENER CONOCIMIENTO ADICIONAL (Base de Conocimiento y Media)
+    // Se omite la "Verdad Maestra" (main_website_content) temporalmente.
 
-    const truthBlock = masterTruth?.map(k => `[DATOS WEB OFICIAL: ${k.title}]\n${k.content?.substring(0, 1500)}`).join('\n\n') || "ATENCIÓN: SISTEMA WEB FUERA DE LÍNEA. USA SOLO TU ADN CORE.";
+    // Fetch from Knowledge Base
+    const { data: knowledgeDocs } = await supabaseClient
+      .from('knowledge_documents')
+      .select('title, description, content, category')
+      .limit(20);
 
-    // 3. CONSTRUCCIÓN DEL NUEVO CEREBRO (MÁS ESTRICTO)
+    const knowledgeBlock = knowledgeDocs?.map(k => 
+      `[RECURSO: ${k.title} | CATEGORÍA: ${k.category}]\n` +
+      `INSTRUCCIÓN DE USO: ${k.description || 'No especificada'}\n` +
+      `CONTENIDO: ${k.content || 'No especificado'}`
+    ).join('\n\n') || "No hay documentos adicionales en la base de conocimiento.";
+
+    // Fetch from Media Manager
+    const { data: mediaAssets } = await supabaseClient
+      .from('media_assets')
+      .select('title, ai_instructions')
+      .not('ai_instructions', 'is', null)
+      .limit(10);
+
+    const mediaBlock = mediaAssets?.map(m => 
+      `[MEDIA: ${m.title}]\n` +
+      `INSTRUCCIONES: ${m.ai_instructions}`
+    ).join('\n\n') || "No hay assets de media con instrucciones.";
+
+    // 3. CONSTRUCCIÓN DEL CEREBRO TEMPORAL (SIN VERDAD MAESTRA)
     const systemPrompt = `
 <INSTRUCTIONS>
 # TU IDENTIDAD
@@ -45,7 +63,7 @@ serve(async (req) => {
 # REGLAS DE COMUNICACIÓN
 - Sé amable, profesional y directo.
 - NUNCA menciones que eres una IA.
-- NUNCA ofrezcas información sobre temas no relacionados con The Elephant Bowl (como talleres de cocina, cerámica, etc.).
+- NUNCA ofrezcas información sobre temas no relacionados con The Elephant Bowl.
 - Si no encuentras la respuesta en el CONTEXTO, di: "No tengo esa información en este momento, pero puedo ayudarte con nuestros talleres de sonoterapia y cuencos de cuarzo."
 
 # PROCESO DE VENTA
@@ -56,17 +74,19 @@ serve(async (req) => {
 </INSTRUCTIONS>
 
 <CONTEXT>
-# VERDAD MAESTRA (INFORMACIÓN OFICIAL Y ÚNICA VÁLIDA)
-La siguiente es la única información que puedes usar para responder. Si la respuesta a la pregunta del usuario no está aquí, NO EXISTE.
-${truthBlock}
+# BASE DE CONOCIMIENTO ADICIONAL
+${knowledgeBlock}
+
+# MEDIA MANAGER (IMÁGENES Y POSTERS)
+${mediaBlock}
 </CONTEXT>
     `;
 
     return new Response(
       JSON.stringify({ 
         system_prompt: systemPrompt,
-        version: "1.0.0-STABLE",
-        has_truth: masterTruth && masterTruth.length > 0
+        version: "1.1.0-TEMPORARY_BRAIN",
+        has_truth: false // Explícitamente desactivado
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
