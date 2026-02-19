@@ -1,71 +1,95 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts"
-import * as cheerio from "https://esm.sh/cheerio@1.0.0-rc.12"
+import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
+import { corsHeaders } from '../_shared/cors.ts'
+import { Cheerio, cheerio } from 'https://deno.land/x/cheerio@1.0.7/mod.ts'
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
+// Simula ser un navegador real para evitar bloqueos simples
+const BROWSER_USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36';
 
-serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders })
-  }
-
+async function scrapeUrl(url: string) {
   try {
-    const { url, mode } = await req.json()
-
-    if (!url) throw new Error('URL es requerida.')
-
-    if (mode === 'VISION') {
-        const openAiKey = Deno.env.get('OPENAI_API_KEY');
-        const response = await fetch("https://api.openai.com/v1/chat/completions", {
-            method: "POST",
-            headers: { "Authorization": `Bearer ${openAiKey}`, "Content-Type": "application/json" },
-            body: JSON.stringify({
-                model: "gpt-4o-mini",
-                messages: [{
-                    role: "user",
-                    content: [
-                        { type: "text", text: "Analiza esta imagen y extrae datos clave." },
-                        { type: "image_url", image_url: { url: url } }
-                    ]
-                }]
-            })
-        });
-        const data = await response.json();
-        return new Response(JSON.stringify({ success: true, content: data.choices?.[0]?.message?.content }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-    }
-
-    // SCRAPER CON HEADERS DE NAVEGACIÓN REAL
-    const response = await fetch(url, { 
-      headers: { 
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-        'Accept-Language': 'es-ES,es;q=0.9',
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent': BROWSER_USER_AGENT,
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+        'Accept-Language': 'es-ES,es;q=0.9,en;q=0.8',
         'Cache-Control': 'no-cache',
-        'Pragma': 'no-cache'
-      }
+      },
     });
 
+    // Valida si la respuesta es exitosa (código 200)
     if (!response.ok) {
-       throw new Error(`El sitio theelephantbowl.com rechazó la conexión (${response.status}). Es posible que necesite una actualización de IP o bypass de Cloudflare.`);
+      throw new Error(`El sitio devolvió un estado de error: ${response.status} ${response.statusText}. Posible bloqueo de seguridad.`);
     }
 
     const html = await response.text();
     const $ = cheerio.load(html);
-    
-    // Limpieza agresiva de basura web
-    $('script, style, noscript, iframe, header, footer, nav, aside').remove();
-    let text = $('body').text().replace(/\s+/g, ' ').trim();
 
-    if (text.length < 100) throw new Error("Contenido insuficiente detectado. El sitio puede estar bloqueando el renderizado.");
+    // Elimina elementos que no contienen contenido relevante (menús, scripts, etc.)
+    $('script, style, nav, footer, header, .header, .footer, #header, #footer, .sidebar, #sidebar, .ad, .ads, .advertisement, form, noscript, link, meta').remove();
+    
+    // Intenta obtener el contenido del <main>, si no existe, del <body>
+    let textContent = $('main').length ? $('main').text() : $('body').text();
+
+    // Limpieza avanzada del texto
+    textContent = textContent
+      .replace(/<[^>]*>/g, ' ')      // Quitar remanentes de HTML
+      .replace(/\s\s+/g, ' ')       // Reemplazar múltiples espacios/saltos con uno solo
+      .replace(/\n\s*\n/g, '\n')     // Reemplazar múltiples saltos de línea con uno
+      .trim();
+
+    if (textContent.length < 100) {
+      // Si el contenido es muy corto, puede ser una página de error o un CAPTCHA
+      throw new Error(`Contenido extraído muy corto (${textContent.length} caracteres). El sitio puede estar presentando un CAPTCHA o una página de error vacía.`);
+    }
+    
+    // Extracción de URLs de imágenes
+    const images: string[] = [];
+    $('img').each((_, element) => {
+      const src = $(element).attr('src');
+      if (src && (src.startsWith('http') || src.startsWith('/'))) {
+        // Resuelve URLs relativas a absolutas
+        const absoluteUrl = new URL(src, url).href;
+        images.push(absoluteUrl);
+      }
+    });
+    const uniqueImages = [...new Set(images)];
+
+    return {
+      success: true,
+      content: textContent,
+      images: uniqueImages,
+    };
+
+  } catch (error) {
+    console.error(`[Scraper] Error crítico en ${url}:`, error);
+    return {
+      success: false,
+      error: error.message || 'Error desconocido durante el scraping.',
+    };
+  }
+}
+
+serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders })
+  }
+
+  try {
+    const { url } = await req.json();
+    if (!url) {
+      throw new Error("La URL es requerida en el cuerpo de la petición.");
+    }
+
+    const data = await scrapeUrl(url);
 
     return new Response(
-      JSON.stringify({ success: true, content: text.substring(0, 15000) }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      JSON.stringify(data),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
     )
-
-  } catch (error: any) {
-    return new Response(JSON.stringify({ success: false, error: error.message }), { status: 200, headers: corsHeaders })
+  } catch (error) {
+    return new Response(
+      JSON.stringify({ error: error.message }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 },
+    )
   }
 })
