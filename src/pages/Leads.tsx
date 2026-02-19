@@ -148,7 +148,10 @@ const Leads = () => {
                             {lead.nombre || 'Desconocido'}
                             {lead.ai_paused && <Badge variant="destructive" className="h-4 px-1 text-[9px]">PAUSADO</Badge>}
                          </span>
-                         <span className="text-xs text-slate-500 mt-1 flex items-center gap-1"><Phone className="w-3 h-3" /> {lead.telefono}</span>
+                         <span className="text-xs text-slate-500 mt-1 flex items-center gap-1">
+                            <Phone className="w-3 h-3" /> 
+                            {lead.telefono && lead.telefono !== 'Sin teléfono' ? lead.telefono : <span className="italic text-red-500/50">Número no detectado</span>}
+                         </span>
                       </div>
                     </TableCell>
                     <TableCell>

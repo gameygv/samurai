@@ -4,8 +4,9 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { BrainCircuit, Edit2, X, Save, Loader2, Bot, TrendingUp, AlertCircle, RotateCcw, Clock, Play, Pause, ShieldAlert, Zap } from 'lucide-react';
+import { BrainCircuit, Edit2, X, Save, Loader2, Bot, TrendingUp, AlertCircle, RotateCcw, Clock, Play, Pause, ShieldAlert, Zap, Calendar } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
@@ -37,20 +38,13 @@ export const MemoryPanel = ({
     return 'text-slate-400 border-slate-700 bg-slate-800';
   };
 
-  const getIntentColor = (intent: string) => {
-    const i = intent?.toUpperCase() || 'BAJO';
-    if (i === 'ALTO') return 'bg-green-600';
-    if (i === 'MEDIO') return 'bg-yellow-500';
-    return 'bg-slate-600';
-  };
-
   const handleSaveCorrection = async () => {
     if (!correctionText.trim()) return;
     setIsReporting(true);
     try {
       const { error } = await supabase.from('errores_ia').insert({
         cliente_id: currentAnalysis.id,
-        mensaje_cliente: 'Corrección manual desde Archivo',
+        mensaje_cliente: 'Corrección manual desde Panel',
         respuesta_ia: 'N/A',
         correccion_sugerida: correctionText,
         categoria: 'CONDUCTA',
@@ -73,20 +67,19 @@ export const MemoryPanel = ({
     <div className="w-[300px] bg-slate-900/30 flex flex-col overflow-y-auto border-l border-slate-800">
       <div className="p-4 space-y-6">
 
-        {/* 1. SECCIÓN DE MEJORA #CORREGIRIA (NUEVO) */}
+        {/* 1. SECCIÓN DE MEJORA #CORREGIRIA */}
         <div className="space-y-3">
            <div className="flex items-center justify-between">
               <h4 className="text-[10px] font-bold text-yellow-500 uppercase tracking-widest flex items-center gap-2">
                  <ShieldAlert className="w-3 h-3" /> #CorregirIA
               </h4>
-              <Badge variant="outline" className="text-[8px] border-yellow-500/30 text-yellow-500 bg-yellow-500/5">MODO MANUAL</Badge>
            </div>
            <div className="space-y-2">
               <Textarea 
                 value={correctionText}
                 onChange={e => setCorrectionText(e.target.value)}
-                placeholder="Escribe aquí la observación técnica para la IA..."
-                className="bg-slate-950 border-slate-800 text-xs min-h-[100px] focus:border-yellow-500/50 transition-colors placeholder:text-slate-700"
+                placeholder="Escribe la observación técnica..."
+                className="bg-slate-950 border-slate-800 text-xs min-h-[80px] focus:border-yellow-500/50 transition-colors"
               />
               <Button 
                 onClick={handleSaveCorrection} 
@@ -94,15 +87,66 @@ export const MemoryPanel = ({
                 className="w-full h-8 text-[10px] bg-yellow-600 hover:bg-yellow-700 text-white font-bold"
               >
                 {isReporting ? <Loader2 className="w-3 h-3 animate-spin mr-2" /> : <Zap className="w-3 h-3 mr-2" />}
-                Guardar Observación #CIA
+                Guardar Observación
               </Button>
            </div>
         </div>
 
+        {/* 2. CONTROL INDIVIDUAL DE FOLLOW-UP */}
+        <div className="border-t border-slate-800 pt-6">
+           <h4 className="text-[10px] font-bold text-blue-500 uppercase tracking-widest flex items-center gap-2 mb-4">
+               <Clock className="w-3 h-3" /> Control de Follow-up
+           </h4>
+           
+           <Card className="bg-slate-950 border-slate-800 shadow-none mb-4 overflow-hidden">
+             <CardContent className="p-3 space-y-4">
+                <div className="space-y-1">
+                   <Label className="text-[10px] text-slate-500 uppercase">Stage Actual</Label>
+                   {isEditing ? (
+                      <Input 
+                        type="number" 
+                        value={memoryForm.followup_stage} 
+                        onChange={e => setMemoryForm({...memoryForm, followup_stage: parseInt(e.target.value)})}
+                        className="h-7 text-xs bg-slate-900 border-slate-700"
+                      />
+                   ) : (
+                      <div className="text-xs text-white font-mono">STAGE {currentAnalysis.followup_stage || 0}</div>
+                   )}
+                </div>
+
+                <div className="space-y-1">
+                   <Label className="text-[10px] text-slate-500 uppercase">Próximo Envío</Label>
+                   {isEditing ? (
+                      <Input 
+                        type="datetime-local" 
+                        value={memoryForm.next_followup_at ? new Date(memoryForm.next_followup_at).toISOString().slice(0, 16) : ''} 
+                        onChange={e => setMemoryForm({...memoryForm, next_followup_at: e.target.value})}
+                        className="h-7 text-xs bg-slate-900 border-slate-700"
+                      />
+                   ) : (
+                      <div className="text-[10px] text-blue-400 font-mono">
+                         {currentAnalysis.next_followup_at ? new Date(currentAnalysis.next_followup_at).toLocaleString() : 'No programado'}
+                      </div>
+                   )}
+                </div>
+
+                <Button 
+                  variant="outline" 
+                  className={`w-full h-7 text-[10px] ${currentAnalysis.ai_paused ? 'border-green-500 text-green-500' : 'border-red-500 text-red-500'}`}
+                  onClick={onToggleFollowup}
+                >
+                   {currentAnalysis.ai_paused ? <Play className="w-3 h-3 mr-1"/> : <Pause className="w-3 h-3 mr-1"/>}
+                   {currentAnalysis.ai_paused ? 'Reactivar IA' : 'Pausar IA (#STOP)'}
+                </Button>
+             </CardContent>
+           </Card>
+        </div>
+
+        {/* 3. MEMORIA VIVA */}
         <div className="border-t border-slate-800 pt-6">
            <div className="flex items-center justify-between mb-4">
              <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest flex items-center gap-2">
-               <BrainCircuit className="w-3 h-3" /> Memoria Viva
+               <BrainCircuit className="w-3 h-3" /> Análisis de Perfil
              </h4>
              {!isEditing ? (
                <Button variant="ghost" size="icon" className="h-6 w-6 text-slate-500 hover:text-white" onClick={() => setIsEditing(true)}>
@@ -120,29 +164,6 @@ export const MemoryPanel = ({
              )}
            </div>
 
-           {/* ESTADO DE FOLLOW-UP */}
-           {hasActiveFollowup && (
-             <Card className="bg-slate-950 border-slate-800 shadow-none mb-4">
-               <CardContent className="p-3 space-y-2">
-                 <div className="flex items-center justify-between">
-                   <Label className="text-[10px] text-slate-400 uppercase tracking-wide flex items-center gap-1">
-                     <Clock className="w-3 h-3" /> Follow-up Activo
-                   </Label>
-                   {onToggleFollowup && (
-                     <Button variant="ghost" size="icon" className="h-5 w-5" onClick={onToggleFollowup}>
-                       <Pause className="w-3 h-3 text-yellow-500" />
-                     </Button>
-                   )}
-                 </div>
-                 <div className="bg-blue-500/10 border border-blue-500/20 rounded p-2">
-                   <p className="text-[9px] text-blue-400 font-mono">
-                     Próximo: {new Date(currentAnalysis.next_followup_at).toLocaleString()}
-                   </p>
-                 </div>
-               </CardContent>
-             </Card>
-           )}
-
            <Card className="bg-slate-950 border-slate-800 shadow-none">
              <CardContent className="p-3 space-y-4">
                <div className="space-y-1">
@@ -158,8 +179,8 @@ export const MemoryPanel = ({
                      </SelectContent>
                    </Select>
                  ) : (
-                   <Badge variant="outline" className={`w-full justify-center py-1 ${getMoodColor(currentAnalysis?.mood)}`}>
-                     {currentAnalysis?.mood || 'NEUTRO'}
+                   <Badge variant="outline" className={`w-full justify-center py-1 ${getMoodColor(currentAnalysis?.estado_emocional_actual)}`}>
+                     {currentAnalysis?.estado_emocional_actual || 'NEUTRO'}
                    </Badge>
                  )}
                </div>

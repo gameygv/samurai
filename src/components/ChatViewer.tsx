@@ -6,7 +6,6 @@ import { MessageList } from './chat/MessageList';
 import { MessageInput } from './chat/MessageInput';
 import { MemoryPanel } from './chat/MemoryPanel';
 import { toast } from 'sonner';
-import { logActivity } from '@/utils/logger';
 
 interface ChatViewerProps {
   lead: any;
@@ -24,7 +23,9 @@ const ChatViewer = ({ lead, open, onOpenChange }: ChatViewerProps) => {
   const [memoryForm, setMemoryForm] = useState({
     summary: lead.summary || '',
     mood: lead.estado_emocional_actual || 'NEUTRO',
-    buying_intent: lead.buying_intent || 'BAJO'
+    buying_intent: lead.buying_intent || 'BAJO',
+    followup_stage: lead.followup_stage || 0,
+    next_followup_at: lead.next_followup_at || null
   });
 
   useEffect(() => {
@@ -33,7 +34,9 @@ const ChatViewer = ({ lead, open, onOpenChange }: ChatViewerProps) => {
       setMemoryForm({
         summary: lead.summary || '',
         mood: lead.estado_emocional_actual || 'NEUTRO',
-        buying_intent: lead.buying_intent || 'BAJO'
+        buying_intent: lead.buying_intent || 'BAJO',
+        followup_stage: lead.followup_stage || 0,
+        next_followup_at: lead.next_followup_at || null
       });
     }
   }, [open, lead]);
@@ -53,7 +56,6 @@ const ChatViewer = ({ lead, open, onOpenChange }: ChatViewerProps) => {
   const handleSendMessage = async (text: string) => {
     setSending(true);
     try {
-      // Guardamos el mensaje simplemente como una intervención humana
       const { error } = await supabase.from('conversaciones').insert({
         lead_id: lead.id,
         mensaje: text,
@@ -64,7 +66,6 @@ const ChatViewer = ({ lead, open, onOpenChange }: ChatViewerProps) => {
       if (error) throw error;
       fetchMessages();
       
-      // Manejo de comandos manuales si se escriben directamente
       if (text.includes('#STOP') || text.includes('#START')) {
          const isPaused = text.includes('#STOP');
          await supabase.from('leads').update({ ai_paused: isPaused }).eq('id', lead.id);
@@ -85,12 +86,14 @@ const ChatViewer = ({ lead, open, onOpenChange }: ChatViewerProps) => {
            .update({
               summary: memoryForm.summary,
               estado_emocional_actual: memoryForm.mood,
-              buying_intent: memoryForm.buying_intent
+              buying_intent: memoryForm.buying_intent,
+              followup_stage: memoryForm.followup_stage,
+              next_followup_at: memoryForm.next_followup_at
            })
            .eq('id', lead.id);
         
         if (error) throw error;
-        toast.success('Memoria del Samurai actualizada');
+        toast.success('Cambios guardados');
         setIsEditingMemory(false);
      } catch (err: any) {
         toast.error(err.message);
@@ -101,18 +104,16 @@ const ChatViewer = ({ lead, open, onOpenChange }: ChatViewerProps) => {
 
   const handleToggleFollowup = async () => {
     try {
-      const hasActiveFollowup = lead.next_followup_at && !lead.ai_paused;
-      if (hasActiveFollowup) {
-        await supabase.from('leads').update({ next_followup_at: null, followup_stage: 0 }).eq('id', lead.id);
-        toast.success('Follow-ups pausados');
-      } else {
-        const nextTime = new Date(Date.now() + 15 * 60 * 1000);
-        await supabase.from('leads').update({ next_followup_at: nextTime.toISOString(), followup_stage: 1 }).eq('id', lead.id);
-        toast.success('Follow-ups reactivados');
-      }
-      fetchMessages();
+      const isCurrentlyPaused = lead.ai_paused;
+      const { error } = await supabase
+        .from('leads')
+        .update({ ai_paused: !isCurrentlyPaused })
+        .eq('id', lead.id);
+      
+      if (error) throw error;
+      toast.success(!isCurrentlyPaused ? 'IA Pausada (#STOP)' : 'IA Reactivada (#START)');
     } catch (err: any) {
-      toast.error('Error al modificar follow-ups');
+      toast.error('Error al cambiar estado de la IA');
     }
   };
 
@@ -120,7 +121,6 @@ const ChatViewer = ({ lead, open, onOpenChange }: ChatViewerProps) => {
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="w-full sm:max-w-5xl flex flex-row bg-slate-950 border-l border-slate-800 text-white p-0 overflow-hidden">
         
-        {/* CHAT AREA */}
         <div className="flex-1 flex flex-col h-full bg-slate-950">
           <ChatHeader 
             lead={lead} 
@@ -136,7 +136,6 @@ const ChatViewer = ({ lead, open, onOpenChange }: ChatViewerProps) => {
           />
         </div>
 
-        {/* MEMORY PANEL CON #CORREGIRIA */}
         <MemoryPanel 
           currentAnalysis={lead}
           isEditing={isEditingMemory}
