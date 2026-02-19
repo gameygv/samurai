@@ -12,7 +12,7 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders })
   }
 
-  console.log("[scrape-main-website] Iniciando scraping del sitio principal...");
+  console.log("[scrape-main-website] Iniciando scraping optimizado...");
 
   try {
     const supabaseClient = createClient(
@@ -20,70 +20,46 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
-    // 1. Obtener todas las URLs pendientes o que necesitan actualización
+    // 1. Obtener URLs limitando a 5 por lote para evitar timeouts de 60s
     const { data: urls, error: fetchError } = await supabaseClient
       .from('main_website_content')
       .select('*')
-      .order('last_scraped_at', { ascending: true });
+      .order('last_scraped_at', { ascending: true, nullsFirst: true })
+      .limit(5);
 
     if (fetchError) throw fetchError;
     if (!urls || urls.length === 0) {
-        return new Response(JSON.stringify({ message: "No URLs to scrape." }), { 
+        return new Response(JSON.stringify({ message: "No URLs to scrape.", successful: 0 }), { 
           headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
         });
     }
 
-    console.log(`[scrape-main-website] Found ${urls.length} URLs to process`);
-
     const results = [];
 
-    // 2. Scrapear cada URL secuencialmente
     for (const page of urls) {
         try {
             console.log(`[scrape-main-website] Scraping: ${page.url}`);
             
             const response = await fetch(page.url, {
                 headers: { 
-                  'User-Agent': 'Mozilla/5.0 (compatible; SamuraiBot/1.0; +http://dyad.sh)',
-                  'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-                  'Accept-Language': 'es-ES,es;q=0.9,en;q=0.8'
-                }
+                  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                  'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+                },
+                signal: AbortSignal.timeout(15000) // Timeout de 15s por página
             });
 
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-            }
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
             const html = await response.text();
             const $ = cheerio.load(html);
 
-            // Extraer título
-            const title = $('title').text() || $('h1').first().text() || page.url;
+            const title = $('title').text() || $('h1').first().text() || page.title;
+            $('script, style, noscript, iframe, svg, header, footer, nav').remove();
 
-            // Limpieza agresiva
-            $('script').remove();
-            $('style').remove();
-            $('noscript').remove();
-            $('iframe').remove();
-            $('svg').remove();
-            $('header').remove();
-            $('footer').remove();
-            $('nav').remove();
-            $('.cookie-notice').remove();
-            $('.popup').remove();
-            $('.modal').remove();
-
-            // Extraer texto del body
-            let text = $('body').text();
-            
-            // Limpiar espacios en blanco excesivos
-            text = text.replace(/\s+/g, ' ').trim();
-            
-            // Limitar a 10,000 caracteres para evitar overflow
+            let text = $('body').text().replace(/\s+/g, ' ').trim();
             const truncatedText = text.substring(0, 10000);
 
-            // Actualizar en la base de datos
-            const { error: updateError } = await supabaseClient
+            await supabaseClient
                 .from('main_website_content')
                 .update({ 
                     title: title,
@@ -95,24 +71,10 @@ serve(async (req) => {
                 })
                 .eq('id', page.id);
 
-            if (updateError) throw updateError;
-
-            results.push({ 
-              url: page.url, 
-              status: 'success', 
-              title: title,
-              length: truncatedText.length 
-            });
-
-            console.log(`[scrape-main-website] ✓ Success: ${page.url} (${truncatedText.length} chars)`);
-
-            // Pequeña pausa para no saturar el servidor
-            await new Promise(resolve => setTimeout(resolve, 500));
+            results.push({ url: page.url, status: 'success' });
 
         } catch (err) {
-            console.error(`[scrape-main-website] ✗ Error processing ${page.url}:`, err);
-            
-            // Registrar el error en la base de datos
+            console.error(`[scrape-main-website] ✗ Error en ${page.url}:`, err.message);
             await supabaseClient
                 .from('main_website_content')
                 .update({ 
@@ -121,45 +83,18 @@ serve(async (req) => {
                     last_scraped_at: new Date().toISOString()
                 })
                 .eq('id', page.id);
-
-            results.push({ 
-              url: page.url, 
-              status: 'error', 
-              error: err.message 
-            });
+            results.push({ url: page.url, status: 'error' });
         }
     }
 
-    // 3. Log de actividad global
     const successCount = results.filter(r => r.status === 'success').length;
-    const errorCount = results.filter(r => r.status === 'error').length;
-
-    await supabaseClient.from('activity_logs').insert({
-        action: 'UPDATE',
-        resource: 'BRAIN',
-        description: `Scraping sitio principal completado: ${successCount}/${urls.length} páginas actualizadas.`,
-        status: errorCount > 0 ? 'ERROR' : 'OK',
-        metadata: { results, total: urls.length, success: successCount, errors: errorCount }
-    });
-
-    console.log(`[scrape-main-website] Completed: ${successCount} success, ${errorCount} errors`);
 
     return new Response(
-      JSON.stringify({ 
-        success: true, 
-        total: urls.length,
-        successful: successCount,
-        failed: errorCount,
-        results 
-      }),
+      JSON.stringify({ success: true, successful: successCount, total: urls.length, results }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
 
   } catch (error) {
-    console.error("[scrape-main-website] Critical Error:", error);
-    return new Response(
-      JSON.stringify({ success: false, error: error.message }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    )
+    return new Response(JSON.stringify({ success: false, error: error.message }), { status: 500, headers: corsHeaders })
   }
 })

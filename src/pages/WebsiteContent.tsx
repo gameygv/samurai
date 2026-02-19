@@ -36,6 +36,7 @@ const WebsiteContent = () => {
   const [selectedPage, setSelectedPage] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
+  const [syncingId, setSyncingId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [mediaRelated, setMediaRelated] = useState<any[]>([]);
 
@@ -70,7 +71,6 @@ const WebsiteContent = () => {
   }, [selectedPage]);
 
   const fetchRelatedMedia = async () => {
-    // Buscamos en media_assets imágenes que tengan el título de la página en sus instrucciones o tags
     const { data } = await supabase
       .from('media_assets')
       .select('*')
@@ -94,6 +94,31 @@ const WebsiteContent = () => {
      } finally {
         setSyncing(false);
      }
+  };
+
+  const handleSyncSingle = async (pageId: string, url: string) => {
+    setSyncingId(pageId);
+    try {
+      const { data, error } = await supabase.functions.invoke('scrape-website', {
+        body: { url }
+      });
+      
+      if (error || !data.success) throw new Error(data?.error || "Error de scraping");
+
+      await supabase.from('main_website_content').update({
+        content: data.content,
+        content_length: data.content.length,
+        scrape_status: 'success',
+        last_scraped_at: new Date().toISOString()
+      }).eq('id', pageId);
+
+      toast.success("Página sincronizada correctamente.");
+      fetchPages();
+    } catch (err: any) {
+      toast.error(`Error: ${err.message}`);
+    } finally {
+      setSyncingId(null);
+    }
   };
 
   const handleSyncAll = async () => {
@@ -142,7 +167,6 @@ const WebsiteContent = () => {
         </div>
 
         <div className="flex-1 flex gap-6 min-h-0">
-          {/* SIDEBAR: LISTA DE URLs */}
           <Card className="w-80 bg-slate-900 border-slate-800 flex flex-col">
             <div className="p-4 border-b border-slate-800">
                <div className="relative">
@@ -162,26 +186,37 @@ const WebsiteContent = () => {
                   ) : filteredPages.length === 0 ? (
                      <p className="text-center text-[10px] text-slate-600 py-10">Sin fuentes cargadas.</p>
                   ) : filteredPages.map(page => (
-                     <button
+                     <div
                         key={page.id}
-                        onClick={() => setSelectedPage(page)}
-                        className={`w-full text-left p-3 rounded-lg transition-all flex items-center justify-between group ${selectedPage?.id === page.id ? 'bg-indigo-600/20 border border-indigo-500/50' : 'hover:bg-slate-800 border border-transparent'}`}
+                        className={`w-full group rounded-lg transition-all border ${selectedPage?.id === page.id ? 'bg-indigo-600/20 border-indigo-500/50' : 'hover:bg-slate-800 border-transparent'}`}
                      >
-                        <div className="min-w-0">
-                           <p className={`text-xs font-bold truncate ${selectedPage?.id === page.id ? 'text-white' : 'text-slate-400'}`}>{page.title}</p>
-                           <div className="flex items-center gap-2 mt-1">
-                              <div className={`w-1.5 h-1.5 rounded-full ${page.scrape_status === 'success' ? 'bg-green-500' : 'bg-red-500'}`} />
-                              <span className="text-[9px] text-slate-500 font-mono truncate">{page.url.replace('https://theelephantbowl.com', '')}</span>
-                           </div>
+                        <div className="flex items-center p-3">
+                          <button
+                            onClick={() => setSelectedPage(page)}
+                            className="flex-1 text-left min-w-0"
+                          >
+                            <p className={`text-xs font-bold truncate ${selectedPage?.id === page.id ? 'text-white' : 'text-slate-400'}`}>{page.title}</p>
+                            <div className="flex items-center gap-2 mt-1">
+                                <div className={`w-1.5 h-1.5 rounded-full ${page.scrape_status === 'success' ? 'bg-green-500' : 'bg-red-500'}`} />
+                                <span className="text-[9px] text-slate-500 font-mono truncate">{page.url.replace('https://theelephantbowl.com', '')}</span>
+                            </div>
+                          </button>
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
+                            onClick={(e) => { e.stopPropagation(); handleSyncSingle(page.id, page.url); }}
+                            disabled={syncingId === page.id}
+                          >
+                            {syncingId === page.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+                          </Button>
                         </div>
-                        <ChevronRight className={`w-4 h-4 shrink-0 transition-transform ${selectedPage?.id === page.id ? 'text-indigo-400 translate-x-1' : 'text-slate-700'}`} />
-                     </button>
+                     </div>
                   ))}
                </div>
             </ScrollArea>
           </Card>
 
-          {/* MAIN: AUDITOR DE CONTENIDO */}
           <Card className="flex-1 bg-slate-900 border-slate-800 flex flex-col overflow-hidden">
              {selectedPage ? (
                 <>
@@ -228,7 +263,7 @@ const WebsiteContent = () => {
                            <div className="bg-slate-950/50 p-4 rounded-lg border border-indigo-500/10 flex items-start gap-3">
                               <Info className="w-5 h-5 text-indigo-400 shrink-0 mt-0.5" />
                               <p className="text-xs text-slate-400 leading-relaxed">
-                                 Este es el contenido puro que el Samurai utiliza para responder. Si ves información desactualizada, pulsa el botón de <strong>Sincronizar Todo</strong> arriba para refrescar el cerebro.
+                                 Este es el contenido puro que el Samurai utiliza para responder. Si ves información desactualizada, pulsa el botón de <strong>Sincronizar</strong> para refrescar esta página.
                               </p>
                            </div>
                            <div className="flex-1 bg-black rounded-xl border border-slate-800 p-6 overflow-y-auto custom-scrollbar shadow-inner relative">
