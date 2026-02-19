@@ -4,7 +4,7 @@ import {
   LayoutDashboard, Brain, Settings as SettingsIcon, Database, LogOut, 
   Users, FileText, UserCircle, GraduationCap, MessageSquare, 
   GitBranch, Link as LinkIcon, Image, Sparkles, BookOpen, Clock,
-  Archive, Globe
+  Archive, Globe, CreditCard
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/context/AuthContext';
@@ -56,9 +56,10 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
     {
       title: "GESTIÓN",
       items: [
-        { icon: Users, label: 'Usuarios', path: '/users' },
         { icon: MessageSquare, label: 'Radar de Leads', path: '/leads' },
+        { icon: CreditCard, label: 'Pagos & Ventas', path: '/payments' },
         { icon: Archive, label: 'Archivo de Chats', path: '/archive' },
+        { icon: Users, label: 'Usuarios', path: '/users' },
         { icon: FileText, label: 'Logs & Actividad', path: '/logs' },
       ]
     },
