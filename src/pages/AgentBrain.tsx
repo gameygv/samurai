@@ -12,7 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { 
   Save, Bot, Eye, Database, History, MessageSquare, 
   CheckCheck, Zap, FlaskConical, Loader2, Terminal, 
-  Target, Sparkles, ShieldAlert, FileText, Send, Scan, Upload
+  Target, Sparkles, ShieldAlert, FileText, Send
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { logActivity } from '@/utils/logger';
@@ -23,9 +23,6 @@ const DEFAULTS = {
   'prompt_memoria': '# MEMORIA\nLógica de cómo recordar lo que el cliente ya dijo.',
   'prompt_estrategia_cierre': '# ESTRATEGIA DE CIERRE\nReglas para enviar links de pago y cerrar la venta.',
   'prompt_reaprendizaje': '# RE-APRENDIZAJE\nInyección de reglas desde la Bitácora.',
-  'prompt_ojo_halcon': '# OJO DE HALCÓN\nCómo interpretar imágenes y posters.',
-  'prompt_match': '# MATCH PAGOS\nValidación de comprobantes.',
-  'prompt_accion_post': '# POST-VENTA\nRespuesta tras confirmar un pago.'
 };
 
 const AgentBrain = () => {
@@ -39,12 +36,6 @@ const AgentBrain = () => {
   const [testing, setTesting] = useState(false);
   const [testInput, setTestInput] = useState("");
   const [testOutput, setTestOutput] = useState<string | null>(null);
-
-  // Vision Test State
-  const [visionUrl, setVisionUrl] = useState("");
-  const [visionFile, setVisionFile] = useState<File | null>(null);
-  const [visionResult, setVisionResult] = useState<string | null>(null);
-  const [scanning, setScanning] = useState(false);
 
   useEffect(() => {
     fetchPrompts();
@@ -87,9 +78,8 @@ const AgentBrain = () => {
     setTesting(true);
     setTestOutput(null);
     try {
-        // Ahora sí enviamos el ADN real a la simulación
         const { data, error } = await supabase.functions.invoke('get-samurai-context', {
-            body: { message: testInput, simulate_reply: true, custom_adn: prompts['prompt_adn_core'] }
+            body: { message: testInput, simulate_reply: true }
         });
         if (error) throw error;
         setTestOutput(data.reply);
@@ -98,36 +88,6 @@ const AgentBrain = () => {
     } finally {
         setTesting(false);
     }
-  };
-
-  const handleTestVision = async () => {
-     let finalUrl = visionUrl;
-     setScanning(true);
-     setVisionResult(null);
-
-     try {
-        if (visionFile) {
-           const fileExt = visionFile.name.split('.').pop();
-           const fileName = `temp-${Date.now()}.${fileExt}`;
-           const { error: uploadError } = await supabase.storage.from('media').upload(`temp/${fileName}`, visionFile);
-           if (uploadError) throw uploadError;
-           const { data: { publicUrl } } = supabase.storage.from('media').getPublicUrl(`temp/${fileName}`);
-           finalUrl = publicUrl;
-        }
-
-        if (!finalUrl) throw new Error("Debes subir un archivo o pegar una URL.");
-
-        const { data, error } = await supabase.functions.invoke('scrape-website', {
-           body: { url: finalUrl, mode: 'VISION' }
-        });
-        if (error) throw error;
-        setVisionResult(data.content);
-        toast.success("Análisis de visión completado.");
-     } catch (err: any) {
-        toast.error('Error de visión: ' + err.message);
-     } finally {
-        setScanning(false);
-     }
   };
 
   return (
@@ -144,44 +104,12 @@ const AgentBrain = () => {
           <TabsList className="bg-slate-900 border border-slate-800 p-1">
              <TabsTrigger value="identidad">1. Identidad</TabsTrigger>
              <TabsTrigger value="ventas">2. Ventas</TabsTrigger>
-             <TabsTrigger value="ojodehalcon">3. Ojo de Halcón</TabsTrigger>
-             <TabsTrigger value="simulador" className="data-[state=active]:bg-indigo-600">4. Simulador</TabsTrigger>
+             <TabsTrigger value="simulador" className="data-[state=active]:bg-indigo-600">3. Simulador</TabsTrigger>
           </TabsList>
 
           <TabsContent value="identidad" className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6">
              <PromptCard title="ADN CORE" icon={Bot} value={prompts['prompt_adn_core']} onChange={(v:any) => setPrompts({...prompts, prompt_adn_core: v})} />
              <PromptCard title="PROTOCOLOS" icon={FileText} value={prompts['prompt_protocolos']} onChange={(v:any) => setPrompts({...prompts, prompt_protocolos: v})} />
-          </TabsContent>
-
-          <TabsContent value="ojodehalcon" className="mt-6 grid grid-cols-1 md:grid-cols-12 gap-6">
-             <div className="md:col-span-8 space-y-6">
-                <PromptCard title="VISIÓN" icon={Eye} value={prompts['prompt_ojo_halcon']} onChange={(v:any) => setPrompts({...prompts, prompt_ojo_halcon: v})} />
-             </div>
-             <div className="md:col-span-4 space-y-6">
-                <Card className="bg-slate-900 border-slate-800 border-l-4 border-l-indigo-500">
-                   <CardHeader>
-                      <CardTitle className="text-sm text-white flex items-center gap-2"><Eye className="w-4 h-4 text-indigo-400" /> Analizar Pago / Poster</CardTitle>
-                   </CardHeader>
-                   <CardContent className="space-y-4">
-                      <div className="space-y-2">
-                         <Label className="text-xs text-slate-400">Opción 1: Subir Archivo</Label>
-                         <Input type="file" onChange={e => setVisionFile(e.target.files?.[0] || null)} className="bg-slate-950 border-slate-800 text-xs" />
-                      </div>
-                      <div className="space-y-2">
-                         <Label className="text-xs text-slate-500">O URL de imagen</Label>
-                         <Input value={visionUrl} onChange={e => setVisionUrl(e.target.value)} placeholder="https://..." className="bg-slate-950 border-slate-800 text-xs" />
-                      </div>
-                      <Button onClick={handleTestVision} className="w-full bg-indigo-600" disabled={scanning}>
-                         {scanning ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Scan className="w-4 h-4 mr-2" />} Escanear Pago
-                      </Button>
-                      {visionResult && (
-                         <div className="mt-4 p-3 bg-slate-950 border border-indigo-500/30 rounded font-mono text-[10px] text-indigo-300 whitespace-pre-wrap max-h-[300px] overflow-y-auto">
-                            {visionResult}
-                         </div>
-                      )}
-                   </CardContent>
-                </Card>
-             </div>
           </TabsContent>
 
           <TabsContent value="simulador" className="mt-6 grid grid-cols-1 md:grid-cols-12 gap-6">

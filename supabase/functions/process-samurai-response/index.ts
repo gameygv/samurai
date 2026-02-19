@@ -21,7 +21,7 @@ serve(async (req) => {
 
     let lead = null;
     
-    // 1. IDENTIFICACIÓN DEL LEAD
+    // 1. IDENTIFICACIÓN DEL LEAD (MÁS ESTRICTA)
     if (lead_id) {
         const { data } = await supabaseClient.from('leads').select('*').eq('id', lead_id).single();
         lead = data;
@@ -44,8 +44,8 @@ serve(async (req) => {
         lead = data;
     }
 
-    // CREACIÓN SI NO EXISTE
-    if (!lead) {
+    // BLOQUEO DE FANTASMAS: Solo crear si hay datos reales
+    if (!lead && (cleanPhone || kommo_id)) {
         const { data: upsertedLead, error: upsertError } = await supabaseClient.from('leads').upsert({
             nombre: name || 'Nuevo Lead WhatsApp',
             telefono: rawPhone,
@@ -53,22 +53,17 @@ serve(async (req) => {
             last_message_at: new Date().toISOString()
         }, { onConflict: 'telefono' }).select().single();
         
-        if (upsertError) {
-            const { data: retryData } = await supabaseClient.from('leads').select('*').eq('telefono', rawPhone).single();
-            lead = retryData;
-        } else {
-            lead = upsertedLead;
-        }
+        if (!upsertError) lead = upsertedLead;
     }
 
-    if (!lead) throw new Error("No se pudo identificar ni crear el lead.");
+    if (!lead) throw new Error("No se pudo identificar ni crear el lead (Datos insuficientes).");
 
-    // 2. PROCESAMIENTO DE RESPUESTA IA Y EXTRACCIÓN DE IDENTIDAD
+    // 2. PROCESAMIENTO DE CONOCIMIENTO
     let fullText = typeof ai_json_response === 'string' ? ai_json_response : (ai_json_response?.reply || "");
     let cleanText = fullText;
     let analysisData: any = null;
 
-    // Detectar bloque de análisis
+    // Detectar bloque de análisis (mejorado para capturar datos de identidad)
     const separators = ['---SYSTEM_ANALYSIS---', '[[ANALYSIS:', '---ANALYSIS---'];
     for (const sep of separators) {
         if (fullText.includes(sep)) {
@@ -86,14 +81,14 @@ serve(async (req) => {
         last_message_at: new Date().toISOString()
     };
 
-    // 3. ACTUALIZAR FICHA DEL LEAD CON DATOS DETECTADOS
+    // ACTUALIZAR FICHA CON CONOCIMIENTO DETECTADO
     if (analysisData) {
         updateData.last_ai_analysis = new Date().toISOString();
         if (analysisData.mood) updateData.estado_emocional_actual = analysisData.mood;
         if (analysisData.intent) updateData.buying_intent = analysisData.intent;
         if (analysisData.summary) updateData.summary = analysisData.summary;
         
-        // ¡IMPORTANTE! Actualizar nombre y ciudad si se detectan
+        // ¡IMPORTANTE! Inyectar identidad si la IA la descubre
         if (analysisData.name && (!lead.nombre || lead.nombre.includes('Nuevo Lead'))) {
             updateData.nombre = analysisData.name;
         }
@@ -102,19 +97,6 @@ serve(async (req) => {
         }
         
         if (analysisData.handoff_required === true) updateData.ai_paused = true;
-    }
-
-    // Desactivar follow-up si el cliente respondió
-    if (is_client_message) {
-        updateData.next_followup_at = null;
-    } else {
-        // Programar follow-up si es el bot quien habla
-        const { data: config } = await supabaseClient.from('followup_config').select('*').single();
-        if (config && config.enabled) {
-            const nextTime = new Date(Date.now() + config.stage_1_delay * 60 * 1000);
-            updateData.next_followup_at = nextTime.toISOString();
-            updateData.followup_stage = 1;
-        }
     }
 
     await supabaseClient.from('leads').update(updateData).eq('id', lead.id);
