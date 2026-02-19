@@ -41,9 +41,9 @@ serve(async (req) => {
 
       system_prompt = `
 <INSTRUCTIONS>
-${prompts['prompt_adn_core'] || ''}
-${prompts['prompt_estrategia_cierre'] || ''}
-${prompts['prompt_protocolos'] || ''}
+${prompts['prompt_adn_core'] ?? ''}
+${prompts['prompt_estrategia_cierre'] ?? ''}
+${prompts['prompt_protocolos'] ?? ''}
 </INSTRUCTIONS>
 <CONTEXT>
 # BASE DE CONOCIMIENTO ADICIONAL

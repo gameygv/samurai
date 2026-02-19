@@ -56,11 +56,11 @@ serve(async (req) => {
     // 3. CONSTRUCCIÓN DEL CEREBRO DINÁMICO (SIN VERDAD MAESTRA)
     const systemPrompt = `
 <INSTRUCTIONS>
-${promptMap['prompt_adn_core'] || '# ADN CORE\nEres un asistente de ventas para The Elephant Bowl.'}
+${promptMap['prompt_adn_core'] ?? '# ADN CORE\nEres un asistente de ventas para The Elephant Bowl.'}
 
-${promptMap['prompt_estrategia_cierre'] || '# ESTRATEGIA DE CIERRE\nTu objetivo es cerrar la venta.'}
+${promptMap['prompt_estrategia_cierre'] ?? '# ESTRATEGIA DE CIERRE\nTu objetivo es cerrar la venta.'}
 
-${promptMap['prompt_protocolos'] || '# PROTOCOLOS\nSigue las reglas de la empresa.'}
+${promptMap['prompt_protocolos'] ?? '# PROTOCOLOS\nSigue las reglas de la empresa.'}
 </INSTRUCTIONS>
 
 <CONTEXT>
