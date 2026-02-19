@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { Globe, Loader2, RefreshCw, ExternalLink, CheckCircle2, AlertCircle, Search, FileText } from 'lucide-react';
+import { Globe, Loader2, RefreshCw, ExternalLink, CheckCircle2, AlertCircle, Search, FileText, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 
@@ -36,7 +36,29 @@ const WebsiteContent = () => {
     }
   };
 
+  const handleInitDatabase = async () => {
+     setSyncing(true);
+     try {
+        const { error } = await supabase.from('main_website_content').insert([
+           { url: 'https://theelephantbowl.com', title: 'Home', scrape_status: 'pending' },
+           { url: 'https://theelephantbowl.com/formacion-sonoterapia', title: 'Formación', scrape_status: 'pending' }
+        ]);
+        if (error) throw error;
+        toast.success("Base de datos inicializada con URLs base.");
+        fetchPages();
+     } catch (err: any) {
+        toast.error("Error al inicializar: " + err.message);
+     } finally {
+        setSyncing(false);
+     }
+  };
+
   const handleSyncAll = async () => {
+    if (pages.length === 0) {
+       toast.warning("Primero inicializa las URLs base.");
+       return;
+    }
+    
     setSyncing(true);
     toast.info("Iniciando sincronización del sitio principal...");
     try {
@@ -62,8 +84,7 @@ const WebsiteContent = () => {
 
   const filteredPages = pages.filter(p => 
     p.url?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    p.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    p.content?.toLowerCase().includes(searchTerm.toLowerCase())
+    (p.title && p.title.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
   return (
@@ -77,14 +98,21 @@ const WebsiteContent = () => {
             </h1>
             <p className="text-slate-400">Contenido indexado de theelephantbowl.com</p>
           </div>
-          <Button 
-            onClick={handleSyncAll} 
-            disabled={syncing}
-            className="bg-indigo-600 hover:bg-indigo-700"
-          >
-            {syncing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />}
-            Sincronizar Sitio
-          </Button>
+          <div className="flex gap-3">
+            {pages.length === 0 && (
+               <Button onClick={handleInitDatabase} variant="outline" className="border-indigo-500 text-indigo-400">
+                  <Plus className="w-4 h-4 mr-2" /> Inicializar URLs
+               </Button>
+            )}
+            <Button 
+              onClick={handleSyncAll} 
+              disabled={syncing || pages.length === 0}
+              className="bg-indigo-600 hover:bg-indigo-700"
+            >
+              {syncing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />}
+              Sincronizar Sitio
+            </Button>
+          </div>
         </div>
 
         <Card className="bg-slate-900 border-slate-800">
@@ -110,6 +138,13 @@ const WebsiteContent = () => {
               <div className="flex justify-center py-12">
                 <Loader2 className="w-8 h-8 animate-spin text-indigo-500" />
               </div>
+            ) : pages.length === 0 ? (
+               <div className="text-center py-16 space-y-4">
+                  <Globe className="w-12 h-12 text-slate-800 mx-auto" />
+                  <div className="max-w-xs mx-auto">
+                     <p className="text-slate-500 text-sm">No hay URLs registradas para sincronizar. Usa el botón superior para inicializar las páginas base del sitio.</p>
+                  </div>
+               </div>
             ) : (
               <Accordion type="single" collapsible className="space-y-2">
                 {filteredPages.map((page, index) => (
@@ -123,7 +158,7 @@ const WebsiteContent = () => {
                         <div className="flex items-center gap-3">
                           <div className={`w-2 h-2 rounded-full ${page.scrape_status === 'success' ? 'bg-green-500' : 'bg-red-500'}`} />
                           <div className="text-left">
-                            <p className="text-sm font-bold text-white">{page.title || 'Sin título'}</p>
+                            <p className="text-sm font-bold text-white">{page.title || 'Cargando...'}</p>
                             <p className="text-xs text-slate-500 font-mono">{page.url}</p>
                           </div>
                         </div>
@@ -154,13 +189,6 @@ const WebsiteContent = () => {
                             <ExternalLink className="w-3 h-3 mr-1" /> Ver Original
                           </Button>
                         </div>
-                        
-                        {page.error_message && (
-                          <div className="bg-red-500/10 border border-red-500/20 rounded p-3">
-                            <p className="text-xs text-red-400 font-mono">{page.error_message}</p>
-                          </div>
-                        )}
-                        
                         <div className="bg-slate-900 border border-slate-800 rounded p-4 max-h-[400px] overflow-y-auto">
                           <p className="text-xs text-slate-300 font-mono leading-relaxed whitespace-pre-wrap">
                             {page.content || 'Sin contenido extraído'}

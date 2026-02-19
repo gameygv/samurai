@@ -5,10 +5,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { 
   CreditCard, Search, Loader2, CheckCircle2, XCircle, 
-  ExternalLink, Eye, DollarSign, Calendar, Landmark, 
-  ArrowRight, ShieldCheck, Filter, RefreshCw
+  ExternalLink, Calendar, RefreshCw, ShieldCheck
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { logActivity } from '@/utils/logger';
@@ -26,7 +26,6 @@ const Payments = () => {
   const fetchPayments = async () => {
     if (!refreshing) setLoading(true);
     try {
-      // Buscamos assets de tipo IMAGE que tengan OCR DATA (posibles pagos)
       const { data, error } = await supabase
         .from('media_assets')
         .select('*')
@@ -44,7 +43,7 @@ const Payments = () => {
     }
   };
 
-  const extractOcrField = (instructions: string, field: string) => {
+  const extractOcrField = (instructions: string | null, field: string) => {
     if (!instructions) return 'N/A';
     const regex = new RegExp(`${field}:?\\s*([^\\n,]+)`, 'i');
     const match = instructions.match(regex);
@@ -53,7 +52,6 @@ const Payments = () => {
 
   const handleValidate = async (id: string, title: string) => {
     try {
-      // Simulación de validación (en prod esto activaría el webhook de Make)
       toast.success(`Pago "${title}" validado correctamente.`);
       await logActivity({
         action: 'UPDATE',
@@ -69,7 +67,7 @@ const Payments = () => {
 
   const filtered = payments.filter(p => 
     p.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    p.ai_instructions?.toLowerCase().includes(searchTerm.toLowerCase())
+    (p.ai_instructions && p.ai_instructions.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
   return (
@@ -86,7 +84,7 @@ const Payments = () => {
           <div className="relative w-full md:w-80">
             <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-500" />
             <Input 
-              placeholder="Buscar por referencia, banco o monto..." 
+              placeholder="Buscar por referencia o banco..." 
               className="pl-10 bg-slate-900 border-slate-800 text-white"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
@@ -98,17 +96,14 @@ const Payments = () => {
            <Card className="bg-slate-900 border-slate-800 p-6 border-l-4 border-l-green-500">
               <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Ventas Hoy</p>
               <h3 className="text-3xl font-bold text-white mt-1">$4,500 <span className="text-xs text-slate-500 font-normal">MXN</span></h3>
-              <p className="text-[9px] text-green-500 mt-2 font-bold uppercase">● 3 Inscripciones</p>
            </Card>
            <Card className="bg-slate-900 border-slate-800 p-6 border-l-4 border-l-yellow-500">
               <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Pendientes</p>
               <h3 className="text-3xl font-bold text-white mt-1">{filtered.length}</h3>
-              <p className="text-[9px] text-yellow-500 mt-2 font-bold uppercase">● Por validar</p>
            </Card>
            <Card className="bg-slate-900 border-slate-800 p-6 border-l-4 border-l-indigo-500">
               <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Conversión</p>
               <h3 className="text-3xl font-bold text-white mt-1">12.5%</h3>
-              <p className="text-[9px] text-indigo-500 mt-2 font-bold uppercase">● Lead a Venta</p>
            </Card>
         </div>
 
@@ -117,8 +112,8 @@ const Payments = () => {
             <CardTitle className="text-white text-sm uppercase tracking-widest flex items-center gap-2">
               <ShieldCheck className="w-4 h-4 text-green-500" /> Cola de Validación OCR
             </CardTitle>
-            <Button variant="ghost" size="sm" onClick={() => fetchPayments()} disabled={refreshing}>
-               <RefreshCw className={`w-3 h-3 mr-2 ${refreshing ? 'animate-spin' : ''}`} /> Sincronizar
+            <Button variant="ghost" size="sm" onClick={() => { setRefreshing(true); fetchPayments(); }} disabled={refreshing}>
+               <RefreshCw className={`w-3 h-3 mr-2 ${refreshing ? 'animate-spin' : ''}`} /> Actualizar
             </Button>
           </CardHeader>
           <CardContent className="p-0">
@@ -132,7 +127,7 @@ const Payments = () => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {loading ? (
+                {loading && !refreshing ? (
                   <TableRow><TableCell colSpan={4} className="h-32 text-center"><Loader2 className="w-8 h-8 animate-spin mx-auto text-indigo-500" /></TableCell></TableRow>
                 ) : filtered.length === 0 ? (
                   <TableRow><TableCell colSpan={4} className="h-32 text-center text-slate-500 italic">No se han detectado comprobantes nuevos.</TableCell></TableRow>
@@ -142,7 +137,7 @@ const Payments = () => {
                       <TableCell>
                          <div className="flex items-center gap-3">
                             <div className="w-12 h-12 rounded border border-slate-800 overflow-hidden bg-black flex items-center justify-center">
-                               <img src={p.url} className="w-full h-full object-cover opacity-60 hover:opacity-100 transition-opacity cursor-pointer" onClick={() => window.open(p.url, '_blank')} />
+                               {p.url && <img src={p.url} className="w-full h-full object-cover opacity-60 hover:opacity-100 transition-opacity cursor-pointer" onClick={() => window.open(p.url, '_blank')} />}
                             </div>
                             <div className="flex flex-col">
                                <span className="font-bold text-slate-200 text-sm">{p.title}</span>
