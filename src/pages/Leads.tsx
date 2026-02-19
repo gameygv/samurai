@@ -44,7 +44,12 @@ const Leads = () => {
       .order('last_message_at', { ascending: false });
 
     if (!error && data) {
-      setLeads(data);
+      // FILTRO CRÍTICO: Eliminar leads fantasma (sin nombre real y sin teléfono)
+      const validLeads = data.filter(l => 
+        (l.nombre && l.nombre !== 'Nuevo Lead WhatsApp' && l.nombre !== '') || 
+        (l.telefono && l.telefono !== '')
+      );
+      setLeads(validLeads);
     }
     setLoading(false);
   };
