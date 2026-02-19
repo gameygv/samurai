@@ -7,53 +7,67 @@ const corsHeaders = {
 }
 
 serve(async (req) => {
-  // Handle CORS
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders })
   }
 
   try {
-    const { url } = await req.json()
+    const { url, mode } = await req.json()
 
     if (!url) {
       throw new Error('URL is required')
     }
 
-    console.log(`Scraping URL: ${url}`);
+    // MODO VISIÓN: Escaneo de Posters mediante IA
+    if (mode === 'VISION') {
+        console.log(`[Vision] Escaneando imagen: ${url}`);
+        
+        const openAiKey = Deno.env.get('OPENAI_API_KEY');
+        if (!openAiKey) throw new Error("OPENAI_API_KEY no configurada en Supabase.");
 
-    // 1. Fetch the HTML
-    const response = await fetch(url, {
-        headers: {
-            'User-Agent': 'Mozilla/5.0 (compatible; SamuraiBot/1.0; +http://dyad.sh)'
-        }
-    });
+        const response = await fetch("https://api.openai.com/v1/chat/completions", {
+            method: "POST",
+            headers: {
+                "Authorization": `Bearer ${openAiKey}`,
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                model: "gpt-4o-mini",
+                messages: [
+                    {
+                        role: "user",
+                        content: [
+                            { type: "text", text: "Extrae todo el texto de este poster de cursos. Enfócate en: Ciudad, Fechas, Nombre del Curso y Precio. Devuelve solo el texto plano extraído." },
+                            { type: "image_url", image_url: { url: url } }
+                        ]
+                    }
+                ],
+                max_tokens: 500
+            })
+        });
 
-    if (!response.ok) {
-        throw new Error(`Failed to fetch website: ${response.statusText}`);
+        const data = await response.json();
+        const content = data.choices?.[0]?.message?.content || "No se detectó texto.";
+
+        return new Response(
+            JSON.stringify({ success: true, content, length: content.length }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
     }
 
-    const html = await response.text();
+    // MODO TEXTO: Scraping estándar de sitios web
+    console.log(`[Scrape] Scraping URL: ${url}`);
+    const response = await fetch(url, {
+        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; SamuraiBot/1.0)' }
+    });
 
-    // 2. Load into Cheerio to parse
+    if (!response.ok) throw new Error(`Error HTTP: ${response.status}`);
+
+    const html = await response.text();
     const $ = cheerio.load(html);
 
-    // 3. Remove junk (scripts, styles, hidden elements, navbars if possible)
-    $('script').remove();
-    $('style').remove();
-    $('noscript').remove();
-    $('iframe').remove();
-    $('svg').remove();
-    $('header').remove(); // Optional: remove header to reduce noise
-    $('footer').remove(); // Optional: remove footer
-
-    // 4. Extract text
-    // We target the body or a specific main container if known
-    let text = $('body').text();
-
-    // 5. Clean whitespace (collapse multiple spaces/newlines into one)
-    text = text.replace(/\s+/g, ' ').trim();
-
-    // Limit text length to avoid token overflow context (e.g. 4000 chars)
+    $('script, style, noscript, iframe, svg, header, footer').remove();
+    let text = $('body').text().replace(/\s+/g, ' ').trim();
     const truncatedText = text.substring(0, 5000);
 
     return new Response(
@@ -67,7 +81,7 @@ serve(async (req) => {
     )
 
   } catch (error) {
-    console.error("Scrape Error:", error);
+    console.error("Operation Error:", error);
     return new Response(
       JSON.stringify({ success: false, error: error.message }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

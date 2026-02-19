@@ -6,7 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { MessageSquare, Search, Loader2, Phone, Zap, BrainCircuit, Clock, AlertCircle } from 'lucide-react';
+import { MessageSquare, Search, Loader2, Phone, Zap, BrainCircuit, Clock, MapPin } from 'lucide-react';
 import { toast } from 'sonner';
 import ChatViewer from '@/components/ChatViewer';
 
@@ -155,7 +155,10 @@ const Leads = () => {
                       </div>
                     </TableCell>
                     <TableCell>
-                       <span className="text-sm text-slate-300">{lead.ciudad || 'Pendiente...'}</span>
+                       <div className="flex items-center gap-1.5">
+                          <MapPin className="w-3 h-3 text-red-500" />
+                          <span className="text-sm text-slate-300 font-bold">{lead.ciudad || 'Detectando...'}</span>
+                       </div>
                     </TableCell>
                     <TableCell>
                        <Badge variant="outline" className={`
@@ -184,7 +187,7 @@ const Leads = () => {
                             <div className="flex items-center gap-1">
                               <Clock className="w-3 h-3 text-blue-400" />
                               {getFollowupBadge(lead)}
-                              <span className="text-[9px] text-slate-600">Stage {lead.followup_stage || 0}</span>
+                              <span className="text-[9px] text-slate-600">Stage {lead.followup_stage || 1}</span>
                             </div>
                           )}
                           {!lead.ai_paused && !lead.next_followup_at && (
