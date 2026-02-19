@@ -23,7 +23,12 @@ serve(async (req) => {
       .select('key, value')
       .eq('category', 'PROMPT');
 
-    const promptMap = configs?.reduce((acc, curr) => ({ ...acc, [curr.key]: curr.value }), {}) || {};
+    const promptMap: { [key: string]: string } = {};
+    if (configs) {
+        for (const row of configs) {
+            promptMap[row.key] = row.value;
+        }
+    }
 
     // 2. OBTENER CONOCIMIENTO ADICIONAL (Base de Conocimiento y Media)
     const { data: knowledgeDocs } = await supabaseClient
@@ -49,7 +54,6 @@ serve(async (req) => {
     ).join('\n\n') || "No hay assets de media con instrucciones.";
 
     // 3. CONSTRUCCIÓN DEL CEREBRO DINÁMICO (SIN VERDAD MAESTRA)
-    // Ahora se usan todos los componentes del panel del cerebro.
     const systemPrompt = `
 <INSTRUCTIONS>
 ${promptMap['prompt_adn_core'] || '# ADN CORE\nEres un asistente de ventas para The Elephant Bowl.'}
@@ -71,8 +75,8 @@ ${mediaBlock}
     return new Response(
       JSON.stringify({ 
         system_prompt: systemPrompt,
-        version: "1.2.0-DYNAMIC_BRAIN",
-        has_truth: false // Explícitamente desactivado
+        version: "1.3.0-STABLE_BRAIN",
+        has_truth: false
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
