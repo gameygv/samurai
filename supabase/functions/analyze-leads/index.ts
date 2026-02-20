@@ -1,16 +1,12 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0'
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
+import { corsHeaders } from '../_shared/cors.ts'
 
 const GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent";
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders })
+    return new Response('ok', { headers: corsHeaders })
   }
 
   console.log("[analyze-leads] Iniciando análisis periódico de conversaciones...");
@@ -34,8 +30,6 @@ serve(async (req) => {
     }
 
     // 2. BUSCAR LEADS ACTIVOS (Que han hablado recientemente y no han sido analizados en la última hora)
-    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
-    
     // Como Supabase no soporta OR complejo en JS client facilmente para timestamps nulos, traemos los más recientes y filtramos en código
     const { data: activeLeads } = await supabaseClient
       .from('leads')
