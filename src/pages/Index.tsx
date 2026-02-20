@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { SystemStatus } from '@/components/SystemStatus';
 import { BrainHealthCard } from '@/components/dashboard/BrainHealthCard';
+import { TaskRadar } from '@/components/dashboard/TaskRadar';
 import { cn } from '@/lib/utils';
 import { 
   Database, Shield, Activity, Terminal, AlertTriangle, 
@@ -22,77 +23,90 @@ const Index = () => {
     activeVersions: 0,
     recentLogs: [] as any[],
     activeFollowups: 0,
-    scheduledRestarts: 0,
     identifiedLeads: 0,
     totalLeads: 0,
   });
+  
   const [brainHealth, setBrainHealth] = useState({
     adnCoreStatus: 'missing' as 'ok' | 'missing',
     ciaRules: 0,
     webHealth: 0,
     overallStatus: 'Sync Required' as 'Operational' | 'Degraded' | 'Sync Required'
   });
+
+  const [tasks, setTasks] = useState<any[]>([]);
   const [funnelData, setFunnelData] = useState<any[]>([]);
   const [recentChats, setRecentChats] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [latency, setLatency] = useState<number>(0);
 
   useEffect(() => {
-    fetchData();
-    fetchRecentChats();
-    measureLatency();
+    fetchDashboardData();
+    const interval = setInterval(fetchDashboardData, 60000); // Actualizar cada minuto
+    return () => clearInterval(interval);
   }, []);
 
-  const measureLatency = async () => {
-     const start = performance.now();
-     await supabase.from('profiles').select('count', { count: 'exact', head: true });
-     const end = performance.now();
-     setLatency(Math.round(end - start));
-  };
-
-  const fetchData = async () => {
+  const fetchDashboardData = async () => {
     try {
-      const [errorsRes, pendingRes, versionsRes, logsRes, followupsRes, leadsRes, webRes, validatedCiaRes, adnPromptRes] = await Promise.all([
+      const start = performance.now();
+      
+      const [
+        errorsRes, 
+        pendingRes, 
+        versionsRes, 
+        logsRes, 
+        followupsRes, 
+        leadsRes, 
+        webRes, 
+        validatedCiaRes, 
+        adnPromptRes
+      ] = await Promise.all([
         supabase.from('errores_ia').select('count', { count: 'exact', head: true }),
         supabase.from('errores_ia').select('count', { count: 'exact', head: true }).eq('estado_correccion', 'REPORTADA'),
         supabase.from('versiones_prompts_aprendidas').select('*').order('created_at', { ascending: true }),
-        supabase.from('activity_logs').select('*').order('created_at', { ascending: false }).limit(10),
-        supabase.from('leads').select('count', { count: 'exact', head: true }).not('next_followup_at', 'is', null),
+        supabase.from('activity_logs').select('*').order('created_at', { ascending: false }).limit(15),
+        supabase.from('leads').select('id, nombre, next_followup_at').not('next_followup_at', 'is', null).order('next_followup_at', { ascending: true }).limit(5),
         supabase.from('leads').select('*'),
         supabase.from('main_website_content').select('scrape_status'),
         supabase.from('errores_ia').select('count', { count: 'exact', head: true }).eq('estado_correccion', 'VALIDADA'),
         supabase.from('app_config').select('key').eq('key', 'prompt_adn_core').limit(1).maybeSingle()
       ]);
 
+      const end = performance.now();
+      setLatency(Math.round(end - start));
+
       const leads = leadsRes.data || [];
       const identified = leads.filter(l => l.nombre && !l.nombre.includes('Nuevo Lead')).length;
       
+      // Procesar Salud Web
       const webPages = webRes.data || [];
       const healthyPages = webPages.filter(p => p.scrape_status === 'success').length;
       const webHealth = webPages.length > 0 ? Math.round((healthyPages / webPages.length) * 100) : 0;
 
+      // Procesar Salud Cerebro
       const adnCoreStatus = adnPromptRes.data ? 'ok' : 'missing';
       const ciaRules = validatedCiaRes.count || 0;
-      
       let overallStatus: 'Operational' | 'Degraded' | 'Sync Required' = 'Operational';
-      if (webHealth < 50 || adnCoreStatus === 'missing') {
-        overallStatus = 'Sync Required';
-      } else if (webHealth < 80) {
-        overallStatus = 'Degraded';
-      }
+      if (webHealth < 50 || adnCoreStatus === 'missing') overallStatus = 'Sync Required';
+      else if (webHealth < 80) overallStatus = 'Degraded';
 
-      setBrainHealth({
-        adnCoreStatus,
-        ciaRules,
-        webHealth,
-        overallStatus
-      });
+      setBrainHealth({ adnCoreStatus, ciaRules, webHealth, overallStatus });
 
+      // Procesar Tareas Radar
+      const followUpTasks = (followupsRes.data || []).map(l => ({
+        id: l.id,
+        type: 'FOLLOWUP',
+        target: l.nombre || 'Cliente Anónimo',
+        time: new Date(l.next_followup_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        status: 'scheduled'
+      }));
+      setTasks(followUpTasks);
+
+      // Procesar Embudo
       const funnel = [
-        { name: 'Nuevos', value: leads.length, color: '#6366f1' },
+        { name: 'Prospectos', value: leads.length, color: '#6366f1' },
         { name: 'Calificados', value: leads.filter(l => l.buying_intent === 'MEDIO' || l.buying_intent === 'ALTO').length, color: '#818cf8' },
-        { name: 'En Cierre', value: leads.filter(l => l.buying_intent === 'ALTO').length, color: '#c084fc' },
-        { name: 'Ventas', value: leads.filter(l => l.buying_intent === 'CLOSED' || l.confidence_score > 90).length, color: '#22c55e' }
+        { name: 'Cierre', value: leads.filter(l => l.buying_intent === 'ALTO').length, color: '#c084fc' }
       ];
       setFunnelData(funnel);
 
@@ -102,20 +116,19 @@ const Index = () => {
         activeVersions: (versionsRes.data || []).length,
         recentLogs: logsRes.data || [],
         activeFollowups: followupsRes.count || 0,
-        scheduledRestarts: 0,
         identifiedLeads: identified,
         totalLeads: leads.length,
       });
+
+      // Chats recientes
+      const { data: chats } = await supabase.from('conversaciones').select('*, leads(nombre)').order('created_at', { ascending: false }).limit(5);
+      if (chats) setRecentChats(chats);
+
     } catch (err) {
       console.error("Dashboard error:", err);
     } finally {
       setLoading(false);
     }
-  };
-
-  const fetchRecentChats = async () => {
-     const { data } = await supabase.from('conversaciones').select('*, leads(nombre)').order('created_at', { ascending: false }).limit(5);
-     if (data) setRecentChats(data);
   };
 
   if (loading) return <Layout><div className="flex h-[80vh] items-center justify-center"><Loader2 className="w-10 h-10 animate-spin text-indigo-500" /></div></Layout>;
@@ -125,31 +138,33 @@ const Index = () => {
       <div className="space-y-8 pb-12">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-white tracking-tight">Samurai Control Center</h1>
-            <p className="text-slate-400">Estado de la red neuronal y flujos de trabajo.</p>
+            <h1 className="text-3xl font-bold text-white tracking-tight">Samurai Command Center</h1>
+            <p className="text-slate-400">Panel de operaciones y vigilancia neuronal v0.8.6</p>
           </div>
           <div className="flex items-center gap-3 bg-slate-900/50 p-2 px-4 rounded-full border border-slate-800 h-10 shadow-lg">
              <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
              <span className="text-[10px] font-mono text-slate-300 uppercase tracking-widest">
-                SYNC: {latency}ms
+                API LATENCY: {latency}ms
              </span>
           </div>
         </div>
 
+        {/* TOP STATS */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           <StatCard title="Alertas #CIA" value={stats.totalErrors} icon={AlertTriangle} color="text-red-500" bg="bg-red-500/10" footer="Correcciones Detectadas" />
-          <StatCard title="Verdad Maestra" value={`${brainHealth.webHealth}%`} icon={Globe} color="text-indigo-500" bg="bg-indigo-500/10" footer="Indexación Web" />
-          <StatCard title="Follow-ups" value={stats.activeFollowups} icon={RefreshCw} color="text-blue-500" bg="bg-blue-500/10" footer="Reintentos en cola" />
-          <StatCard title="Identificados" value={stats.identifiedLeads} icon={UserCheck} color="text-green-500" bg="bg-green-500/10" footer={`de ${stats.totalLeads} prospectos`} />
+          <StatCard title="Salud Web" value={`${brainHealth.webHealth}%`} icon={Globe} color="text-indigo-500" bg="bg-indigo-500/10" footer="Verdad Maestra Indexada" />
+          <StatCard title="Follow-ups" value={stats.activeFollowups} icon={RefreshCw} color="text-blue-500" bg="bg-blue-500/10" footer="Mensajes en cola" />
+          <StatCard title="Leads Identificados" value={stats.identifiedLeads} icon={UserCheck} color="text-green-500" bg="bg-green-500/10" footer={`de ${stats.totalLeads} totales`} />
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+          {/* MAIN COLUMN */}
           <div className="lg:col-span-8 space-y-8">
              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                <Card className="bg-slate-900 border-slate-800 flex flex-col">
+                <Card className="bg-slate-900 border-slate-800 flex flex-col shadow-2xl">
                   <CardHeader className="py-4 border-b border-slate-800">
                      <CardTitle className="text-white text-sm flex items-center gap-2 uppercase tracking-tighter">
-                        <BarChart3 className="w-4 h-4 text-indigo-400" /> Embudo de Conversión
+                        <BarChart3 className="w-4 h-4 text-indigo-400" /> Conversión de Ventas
                      </CardTitle>
                   </CardHeader>
                   <CardContent className="p-6 h-[250px]">
@@ -168,57 +183,58 @@ const Index = () => {
                   </CardContent>
                 </Card>
 
-                <Card className="bg-slate-900 border-slate-800 flex flex-col">
+                <Card className="bg-slate-900 border-slate-800 flex flex-col shadow-2xl">
                   <CardHeader className="py-4 border-b border-slate-800">
                      <CardTitle className="text-white text-sm flex items-center gap-2 uppercase tracking-tighter">
-                        <Eye className="w-4 h-4 text-emerald-400" /> Salud de la Verdad Maestra
+                        <MessageSquare className="w-4 h-4 text-emerald-400" /> Tráfico en Tiempo Real
                      </CardTitle>
                   </CardHeader>
-                  <CardContent className="p-8 flex flex-col items-center justify-center text-center">
-                     <div className="relative w-32 h-32 mb-4">
-                        <svg className="w-full h-full" viewBox="0 0 100 100">
-                           <circle className="text-slate-800 stroke-current" strokeWidth="8" fill="transparent" r="40" cx="50" cy="50" />
-                           <circle className="text-indigo-500 stroke-current" strokeWidth="8" strokeDasharray={`${brainHealth.webHealth * 2.51} 251.2`} strokeLinecap="round" fill="transparent" r="40" cx="50" cy="50" style={{ transform: 'rotate(-90deg)', transformOrigin: '50% 50%' }} />
-                        </svg>
-                        <div className="absolute inset-0 flex items-center justify-center">
-                           <span className="text-2xl font-bold text-white">{brainHealth.webHealth}%</span>
-                        </div>
-                     </div>
-                     <p className="text-xs text-slate-400">Tu Samurai está operando con el {brainHealth.webHealth}% del conocimiento web oficial indexado.</p>
-                     <Button variant="link" className="text-indigo-400 text-[10px] mt-2 uppercase font-bold tracking-widest" onClick={() => window.location.href='/website-content'}>
-                        Optimizar Verdad <ArrowRight className="w-3 h-3 ml-1" />
-                     </Button>
+                  <CardContent className="p-0">
+                    <div className="divide-y divide-slate-800/50">
+                        {recentChats.map((chat) => (
+                          <div key={chat.id} className="p-3 hover:bg-slate-800/20 transition-colors flex flex-col gap-1">
+                              <div className="flex justify-between items-center">
+                                  <span className="text-[10px] font-bold text-slate-300">{chat.leads?.nombre || 'Anónimo'}</span>
+                                  <span className="text-[9px] text-slate-600 font-mono">{new Date(chat.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                              </div>
+                              <p className="text-[11px] text-slate-500 truncate italic">"{chat.mensaje}"</p>
+                          </div>
+                        ))}
+                    </div>
                   </CardContent>
                 </Card>
              </div>
 
-             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <MiniTable title="Live Feed" icon={MessageSquare} color="text-emerald-400" items={recentChats} />
-                <Card className="bg-slate-900 border-slate-800 shadow-xl">
-                   <CardHeader className="py-3 border-b border-slate-800"><CardTitle className="text-[10px] uppercase text-white tracking-widest">Atajos Rápidos</CardTitle></CardHeader>
-                   <CardContent className="p-4 grid grid-cols-2 gap-3">
-                      <QuickButton label="Probar Cerebro" path="/brain?tab=simulador" icon={Zap} color="bg-indigo-600" />
-                      <QuickButton label="Media Manager" path="/media" icon={ImageIcon} color="bg-blue-600" />
-                      <QuickButton label="Bitácora #CIA" path="/learning" icon={Brain} color="bg-purple-600" />
-                      <QuickButton label="Ajustes API" path="/settings" icon={SettingsIcon} color="bg-slate-700" />
-                   </CardContent>
-                </Card>
+             {/* ACCIONES RÁPIDAS */}
+             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <QuickButton label="Probar IA" path="/brain?tab=simulador" icon={Zap} color="bg-indigo-600/10 text-indigo-500 border-indigo-500/20" />
+                <QuickButton label="Media OCR" path="/media" icon={ImageIcon} color="bg-blue-600/10 text-blue-500 border-blue-500/20" />
+                <QuickButton label="Bitácora" path="/learning" icon={Brain} color="bg-purple-600/10 text-purple-500 border-purple-500/20" />
+                <QuickButton label="Ajustes" path="/settings" icon={SettingsIcon} color="bg-slate-800/50 text-slate-400 border-slate-700" />
              </div>
           </div>
 
+          {/* SIDEBAR COLUMN */}
           <div className="lg:col-span-4 space-y-6">
             <SystemStatus />
             <BrainHealthCard health={brainHealth} />
-            <Card className="bg-black border-slate-800 font-mono text-[10px] shadow-2xl flex flex-col rounded-xl overflow-hidden min-h-[400px]">
-              <div className="px-4 py-3 border-b border-slate-800 bg-slate-900/80 flex items-center justify-between">
-                 <div className="flex items-center gap-2 text-slate-500"><Terminal className="w-4 h-4" /><span className="font-bold uppercase tracking-tighter">Kernel Logs</span></div>
+            <TaskRadar tasks={tasks} />
+            
+            <Card className="bg-black border-slate-800 font-mono text-[9px] shadow-2xl flex flex-col rounded-xl overflow-hidden min-h-[300px]">
+              <div className="px-4 py-2 border-b border-slate-800 bg-slate-900/80 flex items-center justify-between">
+                 <div className="flex items-center gap-2 text-slate-500"><Terminal className="w-3.5 h-3.5" /><span className="font-bold uppercase tracking-widest">System Kernel</span></div>
               </div>
-              <div className="p-4 space-y-2 overflow-y-auto flex-1 custom-scrollbar">
+              <div className="p-4 space-y-1.5 overflow-y-auto flex-1 custom-scrollbar">
                  {stats.recentLogs.map((log, i) => (
-                    <div key={i} className="flex items-start gap-2">
+                    <div key={i} className="flex items-start gap-2 border-l border-slate-800 pl-2">
                        <span className="text-slate-600 shrink-0">[{new Date(log.created_at).toLocaleTimeString()}]</span> 
-                       <span className={`shrink-0 px-1 rounded ${log.action === 'ERROR' ? 'bg-red-500/20 text-red-400' : 'bg-green-500/20 text-green-400'}`}>{log.action}</span> 
-                       <span className="text-slate-300 break-all">{log.description}</span>
+                       <span className={cn(
+                          "shrink-0 px-1 rounded uppercase font-bold",
+                          log.action === 'ERROR' ? 'bg-red-500/20 text-red-500' : 
+                          log.action === 'CREATE' ? 'bg-green-500/20 text-green-500' :
+                          'bg-indigo-500/20 text-indigo-400'
+                       )}>{log.action}</span> 
+                       <span className="text-slate-400">{log.description}</span>
                     </div>
                  ))}
               </div>
@@ -231,42 +247,23 @@ const Index = () => {
 };
 
 const QuickButton = ({ label, path, icon: Icon, color }: any) => (
-   <Button className={cn("flex flex-col h-20 gap-2 items-center justify-center", color)} onClick={() => window.location.href = path}>
+   <Button 
+     variant="outline" 
+     className={cn("flex flex-col h-20 gap-2 items-center justify-center border transition-all hover:scale-105", color)} 
+     onClick={() => window.location.href = path}
+   >
       <Icon className="w-5 h-5" />
-      <span className="text-[9px] uppercase font-bold">{label}</span>
+      <span className="text-[9px] uppercase font-bold tracking-widest">{label}</span>
    </Button>
 );
 
 const StatCard = ({ title, value, icon: Icon, color, bg, footer }: any) => (
-  <Card className="bg-slate-900 border-slate-800 p-6 hover:border-indigo-500/30 transition-all group">
+  <Card className="bg-slate-900 border-slate-800 p-6 hover:border-indigo-500/30 transition-all group shadow-lg">
     <div className="flex justify-between items-start">
       <div><p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{title}</p><h3 className="text-3xl font-bold text-white mt-2">{value}</h3></div>
       <div className={cn("p-3 rounded-xl shadow-inner", bg, color, "group-hover:rotate-12 transition-transform")}><Icon className="w-6 h-6" /></div>
     </div>
-    <p className="mt-4 text-[9px] text-slate-600 font-mono uppercase tracking-tighter">{footer}</p>
-  </Card>
-);
-
-const MiniTable = ({ title, icon: Icon, color, items }: any) => (
-  <Card className="bg-slate-900 border-slate-800 shadow-xl overflow-hidden">
-    <CardHeader className="border-b border-slate-800 py-3 bg-slate-950/20">
-       <CardTitle className="text-white text-[10px] uppercase tracking-widest flex items-center gap-2"><Icon className={cn("w-4 h-4", color)} /> {title}</CardTitle>
-    </CardHeader>
-    <CardContent className="p-0">
-       <div className="divide-y divide-slate-800">
-          {items.map((item: any) => (
-             <div key={item.id} className="p-3 flex items-start gap-3 hover:bg-slate-800/50 transition-colors">
-                <div className="flex-1 min-w-0">
-                   <div className="flex justify-between items-center mb-0.5">
-                      <span className="text-[10px] font-bold text-slate-300 truncate">{item.leads?.nombre}</span>
-                      <span className="text-[9px] text-slate-600 font-mono">{new Date(item.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
-                   </div>
-                   <p className="text-[11px] text-slate-500 line-clamp-1 italic">"{item.mensaje}"</p>
-                </div>
-             </div>
-          ))}
-       </div>
-    </CardContent>
+    <p className="mt-4 text-[9px] text-slate-600 font-mono uppercase tracking-widest">{footer}</p>
   </Card>
 );
 
