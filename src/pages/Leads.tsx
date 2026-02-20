@@ -6,13 +6,14 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { MessageSquare, Search, Loader2, Phone, Zap, BrainCircuit, Clock, MapPin, UserCheck, Brain } from 'lucide-react';
+import { MessageSquare, Search, Loader2, Phone, Zap, BrainCircuit, Clock, MapPin, UserCheck, Brain, RefreshCw, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 import ChatViewer from '@/components/ChatViewer';
 
 const Leads = () => {
   const [leads, setLeads] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [analyzing, setAnalyzing] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   
   const [selectedLead, setSelectedLead] = useState<any>(null);
@@ -44,7 +45,6 @@ const Leads = () => {
       .order('last_message_at', { ascending: false });
 
     if (!error && data) {
-      // FILTRO CRÍTICO: Eliminar leads fantasma (sin nombre real y sin teléfono)
       const validLeads = data.filter(l => 
         (l.nombre && l.nombre !== 'Nuevo Lead WhatsApp' && l.nombre !== '') || 
         (l.telefono && l.telefono !== '')
@@ -52,6 +52,29 @@ const Leads = () => {
       setLeads(validLeads);
     }
     setLoading(false);
+  };
+
+  const handleRunAnalysis = async () => {
+     setAnalyzing(true);
+     toast.info("Iniciando análisis neuronal de conversaciones recientes...");
+     try {
+        const { data, error } = await supabase.functions.invoke('analyze-leads', {});
+        if (error) throw error;
+        
+        if (data.results && data.results.length > 0) {
+           toast.success(`Análisis completo: ${data.results.length} perfiles actualizados.`);
+           fetchLeads();
+        } else {
+           toast.info(data.message || "No se encontraron leads pendientes de análisis.");
+        }
+     } catch (err: any) {
+        toast.error("Error en análisis: " + err.message);
+        if (err.message.includes("Gemini API Key")) {
+           toast.warning("Ve a Ajustes > API Keys y configura tu Gemini API Key.");
+        }
+     } finally {
+        setAnalyzing(false);
+     }
   };
 
   const handleOpenChat = (lead: any) => {
@@ -79,14 +102,25 @@ const Leads = () => {
              </h1>
              <p className="text-slate-400">Monitoreo en tiempo real de interacciones y perfiles psicográficos.</p>
           </div>
-          <div className="relative w-full md:w-64">
-            <Search className="absolute left-2 top-2.5 h-4 w-4 text-slate-500" />
-            <Input 
-              placeholder="Buscar por nombre o teléfono..." 
-              className="pl-8 bg-slate-900 border-slate-800 text-slate-200 h-10"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
+          <div className="flex gap-3 items-center w-full md:w-auto">
+             <Button 
+               variant="outline" 
+               className="border-indigo-500/30 text-indigo-400 hover:bg-indigo-500/10"
+               onClick={handleRunAnalysis}
+               disabled={analyzing}
+             >
+                {analyzing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Sparkles className="w-4 h-4 mr-2" />}
+                Analizar Chats Ahora
+             </Button>
+             <div className="relative w-full md:w-64">
+               <Search className="absolute left-2 top-2.5 h-4 w-4 text-slate-500" />
+               <Input 
+                 placeholder="Buscar por nombre o teléfono..." 
+                 className="pl-8 bg-slate-900 border-slate-800 text-slate-200 h-10"
+                 value={searchTerm}
+                 onChange={(e) => setSearchTerm(e.target.value)}
+               />
+             </div>
           </div>
         </div>
 
@@ -133,7 +167,7 @@ const Leads = () => {
                     <TableCell className="text-center">
                        {lead.summary ? (
                           <div className="flex justify-center" title={lead.summary}>
-                             <Brain className="w-5 h-5 text-indigo-500 animate-pulse" />
+                             <Brain className="w-5 h-5 text-indigo-500" />
                           </div>
                        ) : (
                           <span className="text-[9px] text-slate-700 italic">Sin datos</span>
@@ -146,7 +180,7 @@ const Leads = () => {
                              <span className={lead.buying_intent === 'ALTO' ? 'text-green-500' : 'text-slate-500'}>{lead.buying_intent || 'BAJO'}</span>
                           </div>
                           <div className="h-1 bg-slate-800 rounded-full overflow-hidden">
-                             <div className={`h-full ${lead.buying_intent === 'ALTO' ? 'bg-green-500' : 'bg-indigo-500'}`} style={{ width: `${lead.confidence_score || 10}%` }} />
+                             <div className={`h-full ${lead.buying_intent === 'ALTO' ? 'bg-green-500' : lead.buying_intent === 'MEDIO' ? 'bg-yellow-500' : 'bg-slate-700'}`} style={{ width: lead.buying_intent === 'ALTO' ? '90%' : lead.buying_intent === 'MEDIO' ? '50%' : '10%' }} />
                           </div>
                        </div>
                     </TableCell>

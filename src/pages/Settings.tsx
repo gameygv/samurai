@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
-import { Webhook, Key, Save, Loader2, ShoppingCart, Globe, ShieldAlert, Database, Eye, Sparkles, Clock, Zap, Calendar, Package, Play } from 'lucide-react';
+import { Webhook, Key, Save, Loader2, ShoppingCart, Globe, Zap, Calendar, Package, Play, BrainCircuit } from 'lucide-react';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
@@ -355,7 +355,7 @@ const Settings = () => {
                       </div>
                    </CardContent>
                 </Card>
-                <Card className="bg-slate-900 border-slate-800 border-l-4 border-l-orange-500">
+                <Card className="bg-slate-950 border-slate-800 border-l-4 border-l-orange-500">
                    <CardHeader>
                       <CardTitle className="text-sm text-white flex items-center gap-2"><Package className="w-4 h-4 text-orange-400"/> Producto Principal (Anticipo)</CardTitle>
                       <CardDescription>Configura el producto de inscripción a cursos.</CardDescription>
@@ -405,12 +405,26 @@ const Settings = () => {
           </TabsContent>
           
           <TabsContent value="secrets" className="mt-6">
-             <Card className="bg-slate-900 border-slate-800">
+             <Card className="bg-slate-900 border-slate-800 border-l-4 border-l-purple-500">
                 <CardHeader>
-                   <CardTitle className="text-sm text-white">API Keys & Tokens</CardTitle>
+                   <CardTitle className="text-sm text-white flex items-center gap-2">
+                      <BrainCircuit className="w-5 h-5 text-purple-400" /> Inteligencia & APIs
+                   </CardTitle>
+                   <CardDescription>Llaves maestras para conectar con Google Gemini y CRMs externos.</CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-4">
-                   <div className="space-y-1">
+                <CardContent className="space-y-6">
+                   <div className="space-y-2">
+                      <Label className="text-xs text-purple-400 font-bold">Google Gemini API Key (Requerido para Análisis Automático)</Label>
+                      <Input 
+                         type="password"
+                         value={getValue('gemini_api_key')} 
+                         onChange={e => handleInputChange('gemini_api_key', e.target.value, 'SECRET')}
+                         className="bg-slate-950 border-slate-800" 
+                         placeholder="AIza..."
+                      />
+                      <p className="text-[10px] text-slate-500">Esta llave permite que Samurai analice chats en segundo plano para detectar ciudades y ventas.</p>
+                   </div>
+                   <div className="space-y-2">
                       <Label className="text-xs text-slate-500">Kommo API Token</Label>
                       <Input 
                          type="password"
