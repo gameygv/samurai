@@ -13,7 +13,7 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders })
   }
 
-  console.log("[analyze-leads] Iniciando análisis periódico de conversaciones...");
+  console.log("[analyze-leads] Iniciando análisis profundo de conversaciones...");
 
   try {
     const supabaseClient = createClient(
@@ -33,58 +33,62 @@ serve(async (req) => {
       return new Response(JSON.stringify({ message: "Gemini API Key no configurada." }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    // 2. BUSCAR LEADS ACTIVOS (Que han hablado recientemente y no han sido analizados en la última hora)
-    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
-    
-    // Como Supabase no soporta OR complejo en JS client facilmente para timestamps nulos, traemos los más recientes y filtramos en código
+    // 2. BUSCAR LEADS ACTIVOS
+    // Priorizamos leads que han hablado recientemente pero no han sido analizados en la última hora
     const { data: activeLeads } = await supabaseClient
       .from('leads')
       .select('id, nombre, ciudad, last_analyzed_at, last_message_at')
       .order('last_message_at', { ascending: false })
-      .limit(20);
+      .limit(50); // Traemos más para filtrar en memoria
 
     const leadsToAnalyze = activeLeads?.filter(l => {
-       // Si no ha sido analizado nunca, o si el último mensaje es más reciente que el último análisis
-       if (!l.last_analyzed_at) return true;
-       return new Date(l.last_message_at) > new Date(l.last_analyzed_at);
-    }).slice(0, 5) || []; // Limitamos a 5 por ejecución para evitar timeouts
+       if (!l.last_message_at) return false; // Si nunca ha hablado, no hay nada que analizar
+       if (!l.last_analyzed_at) return true; // Nunca analizado
+       return new Date(l.last_message_at) > new Date(l.last_analyzed_at); // Nuevo mensaje desde último análisis
+    }).slice(0, 5) || []; 
 
     if (leadsToAnalyze.length === 0) {
-       return new Response(JSON.stringify({ message: "No hay leads pendientes de análisis." }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+       return new Response(JSON.stringify({ message: "No hay leads con actividad nueva pendiente de análisis." }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     const results = [];
+    let logsToInsert = [];
 
     // 3. ANALIZAR CADA LEAD
     for (const lead of leadsToAnalyze) {
        console.log(`Analizando lead: ${lead.nombre} (${lead.id})`);
 
-       // Obtener chat reciente
+       // Obtener chat completo (hasta 50 mensajes para tener contexto de ubicación antigua)
        const { data: messages } = await supabaseClient
           .from('conversaciones')
           .select('emisor, mensaje')
           .eq('lead_id', lead.id)
-          .order('created_at', { ascending: true }) // Orden cronológico
-          .limit(30);
+          .order('created_at', { ascending: true }) 
+          .limit(50);
 
        if (!messages || messages.length < 2) continue;
 
        const transcript = messages.map(m => `${m.emisor}: ${m.mensaje}`).join('\n');
 
-       // LLAMADA A GEMINI
+       // LLAMADA A GEMINI MEJORADA
        const prompt = `
-          Analiza la siguiente conversación de venta de instrumentos/terapias y extrae JSON.
+          Actúa como un analista de CRM experto. Tu trabajo es extraer datos de perfil de esta conversación.
           
           HISTORIAL:
           ${transcript}
 
-          TU TAREA:
-          Devuelve SOLO un objeto JSON con este formato (sin markdown):
+          INSTRUCCIONES DE EXTRACCIÓN:
+          1. CIUDAD: Busca cualquier mención de ubicación, ciudad o país del cliente. Si dice "soy de X", "vivo en Y", "el evento en Z". Sé agresivo buscando esto. Si no hay NINGUNA pista, usa "N/A".
+          2. INTENCIÓN: (BAJO, MEDIO, ALTO). ALTO si pregunta precios, fechas o métodos de pago.
+          3. ÁNIMO: (POSITIVO, NEUTRO, NEGATIVO).
+          4. RESUMEN: Una frase corta (max 10 palabras) del estado actual.
+
+          Formato JSON estricto:
           {
-            "ciudad": "Ciudad mencionada por el cliente o 'Desconocida'",
-            "resumen": "Resumen de 1 frase de la situación actual",
-            "intencion": "BAJO, MEDIO o ALTO",
-            "estado_animo": "POSITIVO, NEUTRO, NEGATIVO o CONFUSO"
+            "ciudad": "string",
+            "resumen": "string",
+            "intencion": "string",
+            "estado_animo": "string"
           }
        `;
 
@@ -104,7 +108,7 @@ serve(async (req) => {
              const cleanJson = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
              const analysis = JSON.parse(cleanJson);
 
-             // Actualizar Lead
+             // Preparar actualización
              const updateData: any = {
                 last_analyzed_at: new Date().toISOString(),
                 summary: analysis.resumen,
@@ -112,18 +116,37 @@ serve(async (req) => {
                 estado_emocional_actual: analysis.estado_animo
              };
              
-             // Solo actualizamos ciudad si se detectó una nueva y no es "Desconocida"
-             if (analysis.ciudad && !analysis.ciudad.toLowerCase().includes('desconocid') && analysis.ciudad !== 'N/A') {
+             let locationFound = false;
+             // Lógica mejorada para Ciudad
+             if (analysis.ciudad && analysis.ciudad.length > 2 && !analysis.ciudad.toLowerCase().includes('n/a') && !analysis.ciudad.toLowerCase().includes('desconocid')) {
                 updateData.ciudad = analysis.ciudad;
+                locationFound = true;
              }
 
              await supabaseClient.from('leads').update(updateData).eq('id', lead.id);
+             
              results.push({ lead: lead.nombre, ...analysis });
+             
+             // Preparar Log si hubo cambios importantes
+             if (locationFound && lead.ciudad !== analysis.ciudad) {
+                logsToInsert.push({
+                   action: 'UPDATE',
+                   resource: 'LEADS',
+                   username: 'AI Analyst',
+                   description: `Ubicación detectada para ${lead.nombre}: ${analysis.ciudad}`,
+                   status: 'OK'
+                });
+             }
 
           } catch (e) {
              console.error("Error parseando JSON de Gemini:", e);
           }
        }
+    }
+
+    // Insertar logs de actividad
+    if (logsToInsert.length > 0) {
+       await supabaseClient.from('activity_logs').insert(logsToInsert);
     }
 
     return new Response(

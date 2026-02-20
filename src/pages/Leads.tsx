@@ -6,7 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { MessageSquare, Search, Loader2, Phone, Zap, BrainCircuit, Clock, MapPin, UserCheck, Brain, RefreshCw, Sparkles } from 'lucide-react';
+import { MessageSquare, Search, Loader2, Phone, Zap, BrainCircuit, Clock, MapPin, UserCheck, Brain, RefreshCw, Sparkles, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import ChatViewer from '@/components/ChatViewer';
 
@@ -80,6 +80,16 @@ const Leads = () => {
   const handleOpenChat = (lead: any) => {
     setSelectedLead(lead);
     setIsChatOpen(true);
+  };
+
+  const getAnalysisFreshness = (dateString: string | null) => {
+     if (!dateString) return <span className="text-[9px] text-slate-600 flex items-center gap-1"><AlertCircle className="w-3 h-3"/> Pendiente</span>;
+     const diff = new Date().getTime() - new Date(dateString).getTime();
+     const minutes = Math.floor(diff / 60000);
+     
+     if (minutes < 60) return <span className="text-[9px] text-green-500 font-bold">Hace {minutes}m</span>;
+     if (minutes < 1440) return <span className="text-[9px] text-slate-400">Hace {Math.floor(minutes/60)}h</span>;
+     return <span className="text-[9px] text-slate-600">Hace {Math.floor(minutes/1440)}d</span>;
   };
 
   const filteredLeads = leads.filter(l => 
@@ -166,8 +176,9 @@ const Leads = () => {
                     </TableCell>
                     <TableCell className="text-center">
                        {lead.summary ? (
-                          <div className="flex justify-center" title={lead.summary}>
+                          <div className="flex flex-col items-center gap-1" title={lead.summary}>
                              <Brain className="w-5 h-5 text-indigo-500" />
+                             {getAnalysisFreshness(lead.last_analyzed_at)}
                           </div>
                        ) : (
                           <span className="text-[9px] text-slate-700 italic">Sin datos</span>
