@@ -1,10 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0'
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
+import { corsHeaders } from '../_shared/cors.ts'
 
 const GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent";
 
@@ -21,14 +17,18 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
-    // 1. OBTENER API KEY
-    const { data: config } = await supabaseClient
-      .from('app_config')
-      .select('value')
-      .eq('key', 'gemini_api_key')
-      .single();
+    // 1. OBTENER CONFIGURACIONES (Gemini y Meta CAPI)
+    const { data: configs } = await supabaseClient.from('app_config').select('key, value');
+    const getConfig = (key: string) => configs?.find(c => c.key === key)?.value || null;
 
-    const apiKey = config?.value;
+    const apiKey = getConfig('gemini_api_key');
+    const capiConfig = {
+      pixel_id: getConfig('meta_pixel_id'),
+      access_token: getConfig('meta_access_token'),
+      test_mode: getConfig('meta_test_mode') === 'true',
+      test_event_code: getConfig('meta_test_event_code'),
+    };
+
     if (!apiKey) {
       return new Response(JSON.stringify({ message: "Gemini API Key no configurada." }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
@@ -36,7 +36,7 @@ serve(async (req) => {
     // 2. BUSCAR LEADS ACTIVOS
     const { data: activeLeads } = await supabaseClient
       .from('leads')
-      .select('id, nombre, ciudad, last_analyzed_at, last_message_at')
+      .select('id, nombre, ciudad, telefono, perfil_psicologico, last_analyzed_at, last_message_at, capi_lead_event_sent_at')
       .order('last_message_at', { ascending: false })
       .limit(50);
 
@@ -55,7 +55,7 @@ serve(async (req) => {
 
     // 3. ANALIZAR CADA LEAD
     for (const lead of leadsToAnalyze) {
-       console.log(`Analizando lead: ${lead.nombre} (${lead.id})`);
+       console.log(`[analyze-leads] Analizando lead: ${lead.nombre} (${lead.id})`);
 
        const { data: messages } = await supabaseClient
           .from('conversaciones')
@@ -115,28 +115,45 @@ serve(async (req) => {
                 perfil_psicologico: analysis.perfil_psicologico
              };
              
-             let locationFound = false;
-             if (analysis.ciudad && analysis.ciudad.length > 2 && !analysis.ciudad.toLowerCase().includes('n/a') && !analysis.ciudad.toLowerCase().includes('desconocid')) {
+             if (analysis.ciudad && analysis.ciudad.length > 2 && !analysis.ciudad.toLowerCase().includes('n/a')) {
                 updateData.ciudad = analysis.ciudad;
-                locationFound = true;
              }
 
              await supabaseClient.from('leads').update(updateData).eq('id', lead.id);
-             
              results.push({ lead: lead.nombre, ...analysis });
-             
-             if (locationFound && lead.ciudad !== analysis.ciudad) {
+
+             // --- DISPARADOR DE EVENTO CAPI ---
+             if (analysis.intencion === 'ALTO' && !lead.capi_lead_event_sent_at && capiConfig.pixel_id) {
+                console.log(`[analyze-leads] Intención ALTA detectada para ${lead.nombre}. Enviando evento 'Lead' a Meta CAPI.`);
+                
+                const capiPayload = {
+                  eventData: {
+                    event_name: 'Lead',
+                    event_id: `${lead.id}_lead`,
+                    user_data: { ph: lead.telefono },
+                    custom_data: {
+                      intention: 'ALTO',
+                      psych_profile: analysis.perfil_psicologico,
+                      source: 'Samurai AI Analysis'
+                    },
+                  },
+                  config: capiConfig,
+                };
+
+                await supabaseClient.functions.invoke('meta-capi-sender', { body: capiPayload });
+                await supabaseClient.from('leads').update({ capi_lead_event_sent_at: new Date().toISOString() }).eq('id', lead.id);
+                
                 logsToInsert.push({
-                   action: 'UPDATE',
-                   resource: 'LEADS',
+                   action: 'CREATE',
+                   resource: 'META_CAPI',
                    username: 'AI Analyst',
-                   description: `Ubicación detectada para ${lead.nombre}: ${analysis.ciudad}`,
+                   description: `Evento 'Lead' enviado para ${lead.nombre}`,
                    status: 'OK'
                 });
              }
 
           } catch (e) {
-             console.error("Error parseando JSON de Gemini:", e);
+             console.error("[analyze-leads] Error parseando JSON o enviando evento CAPI:", e);
           }
        }
     }
