@@ -67,7 +67,36 @@ const Payments = () => {
         url: asset.url
       });
 
-      // 2. Registrar en Logs
+      // 2. Enviar evento a Meta CAPI
+      const leadName = asset.title.replace(/comprobante/i, '').trim();
+      const { data: lead } = await supabase.from('leads').select('id, telefono').ilike('nombre', `%${leadName}%`).limit(1).single();
+      
+      if (lead) {
+        const { data: configData } = await supabase.from('app_config').select('key, value').in('key', ['meta_pixel_id', 'meta_access_token', 'meta_test_mode', 'meta_test_event_code']);
+        const capiConfig = configData?.reduce((acc, item) => ({...acc, [item.key.replace('meta_', '')]: item.value}), {}) || {};
+
+        if (capiConfig.pixel_id && capiConfig.access_token) {
+          const capiPayload = {
+            eventData: {
+              event_name: 'Purchase',
+              event_id: `${lead.id}_${asset.id}`,
+              user_data: { ph: lead.telefono },
+              custom_data: { payment_reference: referencia },
+              value: parseFloat(monto.replace(/[^0-9.-]+/g,"")),
+              currency: 'MXN',
+            },
+            config: {
+              pixel_id: capiConfig.pixel_id,
+              access_token: capiConfig.access_token,
+              test_event_code: capiConfig.test_mode === 'true' ? capiConfig.test_event_code : undefined,
+            },
+          };
+          await supabase.functions.invoke('meta-capi-sender', { body: capiPayload });
+          toast.success("Evento 'Purchase' enviado a Meta CAPI.");
+        }
+      }
+
+      // 3. Registrar en Logs
       await logActivity({
         action: 'UPDATE',
         resource: 'SYSTEM',
@@ -141,7 +170,7 @@ const Payments = () => {
                   <TableHead className="text-slate-400">Comprobante</TableHead>
                   <TableHead className="text-slate-400 text-center">Datos Extraídos (AI)</TableHead>
                   <TableHead className="text-slate-400 text-center">Monto</TableHead>
-                  <TableHead className="text-slate-400 text-right">Acción</TableHead>
+                  <TableHead className="text-right">Acción</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>

@@ -33,6 +33,13 @@ const MetaCapi = () => {
   const [isPayloadViewerOpen, setIsPayloadViewerOpen] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<any>(null);
 
+  const [mapping, setMapping] = useState([
+    { samuraiField: 'buying_intent', metaField: 'custom_data.intention', enabled: true, description: 'Intención de compra del lead (BAJO, MEDIO, ALTO).' },
+    { samuraiField: 'perfil_psicologico', metaField: 'custom_data.psych_profile', enabled: true, description: 'Análisis de personalidad del lead.' },
+    { samuraiField: 'ciudad', metaField: 'user_data.ct', enabled: true, description: 'Ciudad del lead (hasheado automáticamente).' },
+    { samuraiField: 'telefono', metaField: 'user_data.ph', enabled: true, description: 'Número de WhatsApp (hasheado automáticamente).' },
+  ]);
+
   useEffect(() => {
     fetchData();
   }, []);
@@ -40,7 +47,7 @@ const MetaCapi = () => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const { data: configData } = await supabase.from('app_config').select('*').in('key', ['meta_pixel_id', 'meta_access_token', 'meta_account_id', 'meta_test_mode', 'meta_test_event_code']);
+      const { data: configData } = await supabase.from('app_config').select('*').in('key', ['meta_pixel_id', 'meta_access_token', 'meta_account_id', 'meta_test_mode', 'meta_test_event_code', 'meta_capi_mapping']);
       const { data: eventsData } = await supabase.from('meta_capi_events').select('*').order('created_at', { ascending: false }).limit(100);
 
       if (configData) {
@@ -51,6 +58,7 @@ const MetaCapi = () => {
           if (item.key === 'meta_account_id') newConfig.account_id = item.value;
           if (item.key === 'meta_test_mode') newConfig.test_mode = item.value === 'true';
           if (item.key === 'meta_test_event_code') newConfig.test_event_code = item.value;
+          if (item.key === 'meta_capi_mapping' && item.value) setMapping(JSON.parse(item.value));
         });
         setConfig(newConfig);
       }
@@ -71,6 +79,7 @@ const MetaCapi = () => {
         { key: 'meta_account_id', value: config.account_id, category: 'META_CAPI' },
         { key: 'meta_test_mode', value: String(config.test_mode), category: 'META_CAPI' },
         { key: 'meta_test_event_code', value: config.test_event_code, category: 'META_CAPI' },
+        { key: 'meta_capi_mapping', value: JSON.stringify(mapping), category: 'META_CAPI' },
       ];
       const { error } = await supabase.from('app_config').upsert(configToSave, { onConflict: 'key' });
       if (error) throw error;
@@ -207,8 +216,38 @@ const MetaCapi = () => {
 
           <TabsContent value="mapper" className="mt-6">
             <Card className="bg-slate-900 border-slate-800">
-              <CardHeader><CardTitle>Mapper de Campos (Placeholder)</CardTitle></CardHeader>
-              <CardContent><p className="text-slate-400">Aquí podrás mapear visualmente los campos de tu CRM a los campos de la CAPI de Meta.</p></CardContent>
+              <CardHeader>
+                <CardTitle>Mapeo de Campos de Samurai a Meta CAPI</CardTitle>
+                <CardDescription>Define cómo se traducen los datos de tus leads a eventos de Meta. Los cambios se aplican automáticamente.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Campo en Samurai</TableHead>
+                      <TableHead>Campo en Meta CAPI</TableHead>
+                      <TableHead>Descripción</TableHead>
+                      <TableHead className="text-right">Estado</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {mapping.map((item, index) => (
+                      <TableRow key={index}>
+                        <TableCell className="font-mono text-xs text-indigo-400">{item.samuraiField}</TableCell>
+                        <TableCell className="font-mono text-xs text-slate-300">{item.metaField}</TableCell>
+                        <TableCell className="text-xs text-slate-500">{item.description}</TableCell>
+                        <TableCell className="text-right">
+                          <Switch checked={item.enabled} onCheckedChange={c => {
+                            const newMapping = [...mapping];
+                            newMapping[index].enabled = c;
+                            setMapping(newMapping);
+                          }} />
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
             </Card>
           </TabsContent>
         </Tabs>
