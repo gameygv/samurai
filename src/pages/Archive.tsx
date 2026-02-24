@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { 
   Archive as ArchiveIcon, Search, Loader2, MessageSquare, 
-  Calendar, User, Bot, ArrowRight, Filter, RefreshCw, Trash2
+  Calendar, User, Bot, ArrowRight, Filter, RefreshCw, Trash2, Sparkles
 } from 'lucide-react';
 import { toast } from 'sonner';
 import ChatViewer from '@/components/ChatViewer';
@@ -21,6 +21,7 @@ const Archive = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedLead, setSelectedLead] = useState<any>(null);
   const [isChatOpen, setIsChatOpen] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
 
   useEffect(() => {
     fetchArchive();
@@ -36,7 +37,6 @@ const Archive = () => {
 
       if (error) throw error;
       
-      // Filtramos leads que realmente tienen datos o conversaciones
       const validLeads = (data || []).filter(l => (l.nombre && l.nombre !== 'Nuevo Lead WhatsApp') || (l.conversaciones && l.conversaciones.length > 0));
       setConversations(validLeads);
     } catch (err: any) {
@@ -47,12 +47,34 @@ const Archive = () => {
     }
   };
 
+  const handleRunAnalysis = async () => {
+     setAnalyzing(true);
+     toast.info("Iniciando análisis neuronal de conversaciones recientes...");
+     try {
+        const { data, error } = await supabase.functions.invoke('analyze-leads', {});
+        if (error) throw error;
+        
+        if (data.results && data.results.length > 0) {
+           toast.success(`Análisis completo: ${data.results.length} perfiles actualizados.`);
+           fetchArchive();
+        } else {
+           toast.info(data.message || "No se encontraron leads pendientes de análisis.");
+        }
+     } catch (err: any) {
+        toast.error("Error en análisis: " + err.message);
+        if (err.message.includes("Gemini API Key")) {
+           toast.warning("Ve a Ajustes > API Keys y configura tu Gemini API Key.");
+        }
+     } finally {
+        setAnalyzing(false);
+     }
+  };
+
   const handleDeleteLead = async (id: string, nombre: string) => {
     if (!confirm(`¿Estás seguro? Se borrará a "${nombre}" de raíz.`)) return;
     
     setRefreshing(true);
     try {
-      // Borrado forzado en cascada
       await supabase.from('conversaciones').delete().eq('lead_id', id);
       const { error } = await supabase.from('leads').delete().eq('id', id);
 
@@ -66,7 +88,6 @@ const Archive = () => {
       });
 
       toast.success('Chat eliminado correctamente');
-      // Actualizamos estado local inmediatamente
       setConversations(prev => prev.filter(c => c.id !== id));
     } catch (err: any) {
       toast.error('Fallo al eliminar: ' + err.message);
@@ -97,14 +118,25 @@ const Archive = () => {
             </h1>
             <p className="text-slate-400">Historial completo de interacciones archivadas.</p>
           </div>
-          <div className="relative w-full md:w-80">
-            <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-500" />
-            <Input 
-              placeholder="Buscar..." 
-              className="pl-10 bg-slate-900 border-slate-800 text-white"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
+          <div className="flex gap-3 items-center">
+            <Button 
+              variant="outline" 
+              className="border-indigo-500/30 text-indigo-400 hover:bg-indigo-500/10"
+              onClick={handleRunAnalysis}
+              disabled={analyzing}
+            >
+              {analyzing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Sparkles className="w-4 h-4 mr-2" />}
+              Analizar Chats
+            </Button>
+            <div className="relative w-full md:w-80">
+              <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-500" />
+              <Input 
+                placeholder="Buscar..." 
+                className="pl-10 bg-slate-900 border-slate-800 text-white"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
           </div>
         </div>
 

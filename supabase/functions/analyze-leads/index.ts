@@ -34,17 +34,16 @@ serve(async (req) => {
     }
 
     // 2. BUSCAR LEADS ACTIVOS
-    // Priorizamos leads que han hablado recientemente pero no han sido analizados en la última hora
     const { data: activeLeads } = await supabaseClient
       .from('leads')
       .select('id, nombre, ciudad, last_analyzed_at, last_message_at')
       .order('last_message_at', { ascending: false })
-      .limit(50); // Traemos más para filtrar en memoria
+      .limit(50);
 
     const leadsToAnalyze = activeLeads?.filter(l => {
-       if (!l.last_message_at) return false; // Si nunca ha hablado, no hay nada que analizar
-       if (!l.last_analyzed_at) return true; // Nunca analizado
-       return new Date(l.last_message_at) > new Date(l.last_analyzed_at); // Nuevo mensaje desde último análisis
+       if (!l.last_message_at) return false;
+       if (!l.last_analyzed_at) return true;
+       return new Date(l.last_message_at) > new Date(l.last_analyzed_at);
     }).slice(0, 5) || []; 
 
     if (leadsToAnalyze.length === 0) {
@@ -58,7 +57,6 @@ serve(async (req) => {
     for (const lead of leadsToAnalyze) {
        console.log(`Analizando lead: ${lead.nombre} (${lead.id})`);
 
-       // Obtener chat completo (hasta 50 mensajes para tener contexto de ubicación antigua)
        const { data: messages } = await supabaseClient
           .from('conversaciones')
           .select('emisor, mensaje')
@@ -70,7 +68,6 @@ serve(async (req) => {
 
        const transcript = messages.map(m => `${m.emisor}: ${m.mensaje}`).join('\n');
 
-       // LLAMADA A GEMINI MEJORADA
        const prompt = `
           Actúa como un analista de CRM experto. Tu trabajo es extraer datos de perfil de esta conversación.
           
@@ -78,17 +75,19 @@ serve(async (req) => {
           ${transcript}
 
           INSTRUCCIONES DE EXTRACCIÓN:
-          1. CIUDAD: Busca cualquier mención de ubicación, ciudad o país del cliente. Si dice "soy de X", "vivo en Y", "el evento en Z". Sé agresivo buscando esto. Si no hay NINGUNA pista, usa "N/A".
+          1. CIUDAD: Busca cualquier mención de ubicación, ciudad o país del cliente. Sé agresivo buscando esto. Si no hay NINGUNA pista, usa "N/A".
           2. INTENCIÓN: (BAJO, MEDIO, ALTO). ALTO si pregunta precios, fechas o métodos de pago.
           3. ÁNIMO: (POSITIVO, NEUTRO, NEGATIVO).
           4. RESUMEN: Una frase corta (max 10 palabras) del estado actual.
+          5. PERFIL_PSICOLOGICO: Describe brevemente la personalidad del cliente en 3-5 palabras (ej: "Directo y decidido", "Curioso pero escéptico", "Amable y hablador"). Si no hay suficiente información, usa "N/A".
 
           Formato JSON estricto:
           {
             "ciudad": "string",
             "resumen": "string",
             "intencion": "string",
-            "estado_animo": "string"
+            "estado_animo": "string",
+            "perfil_psicologico": "string"
           }
        `;
 
@@ -108,16 +107,15 @@ serve(async (req) => {
              const cleanJson = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
              const analysis = JSON.parse(cleanJson);
 
-             // Preparar actualización
              const updateData: any = {
                 last_analyzed_at: new Date().toISOString(),
                 summary: analysis.resumen,
                 buying_intent: analysis.intencion,
-                estado_emocional_actual: analysis.estado_animo
+                estado_emocional_actual: analysis.estado_animo,
+                perfil_psicologico: analysis.perfil_psicologico
              };
              
              let locationFound = false;
-             // Lógica mejorada para Ciudad
              if (analysis.ciudad && analysis.ciudad.length > 2 && !analysis.ciudad.toLowerCase().includes('n/a') && !analysis.ciudad.toLowerCase().includes('desconocid')) {
                 updateData.ciudad = analysis.ciudad;
                 locationFound = true;
@@ -127,7 +125,6 @@ serve(async (req) => {
              
              results.push({ lead: lead.nombre, ...analysis });
              
-             // Preparar Log si hubo cambios importantes
              if (locationFound && lead.ciudad !== analysis.ciudad) {
                 logsToInsert.push({
                    action: 'UPDATE',
@@ -144,7 +141,6 @@ serve(async (req) => {
        }
     }
 
-    // Insertar logs de actividad
     if (logsToInsert.length > 0) {
        await supabaseClient.from('activity_logs').insert(logsToInsert);
     }
