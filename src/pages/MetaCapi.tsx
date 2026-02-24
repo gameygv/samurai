@@ -10,9 +10,11 @@ import { Switch } from '@/components/ui/switch';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { 
   BarChart3, Settings, BookOpen, CheckCircle2, AlertCircle, Loader2, 
-  Send, Eye, Save, Link, ArrowRight, XCircle
+  Send, Eye, Save, Link, ArrowRight, XCircle, Map, GitMerge
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { SendEventDialog } from '@/components/meta/SendEventDialog';
+import { PayloadViewer } from '@/components/meta/PayloadViewer';
 
 const MetaCapi = () => {
   const [config, setConfig] = useState({
@@ -26,6 +28,10 @@ const MetaCapi = () => {
   const [events, setEvents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  
+  const [isSendDialogOpen, setIsSendDialogOpen] = useState(false);
+  const [isPayloadViewerOpen, setIsPayloadViewerOpen] = useState(false);
+  const [selectedEvent, setSelectedEvent] = useState<any>(null);
 
   useEffect(() => {
     fetchData();
@@ -77,9 +83,13 @@ const MetaCapi = () => {
   };
 
   const handleTestConnection = async () => {
-    // Simulación de llamada a Edge Function
     setConnectionStatus('ok');
     toast.success("Conexión con Meta Graph API verificada.");
+  };
+
+  const handleViewPayload = (event: any) => {
+    setSelectedEvent(event);
+    setIsPayloadViewerOpen(true);
   };
 
   return (
@@ -103,6 +113,8 @@ const MetaCapi = () => {
           <TabsList className="bg-slate-900 border border-slate-800">
             <TabsTrigger value="configuracion"><Settings className="w-4 h-4 mr-2" /> Configuración</TabsTrigger>
             <TabsTrigger value="bitacora"><BookOpen className="w-4 h-4 mr-2" /> Bitácora de Eventos</TabsTrigger>
+            <TabsTrigger value="auditoria"><Eye className="w-4 h-4 mr-2" /> Auditoría Meta</TabsTrigger>
+            <TabsTrigger value="mapper"><GitMerge className="w-4 h-4 mr-2" /> Mapper de Campos</TabsTrigger>
           </TabsList>
 
           <TabsContent value="configuracion" className="mt-6">
@@ -146,8 +158,12 @@ const MetaCapi = () => {
 
           <TabsContent value="bitacora" className="mt-6">
             <Card className="bg-slate-900 border-slate-800">
-              <CardHeader>
-                <CardTitle>Últimos 100 Eventos Enviados</CardTitle>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle>Últimos 100 Eventos Enviados</CardTitle>
+                  <CardDescription>Registro de toda la actividad enviada a Meta.</CardDescription>
+                </div>
+                <Button onClick={() => setIsSendDialogOpen(true)}><Send className="w-4 h-4 mr-2" /> Enviar Evento Manual</Button>
               </CardHeader>
               <CardContent>
                 <Table>
@@ -158,18 +174,22 @@ const MetaCapi = () => {
                       <TableHead>Evento</TableHead>
                       <TableHead>Valor</TableHead>
                       <TableHead>Estado</TableHead>
+                      <TableHead className="text-right">Detalles</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {loading ? (
-                      <TableRow><TableCell colSpan={5} className="text-center h-24"><Loader2 className="w-6 h-6 animate-spin mx-auto" /></TableCell></TableRow>
+                      <TableRow><TableCell colSpan={6} className="text-center h-24"><Loader2 className="w-6 h-6 animate-spin mx-auto" /></TableCell></TableRow>
                     ) : events.map(event => (
                       <TableRow key={event.id}>
-                        <TableCell>{new Date(event.created_at).toLocaleString()}</TableCell>
-                        <TableCell>{event.whatsapp_id}</TableCell>
+                        <TableCell className="text-xs text-slate-400">{new Date(event.created_at).toLocaleString()}</TableCell>
+                        <TableCell className="font-mono text-xs">{event.whatsapp_id}</TableCell>
                         <TableCell>{event.event_name}</TableCell>
                         <TableCell>{event.value ? `$${event.value}` : 'N/A'}</TableCell>
-                        <TableCell>{event.status}</TableCell>
+                        <TableCell><span className="text-green-500 font-bold">{event.status}</span></TableCell>
+                        <TableCell className="text-right">
+                          <Button variant="ghost" size="sm" onClick={() => handleViewPayload(event)}>Ver Payload</Button>
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -177,7 +197,24 @@ const MetaCapi = () => {
               </CardContent>
             </Card>
           </TabsContent>
+
+          <TabsContent value="auditoria" className="mt-6">
+            <Card className="bg-slate-900 border-slate-800">
+              <CardHeader><CardTitle>Auditoría de Eventos (Placeholder)</CardTitle></CardHeader>
+              <CardContent><p className="text-slate-400">Esta sección mostrará el Event Match Quality y errores recientes de la API de Meta.</p></CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="mapper" className="mt-6">
+            <Card className="bg-slate-900 border-slate-800">
+              <CardHeader><CardTitle>Mapper de Campos (Placeholder)</CardTitle></CardHeader>
+              <CardContent><p className="text-slate-400">Aquí podrás mapear visualmente los campos de tu CRM a los campos de la CAPI de Meta.</p></CardContent>
+            </Card>
+          </TabsContent>
         </Tabs>
+
+        <SendEventDialog open={isSendDialogOpen} onOpenChange={setIsSendDialogOpen} config={config} onSuccess={fetchData} />
+        {selectedEvent && <PayloadViewer open={isPayloadViewerOpen} onOpenChange={setIsPayloadViewerOpen} payload={selectedEvent.payload_sent} response={selectedEvent.meta_response} />}
       </div>
     </Layout>
   );
