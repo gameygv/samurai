@@ -5,6 +5,7 @@ import { ChatHeader } from './chat/ChatHeader';
 import { MessageList } from './chat/MessageList';
 import { MessageInput } from './chat/MessageInput';
 import { MemoryPanel } from './chat/MemoryPanel';
+import { AiSuggestions } from './chat/AiSuggestions';
 import { toast } from 'sonner';
 import { triggerMakeWebhook } from '@/utils/makeService';
 
@@ -19,6 +20,11 @@ const ChatViewer = ({ lead, open, onOpenChange }: ChatViewerProps) => {
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [isEditingMemory, setIsEditingMemory] = useState(false);
+  
+  // AI Co-pilot state
+  const [suggestions, setSuggestions] = useState<any[]>([]);
+  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
+  const [draftMessage, setDraftMessage] = useState('');
   
   // Local Memory State
   const [memoryForm, setMemoryForm] = useState({
@@ -54,14 +60,35 @@ const ChatViewer = ({ lead, open, onOpenChange }: ChatViewerProps) => {
       .eq('lead_id', lead.id)
       .order('created_at', { ascending: true });
 
-    if (!error && data) setMessages(data);
+    if (!error && data) {
+      setMessages(data);
+      // Fetch suggestions after loading messages
+      fetchAiSuggestions(data);
+    }
     setLoading(false);
+  };
+
+  const fetchAiSuggestions = async (msgs: any[]) => {
+    if (msgs.length === 0) return;
+    setLoadingSuggestions(true);
+    try {
+      const transcript = msgs.slice(-10).map(m => `${m.emisor}: ${m.mensaje}`).join('\n');
+      const { data, error } = await supabase.functions.invoke('get-ai-suggestions', {
+        body: { lead_id: lead.id, transcript }
+      });
+      if (!error && data.suggestions) {
+        setSuggestions(data.suggestions);
+      }
+    } catch (err) {
+      console.error("Error fetching suggestions:", err);
+    } finally {
+      setLoadingSuggestions(false);
+    }
   };
 
   const handleSendMessage = async (text: string) => {
     setSending(true);
     try {
-      // 1. Guardar localmente
       const { error } = await supabase.from('conversaciones').insert({
         lead_id: lead.id,
         mensaje: text,
@@ -71,8 +98,6 @@ const ChatViewer = ({ lead, open, onOpenChange }: ChatViewerProps) => {
 
       if (error) throw error;
       
-      // 2. Enviar a Make (Si hay webhook configurado)
-      // Usamos el webhook de ventas como fallback si no hay uno específico de chat
       await triggerMakeWebhook('webhook_sale', {
         type: 'outgoing_message',
         lead_id: lead.id,
@@ -82,6 +107,7 @@ const ChatViewer = ({ lead, open, onOpenChange }: ChatViewerProps) => {
       });
 
       fetchMessages();
+      setDraftMessage('');
       
       if (text.includes('#STOP') || text.includes('#START')) {
          const isPaused = text.includes('#STOP');
@@ -143,11 +169,21 @@ const ChatViewer = ({ lead, open, onOpenChange }: ChatViewerProps) => {
             onSendCommand={handleSendMessage} 
           />
           <MessageList messages={messages} loading={loading} />
-          <MessageInput 
-            onSendMessage={handleSendMessage} 
-            sending={sending} 
-            isAiPaused={lead.ai_paused} 
-          />
+          
+          <div className="p-3 bg-slate-900 border-t border-slate-800">
+            <AiSuggestions 
+              suggestions={suggestions} 
+              loading={loadingSuggestions} 
+              onSelect={setDraftMessage} 
+              onRefresh={() => fetchAiSuggestions(messages)}
+            />
+            <MessageInput 
+              onSendMessage={handleSendMessage} 
+              sending={sending} 
+              isAiPaused={lead.ai_paused}
+              initialValue={draftMessage}
+            />
+          </div>
         </div>
 
         <MemoryPanel 
