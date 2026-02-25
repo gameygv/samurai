@@ -11,79 +11,48 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders })
   }
 
-  console.log("[get-samurai-context] Reconstruyendo consciencia 5-Layer del Samurai...");
-
   try {
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
-    // 1. Obtener configuraciones base (ADN, Protocolos, etc)
     const { data: configs } = await supabaseClient.from('app_config').select('key, value');
     const getConfig = (key: string) => configs?.find(c => c.key === key)?.value || "";
 
-    // 2. Obtener Verdad Maestra (Sitio Web)
-    const { data: webContent } = await supabaseClient
-      .from('main_website_content')
-      .select('title, content')
-      .eq('scrape_status', 'success');
-    
-    const truthBlock = webContent?.map(w => `[FUENTE OFICIAL: ${w.title}]\n${w.content}`).join('\n\n') 
-      || "Sin datos oficiales indexados.";
+    const { data: webContent } = await supabaseClient.from('main_website_content').select('title, content').eq('scrape_status', 'success');
+    const truthBlock = webContent?.map(w => `[FUENTE OFICIAL: ${w.title}]\n${w.content}`).join('\n\n') || "Sin datos oficiales.";
 
-    // 3. Obtener Catálogo de Media (Imágenes con Triggers y OCR)
-    const { data: mediaAssets } = await supabaseClient
-      .from('media_assets')
-      .select('title, url, ai_instructions');
-
-    const mediaCatalog = mediaAssets?.map(m => {
-       const [trigger, ocr] = (m.ai_instructions || "").split('--- OCR DATA ---');
-       return `[ACTIVO VISUAL: ${m.title}]
-- URL: ${m.url}
-- CUANDO USAR: ${trigger?.trim() || 'No especificado'}
-- CONTENIDO DEL POSTER (LECTURA OCR): ${ocr?.trim() || 'Sin datos de texto'}`;
-    }).join('\n\n') || "No hay activos visuales en biblioteca.";
-
-    // 4. Obtener Reglas #CIA (Aprendizaje)
-    const learningBlock = getConfig('prompt_relearning') || "Sin lecciones previas.";
+    const { data: mediaAssets } = await supabaseClient.from('media_assets').select('title, url, ai_instructions');
+    const mediaCatalog = mediaAssets?.map(m => `[ACTIVO: ${m.title}] URL: ${m.url}`).join('\n');
 
     const systemPrompt = `
-# CAPA 1: REGLAS CRÍTICAS DE APRENDIZAJE (#CIA)
-IMPORTANTE: Estas reglas son correcciones a errores que cometiste en el pasado. Tienen prioridad absoluta sobre el ADN.
-${learningBlock}
+# CAPA 0: EL ALMA DEL SAMURAI (INSTINTO SUPREMO)
+Eres el Samurai de The Elephant Bowl. Tu esencia es la hospitalidad y la efectividad comercial.
+1. MISIÓN: Informar con calidez y convencer al cliente de que reserve su lugar.
+2. EL CIERRE: Todo proceso de venta inicia con el pago de $1500 MXN para reservar.
+3. ACCIÓN OBLIGATORIA: En cuanto el cliente muestre intención de inscribirse, DEBES enviar el link de pago de WooCommerce.
+4. COMPROBANTES: Si el cliente envía una foto de un comprobante, agradécele calurosamente y dile: "Gracias por tu pago, en breve mi equipo validará la transacción para confirmar tu lugar." (No intentes validarlo tú aún).
 
-# CAPA 2: IDENTIDAD Y ADN (SAMURAI)
+# CAPA 1: REGLAS #CIA (APRENDIZAJE ADAPTATIVO)
+${getConfig('prompt_relearning')}
+
+# CAPA 2: ADN CORE Y ESTRATEGIA
 ${getConfig('prompt_adn_core')}
-${getConfig('prompt_protocolos')}
 ${getConfig('prompt_estrategia_cierre')}
 
-# CAPA 3: FUENTE DE VERDAD ABSOLUTA (CONTEXTO WEB)
-Solo puedes afirmar datos que aparezcan aquí. No inventes fechas ni precios que no estén en este bloque:
+# CAPA 3: VERDAD MAESTRA (CONTEXTO WEB)
 ${truthBlock}
 
-# CAPA 4: CATÁLOGO DE ACTIVOS VISUALES (MEDIA MANAGER)
-Tienes permiso para enviar estas imágenes. Identifica si el contexto del cliente coincide con el campo "CUANDO USAR":
+# CAPA 4: CATÁLOGO VISUAL
 ${mediaCatalog}
 
-# CAPA 5: INSTRUCCIONES DE VISIÓN (OJO DE HALCÓN)
-${getConfig('prompt_vision_instrucciones')}
-
 # REGLA DE ORO
-Eres un cerrador de ventas. Si el cliente muestra interés, usa los activos visuales (Layer 4) para reforzar la venta. No alucines información fuera de la Verdad Maestra (Layer 3).
+Eres un cerrador de elite. Tu éxito se mide en reservas de $1500 MXN. Usa el link de pago con orgullo.
     `;
 
-    return new Response(
-      JSON.stringify({ 
-        system_prompt: systemPrompt,
-        version: "3.0.0-HIERARCHY_CORE",
-        timestamp: new Date().toISOString()
-      }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    )
-
+    return new Response(JSON.stringify({ system_prompt: systemPrompt }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   } catch (error: any) {
-    console.error("[get-samurai-context] Error:", error.message);
     return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: corsHeaders })
   }
 })
