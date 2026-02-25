@@ -36,7 +36,11 @@ const Index = () => {
   });
 
   const [tasks, setTasks] = useState<any[]>([]);
-  const [funnelData, setFunnelData] = useState<any[]>([]);
+  const [funnelData, setFunnelData] = useState<any[]>([
+     { name: 'Prospectos', value: 0, color: '#6366f1' },
+     { name: 'Calificados', value: 0, color: '#818cf8' },
+     { name: 'Cierre', value: 0, color: '#c084fc' }
+  ]);
   const [recentChats, setRecentChats] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [latency, setLatency] = useState<number>(0);
@@ -67,6 +71,7 @@ const Index = () => {
         supabase.from('errores_ia').select('count', { count: 'exact', head: true }).eq('estado_correccion', 'REPORTADA'),
         supabase.from('versiones_prompts_aprendidas').select('*').order('created_at', { ascending: true }),
         supabase.from('activity_logs').select('*').order('created_at', { ascending: false }).limit(15),
+        // Usamos maybeSingle o validamos que la columna exista via SQL antes, aquí asumimos que el parche SQL se aplicó
         supabase.from('leads').select('id, nombre, next_followup_at').not('next_followup_at', 'is', null).order('next_followup_at', { ascending: true }).limit(5),
         supabase.from('leads').select('*'),
         supabase.from('main_website_content').select('scrape_status'),
@@ -96,11 +101,12 @@ const Index = () => {
       setBrainHealth({ adnCoreStatus, ciaRules, webHealth, overallStatus });
 
       // Procesar Tareas Radar
+      // Protegemos contra errores si followupsRes falla
       const followUpTasks = (followupsRes.data || []).map(l => ({
         id: l.id,
         type: 'FOLLOWUP',
         target: l.nombre || 'Cliente Anónimo',
-        time: new Date(l.next_followup_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        time: l.next_followup_at ? new Date(l.next_followup_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Pendiente',
         status: 'scheduled'
       }));
       setTasks(followUpTasks);
@@ -130,6 +136,7 @@ const Index = () => {
 
     } catch (err) {
       console.error("Dashboard error:", err);
+      // No mostramos toast de error en loop, solo logueamos
     } finally {
       setLoading(false);
     }
@@ -195,7 +202,9 @@ const Index = () => {
                   </CardHeader>
                   <CardContent className="p-0">
                     <div className="divide-y divide-slate-800/50">
-                        {recentChats.map((chat) => (
+                        {recentChats.length === 0 ? (
+                           <div className="p-6 text-center text-[10px] text-slate-500 italic">Sin actividad reciente</div>
+                        ) : recentChats.map((chat) => (
                           <div key={chat.id} className="p-3 hover:bg-slate-800/20 transition-colors flex flex-col gap-1">
                               <div className="flex justify-between items-center">
                                   <span className="text-[10px] font-bold text-slate-300">{chat.leads?.nombre || 'Anónimo'}</span>
