@@ -11,7 +11,7 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders })
   }
 
-  console.log("[get-samurai-context] Reconstruyendo cerebro para Make.com...");
+  console.log("[get-samurai-context] Reconstruyendo cerebro dinámico...");
 
   try {
     const supabaseClient = createClient(
@@ -19,23 +19,22 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
-    // --- CONSTRUCCIÓN DEL CEREBRO ---
+    // 1. Obtener configuraciones base
     const { data: configs } = await supabaseClient.from('app_config').select('key, value');
     const p = (key: string) => configs?.find(c => c.key === key)?.value || "";
 
+    // 2. Obtener Verdad Maestra (Contenido del sitio indexado)
     const { data: webContent } = await supabaseClient
       .from('main_website_content')
       .select('title, content')
       .eq('scrape_status', 'success');
+    
     const truthBlock = webContent?.map(w => `[FUENTE OFICIAL: ${w.title}]\n${w.content}`).join('\n\n') 
       || "ERROR: No hay Verdad Maestra indexada.";
 
-    const { data: ciaRules } = await supabaseClient
-      .from('errores_ia')
-      .select('categoria, correccion_sugerida')
-      .eq('estado_correccion', 'VALIDADA');
-    const ciaBlock = ciaRules?.map(r => `[#CIA - REGLA ${r.categoria}]: ${r.correccion_sugerida}`).join('\n')
-      || "No hay reglas de aprendizaje activas.";
+    // 3. Obtener Aprendizaje Dinámico (#CIA)
+    // Leemos el bloque que generó el botón "Sincronizar Cerebro"
+    const learningBlock = p('prompt_relearning') || "Aún no hay lecciones aprendidas registradas.";
 
     const systemPrompt = `
 # IDENTIDAD MAESTRA: SAMURAI (The Elephant Bowl)
@@ -47,9 +46,9 @@ ${p('prompt_estrategia_cierre') || 'Tu objetivo es que el cliente compre formaci
 # PROTOCOLOS DE CONDUCTA
 ${p('prompt_protocolos') || 'Mantén un tono profesional, experto y místico.'}
 
-# REGLAS DE APRENDIZAJE (#CIA)
-IMPORTANTE: Estas reglas son correcciones a errores que cometiste en el pasado. NO las ignores.
-${ciaBlock}
+# LECCIONES APRENDIDAS Y REGLAS DE ORO (#CIA)
+IMPORTANTE: Estas reglas son correcciones críticas a tu comportamiento anterior. SÍGUELAS ESTRICTAMENTE.
+${learningBlock}
 
 # FUENTE DE VERDAD ABSOLUTA (CONTEXTO DEL SITIO WEB)
 Toda tu información debe basarse UNICAMENTE en estos datos. Si el dato no está aquí, no lo inventes.
@@ -59,13 +58,13 @@ ${truthBlock}
 ${p('prompt_vision_instrucciones')}
 
 # REGLA DE ORO
-Bajo ninguna circunstancia respondas sobre temas ajenos a The Elephant Bowl (como mecánica, arte general, etc). Eres un especialista en Sonoterapia y Cuencos.
+Bajo ninguna circunstancia respondas sobre temas ajenos a The Elephant Bowl. Eres un especialista en Sonoterapia y Cuencos.
     `;
 
     return new Response(
       JSON.stringify({ 
         system_prompt: systemPrompt,
-        version: "2.1.0-MAKE_COMPATIBLE",
+        version: "2.5.0-LEARNING_ENABLED",
         timestamp: new Date().toISOString()
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

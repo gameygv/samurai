@@ -13,7 +13,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { 
   Brain, AlertTriangle, GitBranch, Search, 
-  Eye, Loader2, Zap, CheckCircle2, RefreshCcw, Edit, Lock, Plus, Save
+  Eye, Loader2, Zap, CheckCircle2, RefreshCcw, Edit, Lock, Plus, Save, Trash2
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { logActivity } from '@/utils/logger';
@@ -73,10 +73,22 @@ const LearningLog = () => {
      setEditForm({ 
         correction: '', 
         category: 'CONDUCTA', 
-        status: 'VALIDADA' // Por defecto validada si se crea manual
+        status: 'VALIDADA' 
      });
      setEditMode(true);
      setIsDialogOpen(true);
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm("¿Seguro que quieres eliminar esta regla?")) return;
+    try {
+      const { error } = await supabase.from('errores_ia').delete().eq('error_id', id);
+      if (error) throw error;
+      toast.success("Regla eliminada");
+      fetchData();
+    } catch (err: any) {
+      toast.error("Error al eliminar");
+    }
   };
 
   const handleSaveChanges = async () => {
@@ -100,14 +112,6 @@ const LearningLog = () => {
               });
 
            if (error) throw error;
-
-           await logActivity({
-              action: 'CREATE',
-              resource: 'BRAIN',
-              description: `Nueva regla #CIA manual creada: ${editForm.category}`,
-              status: 'OK'
-           });
-
            toast.success("Nueva regla guardada correctamente");
         } else {
            const { error } = await supabase
@@ -121,14 +125,6 @@ const LearningLog = () => {
               .eq('error_id', selectedError.error_id);
 
            if (error) throw error;
-
-           await logActivity({
-              action: 'UPDATE',
-              resource: 'BRAIN',
-              description: `Regla #CIA actualizada: ${editForm.category}`,
-              status: 'OK'
-           });
-
            toast.success("Regla actualizada correctamente");
         }
 
@@ -152,9 +148,11 @@ const LearningLog = () => {
         return;
       }
 
+      // Generamos un bloque de texto que consolida todo el aprendizaje
       const instructionBlock = `# LECCIONES APRENDIDAS (#CIA AUTO-GENERADO)\n` + 
         validated.map(e => `[${e.categoria}] REGLA: ${e.correccion_sugerida}`).join('\n');
 
+      // Guardamos este bloque en la configuración para que el kernel lo lea
       const { error } = await supabase
         .from('app_config')
         .upsert({
@@ -165,13 +163,6 @@ const LearningLog = () => {
         });
 
       if (error) throw error;
-
-      await logActivity({
-        action: 'UPDATE',
-        resource: 'BRAIN',
-        description: `Sincronización #CIA: ${validated.length} reglas inyectadas.`,
-        status: 'OK'
-      });
 
       toast.success(`¡Cerebro actualizado! ${validated.length} reglas #CIA inyectadas.`);
     } catch (err: any) {
@@ -286,7 +277,7 @@ const LearningLog = () => {
                         <TableHead className="text-slate-400">Categoría</TableHead>
                         <TableHead className="text-slate-400">Regla #CIA</TableHead>
                         <TableHead className="text-slate-400">Estado</TableHead>
-                        <TableHead className="text-right text-slate-400">Editar</TableHead>
+                        <TableHead className="text-right text-slate-400">Acciones</TableHead>
                      </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -322,9 +313,14 @@ const LearningLog = () => {
                                  </Badge>
                               </TableCell>
                               <TableCell className="text-right">
-                                 <Button variant="ghost" size="sm" className="h-8 w-8 p-0 hover:text-indigo-400" onClick={() => handleOpenEditDialog(err)}>
-                                    <Edit className="w-4 h-4" />
-                                 </Button>
+                                 <div className="flex justify-end gap-2">
+                                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0 hover:text-indigo-400" onClick={() => handleOpenEditDialog(err)}>
+                                       <Edit className="w-4 h-4" />
+                                    </Button>
+                                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0 hover:text-red-500" onClick={() => handleDelete(err.error_id)}>
+                                       <Trash2 className="w-4 h-4" />
+                                    </Button>
+                                 </div>
                               </TableCell>
                            </TableRow>
                         ))
@@ -335,6 +331,7 @@ const LearningLog = () => {
           </TabsContent>
           
           <TabsContent value="versiones">
+             {/* Historial de versiones del prompt consolidado */}
              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-6">
                 {versions.map(v => (
                    <Card key={v.version_id} className="bg-slate-900 border-slate-800 hover:border-indigo-500/50 transition-colors">
@@ -365,7 +362,6 @@ const LearningLog = () => {
               </DialogHeader>
               <div className="space-y-4 py-4">
                  
-                 {/* Mensajes de Contexto (Solo lectura, si no es creación) */}
                  {!isCreating && selectedError?.mensaje_cliente !== 'Creación Manual' && (
                     <div className="bg-slate-950/50 p-3 rounded border border-slate-800 space-y-3">
                        <div className="flex gap-2 items-start">
@@ -379,7 +375,6 @@ const LearningLog = () => {
                     </div>
                  )}
 
-                 {/* Formulario de Edición */}
                  <div className="space-y-3">
                     <div className="space-y-2">
                        <Label className="text-xs text-green-400">Instrucción Maestra (#CIA)</Label>
