@@ -1,17 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import Layout from '@/components/Layout';
 import { supabase } from '@/integrations/supabase/client';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { 
-  Trello, Search, Loader2, MessageSquare, 
-  MapPin, Clock, TrendingUp, Filter, BrainCircuit,
-  Smile, Meh, Frown, User
+  Trello, Loader2, Clock, TrendingUp, User, Smile, Meh, Frown
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import ChatViewer from '@/components/ChatViewer';
-import { toast } from 'sonner';
 
 const Pipeline = () => {
   const [leads, setLeads] = useState<any[]>([]);
@@ -28,7 +25,6 @@ const Pipeline = () => {
   useEffect(() => {
     fetchLeads();
     
-    // Suscripción en tiempo real para cambios en el pipeline
     const channel = supabase
       .channel('pipeline-live')
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'leads' }, (payload) => {
@@ -50,8 +46,12 @@ const Pipeline = () => {
     setLoading(false);
   };
 
+  // Comparación robusta: Convierte todo a mayúsculas para evitar errores de tipeo o IA
   const getLeadsByIntent = (intent: string) => {
-    return leads.filter(l => (l.buying_intent || 'BAJO') === intent);
+    return leads.filter(l => {
+        const leadIntent = (l.buying_intent || 'BAJO').toUpperCase();
+        return leadIntent === intent;
+    });
   };
 
   const handleOpenChat = (lead: any) => {
@@ -65,6 +65,16 @@ const Pipeline = () => {
       case 'NEGATIVO': return 'text-red-500';
       default: return 'text-slate-500';
     }
+  };
+
+  const getFollowupBadge = (date: string | null) => {
+     if (!date) return null;
+     const isOverdue = new Date(date) < new Date();
+     return (
+        <Badge variant="outline" className={cn("text-[8px] h-4 px-1", isOverdue ? "border-red-500 text-red-500 bg-red-500/10" : "border-indigo-500 text-indigo-500 bg-indigo-500/10")}>
+           {isOverdue ? "VENCIDO" : "PENDIENTE"}
+        </Badge>
+     );
   };
 
   return (
@@ -106,10 +116,13 @@ const Pipeline = () => {
                   ) : getLeadsByIntent(col.id).map((lead) => (
                     <Card 
                       key={lead.id} 
-                      className="bg-slate-900 border-slate-800 hover:border-indigo-500/50 transition-all cursor-pointer group shadow-lg"
+                      className="bg-slate-900 border-slate-800 hover:border-indigo-500/50 transition-all cursor-pointer group shadow-lg relative overflow-hidden"
                       onClick={() => handleOpenChat(lead)}
                     >
-                      <CardContent className="p-4 space-y-3">
+                      {/* Borde izquierdo de estado */}
+                      <div className={cn("absolute left-0 top-0 bottom-0 w-1", lead.ai_paused ? "bg-red-500" : "bg-green-500")} />
+                      
+                      <CardContent className="p-4 space-y-3 pl-5">
                          <div className="flex justify-between items-start">
                             <div className="flex items-center gap-2">
                                <div className="w-8 h-8 rounded-lg bg-indigo-600/10 flex items-center justify-center text-indigo-500 border border-indigo-500/20">
@@ -119,10 +132,12 @@ const Pipeline = () => {
                                   <p className="text-xs font-bold text-white group-hover:text-indigo-400 transition-colors truncate max-w-[120px]">
                                      {lead.nombre || lead.telefono || 'Anónimo'}
                                   </p>
-                                  <p className="text-[9px] text-slate-500 font-mono">{lead.ciudad || 'Ubicación...'}</p>
+                                  <div className="flex items-center gap-2">
+                                     <p className="text-[9px] text-slate-500 font-mono">{lead.ciudad || 'Ubicación...'}</p>
+                                     {getFollowupBadge(lead.next_followup_at)}
+                                  </div>
                                </div>
                             </div>
-                            {lead.ai_paused && <Badge className="bg-red-600 text-[8px] h-4">STOP</Badge>}
                          </div>
 
                          {lead.summary && (

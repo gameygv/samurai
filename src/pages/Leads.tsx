@@ -124,14 +124,14 @@ const Leads = () => {
 
   const filteredLeads = leads.filter(l => {
     const matchesSearch = (l.nombre?.toLowerCase().includes(searchTerm.toLowerCase()) || l.telefono?.includes(searchTerm));
-    const matchesIntent = filterIntent === 'ALL' || l.buying_intent === filterIntent;
+    const matchesIntent = filterIntent === 'ALL' || l.buying_intent?.toUpperCase() === filterIntent;
     return matchesSearch && matchesIntent;
   });
 
   const intentStats = {
-    alto: leads.filter(l => l.buying_intent === 'ALTO').length,
-    medio: leads.filter(l => l.buying_intent === 'MEDIO').length,
-    bajo: leads.filter(l => l.buying_intent === 'BAJO').length,
+    alto: leads.filter(l => l.buying_intent?.toUpperCase() === 'ALTO').length,
+    medio: leads.filter(l => l.buying_intent?.toUpperCase() === 'MEDIO').length,
+    bajo: leads.filter(l => l.buying_intent?.toUpperCase() === 'BAJO').length,
   };
 
   return (
@@ -257,13 +257,13 @@ const Leads = () => {
                        <div className="flex flex-col gap-1 w-[100px]">
                           <div className="flex justify-between text-[8px] text-slate-500 font-bold uppercase">
                              <span>{lead.buying_intent || 'BAJO'}</span>
-                             <TrendingUp className={cn("w-2.5 h-2.5", lead.buying_intent === 'ALTO' ? 'text-green-500' : 'text-slate-500')} />
+                             <TrendingUp className={cn("w-2.5 h-2.5", lead.buying_intent?.toUpperCase() === 'ALTO' ? 'text-green-500' : 'text-slate-500')} />
                           </div>
                           <div className="h-1 bg-slate-800 rounded-full overflow-hidden">
                              <div className={cn(
                                 "h-full transition-all duration-500",
-                                lead.buying_intent === 'ALTO' ? 'bg-green-500' : lead.buying_intent === 'MEDIO' ? 'bg-yellow-500' : 'bg-slate-700'
-                             )} style={{ width: lead.buying_intent === 'ALTO' ? '90%' : lead.buying_intent === 'MEDIO' ? '50%' : '10%' }} />
+                                lead.buying_intent?.toUpperCase() === 'ALTO' ? 'bg-green-500' : lead.buying_intent?.toUpperCase() === 'MEDIO' ? 'bg-yellow-500' : 'bg-slate-700'
+                             )} style={{ width: lead.buying_intent?.toUpperCase() === 'ALTO' ? '90%' : lead.buying_intent?.toUpperCase() === 'MEDIO' ? '50%' : '10%' }} />
                           </div>
                        </div>
                     </TableCell>

@@ -71,7 +71,6 @@ const Index = () => {
         supabase.from('errores_ia').select('count', { count: 'exact', head: true }).eq('estado_correccion', 'REPORTADA'),
         supabase.from('versiones_prompts_aprendidas').select('*').order('created_at', { ascending: true }),
         supabase.from('activity_logs').select('*').order('created_at', { ascending: false }).limit(15),
-        // Usamos maybeSingle o validamos que la columna exista via SQL antes, aquí asumimos que el parche SQL se aplicó
         supabase.from('leads').select('id, nombre, next_followup_at').not('next_followup_at', 'is', null).order('next_followup_at', { ascending: true }).limit(5),
         supabase.from('leads').select('*'),
         supabase.from('main_website_content').select('scrape_status'),
@@ -101,21 +100,20 @@ const Index = () => {
       setBrainHealth({ adnCoreStatus, ciaRules, webHealth, overallStatus });
 
       // Procesar Tareas Radar
-      // Protegemos contra errores si followupsRes falla
       const followUpTasks = (followupsRes.data || []).map(l => ({
         id: l.id,
         type: 'FOLLOWUP',
         target: l.nombre || 'Cliente Anónimo',
-        time: l.next_followup_at ? new Date(l.next_followup_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Pendiente',
+        time: new Date(l.next_followup_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         status: 'scheduled'
       }));
       setTasks(followUpTasks);
 
-      // Procesar Embudo
+      // Procesar Embudo (Robust Case-Insensitive)
       const funnel = [
         { name: 'Prospectos', value: leads.length, color: '#6366f1' },
-        { name: 'Calificados', value: leads.filter(l => l.buying_intent === 'MEDIO' || l.buying_intent === 'ALTO').length, color: '#818cf8' },
-        { name: 'Cierre', value: leads.filter(l => l.buying_intent === 'ALTO').length, color: '#c084fc' }
+        { name: 'Calificados', value: leads.filter(l => ['MEDIO', 'ALTO'].includes(l.buying_intent?.toUpperCase())).length, color: '#818cf8' },
+        { name: 'Cierre', value: leads.filter(l => l.buying_intent?.toUpperCase() === 'ALTO').length, color: '#c084fc' }
       ];
       setFunnelData(funnel);
 
@@ -136,7 +134,6 @@ const Index = () => {
 
     } catch (err) {
       console.error("Dashboard error:", err);
-      // No mostramos toast de error en loop, solo logueamos
     } finally {
       setLoading(false);
     }
