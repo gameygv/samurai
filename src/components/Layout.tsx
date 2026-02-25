@@ -40,7 +40,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
       title: "SAMURAI AI",
       items: [
         { icon: Brain, label: 'Cerebro Core', path: '/brain' },
-        { icon: GitBranch, label: 'Control de Versiones', path: '/brain?tab=part5' },
+        { icon: GitBranch, label: 'Control de Versiones', path: '/brain?tab=versiones' },
       ]
     },
     {

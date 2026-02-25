@@ -2,17 +2,16 @@ import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import Layout from '@/components/Layout';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/context/AuthContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { 
-  Save, Bot, Eye, Database, History, MessageSquare, 
-  CheckCheck, Zap, Loader2, FileText, Send, ShoppingCart, Scan, Terminal, FlaskConical, Image as ImageIcon, Search, ArrowRight, BrainCircuit, ShieldAlert, Info, Target
+  Save, Bot, Eye, History, Zap, Loader2, FileText, Scan, Terminal, FlaskConical, BrainCircuit, ShieldAlert, Target, GitBranch, User, Calendar, RefreshCcw
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
@@ -27,6 +26,7 @@ const DEFAULTS = {
 const AgentBrain = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const initialTab = searchParams.get('tab') || 'identidad';
+  const { user, profile } = useAuth();
   
   const [prompts, setPrompts] = useState<Record<string, string>>(DEFAULTS);
   const [loading, setLoading] = useState(true);
@@ -38,8 +38,13 @@ const AgentBrain = () => {
   const [testResult, setTestResult] = useState<{ reply: string; system_prompt: string } | null>(null);
   const [testing, setTesting] = useState(false);
 
+  // Version Control State
+  const [versions, setVersions] = useState<any[]>([]);
+  const [viewingVersion, setViewingVersion] = useState<any>(null);
+
   useEffect(() => {
     fetchPrompts();
+    fetchVersions();
   }, []);
 
   const fetchPrompts = async () => {
@@ -58,6 +63,11 @@ const AgentBrain = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const fetchVersions = async () => {
+    const { data } = await supabase.from('prompt_versions').select('*').order('created_at', { ascending: false });
+    if (data) setVersions(data);
   };
 
   const handleRunSimulation = async () => {
@@ -84,6 +94,19 @@ const AgentBrain = () => {
   const handleSave = async () => {
     setSaving(true);
     try {
+      // 1. Crear snapshot para control de versiones
+      const versionName = `Guardado Manual - ${new Date().toLocaleString()}`;
+      const { error: versionError } = await supabase
+        .from('prompt_versions')
+        .insert({
+          version_name: versionName,
+          prompts_snapshot: prompts,
+          created_by: user?.id,
+          created_by_name: profile?.full_name || user?.email
+        });
+      if (versionError) throw versionError;
+
+      // 2. Guardar prompts actuales
       const promptsToSave = Object.entries(prompts).map(([key, value]) => ({
         key,
         value,
@@ -96,11 +119,44 @@ const AgentBrain = () => {
 
       if (error) throw error;
 
-      toast.success('Cerebro actualizado correctamente.');
+      toast.success('Cerebro actualizado y versión guardada.');
       fetchPrompts();
+      fetchVersions();
     } catch (err: any) {
       console.error("Save Error:", err);
       toast.error(`Error al guardar: ${err.message}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleRevert = async (versionToRevert: any) => {
+    if (!confirm(`¿Seguro que quieres restaurar la versión "${versionToRevert.version_name}"?`)) return;
+    setSaving(true);
+    try {
+      const snapshot = versionToRevert.prompts_snapshot;
+      const promptsToSave = Object.entries(snapshot).map(([key, value]) => ({
+        key, value, category: 'PROMPT'
+      }));
+      
+      const { error: upsertError } = await supabase.from('app_config').upsert(promptsToSave, { onConflict: 'key' });
+      if (upsertError) throw upsertError;
+
+      const versionName = `Restaurado a "${versionToRevert.version_name.substring(0, 30)}..."`;
+      await supabase.from('prompt_versions').insert({
+        version_name: versionName,
+        prompts_snapshot: snapshot,
+        created_by: user?.id,
+        created_by_name: profile?.full_name || user?.email,
+        notes: `Restaurado desde la versión ID: ${versionToRevert.id}`
+      });
+
+      toast.success("Versión restaurada correctamente.");
+      await fetchPrompts();
+      await fetchVersions();
+      setSearchParams({ tab: 'identidad' });
+    } catch (err: any) {
+      toast.error(`Error al restaurar: ${err.message}`);
     } finally {
       setSaving(false);
     }
@@ -134,9 +190,10 @@ const AgentBrain = () => {
         <Tabs value={initialTab} onValueChange={v => setSearchParams({ tab: v })}>
           <TabsList className="bg-slate-900 border border-slate-800 p-1 mb-6 flex-wrap h-auto">
              <TabsTrigger value="identidad">1. Identidad Core</TabsTrigger>
-             <TabsTrigger value="simulador">2. Simulador de Jerarquía</TabsTrigger>
-             <TabsTrigger value="ojo-de-halcon">3. Ojo de Halcón</TabsTrigger>
-             <TabsTrigger value="debug">4. Ver Prompt Maestro</TabsTrigger>
+             <TabsTrigger value="versiones">2. Control de Versiones</TabsTrigger>
+             <TabsTrigger value="simulador">3. Simulador de Jerarquía</TabsTrigger>
+             <TabsTrigger value="ojo-de-halcon">4. Ojo de Halcón</TabsTrigger>
+             <TabsTrigger value="debug">5. Ver Prompt Maestro</TabsTrigger>
           </TabsList>
 
           <TabsContent value="identidad" className="space-y-6">
@@ -145,6 +202,33 @@ const AgentBrain = () => {
                 <PromptCard title="ESTRATEGIA DE VENTAS" icon={Target} value={prompts['prompt_estrategia_cierre']} onChange={(v:string) => setPrompts({...prompts, prompt_estrategia_cierre: v})} />
                 <PromptCard title="PROTOCOLOS" icon={FileText} value={prompts['prompt_protocolos']} onChange={(v:string) => setPrompts({...prompts, prompt_protocolos: v})} />
              </div>
+          </TabsContent>
+
+          <TabsContent value="versiones">
+            <Card className="bg-slate-900 border-slate-800">
+              <CardHeader>
+                <CardTitle className="text-sm text-white flex items-center gap-2"><GitBranch className="w-4 h-4 text-indigo-400" /> Historial de Cambios</CardTitle>
+                <CardDescription>Cada vez que guardas, se crea un respaldo aquí.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader><TableRow><TableHead>Fecha</TableHead><TableHead>Versión</TableHead><TableHead>Autor</TableHead><TableHead className="text-right">Acciones</TableHead></TableRow></TableHeader>
+                  <TableBody>
+                    {versions.map(v => (
+                      <TableRow key={v.id}>
+                        <TableCell className="text-xs text-slate-400">{new Date(v.created_at).toLocaleString()}</TableCell>
+                        <TableCell className="font-mono text-xs">{v.version_name}</TableCell>
+                        <TableCell className="text-xs">{v.created_by_name || 'Sistema'}</TableCell>
+                        <TableCell className="text-right space-x-2">
+                          <Button variant="ghost" size="sm" onClick={() => setViewingVersion(v)}><Eye className="w-4 h-4 mr-2" /> Ver</Button>
+                          <Button variant="outline" size="sm" className="text-indigo-400 border-indigo-500/50" onClick={() => handleRevert(v)} disabled={saving}><RefreshCcw className="w-4 h-4 mr-2" /> Restaurar</Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
           </TabsContent>
 
           <TabsContent value="simulador">
@@ -202,7 +286,6 @@ const AgentBrain = () => {
                          </div>
                       ) : (
                          <div className="h-48 flex flex-col items-center justify-center text-slate-700">
-                            <ArrowRight className="w-8 h-8 mb-2 opacity-20 rotate-45" />
                             <p className="text-xs italic">Ingresa una pregunta a la izquierda.</p>
                          </div>
                       )}
@@ -232,6 +315,19 @@ const AgentBrain = () => {
              <PromptCard title="INSTRUCCIONES DE VISIÓN" icon={Scan} value={prompts['prompt_vision_instrucciones']} onChange={(v:string) => setPrompts({...prompts, prompt_vision_instrucciones: v})} />
           </TabsContent>
         </Tabs>
+
+        <Dialog open={!!viewingVersion} onOpenChange={() => setViewingVersion(null)}>
+          <DialogContent className="bg-slate-900 border-slate-800 text-white max-w-3xl">
+            <DialogHeader>
+              <DialogTitle>Viendo Versión: {viewingVersion?.version_name}</DialogTitle>
+            </DialogHeader>
+            <ScrollArea className="h-[60vh] mt-4 bg-black rounded p-4 border border-slate-800">
+              <pre className="text-xs text-slate-300 whitespace-pre-wrap">
+                {JSON.stringify(viewingVersion?.prompts_snapshot, null, 2)}
+              </pre>
+            </ScrollArea>
+          </DialogContent>
+        </Dialog>
       </div>
     </Layout>
   );

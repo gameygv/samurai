@@ -25,6 +25,7 @@ const Index = () => {
     activeFollowups: 0,
     identifiedLeads: 0,
     totalLeads: 0,
+    validatedSales: 0,
   });
   
   const [brainHealth, setBrainHealth] = useState({
@@ -59,7 +60,8 @@ const Index = () => {
         leadsRes, 
         webRes, 
         validatedCiaRes, 
-        adnPromptRes
+        adnPromptRes,
+        salesRes
       ] = await Promise.all([
         supabase.from('errores_ia').select('count', { count: 'exact', head: true }),
         supabase.from('errores_ia').select('count', { count: 'exact', head: true }).eq('estado_correccion', 'REPORTADA'),
@@ -69,7 +71,8 @@ const Index = () => {
         supabase.from('leads').select('*'),
         supabase.from('main_website_content').select('scrape_status'),
         supabase.from('errores_ia').select('count', { count: 'exact', head: true }).eq('estado_correccion', 'VALIDADA'),
-        supabase.from('app_config').select('key').eq('key', 'prompt_adn_core').limit(1).maybeSingle()
+        supabase.from('app_config').select('key').eq('key', 'prompt_adn_core').limit(1).maybeSingle(),
+        supabase.from('activity_logs').select('count', { count: 'exact', head: true }).like('description', '%Pago VALIDADO%')
       ]);
 
       const end = performance.now();
@@ -118,6 +121,7 @@ const Index = () => {
         activeFollowups: followupsRes.count || 0,
         identifiedLeads: identified,
         totalLeads: leads.length,
+        validatedSales: salesRes.count || 0,
       });
 
       // Chats recientes
@@ -153,7 +157,7 @@ const Index = () => {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           <StatCard title="Alertas #CIA" value={stats.totalErrors} icon={AlertTriangle} color="text-red-500" bg="bg-red-500/10" footer="Correcciones Detectadas" />
           <StatCard title="Salud Web" value={`${brainHealth.webHealth}%`} icon={Globe} color="text-indigo-500" bg="bg-indigo-500/10" footer="Verdad Maestra Indexada" />
-          <StatCard title="Follow-ups" value={stats.activeFollowups} icon={RefreshCw} color="text-blue-500" bg="bg-blue-500/10" footer="Mensajes en cola" />
+          <StatCard title="Ventas Validadas" value={stats.validatedSales} icon={DollarSign} color="text-emerald-500" bg="bg-emerald-500/10" footer="Comprobantes Procesados" />
           <StatCard title="Leads Identificados" value={stats.identifiedLeads} icon={UserCheck} color="text-green-500" bg="bg-green-500/10" footer={`de ${stats.totalLeads} totales`} />
         </div>
 
