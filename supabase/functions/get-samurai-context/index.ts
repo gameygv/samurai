@@ -11,7 +11,7 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders })
   }
 
-  console.log("[get-samurai-context] Reconstruyendo cerebro dinámico...");
+  console.log("[get-samurai-context] Reconstruyendo consciencia 5-Layer del Samurai...");
 
   try {
     const supabaseClient = createClient(
@@ -19,52 +19,64 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
-    // 1. Obtener configuraciones base
+    // 1. Obtener configuraciones base (ADN, Protocolos, etc)
     const { data: configs } = await supabaseClient.from('app_config').select('key, value');
-    const p = (key: string) => configs?.find(c => c.key === key)?.value || "";
+    const getConfig = (key: string) => configs?.find(c => c.key === key)?.value || "";
 
-    // 2. Obtener Verdad Maestra (Contenido del sitio indexado)
+    // 2. Obtener Verdad Maestra (Sitio Web)
     const { data: webContent } = await supabaseClient
       .from('main_website_content')
       .select('title, content')
       .eq('scrape_status', 'success');
     
     const truthBlock = webContent?.map(w => `[FUENTE OFICIAL: ${w.title}]\n${w.content}`).join('\n\n') 
-      || "ERROR: No hay Verdad Maestra indexada.";
+      || "Sin datos oficiales indexados.";
 
-    // 3. Obtener Aprendizaje Dinámico (#CIA)
-    // Leemos el bloque que generó el botón "Sincronizar Cerebro"
-    const learningBlock = p('prompt_relearning') || "Aún no hay lecciones aprendidas registradas.";
+    // 3. Obtener Catálogo de Media (Imágenes con Triggers y OCR)
+    const { data: mediaAssets } = await supabaseClient
+      .from('media_assets')
+      .select('title, url, ai_instructions');
+
+    const mediaCatalog = mediaAssets?.map(m => {
+       const [trigger, ocr] = (m.ai_instructions || "").split('--- OCR DATA ---');
+       return `[ACTIVO VISUAL: ${m.title}]
+- URL: ${m.url}
+- CUANDO USAR: ${trigger?.trim() || 'No especificado'}
+- CONTENIDO DEL POSTER (LECTURA OCR): ${ocr?.trim() || 'Sin datos de texto'}`;
+    }).join('\n\n') || "No hay activos visuales en biblioteca.";
+
+    // 4. Obtener Reglas #CIA (Aprendizaje)
+    const learningBlock = getConfig('prompt_relearning') || "Sin lecciones previas.";
 
     const systemPrompt = `
-# IDENTIDAD MAESTRA: SAMURAI (The Elephant Bowl)
-${p('prompt_adn_core') || 'Eres Samurai, el cerrador de ventas de elite de The Elephant Bowl.'}
-
-# ESTRATEGIA DE CONVERSIÓN
-${p('prompt_estrategia_cierre') || 'Tu objetivo es que el cliente compre formación o instrumentos.'}
-
-# PROTOCOLOS DE CONDUCTA
-${p('prompt_protocolos') || 'Mantén un tono profesional, experto y místico.'}
-
-# LECCIONES APRENDIDAS Y REGLAS DE ORO (#CIA)
-IMPORTANTE: Estas reglas son correcciones críticas a tu comportamiento anterior. SÍGUELAS ESTRICTAMENTE.
+# CAPA 1: REGLAS CRÍTICAS DE APRENDIZAJE (#CIA)
+IMPORTANTE: Estas reglas son correcciones a errores que cometiste en el pasado. Tienen prioridad absoluta sobre el ADN.
 ${learningBlock}
 
-# FUENTE DE VERDAD ABSOLUTA (CONTEXTO DEL SITIO WEB)
-Toda tu información debe basarse UNICAMENTE en estos datos. Si el dato no está aquí, no lo inventes.
+# CAPA 2: IDENTIDAD Y ADN (SAMURAI)
+${getConfig('prompt_adn_core')}
+${getConfig('prompt_protocolos')}
+${getConfig('prompt_estrategia_cierre')}
+
+# CAPA 3: FUENTE DE VERDAD ABSOLUTA (CONTEXTO WEB)
+Solo puedes afirmar datos que aparezcan aquí. No inventes fechas ni precios que no estén en este bloque:
 ${truthBlock}
 
-# INSTRUCCIONES DE VISIÓN (OJO DE HALCÓN)
-${p('prompt_vision_instrucciones')}
+# CAPA 4: CATÁLOGO DE ACTIVOS VISUALES (MEDIA MANAGER)
+Tienes permiso para enviar estas imágenes. Identifica si el contexto del cliente coincide con el campo "CUANDO USAR":
+${mediaCatalog}
+
+# CAPA 5: INSTRUCCIONES DE VISIÓN (OJO DE HALCÓN)
+${getConfig('prompt_vision_instrucciones')}
 
 # REGLA DE ORO
-Bajo ninguna circunstancia respondas sobre temas ajenos a The Elephant Bowl. Eres un especialista en Sonoterapia y Cuencos.
+Eres un cerrador de ventas. Si el cliente muestra interés, usa los activos visuales (Layer 4) para reforzar la venta. No alucines información fuera de la Verdad Maestra (Layer 3).
     `;
 
     return new Response(
       JSON.stringify({ 
         system_prompt: systemPrompt,
-        version: "2.5.0-LEARNING_ENABLED",
+        version: "3.0.0-HIERARCHY_CORE",
         timestamp: new Date().toISOString()
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -72,9 +84,6 @@ Bajo ninguna circunstancia respondas sobre temas ajenos a The Elephant Bowl. Ere
 
   } catch (error: any) {
     console.error("[get-samurai-context] Error:", error.message);
-    return new Response(JSON.stringify({ error: error.message }), { 
-      status: 500, 
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-    })
+    return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: corsHeaders })
   }
 })
