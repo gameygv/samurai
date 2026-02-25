@@ -6,11 +6,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { 
-  MessageSquare, Search, Loader2, Phone, Zap, BrainCircuit, 
-  Clock, MapPin, UserCheck, Brain, RefreshCw, Sparkles, 
+import {
+  MessageSquare, Search, Loader2, Phone, Zap, BrainCircuit,
+  Clock, MapPin, UserCheck, Brain, RefreshCw, Sparkles,
   AlertCircle, TrendingUp, Smile, Meh, Frown, Target
-} from 'lucide-center';
+} from 'lucide-react';
 import { toast } from 'sonner';
 import ChatViewer from '@/components/ChatViewer';
 import { cn } from '@/lib/utils';
