@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import Layout from '@/components/Layout';
 import { supabase } from '@/integrations/supabase/client';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
@@ -14,8 +14,8 @@ import { Label } from '@/components/ui/label';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { 
   Brain, AlertTriangle, GitBranch, Search, 
-  Eye, Loader2, Zap, CheckCircle2, RefreshCw, Edit, Lock, Plus, Save, Trash2,
-  FileCode, Terminal, Sparkles, ArrowRight
+  Loader2, CheckCircle2, RefreshCw, Edit, Save, Trash2,
+  Terminal, Sparkles, ArrowRight, Lock
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { logActivity } from '@/utils/logger';
@@ -25,14 +25,12 @@ const LearningLog = () => {
   const [updating, setUpdating] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [errors, setErrors] = useState<any[]>([]);
-  const [versions, setVersions] = useState<any[]>([]);
   const [currentRelearningPrompt, setCurrentRelearningPrompt] = useState("");
   
   // Dialog State
   const [selectedError, setSelectedError] = useState<any>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editMode, setEditMode] = useState(false);
-  const [isCreating, setIsCreating] = useState(false);
   const [editForm, setEditForm] = useState({ correction: '', category: 'CONDUCTA', status: 'REPORTADA' });
 
   // Filters
@@ -49,9 +47,6 @@ const LearningLog = () => {
       const { data: errorsData } = await supabase.from('errores_ia').select('*').order('reported_at', { ascending: false });
       setErrors(errorsData || []);
 
-      const { data: versionsData } = await supabase.from('versiones_prompts_aprendidas').select('*').order('created_at', { ascending: false });
-      setVersions(versionsData || []);
-
       const { data: configData } = await supabase.from('app_config').select('value').eq('key', 'prompt_relearning').maybeSingle();
       setCurrentRelearningPrompt(configData?.value || "# Aún no hay lecciones inyectadas.");
 
@@ -63,7 +58,6 @@ const LearningLog = () => {
   };
 
   const handleOpenEditDialog = (err: any) => {
-     setIsCreating(false);
      setSelectedError(err);
      setEditForm({ 
         correction: err.correccion_sugerida, 
@@ -71,18 +65,6 @@ const LearningLog = () => {
         status: err.estado_correccion 
      });
      setEditMode(false);
-     setIsDialogOpen(true);
-  };
-
-  const handleOpenCreateDialog = () => {
-     setIsCreating(true);
-     setSelectedError(null);
-     setEditForm({ 
-        correction: '', 
-        category: 'CONDUCTA', 
-        status: 'VALIDADA' 
-     });
-     setEditMode(true);
      setIsDialogOpen(true);
   };
 
@@ -106,35 +88,18 @@ const LearningLog = () => {
      
      setUpdating(true);
      try {
-        if (isCreating) {
-           const { error } = await supabase
-              .from('errores_ia')
-              .insert({
-                 correccion_sugerida: editForm.correction,
-                 categoria: editForm.category,
-                 estado_correccion: editForm.status,
-                 mensaje_cliente: 'Creación Manual',
-                 respuesta_ia: 'N/A',
-                 applied_at: editForm.status === 'VALIDADA' ? new Date().toISOString() : null
-              });
+        const { error } = await supabase
+           .from('errores_ia')
+           .update({
+              correccion_sugerida: editForm.correction,
+              categoria: editForm.category,
+              estado_correccion: editForm.status,
+              applied_at: editForm.status === 'VALIDADA' ? new Date().toISOString() : null
+           })
+           .eq('error_id', selectedError.error_id);
 
-           if (error) throw error;
-           toast.success("Nueva regla guardada correctamente");
-        } else {
-           const { error } = await supabase
-              .from('errores_ia')
-              .update({
-                 correccion_sugerida: editForm.correction,
-                 categoria: editForm.category,
-                 estado_correccion: editForm.status,
-                 applied_at: editForm.status === 'VALIDADA' ? new Date().toISOString() : null
-              })
-              .eq('error_id', selectedError.error_id);
-
-           if (error) throw error;
-           toast.success("Regla actualizada correctamente");
-        }
-
+        if (error) throw error;
+        toast.success("Regla actualizada correctamente");
         setIsDialogOpen(false);
         fetchData();
 
@@ -155,7 +120,6 @@ const LearningLog = () => {
         return;
       }
 
-      // Generamos el bloque de texto consolidado
       const instructionBlock = `# REGLAS DE APRENDIZAJE CRÍTICAS (#CIA)\n` + 
         `# Este bloque se genera automáticamente desde la Bitácora.\n\n` +
         validated.map((e, i) => `REGLA ${i+1} [${e.categoria}]:\n- INSTRUCCIÓN: ${e.correccion_sugerida}`).join('\n\n');
@@ -206,21 +170,12 @@ const LearningLog = () => {
               <Brain className="w-8 h-8 text-indigo-500" /> 
               Bitácora #CIA
             </h1>
-            <p className="text-slate-400">Control de lecciones aprendidas y reglas de conducta de la IA.</p>
-          </div>
-          <div className="flex gap-3">
-             <Button 
-               variant="outline"
-               className="border-indigo-500/30 text-indigo-400 hover:bg-indigo-500/10"
-               onClick={handleOpenCreateDialog}
-             >
-                <Plus className="w-4 h-4 mr-2" /> Nueva Regla
-             </Button>
+            <p className="text-slate-400">Panel de auditoría y validación de lecciones aprendidas en los chats.</p>
           </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <Card className="bg-slate-900 border-slate-800 p-6 border-l-4 border-l-indigo-600">
+          <Card className="bg-slate-900 border-slate-800 p-6 border-l-4 border-l-indigo-600 shadow-xl">
              <div className="flex justify-between items-start">
                 <div>
                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Lecciones Validadas</p>
@@ -232,7 +187,7 @@ const LearningLog = () => {
              </div>
              <p className="text-[9px] text-slate-500 mt-4 uppercase font-mono">LISTAS PARA SINCRONIZAR</p>
           </Card>
-          <Card className="bg-slate-900 border-slate-800 p-6 border-l-4 border-l-yellow-600">
+          <Card className="bg-slate-900 border-slate-800 p-6 border-l-4 border-l-yellow-600 shadow-xl">
              <div className="flex justify-between items-start">
                 <div>
                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Pendientes de Revisión</p>
@@ -248,9 +203,8 @@ const LearningLog = () => {
 
         <Tabs defaultValue="errores" className="w-full">
           <TabsList className="bg-slate-900 border border-slate-800 p-1">
-            <TabsTrigger value="errores" className="gap-2"><AlertTriangle className="w-4 h-4" /> Reportes #CIA</TabsTrigger>
+            <TabsTrigger value="errores" className="gap-2"><AlertTriangle className="w-4 h-4" /> Reportes de Chat</TabsTrigger>
             <TabsTrigger value="prompt" className="gap-2"><Terminal className="w-4 h-4" /> Cerebro Complementario</TabsTrigger>
-            <TabsTrigger value="versiones" className="gap-2"><GitBranch className="w-4 h-4" /> Versiones</TabsTrigger>
           </TabsList>
 
           <TabsContent value="errores" className="mt-6 space-y-4">
@@ -258,7 +212,7 @@ const LearningLog = () => {
                <div className="relative flex-1">
                   <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-500" />
                   <Input 
-                    placeholder="Buscar regla o error..." 
+                    placeholder="Buscar por contenido o categoría..." 
                     className="pl-9 bg-slate-950 border-slate-800 text-white" 
                     value={searchTerm} 
                     onChange={e => setSearchTerm(e.target.value)} 
@@ -266,7 +220,7 @@ const LearningLog = () => {
                </div>
                <Select value={statusFilter} onValueChange={setStatusFilter}>
                   <SelectTrigger className="w-[180px] bg-slate-950 border-slate-800 text-slate-300">
-                    <SelectValue placeholder="Estado" />
+                    <SelectValue placeholder="Filtrar Estado" />
                   </SelectTrigger>
                   <SelectContent className="bg-slate-900 border-slate-800 text-white">
                      <SelectItem value="all">Todos los estados</SelectItem>
@@ -292,7 +246,7 @@ const LearningLog = () => {
                      {loading ? (
                         <TableRow><TableCell colSpan={5} className="text-center h-32"><Loader2 className="w-8 h-8 animate-spin mx-auto text-indigo-500" /></TableCell></TableRow>
                      ) : filteredErrors.length === 0 ? (
-                        <TableRow><TableCell colSpan={5} className="text-center h-32 text-slate-500 italic uppercase text-[10px]">No se encontraron reportes</TableCell></TableRow>
+                        <TableRow><TableCell colSpan={5} className="text-center h-32 text-slate-500 italic uppercase text-[10px]">No hay reportes que coincidan</TableCell></TableRow>
                      ) : (
                         filteredErrors.map(err => (
                            <TableRow key={err.error_id} className="border-slate-800 hover:bg-slate-800/30 transition-colors">
@@ -412,50 +366,23 @@ const LearningLog = () => {
                          </div>
                       </CardContent>
                    </Card>
-                   
-                   <Card className="bg-indigo-600/5 border border-indigo-500/20 p-4 rounded-xl">
-                      <p className="text-xs text-indigo-300 leading-relaxed">
-                         <strong>Tip Samurai:</strong> Las reglas con categoría <strong>CONDUCTA</strong> tienen mayor influencia en el tono del bot que las de <strong>VENTAS</strong>.
-                      </p>
-                   </Card>
                 </div>
-             </div>
-          </TabsContent>
-          
-          <TabsContent value="versiones">
-             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-6">
-                {versions.length === 0 ? (
-                   <div className="col-span-full py-20 text-center text-slate-600 italic">No hay historial de versiones consolidado.</div>
-                ) : versions.map(v => (
-                   <Card key={v.version_id} className="bg-slate-900 border-slate-800 hover:border-indigo-500/50 transition-colors">
-                      <CardHeader className="pb-2">
-                         <div className="flex justify-between items-start">
-                            <Badge className="bg-indigo-600">{v.version_numero}</Badge>
-                            <span className="text-[10px] text-slate-500 font-mono">{new Date(v.created_at).toLocaleDateString()}</span>
-                         </div>
-                         <CardTitle className="text-sm text-white mt-2">Precisión IA: {v.test_accuracy_nuevo}%</CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                         <p className="text-xs text-slate-400 line-clamp-3 italic">"{v.motivo_creacion || 'Consolidación de aprendizaje automático'}"</p>
-                      </CardContent>
-                   </Card>
-                ))}
              </div>
           </TabsContent>
         </Tabs>
 
-        {/* DIALOG DE EDICIÓN / CREACIÓN */}
+        {/* DIALOG DE REVISIÓN / EDICIÓN */}
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
            <DialogContent className="bg-slate-900 border-slate-800 text-white max-w-lg shadow-2xl">
               <DialogHeader>
-                 <DialogTitle className="flex items-center gap-2">
-                    {isCreating ? <Plus className="w-5 h-5 text-indigo-400" /> : <Zap className="w-5 h-5 text-yellow-500" />} 
-                    {isCreating ? 'Añadir Nueva Instrucción' : (editMode ? 'Editar Regla #CIA' : 'Revisar Reporte')}
+                 <DialogTitle className="flex items-center gap-2 text-yellow-500">
+                    <Zap className="w-5 h-5" /> 
+                    {editMode ? 'Editar Regla #CIA' : 'Revisar Reporte de Chat'}
                  </DialogTitle>
               </DialogHeader>
               <div className="space-y-4 py-4">
                  
-                 {!isCreating && selectedError?.mensaje_cliente !== 'Creación Manual' && (
+                 {selectedError?.mensaje_cliente !== 'Creación Manual' && (
                     <div className="bg-slate-950/50 p-3 rounded border border-slate-800 space-y-3">
                        <div className="flex gap-2 items-start">
                           <span className="text-[9px] font-bold bg-slate-800 px-1 rounded text-slate-400 uppercase">Input Cliente</span>
@@ -476,7 +403,6 @@ const LearningLog = () => {
                           onChange={e => setEditForm({...editForm, correction: e.target.value})}
                           disabled={!editMode}
                           className="bg-slate-950 border-slate-800 font-mono text-xs h-32 focus:border-green-500"
-                          placeholder="Ej: Si el cliente pregunta por el taller Nivel 1, menciona siempre que incluye el cuenco de regalo."
                        />
                     </div>
                     
@@ -531,10 +457,10 @@ const LearningLog = () => {
                     </>
                  ) : (
                     <>
-                       <Button variant="ghost" onClick={() => { if (isCreating) setIsDialogOpen(false); else setEditMode(false); }}>Cancelar</Button>
+                       <Button variant="ghost" onClick={() => setEditMode(false)}>Cancelar</Button>
                        <Button className="bg-indigo-600 hover:bg-indigo-700 shadow-lg shadow-indigo-900/20" onClick={handleSaveChanges} disabled={updating}>
                           {updating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
-                          {isCreating ? 'Guardar Regla' : 'Actualizar Regla'}
+                          Actualizar Regla
                        </Button>
                     </>
                  )}
