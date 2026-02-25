@@ -52,7 +52,11 @@ const Archive = () => {
      toast.info("Iniciando análisis neuronal de conversaciones recientes...");
      try {
         const { data, error } = await supabase.functions.invoke('analyze-leads', {});
-        if (error) throw error;
+        
+        if (error) {
+          const errorBody = await error.context.json();
+          throw new Error(errorBody.error || error.message);
+        }
         
         if (data.results && data.results.length > 0) {
            toast.success(`Análisis completo: ${data.results.length} perfiles actualizados.`);
@@ -63,7 +67,7 @@ const Archive = () => {
      } catch (err: any) {
         toast.error("Error en análisis: " + err.message);
         if (err.message.includes("Gemini API Key")) {
-           toast.warning("Ve a Ajustes > API Keys y configura tu Gemini API Key.");
+           toast.warning("Ve a Ajustes > API Keys y configura tu Gemini API Key.", { duration: 6000 });
         }
      } finally {
         setAnalyzing(false);

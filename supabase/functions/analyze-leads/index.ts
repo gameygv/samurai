@@ -10,13 +10,12 @@ serve(async (req) => {
   }
 
   console.log("[analyze-leads] Iniciando análisis profundo de conversaciones...");
+  const supabaseClient = createClient(
+    Deno.env.get('SUPABASE_URL') ?? '',
+    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+  );
 
   try {
-    const supabaseClient = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-    )
-
     // 1. OBTENER CONFIGURACIONES (Gemini y Meta CAPI)
     const { data: configs } = await supabaseClient.from('app_config').select('key, value');
     const getConfig = (key: string) => configs?.find(c => c.key === key)?.value || null;
@@ -30,7 +29,7 @@ serve(async (req) => {
     };
 
     if (!apiKey) {
-      return new Response(JSON.stringify({ message: "Gemini API Key no configurada." }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      throw new Error("Gemini API Key no configurada. Por favor, añádela en Ajustes > API Keys.");
     }
 
     // 2. BUSCAR LEADS ACTIVOS
@@ -55,106 +54,120 @@ serve(async (req) => {
 
     // 3. ANALIZAR CADA LEAD
     for (const lead of leadsToAnalyze) {
-       console.log(`[analyze-leads] Analizando lead: ${lead.nombre} (${lead.id})`);
+       try {
+         console.log(`[analyze-leads] Analizando lead: ${lead.nombre} (${lead.id})`);
 
-       const { data: messages } = await supabaseClient
-          .from('conversaciones')
-          .select('emisor, mensaje')
-          .eq('lead_id', lead.id)
-          .order('created_at', { ascending: true }) 
-          .limit(50);
+         const { data: messages } = await supabaseClient
+            .from('conversaciones')
+            .select('emisor, mensaje')
+            .eq('lead_id', lead.id)
+            .order('created_at', { ascending: true }) 
+            .limit(50);
 
-       if (!messages || messages.length < 2) continue;
+         if (!messages || messages.length < 2) continue;
 
-       const transcript = messages.map(m => `${m.emisor}: ${m.mensaje}`).join('\n');
+         const transcript = messages.map(m => `${m.emisor}: ${m.mensaje}`).join('\n');
 
-       const prompt = `
-          Actúa como un analista de CRM experto. Tu trabajo es extraer datos de perfil de esta conversación.
-          
-          HISTORIAL:
-          ${transcript}
+         const prompt = `
+            Actúa como un analista de CRM experto. Tu trabajo es extraer datos de perfil de esta conversación.
+            
+            HISTORIAL:
+            ${transcript}
 
-          INSTRUCCIONES DE EXTRACCIÓN:
-          1. CIUDAD: Busca cualquier mención de ubicación, ciudad o país del cliente. Sé agresivo buscando esto. Si no hay NINGUNA pista, usa "N/A".
-          2. INTENCIÓN: (BAJO, MEDIO, ALTO). ALTO si pregunta precios, fechas o métodos de pago.
-          3. ÁNIMO: (POSITIVO, NEUTRO, NEGATIVO).
-          4. RESUMEN: Una frase corta (max 10 palabras) del estado actual.
-          5. PERFIL_PSICOLOGICO: Describe brevemente la personalidad del cliente en 3-5 palabras (ej: "Directo y decidido", "Curioso pero escéptico", "Amable y hablador"). Si no hay suficiente información, usa "N/A".
+            INSTRUCCIONES DE EXTRACCIÓN:
+            1. CIUDAD: Busca cualquier mención de ubicación, ciudad o país del cliente. Sé agresivo buscando esto. Si no hay NINGUNA pista, usa "N/A".
+            2. INTENCIÓN: (BAJO, MEDIO, ALTO). ALTO si pregunta precios, fechas o métodos de pago.
+            3. ÁNIMO: (POSITIVO, NEUTRO, NEGATIVO).
+            4. RESUMEN: Una frase corta (max 10 palabras) del estado actual.
+            5. PERFIL_PSICOLOGICO: Describe brevemente la personalidad del cliente en 3-5 palabras (ej: "Directo y decidido", "Curioso pero escéptico", "Amable y hablador"). Si no hay suficiente información, usa "N/A".
 
-          Formato JSON estricto:
-          {
-            "ciudad": "string",
-            "resumen": "string",
-            "intencion": "string",
-            "estado_animo": "string",
-            "perfil_psicologico": "string"
-          }
-       `;
+            Formato JSON estricto:
+            {
+              "ciudad": "string",
+              "resumen": "string",
+              "intencion": "string",
+              "estado_animo": "string",
+              "perfil_psicologico": "string"
+            }
+         `;
 
-       const response = await fetch(`${GEMINI_URL}?key=${apiKey}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-             contents: [{ parts: [{ text: prompt }] }]
-          })
-       });
+         const response = await fetch(`${GEMINI_URL}?key=${apiKey}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+               contents: [{ parts: [{ text: prompt }] }]
+            })
+         });
 
-       const aiData = await response.json();
-       const rawText = aiData?.candidates?.[0]?.content?.parts?.[0]?.text;
-       
-       if (rawText) {
-          try {
-             const cleanJson = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
-             const analysis = JSON.parse(cleanJson);
+         if (!response.ok) {
+            const errorBody = await response.json();
+            throw new Error(`Gemini API Error: ${errorBody.error.message}`);
+         }
 
-             const updateData: any = {
-                last_analyzed_at: new Date().toISOString(),
-                summary: analysis.resumen,
-                buying_intent: analysis.intencion,
-                estado_emocional_actual: analysis.estado_animo,
-                perfil_psicologico: analysis.perfil_psicologico
-             };
-             
-             if (analysis.ciudad && analysis.ciudad.length > 2 && !analysis.ciudad.toLowerCase().includes('n/a')) {
-                updateData.ciudad = analysis.ciudad;
-             }
+         const aiData = await response.json();
+         const rawText = aiData?.candidates?.[0]?.content?.parts?.[0]?.text;
+         
+         if (!rawText) {
+            throw new Error("La respuesta de Gemini estaba vacía.");
+         }
+         
+         const cleanJson = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
+         const analysis = JSON.parse(cleanJson);
 
-             await supabaseClient.from('leads').update(updateData).eq('id', lead.id);
-             results.push({ lead: lead.nombre, ...analysis });
+         const updateData: any = {
+            last_analyzed_at: new Date().toISOString(),
+            summary: analysis.resumen,
+            buying_intent: analysis.intencion,
+            estado_emocional_actual: analysis.estado_animo,
+            perfil_psicologico: analysis.perfil_psicologico
+         };
+         
+         if (analysis.ciudad && analysis.ciudad.length > 2 && !analysis.ciudad.toLowerCase().includes('n/a')) {
+            updateData.ciudad = analysis.ciudad;
+         }
 
-             // --- DISPARADOR DE EVENTO CAPI ---
-             if (analysis.intencion === 'ALTO' && !lead.capi_lead_event_sent_at && capiConfig.pixel_id) {
-                console.log(`[analyze-leads] Intención ALTA detectada para ${lead.nombre}. Enviando evento 'Lead' a Meta CAPI.`);
-                
-                const capiPayload = {
-                  eventData: {
-                    event_name: 'Lead',
-                    event_id: `${lead.id}_lead`,
-                    user_data: { ph: lead.telefono },
-                    custom_data: {
-                      intention: 'ALTO',
-                      psych_profile: analysis.perfil_psicologico,
-                      source: 'Samurai AI Analysis'
-                    },
-                  },
-                  config: capiConfig,
-                };
+         await supabaseClient.from('leads').update(updateData).eq('id', lead.id);
+         results.push({ lead: lead.nombre, ...analysis });
 
-                await supabaseClient.functions.invoke('meta-capi-sender', { body: capiPayload });
-                await supabaseClient.from('leads').update({ capi_lead_event_sent_at: new Date().toISOString() }).eq('id', lead.id);
-                
-                logsToInsert.push({
-                   action: 'CREATE',
-                   resource: 'META_CAPI',
-                   username: 'AI Analyst',
-                   description: `Evento 'Lead' enviado para ${lead.nombre}`,
-                   status: 'OK'
-                });
-             }
+         // --- DISPARADOR DE EVENTO CAPI ---
+         if (analysis.intencion === 'ALTO' && !lead.capi_lead_event_sent_at && capiConfig.pixel_id) {
+            console.log(`[analyze-leads] Intención ALTA detectada para ${lead.nombre}. Enviando evento 'Lead' a Meta CAPI.`);
+            
+            const capiPayload = {
+              eventData: {
+                event_name: 'Lead',
+                event_id: `${lead.id}_lead`,
+                user_data: { ph: lead.telefono },
+                custom_data: {
+                  intention: 'ALTO',
+                  psych_profile: analysis.perfil_psicologico,
+                  source: 'Samurai AI Analysis'
+                },
+              },
+              config: capiConfig,
+            };
 
-          } catch (e) {
-             console.error("[analyze-leads] Error parseando JSON o enviando evento CAPI:", e);
-          }
+            await supabaseClient.functions.invoke('meta-capi-sender', { body: capiPayload });
+            await supabaseClient.from('leads').update({ capi_lead_event_sent_at: new Date().toISOString() }).eq('id', lead.id);
+            
+            logsToInsert.push({
+               action: 'CREATE',
+               resource: 'META_CAPI',
+               username: 'AI Analyst',
+               description: `Evento 'Lead' enviado para ${lead.nombre}`,
+               status: 'OK'
+            });
+         }
+       } catch (e) {
+          console.error(`[analyze-leads] Error procesando lead ${lead.id}:`, e);
+          logsToInsert.push({
+              action: 'ERROR',
+              resource: 'BRAIN',
+              username: 'AI Analyst',
+              description: `Fallo al analizar lead: ${lead.nombre}`,
+              status: 'ERROR',
+              metadata: { lead_id: lead.id, error: e.message }
+          });
        }
     }
 
@@ -169,6 +182,14 @@ serve(async (req) => {
 
   } catch (error: any) {
     console.error("[analyze-leads] Error crítico:", error.message);
+    await supabaseClient.from('activity_logs').insert({
+        action: 'ERROR',
+        resource: 'SYSTEM',
+        username: 'AI Analyst',
+        description: `Error crítico en la función analyze-leads`,
+        status: 'ERROR',
+        metadata: { error: error.message }
+    });
     return new Response(
       JSON.stringify({ error: error.message }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

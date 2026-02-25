@@ -65,7 +65,11 @@ const Leads = () => {
      const tid = toast.loading("Sincronizando con redes neuronales...");
      try {
         const { data, error } = await supabase.functions.invoke('analyze-leads', {});
-        if (error) throw error;
+        
+        if (error) {
+          const errorBody = await error.context.json();
+          throw new Error(errorBody.error || error.message);
+        }
         
         if (data.results && data.results.length > 0) {
            toast.success(`Análisis completo: ${data.results.length} perfiles actualizados.`, { id: tid });
@@ -75,6 +79,9 @@ const Leads = () => {
         }
      } catch (err: any) {
         toast.error("Error en análisis: " + err.message, { id: tid });
+        if (err.message.includes("Gemini API Key")) {
+           toast.warning("Ve a Ajustes > API Keys y configura tu Gemini API Key.", { duration: 6000 });
+        }
      } finally {
         setAnalyzing(false);
      }
