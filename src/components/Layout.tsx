@@ -4,7 +4,7 @@ import {
   LayoutDashboard, Brain, Settings as SettingsIcon, Database, LogOut, 
   Users, FileText, UserCircle, GraduationCap, MessageSquare, 
   GitBranch, Link as LinkIcon, Image, Sparkles, BookOpen, Clock,
-  Archive, Globe, CreditCard, BarChart3
+  Archive, Globe, CreditCard, BarChart3, Zap
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/context/AuthContext';
@@ -18,7 +18,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/avatar";
 
 const Layout = ({ children }: { children: React.ReactNode }) => {
   const location = useLocation();
@@ -47,7 +46,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
     {
       title: "RECURSOS",
       items: [
-        { icon: GraduationCap, label: 'Aprendizaje IA', path: '/learning' },
+        { icon: Zap, label: 'Bitácora #CIA (Aprendizaje)', path: '/learning' },
         { icon: Database, label: 'Base Conocimiento', path: '/knowledge' },
         { icon: Globe, label: 'Sitio Web Principal', path: '/website-content' },
         { icon: Image, label: 'Media Manager', path: '/media' },
@@ -137,11 +136,9 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="relative h-10 w-10 rounded-full hover:bg-slate-800">
-                  <Avatar className="h-9 w-9 border border-slate-700">
-                    <AvatarFallback className="bg-slate-800 text-red-500 font-bold">
-                      {profile?.username?.substring(0, 2).toUpperCase() || 'US'}
-                    </AvatarFallback>
-                  </Avatar>
+                  <div className="h-9 w-9 rounded-full border border-slate-700 bg-slate-800 flex items-center justify-center text-red-500 font-bold overflow-hidden">
+                    {profile?.username?.substring(0, 2).toUpperCase() || 'US'}
+                  </div>
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent className="w-56 bg-slate-900 border-slate-800 text-slate-200" align="end" forceMount>
@@ -181,9 +178,5 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
     </div>
   );
 };
-
-const Avatar = ({ children, className }: any) => <div className={cn("rounded-full overflow-hidden", className)}>{children}</div>;
-const AvatarFallback = ({ children, className }: any) => <div className={cn("flex items-center justify-center w-full h-full", className)}>{children}</div>;
-const AvatarImage = ({ src }: any) => <img src={src} className="w-full h-full object-cover" />;
 
 export default Layout;
