@@ -6,7 +6,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { 
   BookOpen, Brain, Zap, ShieldAlert, 
-  Terminal, Play, Pause, ShoppingCart, LinkIcon
+  Terminal, Play, Pause, ShoppingCart, LinkIcon,
+  Layers, Eye, Database, ShieldCheck, Heart
 } from 'lucide-react';
 
 const Manual = () => {
@@ -23,12 +24,51 @@ const Manual = () => {
           </p>
         </div>
 
-        <Tabs defaultValue="comandos" className="w-full">
+        <Tabs defaultValue="arquitectura" className="w-full">
           <TabsList className="bg-slate-900 border border-slate-800 w-full justify-start p-1 h-auto flex-wrap">
+            <TabsTrigger value="arquitectura" className="py-2 px-4"><Layers className="w-4 h-4 mr-2"/> Arquitectura</TabsTrigger>
             <TabsTrigger value="comandos" className="py-2 px-4"><Terminal className="w-4 h-4 mr-2"/> Comandos</TabsTrigger>
-            <TabsTrigger value="ecommerce" className="py-2 px-4"><ShoppingCart className="w-4 h-4 mr-2"/> E-commerce</TabsTrigger>
+            <TabsTrigger value="vision" className="py-2 px-4"><Eye className="w-4 h-4 mr-2"/> Ojo de Halcón</TabsTrigger>
             <TabsTrigger value="aprendizaje" className="py-2 px-4"><Zap className="w-4 h-4 mr-2"/> Aprendizaje</TabsTrigger>
           </TabsList>
+
+          <TabsContent value="arquitectura" className="mt-6 space-y-6">
+             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <Card className="bg-slate-900 border-slate-800 border-l-4 border-l-indigo-600">
+                   <CardHeader>
+                      <CardTitle className="text-white flex items-center gap-2"><Layers className="w-5 h-5 text-indigo-400" /> Las 5 Capas del Cerebro</CardTitle>
+                      <CardDescription>Samurai piensa en orden jerárquico.</CardDescription>
+                   </CardHeader>
+                   <CardContent className="space-y-4">
+                      {[
+                        { l: "Layer 1: #CIA", d: "Reglas de aprendizaje. Lo que se corrige en la Bitácora manda sobre todo lo demás.", c: "text-red-500 font-bold" },
+                        { l: "Layer 2: ADN Core", d: "Identidad, tono y protocolos de venta del Samurai.", c: "text-indigo-400 font-bold" },
+                        { l: "Layer 3: Verdad Maestra", d: "Datos indexados del sitio web oficial (theelephantbowl.com).", c: "text-green-400 font-bold" },
+                        { l: "Layer 4: Media Catalog", d: "Posters y promociones disponibles para enviar.", c: "text-blue-400 font-bold" },
+                        { l: "Layer 5: Ojo de Halcón", d: "Instrucciones de visión financiera y validación de pagos.", c: "text-red-600 font-bold" }
+                      ].map((item, i) => (
+                        <div key={i} className="bg-slate-950 p-3 rounded border border-slate-800">
+                           <p className={`text-xs ${item.c}`}>{item.l}</p>
+                           <p className="text-[10px] text-slate-500 mt-1">{item.d}</p>
+                        </div>
+                      ))}
+                   </CardContent>
+                </Card>
+
+                <div className="space-y-6">
+                   <Card className="bg-slate-900 border-slate-800">
+                      <CardHeader>
+                         <CardTitle className="text-white text-sm">Prioridad de Respuesta</CardTitle>
+                      </CardHeader>
+                      <CardContent className="text-xs text-slate-400 leading-relaxed space-y-3">
+                         <p>Samurai siempre consultará primero si hay una regla **#CIA** que aplique al contexto actual.</p>
+                         <p>Si un dato (como un precio) está en la **Verdad Maestra**, ese dato es ley. Nunca inventará información que no esté en la Layer 3.</p>
+                         <p>El bot solo enviará imágenes si detecta que el **Trigger** configurado en el Media Manager coincide con la necesidad del cliente.</p>
+                      </CardContent>
+                   </Card>
+                </div>
+             </div>
+          </TabsContent>
 
           <TabsContent value="comandos" className="mt-6 space-y-6">
              <Card className="bg-slate-900 border-slate-800">
@@ -41,41 +81,41 @@ const Manual = () => {
                       <div className="flex items-center gap-2 mb-2 text-red-500 font-bold">
                          <Pause className="w-5 h-5" /> #STOP
                       </div>
-                      <p className="text-xs text-slate-400">Detiene a la IA. El bot no contestará hasta reactivarlo.</p>
+                      <p className="text-xs text-slate-400">Detiene a la IA. El bot no contestará hasta reactivarlo. Úsalo si quieres tomar el control manual total.</p>
                    </div>
                    <div className="bg-green-900/10 border border-green-900/50 p-4 rounded-xl">
                       <div className="flex items-center gap-2 mb-2 text-green-500 font-bold">
                          <Play className="w-5 h-5" /> #START
                       </div>
-                      <p className="text-xs text-slate-400">Reactiva al Samurai para que retome la conversación.</p>
+                      <p className="text-xs text-slate-400">Reactiva al Samurai para que retome la conversación desde donde se quedó.</p>
                    </div>
                    <div className="bg-yellow-900/10 border border-yellow-900/50 p-4 rounded-xl">
                       <div className="flex items-center gap-2 mb-2 text-yellow-500 font-bold">
                          <ShieldAlert className="w-5 h-5" /> #CIA
                       </div>
-                      <p className="text-xs text-slate-400">Corrige errores de la IA y genera aprendizaje.</p>
+                      <p className="text-xs text-slate-400">Cuando la IA cometa un error, escribe #CIA seguido de la instrucción correcta para que aprenda.</p>
                    </div>
                 </CardContent>
              </Card>
           </TabsContent>
 
-          <TabsContent value="ecommerce" className="mt-6">
-             <Card className="bg-slate-900 border-slate-800">
+          <TabsContent value="vision" className="mt-6">
+             <Card className="bg-slate-900 border-slate-800 border-l-4 border-l-red-600">
                 <CardHeader>
-                   <CardTitle className="text-white flex items-center gap-2">Ventas y Anticipos</CardTitle>
+                   <CardTitle className="text-white flex items-center gap-2"><Eye className="w-5 h-5 text-red-600" /> Ojo de Halcón (Visión Financiera)</CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-6">
-                   <div className="bg-indigo-500/10 border border-indigo-500/20 rounded-lg p-4">
-                      <h4 className="text-sm font-bold text-indigo-400 mb-2 flex items-center gap-2">
-                         <LinkIcon className="w-4 h-4" /> Links Dinámicos
-                      </h4>
-                      <p className="text-xs text-slate-300">Usa estas etiquetas en tus prompts:</p>
-                      <ul className="mt-3 space-y-2 text-[11px] font-mono text-slate-400">
-                         <li>{"{ecommerce_url}"} : URL de la tienda</li>
-                         <li>{"{main_product_id}"} : ID del anticipo</li>
-                         <li>{"{main_product_price}"} : Precio del curso</li>
+                <CardContent className="space-y-4">
+                   <p className="text-sm text-slate-400">El Ojo de Halcón es el módulo de visión avanzada para validación de transacciones.</p>
+                   <div className="bg-slate-950 p-4 rounded-lg border border-slate-800 space-y-3">
+                      <h4 className="text-xs font-bold text-red-500 uppercase">Capacidades:</h4>
+                      <ul className="text-xs text-slate-300 space-y-2 list-disc pl-4">
+                         <li>Extracción de Referencia y Monto en recibos bancarios.</li>
+                         <li>Identificación de Banco emisor.</li>
+                         <li>Validación de autenticidad (en desarrollo).</li>
+                         <li>Match automático con el ID de cliente para marcar ventas.</li>
                       </ul>
                    </div>
+                   <p className="text-xs text-slate-500 italic">Configura las reglas de validación en la pestaña "Ojo de Halcón" dentro del Cerebro Core.</p>
                 </CardContent>
              </Card>
           </TabsContent>
@@ -83,20 +123,27 @@ const Manual = () => {
           <TabsContent value="aprendizaje" className="mt-6">
              <Card className="bg-slate-900 border-slate-800">
                 <CardHeader>
-                   <CardTitle className="text-white">Bucle de Aprendizaje</CardTitle>
+                   <CardTitle className="text-white flex items-center gap-2"><Zap className="w-5 h-5 text-yellow-500" /> El Bucle de Aprendizaje</CardTitle>
                 </CardHeader>
-                <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-4 text-center">
-                   <div className="bg-slate-950 p-4 rounded-lg border border-slate-800">
-                      <Badge className="mb-2">1. Reportar</Badge>
-                      <p className="text-[10px] text-slate-500">Usa #CIA en el chat</p>
+                <CardContent className="space-y-8">
+                   <div className="flex flex-col md:flex-row justify-between gap-4">
+                      {[
+                        { n: "1", t: "REPORTAR", d: "Detecta un error y usa el comando #CIA en el chat.", i: ShieldAlert },
+                        { n: "2", t: "VALIDAR", d: "Ve a la Bitácora #CIA y aprueba la nueva regla.", i: ShieldCheck },
+                        { n: "3", t: "SINCRONIZAR", d: "Pulsa 'Sincronizar Cerebro' para inyectar la lección.", i: RefreshCcw }
+                      ].map((step, i) => (
+                        <div key={i} className="flex-1 text-center space-y-2">
+                           <div className="w-12 h-12 rounded-full bg-slate-950 border border-slate-800 flex items-center justify-center mx-auto text-indigo-500 font-bold">
+                              {step.n}
+                           </div>
+                           <h4 className="text-xs font-bold text-white">{step.t}</h4>
+                           <p className="text-[10px] text-slate-500">{step.d}</p>
+                        </div>
+                      ))}
                    </div>
-                   <div className="bg-slate-950 p-4 rounded-lg border border-slate-800">
-                      <Badge className="mb-2">2. Validar</Badge>
-                      <p className="text-[10px] text-slate-500">Aprueba en Bitácora</p>
-                   </div>
-                   <div className="bg-slate-950 p-4 rounded-lg border border-slate-800">
-                      <Badge className="mb-2">3. Sincronizar</Badge>
-                      <p className="text-[10px] text-slate-500">Actualiza el Cerebro</p>
+                   <div className="bg-indigo-600/10 border border-indigo-500/20 p-4 rounded-xl flex items-start gap-4">
+                      <Heart className="w-6 h-6 text-indigo-500 shrink-0" />
+                      <p className="text-xs text-slate-300">Este proceso garantiza que Samurai nunca cometa el mismo error dos veces, volviéndose un vendedor más letal cada día.</p>
                    </div>
                 </CardContent>
              </Card>
