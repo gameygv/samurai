@@ -10,7 +10,7 @@ import {
   MessageSquare, Search, Loader2, Phone, Zap, BrainCircuit, 
   Clock, MapPin, UserCheck, Brain, RefreshCw, Sparkles, 
   AlertCircle, TrendingUp, Smile, Meh, Frown, Target
-} from 'lucide-react';
+} from 'lucide-center';
 import { toast } from 'sonner';
 import ChatViewer from '@/components/ChatViewer';
 import { cn } from '@/lib/utils';
@@ -93,6 +93,18 @@ const Leads = () => {
      if (minutes < 60) return <span className="text-[9px] text-green-500 font-bold">Hace {minutes}m</span>;
      if (minutes < 1440) return <span className="text-[9px] text-slate-400">Hace {Math.floor(minutes/60)}h</span>;
      return <span className="text-[9px] text-slate-600">Hace {Math.floor(minutes/1440)}d</span>;
+  };
+
+  const getNextFollowup = (lead: any) => {
+     if (lead.ai_paused) return <span className="text-[9px] text-red-500/50 uppercase font-bold">Pausado</span>;
+     if (!lead.next_followup_at) return <span className="text-[9px] text-slate-700">Sin programar</span>;
+     
+     const diff = new Date(lead.next_followup_at).getTime() - new Date().getTime();
+     const minutes = Math.floor(diff / 60000);
+     
+     if (minutes <= 0) return <Badge className="bg-indigo-600 animate-pulse h-4 text-[8px]">DUE NOW</Badge>;
+     if (minutes < 60) return <span className="text-[9px] text-indigo-400 font-bold flex items-center gap-1"><Clock className="w-3 h-3"/> en {minutes}m</span>;
+     return <span className="text-[9px] text-slate-500 flex items-center gap-1"><Clock className="w-3 h-3"/> en {Math.floor(minutes/60)}h</span>;
   };
 
   const getMoodIcon = (mood: string) => {
@@ -192,7 +204,7 @@ const Leads = () => {
               <TableHeader>
                 <TableRow className="border-slate-800 hover:bg-slate-900">
                   <TableHead className="text-slate-400 text-[10px] uppercase">Cliente</TableHead>
-                  <TableHead className="text-slate-400 text-[10px] uppercase">Ubicación</TableHead>
+                  <TableHead className="text-slate-400 text-[10px] uppercase">Follow-up</TableHead>
                   <TableHead className="text-slate-400 text-[10px] uppercase text-center">IA Analysis</TableHead>
                   <TableHead className="text-slate-400 text-[10px] uppercase text-center">Ánimo</TableHead>
                   <TableHead className="text-slate-400 text-[10px] uppercase">Intención</TableHead>
@@ -217,10 +229,7 @@ const Leads = () => {
                       </div>
                     </TableCell>
                     <TableCell>
-                       <div className="flex items-center gap-1.5">
-                          <MapPin className="w-3 h-3 text-red-500" />
-                          <span className="text-xs text-slate-300 font-bold">{lead.ciudad || 'Detectando...'}</span>
-                       </div>
+                       {getNextFollowup(lead)}
                     </TableCell>
                     <TableCell className="text-center">
                        {lead.summary ? (
