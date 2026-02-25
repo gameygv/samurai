@@ -21,7 +21,8 @@ import MediaManager from "./pages/MediaManager";
 import Manual from "./pages/Manual";
 import WebsiteContent from "./pages/WebsiteContent";
 import Payments from "./pages/Payments";
-import MetaCapi from "./pages/MetaCapi"; // Importar la nueva página
+import MetaCapi from "./pages/MetaCapi";
+import Pipeline from "./pages/Pipeline"; // Importar Pipeline
 import { Loader2 } from "lucide-react";
 
 const queryClient = new QueryClient();
@@ -67,10 +68,11 @@ const App = () => (
             <Route path="/profile" element={<PrivateRoute><Profile /></PrivateRoute>} />
             <Route path="/settings" element={<PrivateRoute><Settings /></PrivateRoute>} />
             <Route path="/leads" element={<PrivateRoute><Leads /></PrivateRoute>} />
+            <Route path="/pipeline" element={<PrivateRoute><Pipeline /></PrivateRoute>} /> {/* Nueva ruta */}
             <Route path="/archive" element={<PrivateRoute><Archive /></PrivateRoute>} />
             <Route path="/manual" element={<PrivateRoute><Manual /></PrivateRoute>} /> 
             <Route path="/payments" element={<PrivateRoute><Payments /></PrivateRoute>} />
-            <Route path="/meta-capi" element={<PrivateRoute><MetaCapi /></PrivateRoute>} /> {/* Nueva ruta */}
+            <Route path="/meta-capi" element={<PrivateRoute><MetaCapi /></PrivateRoute>} />
             
             <Route path="*" element={<NotFound />} />
           </Routes>
