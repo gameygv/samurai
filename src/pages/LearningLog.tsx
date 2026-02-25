@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import Layout from '@/components/Layout';
 import { supabase } from '@/integrations/supabase/client';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
@@ -11,9 +11,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { 
   Brain, AlertTriangle, GitBranch, Search, 
-  Eye, Loader2, Zap, CheckCircle2, RefreshCcw, Edit, Lock, Plus, Save, Trash2
+  Eye, Loader2, Zap, CheckCircle2, RefreshCw, Edit, Lock, Plus, Save, Trash2,
+  FileCode, Terminal, Sparkles, ArrowRight
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { logActivity } from '@/utils/logger';
@@ -24,6 +26,7 @@ const LearningLog = () => {
   const [syncing, setSyncing] = useState(false);
   const [errors, setErrors] = useState<any[]>([]);
   const [versions, setVersions] = useState<any[]>([]);
+  const [currentRelearningPrompt, setCurrentRelearningPrompt] = useState("");
   
   // Dialog State
   const [selectedError, setSelectedError] = useState<any>(null);
@@ -48,6 +51,10 @@ const LearningLog = () => {
 
       const { data: versionsData } = await supabase.from('versiones_prompts_aprendidas').select('*').order('created_at', { ascending: false });
       setVersions(versionsData || []);
+
+      const { data: configData } = await supabase.from('app_config').select('value').eq('key', 'prompt_relearning').maybeSingle();
+      setCurrentRelearningPrompt(configData?.value || "# Aún no hay lecciones inyectadas.");
+
     } catch (error) {
       toast.error('Error cargando datos');
     } finally {
@@ -148,11 +155,11 @@ const LearningLog = () => {
         return;
       }
 
-      // Generamos un bloque de texto que consolida todo el aprendizaje
-      const instructionBlock = `# LECCIONES APRENDIDAS (#CIA AUTO-GENERADO)\n` + 
-        validated.map(e => `[${e.categoria}] REGLA: ${e.correccion_sugerida}`).join('\n');
+      // Generamos el bloque de texto consolidado
+      const instructionBlock = `# REGLAS DE APRENDIZAJE CRÍTICAS (#CIA)\n` + 
+        `# Este bloque se genera automáticamente desde la Bitácora.\n\n` +
+        validated.map((e, i) => `REGLA ${i+1} [${e.categoria}]:\n- INSTRUCCIÓN: ${e.correccion_sugerida}`).join('\n\n');
 
-      // Guardamos este bloque en la configuración para que el kernel lo lea
       const { error } = await supabase
         .from('app_config')
         .upsert({
@@ -164,7 +171,15 @@ const LearningLog = () => {
 
       if (error) throw error;
 
-      toast.success(`¡Cerebro actualizado! ${validated.length} reglas #CIA inyectadas.`);
+      await logActivity({
+          action: 'UPDATE',
+          resource: 'BRAIN',
+          description: `Sincronización de Cerebro: ${validated.length} reglas inyectadas`,
+          status: 'OK'
+      });
+
+      toast.success(`¡Cerebro actualizado! ${validated.length} reglas inyectadas.`);
+      fetchData();
     } catch (err: any) {
       toast.error(`Fallo de sincronización: ${err.message}`);
     } finally {
@@ -191,7 +206,7 @@ const LearningLog = () => {
               <Brain className="w-8 h-8 text-indigo-500" /> 
               Bitácora #CIA
             </h1>
-            <p className="text-slate-400">Gestiona las reglas de corrección y sincroniza el cerebro.</p>
+            <p className="text-slate-400">Control de lecciones aprendidas y reglas de conducta de la IA.</p>
           </div>
           <div className="flex gap-3">
              <Button 
@@ -199,50 +214,43 @@ const LearningLog = () => {
                className="border-indigo-500/30 text-indigo-400 hover:bg-indigo-500/10"
                onClick={handleOpenCreateDialog}
              >
-                <Plus className="w-4 h-4 mr-2" /> Nueva Regla #CIA
-             </Button>
-             <Button 
-               onClick={syncKnowledgeToPrompt} 
-               disabled={syncing || validatedCount === 0}
-               className="bg-indigo-600 hover:bg-indigo-700 shadow-lg shadow-indigo-900/20"
-             >
-               {syncing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCcw className="w-4 h-4 mr-2" />}
-               Sincronizar Cerebro ({validatedCount})
+                <Plus className="w-4 h-4 mr-2" /> Nueva Regla
              </Button>
           </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <Card className="bg-slate-900 border-slate-800 p-6">
+          <Card className="bg-slate-900 border-slate-800 p-6 border-l-4 border-l-indigo-600">
              <div className="flex justify-between items-start">
                 <div>
-                   <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">Reglas Activas</p>
+                   <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Lecciones Validadas</p>
                    <h3 className="text-3xl font-bold text-white mt-1">{validatedCount}</h3>
                 </div>
-                <div className="p-3 rounded-xl bg-green-500/10 text-green-500">
+                <div className="p-3 rounded-xl bg-indigo-500/10 text-indigo-500">
                    <CheckCircle2 className="w-6 h-6" />
                 </div>
              </div>
-             <p className="text-[10px] text-slate-500 mt-4 uppercase">Inyectadas en Prompt</p>
+             <p className="text-[9px] text-slate-500 mt-4 uppercase font-mono">LISTAS PARA SINCRONIZAR</p>
           </Card>
-          <Card className="bg-slate-900 border-slate-800 p-6">
+          <Card className="bg-slate-900 border-slate-800 p-6 border-l-4 border-l-yellow-600">
              <div className="flex justify-between items-start">
                 <div>
-                   <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">Pendientes</p>
+                   <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Pendientes de Revisión</p>
                    <h3 className="text-3xl font-bold text-white mt-1">{errors.filter(e => e.estado_correccion === 'REPORTADA').length}</h3>
                 </div>
                 <div className="p-3 rounded-xl bg-yellow-500/10 text-yellow-500">
                    <AlertTriangle className="w-6 h-6" />
                 </div>
              </div>
-             <p className="text-[10px] text-slate-500 mt-4 uppercase">Requieren revisión</p>
+             <p className="text-[9px] text-slate-500 mt-4 uppercase font-mono">REVISE ANTES DE APROBAR</p>
           </Card>
         </div>
 
         <Tabs defaultValue="errores" className="w-full">
-          <TabsList className="bg-slate-900 border border-slate-800">
-            <TabsTrigger value="errores"><AlertTriangle className="w-4 h-4 mr-2" /> Reportes #CIA</TabsTrigger>
-            <TabsTrigger value="versiones"><GitBranch className="w-4 h-4 mr-2" /> Historial de Versiones</TabsTrigger>
+          <TabsList className="bg-slate-900 border border-slate-800 p-1">
+            <TabsTrigger value="errores" className="gap-2"><AlertTriangle className="w-4 h-4" /> Reportes #CIA</TabsTrigger>
+            <TabsTrigger value="prompt" className="gap-2"><Terminal className="w-4 h-4" /> Cerebro Complementario</TabsTrigger>
+            <TabsTrigger value="versiones" className="gap-2"><GitBranch className="w-4 h-4" /> Versiones</TabsTrigger>
           </TabsList>
 
           <TabsContent value="errores" className="mt-6 space-y-4">
@@ -250,7 +258,7 @@ const LearningLog = () => {
                <div className="relative flex-1">
                   <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-500" />
                   <Input 
-                    placeholder="Buscar regla #CIA..." 
+                    placeholder="Buscar regla o error..." 
                     className="pl-9 bg-slate-950 border-slate-800 text-white" 
                     value={searchTerm} 
                     onChange={e => setSearchTerm(e.target.value)} 
@@ -258,54 +266,50 @@ const LearningLog = () => {
                </div>
                <Select value={statusFilter} onValueChange={setStatusFilter}>
                   <SelectTrigger className="w-[180px] bg-slate-950 border-slate-800 text-slate-300">
-                    <SelectValue placeholder="Filtrar Estado" />
+                    <SelectValue placeholder="Estado" />
                   </SelectTrigger>
                   <SelectContent className="bg-slate-900 border-slate-800 text-white">
-                     <SelectItem value="all">Todos</SelectItem>
+                     <SelectItem value="all">Todos los estados</SelectItem>
                      <SelectItem value="REPORTADA">Reportada</SelectItem>
                      <SelectItem value="VALIDADA">Validada (Activa)</SelectItem>
-                     <SelectItem value="RECHAZADA">Rechazada (Inactiva)</SelectItem>
+                     <SelectItem value="RECHAZADA">Rechazada</SelectItem>
                   </SelectContent>
                </Select>
             </div>
 
-            <Card className="bg-slate-900 border-slate-800 overflow-hidden">
+            <Card className="bg-slate-900 border-slate-800 overflow-hidden shadow-2xl">
                <Table>
                   <TableHeader>
                      <TableRow className="border-slate-800 bg-slate-950/30">
-                        <TableHead className="text-slate-400">Fecha</TableHead>
-                        <TableHead className="text-slate-400">Categoría</TableHead>
-                        <TableHead className="text-slate-400">Regla #CIA</TableHead>
-                        <TableHead className="text-slate-400">Estado</TableHead>
-                        <TableHead className="text-right text-slate-400">Acciones</TableHead>
+                        <TableHead className="text-slate-400 text-[10px] uppercase">Timestamp</TableHead>
+                        <TableHead className="text-slate-400 text-[10px] uppercase">Categoría</TableHead>
+                        <TableHead className="text-slate-400 text-[10px] uppercase">Instrucción #CIA</TableHead>
+                        <TableHead className="text-slate-400 text-[10px] uppercase">Estado</TableHead>
+                        <TableHead className="text-right text-slate-400 text-[10px] uppercase">Acciones</TableHead>
                      </TableRow>
                   </TableHeader>
                   <TableBody>
                      {loading ? (
-                        <TableRow>
-                           <TableCell colSpan={5} className="text-center h-24"><Loader2 className="w-6 h-6 animate-spin mx-auto text-indigo-500" /></TableCell>
-                        </TableRow>
+                        <TableRow><TableCell colSpan={5} className="text-center h-32"><Loader2 className="w-8 h-8 animate-spin mx-auto text-indigo-500" /></TableCell></TableRow>
                      ) : filteredErrors.length === 0 ? (
-                        <TableRow>
-                           <TableCell colSpan={5} className="text-center h-24 text-slate-500">No hay reportes que coincidan.</TableCell>
-                        </TableRow>
+                        <TableRow><TableCell colSpan={5} className="text-center h-32 text-slate-500 italic uppercase text-[10px]">No se encontraron reportes</TableCell></TableRow>
                      ) : (
                         filteredErrors.map(err => (
-                           <TableRow key={err.error_id} className="border-slate-800 hover:bg-slate-800/30">
+                           <TableRow key={err.error_id} className="border-slate-800 hover:bg-slate-800/30 transition-colors">
                               <TableCell className="text-[10px] text-slate-500 font-mono">
-                                 {new Date(err.reported_at).toLocaleDateString()}
+                                 {new Date(err.reported_at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
                               </TableCell>
                               <TableCell>
-                                 <Badge variant="outline" className="text-[10px] border-indigo-500/30 text-indigo-400">
-                                    {err.categoria}
+                                 <Badge variant="outline" className="text-[9px] border-indigo-500/30 text-indigo-400 font-bold">
+                                    {err.category || err.categoria}
                                  </Badge>
                               </TableCell>
                               <TableCell className="max-w-md">
-                                 <p className="text-xs text-slate-300 truncate font-mono">{err.correccion_sugerida}</p>
+                                 <p className="text-xs text-slate-300 font-medium line-clamp-1">{err.correccion_sugerida}</p>
                               </TableCell>
                               <TableCell>
                                  <Badge className={
-                                    err.estado_correccion === 'VALIDADA' ? 'bg-green-600' : 
+                                    err.estado_correccion === 'VALIDADA' ? 'bg-green-600/20 text-green-500 border-green-500/30' : 
                                     err.estado_correccion === 'RECHAZADA' ? 'bg-red-900/50 text-red-500' : 
                                     'bg-yellow-600/20 text-yellow-500 border border-yellow-500/20'
                                  }>
@@ -330,20 +334,109 @@ const LearningLog = () => {
             </Card>
           </TabsContent>
           
+          <TabsContent value="prompt" className="mt-6 animate-in fade-in-50">
+             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                <div className="lg:col-span-8">
+                   <Card className="bg-slate-900 border-slate-800 shadow-2xl relative overflow-hidden">
+                      <div className="absolute top-0 left-0 w-1 h-full bg-indigo-500"></div>
+                      <CardHeader className="bg-slate-950/20 border-b border-slate-800 py-4 flex flex-row items-center justify-between">
+                         <div>
+                            <CardTitle className="text-sm text-white flex items-center gap-2 uppercase tracking-widest">
+                               <Terminal className="w-4 h-4 text-indigo-400" /> Visor del Prompt Aprendido
+                            </CardTitle>
+                            <CardDescription className="text-[10px]">Este bloque se inyecta en la Capa 1 del Cerebro.</CardDescription>
+                         </div>
+                         <div className="flex gap-3">
+                            <Button 
+                               onClick={fetchData} 
+                               variant="ghost" 
+                               size="sm" 
+                               className="h-8 text-[10px] text-slate-500"
+                            >
+                               <RefreshCw className="w-3 h-3 mr-2" /> RECARGAR DATOS
+                            </Button>
+                            <Button 
+                               onClick={syncKnowledgeToPrompt} 
+                               disabled={syncing || validatedCount === 0}
+                               className="bg-indigo-600 hover:bg-indigo-700 h-8 text-[10px] font-bold shadow-lg shadow-indigo-900/20"
+                            >
+                               {syncing ? <Loader2 className="w-3 h-3 mr-2 animate-spin" /> : <Zap className="w-3 h-3 mr-2" />}
+                               SINCRONIZAR CEREBRO ({validatedCount})
+                            </Button>
+                         </div>
+                      </CardHeader>
+                      <CardContent className="p-0">
+                         <ScrollArea className="h-[500px] bg-black">
+                            <div className="p-6 font-mono text-[11px] leading-relaxed text-slate-400 select-text">
+                               {syncing ? (
+                                  <div className="h-full flex flex-col items-center justify-center py-20 gap-4">
+                                     <Loader2 className="w-8 h-8 animate-spin text-indigo-500" />
+                                     <p className="animate-pulse">Consolidando reglas #CIA...</p>
+                                  </div>
+                               ) : (
+                                  <pre className="whitespace-pre-wrap">{currentRelearningPrompt}</pre>
+                               )}
+                            </div>
+                         </ScrollArea>
+                      </CardContent>
+                      <CardFooter className="bg-slate-950/40 border-t border-slate-800 p-4">
+                         <div className="flex items-center gap-2 text-xs text-slate-500 italic">
+                            <Sparkles className="w-4 h-4 text-indigo-400" />
+                            <span>Samurai usa este bloque como su "brújula moral" para no repetir errores pasados.</span>
+                         </div>
+                      </CardFooter>
+                   </Card>
+                </div>
+
+                <div className="lg:col-span-4 space-y-6">
+                   <Card className="bg-slate-900 border-slate-800 shadow-xl border-l-4 border-l-green-500">
+                      <CardHeader className="py-4">
+                         <CardTitle className="text-xs uppercase tracking-widest text-slate-300">Próxima Inyección</CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                         <div className="flex items-center justify-between text-xs">
+                            <span className="text-slate-500">Nuevas reglas validadas:</span>
+                            <span className="font-bold text-green-500">{validatedCount}</span>
+                         </div>
+                         <div className="p-3 bg-slate-950 rounded border border-slate-800 space-y-2">
+                            <p className="text-[10px] text-slate-400 font-bold uppercase">Impacto:</p>
+                            <div className="space-y-1.5">
+                               {errors.filter(e => e.estado_correccion === 'VALIDADA').slice(0, 3).map((e, i) => (
+                                  <div key={i} className="flex items-center gap-2 text-[10px] text-slate-500">
+                                     <ArrowRight className="w-2.5 h-2.5 text-indigo-500" />
+                                     <span className="truncate">{e.correccion_sugerida}</span>
+                                  </div>
+                               ))}
+                               {validatedCount > 3 && <p className="text-[9px] text-slate-600 pl-4">+ {validatedCount - 3} reglas más...</p>}
+                            </div>
+                         </div>
+                      </CardContent>
+                   </Card>
+                   
+                   <Card className="bg-indigo-600/5 border border-indigo-500/20 p-4 rounded-xl">
+                      <p className="text-xs text-indigo-300 leading-relaxed">
+                         <strong>Tip Samurai:</strong> Las reglas con categoría <strong>CONDUCTA</strong> tienen mayor influencia en el tono del bot que las de <strong>VENTAS</strong>.
+                      </p>
+                   </Card>
+                </div>
+             </div>
+          </TabsContent>
+          
           <TabsContent value="versiones">
-             {/* Historial de versiones del prompt consolidado */}
              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-6">
-                {versions.map(v => (
+                {versions.length === 0 ? (
+                   <div className="col-span-full py-20 text-center text-slate-600 italic">No hay historial de versiones consolidado.</div>
+                ) : versions.map(v => (
                    <Card key={v.version_id} className="bg-slate-900 border-slate-800 hover:border-indigo-500/50 transition-colors">
                       <CardHeader className="pb-2">
                          <div className="flex justify-between items-start">
                             <Badge className="bg-indigo-600">{v.version_numero}</Badge>
                             <span className="text-[10px] text-slate-500 font-mono">{new Date(v.created_at).toLocaleDateString()}</span>
                          </div>
-                         <CardTitle className="text-sm text-white mt-2">Puntuación: {v.test_accuracy_nuevo}%</CardTitle>
+                         <CardTitle className="text-sm text-white mt-2">Precisión IA: {v.test_accuracy_nuevo}%</CardTitle>
                       </CardHeader>
                       <CardContent>
-                         <p className="text-xs text-slate-400 line-clamp-3 italic">"{v.motivo_creacion || 'Sin descripción'}"</p>
+                         <p className="text-xs text-slate-400 line-clamp-3 italic">"{v.motivo_creacion || 'Consolidación de aprendizaje automático'}"</p>
                       </CardContent>
                    </Card>
                 ))}
@@ -353,7 +446,7 @@ const LearningLog = () => {
 
         {/* DIALOG DE EDICIÓN / CREACIÓN */}
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-           <DialogContent className="bg-slate-900 border-slate-800 text-white max-w-lg">
+           <DialogContent className="bg-slate-900 border-slate-800 text-white max-w-lg shadow-2xl">
               <DialogHeader>
                  <DialogTitle className="flex items-center gap-2">
                     {isCreating ? <Plus className="w-5 h-5 text-indigo-400" /> : <Zap className="w-5 h-5 text-yellow-500" />} 
@@ -365,11 +458,11 @@ const LearningLog = () => {
                  {!isCreating && selectedError?.mensaje_cliente !== 'Creación Manual' && (
                     <div className="bg-slate-950/50 p-3 rounded border border-slate-800 space-y-3">
                        <div className="flex gap-2 items-start">
-                          <span className="text-[10px] bg-slate-800 px-1 rounded text-slate-400">INPUT</span>
+                          <span className="text-[9px] font-bold bg-slate-800 px-1 rounded text-slate-400 uppercase">Input Cliente</span>
                           <p className="text-xs text-slate-300 italic">"{selectedError?.mensaje_cliente}"</p>
                        </div>
                        <div className="flex gap-2 items-start">
-                          <span className="text-[10px] bg-red-900/30 px-1 rounded text-red-400">ERROR IA</span>
+                          <span className="text-[9px] font-bold bg-red-900/30 px-1 rounded text-red-400 uppercase">Fallo IA</span>
                           <p className="text-xs text-red-300/80 italic">"{selectedError?.respuesta_ia}"</p>
                        </div>
                     </div>
@@ -377,7 +470,7 @@ const LearningLog = () => {
 
                  <div className="space-y-3">
                     <div className="space-y-2">
-                       <Label className="text-xs text-green-400">Instrucción Maestra (#CIA)</Label>
+                       <Label className="text-[10px] text-green-400 uppercase font-bold tracking-widest">Instrucción Maestra (#CIA)</Label>
                        <Textarea 
                           value={editForm.correction}
                           onChange={e => setEditForm({...editForm, correction: e.target.value})}
@@ -389,7 +482,7 @@ const LearningLog = () => {
                     
                     <div className="grid grid-cols-2 gap-4">
                        <div className="space-y-2">
-                          <Label className="text-xs text-slate-400">Categoría</Label>
+                          <Label className="text-[10px] text-slate-400 uppercase font-bold tracking-widest">Categoría</Label>
                           <Select 
                              value={editForm.category} 
                              onValueChange={v => setEditForm({...editForm, category: v})}
@@ -405,7 +498,7 @@ const LearningLog = () => {
                           </Select>
                        </div>
                        <div className="space-y-2">
-                          <Label className="text-xs text-slate-400">Estado</Label>
+                          <Label className="text-[10px] text-slate-400 uppercase font-bold tracking-widest">Estado</Label>
                           <Select 
                              value={editForm.status} 
                              onValueChange={v => setEditForm({...editForm, status: v})}
@@ -415,7 +508,7 @@ const LearningLog = () => {
                              <SelectContent className="bg-slate-900 border-slate-800 text-white">
                                 <SelectItem value="REPORTADA">Reportada (Pendiente)</SelectItem>
                                 <SelectItem value="VALIDADA">Validada (Activa)</SelectItem>
-                                <SelectItem value="RECHAZADA">Rechazada (Inactiva)</SelectItem>
+                                <SelectItem value="RECHAZADA">Rechazada</SelectItem>
                              </SelectContent>
                           </Select>
                        </div>
@@ -428,20 +521,20 @@ const LearningLog = () => {
                     <>
                        <Button variant="ghost" onClick={() => setIsDialogOpen(false)}>Cerrar</Button>
                        <Button variant="outline" className="border-indigo-500 text-indigo-400 hover:bg-indigo-500/10" onClick={() => setEditMode(true)}>
-                          <Lock className="w-3 h-3 mr-2" /> Desbloquear Edición
+                          <Lock className="w-3 h-3 mr-2" /> Editar Regla
                        </Button>
                        {editForm.status === 'REPORTADA' && (
                           <Button className="bg-green-600 hover:bg-green-700" onClick={() => { setEditForm({...editForm, status: 'VALIDADA'}); setEditMode(true); }}>
-                             <CheckCircle2 className="w-4 h-4 mr-2" /> Aprobar Rápido
+                             <CheckCircle2 className="w-4 h-4 mr-2" /> Validar Rápido
                           </Button>
                        )}
                     </>
                  ) : (
                     <>
                        <Button variant="ghost" onClick={() => { if (isCreating) setIsDialogOpen(false); else setEditMode(false); }}>Cancelar</Button>
-                       <Button className="bg-indigo-600 hover:bg-indigo-700" onClick={handleSaveChanges} disabled={updating}>
+                       <Button className="bg-indigo-600 hover:bg-indigo-700 shadow-lg shadow-indigo-900/20" onClick={handleSaveChanges} disabled={updating}>
                           {updating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
-                          {isCreating ? 'Guardar Regla' : 'Guardar Cambios'}
+                          {isCreating ? 'Guardar Regla' : 'Actualizar Regla'}
                        </Button>
                     </>
                  )}
