@@ -25,7 +25,7 @@ const LearningLog = () => {
   const [updating, setUpdating] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [errors, setErrors] = useState<any[]>([]);
-  const [versions, setVersions] = useState<any[]>([]); // Restaurado para evitar crash
+  const [versions, setVersions] = useState<any[]>([]);
   const [currentRelearningPrompt, setCurrentRelearningPrompt] = useState("");
   
   // Dialog State
@@ -48,7 +48,6 @@ const LearningLog = () => {
       const { data: errorsData } = await supabase.from('errores_ia').select('*').order('reported_at', { ascending: false });
       setErrors(errorsData || []);
 
-      // Restaurada la carga de versiones
       const { data: versionsData } = await supabase.from('versiones_prompts_aprendidas').select('*').order('created_at', { ascending: false });
       setVersions(versionsData || []);
 
@@ -65,7 +64,7 @@ const LearningLog = () => {
   const handleOpenEditDialog = (err: any) => {
      setSelectedError(err);
      setEditForm({ 
-        correction: err.correccion_sugerida, 
+        correction: err.correccion_sugerida || '', 
         category: err.categoria || 'CONDUCTA', 
         status: err.estado_correccion 
      });
@@ -257,7 +256,7 @@ const LearningLog = () => {
                         filteredErrors.map(err => (
                            <TableRow key={err.error_id} className="border-slate-800 hover:bg-slate-800/30 transition-colors">
                               <TableCell className="text-[10px] text-slate-500 font-mono">
-                                 {new Date(err.reported_at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
+                                 {err.reported_at ? new Date(err.reported_at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : 'N/A'}
                               </TableCell>
                               <TableCell>
                                  <Badge variant="outline" className="text-[9px] border-indigo-500/30 text-indigo-400 font-bold">
@@ -398,7 +397,6 @@ const LearningLog = () => {
           </TabsContent>
         </Tabs>
 
-        {/* DIALOG DE REVISIÓN / EDICIÓN */}
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
            <DialogContent className="bg-slate-900 border-slate-800 text-white max-w-lg shadow-2xl">
               <DialogHeader>

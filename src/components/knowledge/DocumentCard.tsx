@@ -56,7 +56,6 @@ export const DocumentCard = ({ doc, syncingId, onSync, onDelete }: DocumentCardP
       <CardContent className="pb-2">
         <CardTitle className="text-base text-white mb-2 leading-tight pr-4">{doc.title}</CardTitle>
         
-        {/* Instrucción de Uso (Description) */}
         {doc.description && (
            <div className="mb-3 bg-slate-950/50 p-2 rounded border border-slate-800/50">
               <p className="text-[10px] text-indigo-300 font-bold uppercase mb-1 flex items-center gap-1">
@@ -66,7 +65,6 @@ export const DocumentCard = ({ doc, syncingId, onSync, onDelete }: DocumentCardP
            </div>
         )}
         
-        {/* Contenido Clave (Content) */}
         <div className="space-y-1">
             <div className="flex justify-between items-center">
                 <p className="text-[10px] text-slate-500 uppercase font-bold">Información Indexada:</p>
@@ -90,7 +88,7 @@ export const DocumentCard = ({ doc, syncingId, onSync, onDelete }: DocumentCardP
       <CardFooter className="pt-2 border-t border-slate-800/50 flex justify-between text-xs text-slate-500">
          <span className="truncate max-w-[150px]">{doc.external_link || doc.size}</span>
          <span title="Última actualización">
-            {doc.updated_at ? new Date(doc.updated_at).toLocaleDateString() : new Date(doc.created_at).toLocaleDateString()}
+            {doc.updated_at ? new Date(doc.updated_at).toLocaleDateString() : (doc.created_at ? new Date(doc.created_at).toLocaleDateString() : 'N/A')}
          </span>
       </CardFooter>
     </Card>

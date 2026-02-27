@@ -11,6 +11,7 @@ import { Search, BookOpen, Upload, Loader2, Globe, RefreshCw, Lock, FileText, Ch
 import { toast } from 'sonner';
 import { CreateResourceDialog } from '@/components/knowledge/CreateResourceDialog';
 import { DocumentCard } from '@/components/knowledge/DocumentCard';
+import { cn } from '@/lib/utils';
 
 const KnowledgeBase = () => {
   const { user } = useAuth();
@@ -73,6 +74,28 @@ const KnowledgeBase = () => {
      }
   };
 
+  const handleDelete = async (id: string, title: string, filePath?: string) => {
+    if (!confirm(`¿Seguro que quieres eliminar "${title}"? Esta acción es irreversible.`)) return;
+
+    try {
+      if (filePath) {
+        const { error: storageError } = await supabase.storage.from('knowledge-files').remove([filePath]);
+        if (storageError) {
+          console.error('Storage Error:', storageError);
+          toast.warning('No se pudo eliminar el archivo asociado, pero se borrará el registro.');
+        }
+      }
+
+      const { error } = await supabase.from('knowledge_documents').delete().eq('id', id);
+      if (error) throw error;
+
+      toast.success(`"${title}" ha sido eliminado.`);
+      fetchDocuments();
+    } catch (err: any) {
+      toast.error(`Error al eliminar: ${err.message}`);
+    }
+  };
+
   const filteredDocs = documents.filter(doc => {
     const matchesSearch = doc.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          doc.category.toLowerCase().includes(searchTerm.toLowerCase());
@@ -84,7 +107,6 @@ const KnowledgeBase = () => {
     <Layout>
       <div className="max-w-6xl mx-auto space-y-8 pb-12">
         
-        {/* Banner de Fuente de Verdad Maestra */}
         <Card className="bg-indigo-900/10 border-indigo-500/30 border-l-4 border-l-indigo-500 overflow-hidden">
           <div className="p-4 flex items-center gap-4">
             <div className="p-3 rounded-full bg-indigo-500/10">
@@ -165,7 +187,7 @@ const KnowledgeBase = () => {
                         doc={doc} 
                         syncingId={syncingId}
                         onSync={handleSyncWebsite}
-                        onDelete={fetchDocuments} 
+                        onDelete={handleDelete} 
                       />
                    ))}
                 </div>
