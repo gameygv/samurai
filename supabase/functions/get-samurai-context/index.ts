@@ -1,10 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0'
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
+import { corsHeaders } from '../_shared/cors.ts'
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -18,16 +14,16 @@ serve(async (req) => {
     )
 
     const { data: configs } = await supabaseClient.from('app_config').select('key, value');
-    const getConfig = (key: string) => configs?.find(c => c.key === key)?.value || "";
+    const getConfig = (key: string) => configs?.find((c: any) => c.key === key)?.value || "";
     
     // Recuperar link de reserva
     const bookingLink = getConfig('booking_link') || "https://theelephantbowl.com/reservar (LINK NO CONFIGURADO)";
 
     const { data: webContent } = await supabaseClient.from('main_website_content').select('title, content').eq('scrape_status', 'success');
-    const truthBlock = webContent?.map(w => `[FUENTE OFICIAL: ${w.title}]\n${w.content}`).join('\n\n') || "Sin datos oficiales.";
+    const truthBlock = webContent?.map((w: any) => `[FUENTE OFICIAL: ${w.title}]\n${w.content}`).join('\n\n') || "Sin datos oficiales.";
 
     const { data: mediaAssets } = await supabaseClient.from('media_assets').select('title, url, ai_instructions');
-    const mediaCatalog = mediaAssets?.map(m => `[ACTIVO: ${m.title}] URL: ${m.url}`).join('\n');
+    const mediaCatalog = mediaAssets?.map((m: any) => `[ACTIVO: ${m.title}] URL: ${m.url}`).join('\n');
 
     const systemPrompt = `
 # CAPA 0: EL ALMA DEL SAMURAI (INSTINTO SUPREMO)
