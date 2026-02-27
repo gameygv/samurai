@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Switch } from '@/components/ui/switch';
-import { Webhook, Key, Save, Loader2, ShoppingCart, Clock, Zap, DollarSign, Target } from 'lucide-react';
+import { Webhook, Key, Save, Loader2, ShoppingCart, Clock, Zap, DollarSign, Target, Link as LinkIcon } from 'lucide-react';
 import { toast } from 'sonner';
 
 const Settings = () => {
@@ -79,22 +79,37 @@ const Settings = () => {
                    <CardTitle className="text-white flex items-center gap-2"><DollarSign className="w-5 h-5 text-orange-500" /> Secuencia de Recordatorio de Pago</CardTitle>
                    <CardDescription>Tiempos de espera para re-contactar tras enviar el link de reserva.</CardDescription>
                 </CardHeader>
-                <CardContent className="grid grid-cols-2 md:grid-cols-4 gap-6">
-                   <div className="space-y-2">
-                      <Label className="text-xs text-slate-500 uppercase">Intento 1 (horas)</Label>
-                      <Input type="number" value={getValue('sales_reminder_1') || '24'} onChange={e => handleInputChange('sales_reminder_1', e.target.value, 'SALES')} className="bg-slate-950" />
+                <CardContent className="space-y-6">
+                   <div className="space-y-2 bg-slate-950 p-4 rounded border border-slate-800">
+                      <Label className="text-xs text-green-500 uppercase font-bold flex items-center gap-2">
+                         <LinkIcon className="w-4 h-4" /> Link de Reserva (WooCommerce)
+                      </Label>
+                      <Input 
+                        value={getValue('booking_link')} 
+                        onChange={e => handleInputChange('booking_link', e.target.value, 'SALES')} 
+                        placeholder="https://theelephantbowl.com/checkout/..."
+                        className="bg-slate-900 border-slate-700 text-indigo-300 font-mono" 
+                      />
+                      <p className="text-[10px] text-slate-500">Este es el link que Samurai enviará automáticamente cuando el cliente quiera reservar.</p>
                    </div>
-                   <div className="space-y-2">
-                      <Label className="text-xs text-slate-500 uppercase">Intento 2 (horas)</Label>
-                      <Input type="number" value={getValue('sales_reminder_2') || '48'} onChange={e => handleInputChange('sales_reminder_2', e.target.value, 'SALES')} className="bg-slate-950" />
-                   </div>
-                   <div className="space-y-2">
-                      <Label className="text-xs text-slate-500 uppercase">Intento 3 (horas)</Label>
-                      <Input type="number" value={getValue('sales_reminder_3') || '72'} onChange={e => handleInputChange('sales_reminder_3', e.target.value, 'SALES')} className="bg-slate-950" />
-                   </div>
-                   <div className="space-y-2">
-                      <Label className="text-xs text-slate-500 uppercase">Intento 4 (días)</Label>
-                      <Input type="number" value={getValue('sales_reminder_4') || '7'} onChange={e => handleInputChange('sales_reminder_4', e.target.value, 'SALES')} className="bg-slate-950" />
+
+                   <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+                      <div className="space-y-2">
+                         <Label className="text-xs text-slate-500 uppercase">Intento 1 (horas)</Label>
+                         <Input type="number" value={getValue('sales_reminder_1') || '24'} onChange={e => handleInputChange('sales_reminder_1', e.target.value, 'SALES')} className="bg-slate-950" />
+                      </div>
+                      <div className="space-y-2">
+                         <Label className="text-xs text-slate-500 uppercase">Intento 2 (horas)</Label>
+                         <Input type="number" value={getValue('sales_reminder_2') || '48'} onChange={e => handleInputChange('sales_reminder_2', e.target.value, 'SALES')} className="bg-slate-950" />
+                      </div>
+                      <div className="space-y-2">
+                         <Label className="text-xs text-slate-500 uppercase">Intento 3 (horas)</Label>
+                         <Input type="number" value={getValue('sales_reminder_3') || '72'} onChange={e => handleInputChange('sales_reminder_3', e.target.value, 'SALES')} className="bg-slate-950" />
+                      </div>
+                      <div className="space-y-2">
+                         <Label className="text-xs text-slate-500 uppercase">Intento 4 (días)</Label>
+                         <Input type="number" value={getValue('sales_reminder_4') || '7'} onChange={e => handleInputChange('sales_reminder_4', e.target.value, 'SALES')} className="bg-slate-950" />
+                      </div>
                    </div>
                 </CardContent>
                 <div className="p-4 bg-orange-500/5 border-t border-slate-800">

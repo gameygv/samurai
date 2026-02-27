@@ -1,3 +1,4 @@
+Lost.">
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0'
 
@@ -11,7 +12,7 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders })
   }
 
-  console.log("[process-followups] Iniciando proceso de follow-ups automáticos...");
+  console.log("[process-followups] Iniciando ciclo de recordatorios de ventas...");
 
   try {
     const supabaseClient = createClient(
@@ -19,164 +20,110 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
-    const now = new Date().toISOString();
+    const now = new Date();
+
+    // 1. OBTENER CONFIGURACIÓN DE TIEMPOS
+    const { data: configs } = await supabaseClient.from('app_config').select('key, value').in('key', ['sales_reminder_1', 'sales_reminder_2', 'sales_reminder_3', 'sales_reminder_4']);
     
-    // 1. OBTENER CONFIGURACIÓN
-    const { data: config } = await supabaseClient
-      .from('followup_config')
-      .select('*')
-      .single();
-
-    if (!config || !config.enabled) {
-      console.log("[process-followups] Sistema deshabilitado");
-      return new Response(JSON.stringify({ message: "Follow-up system disabled" }), { headers: corsHeaders });
-    }
-
-    console.log("[process-followups] Configuración cargada:", config);
-
-    // 2. VERIFICAR HORARIO PERMITIDO
-    const currentDate = new Date();
-    const currentHour = currentDate.getHours();
-    const currentDay = currentDate.toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase();
-
-    const isAllowedTime = 
-      config.allowed_days.includes(currentDay) &&
-      currentHour >= config.start_hour &&
-      currentHour < config.end_hour;
-
-    if (!isAllowedTime) {
-      console.log(`[process-followups] Fuera de horario permitido. Día: ${currentDay}, Hora: ${currentHour}`);
-      return new Response(JSON.stringify({ message: "Outside allowed hours" }), { headers: corsHeaders });
-    }
-
-    // 3. PROCESAR AUTO-RESTART (Leads con #STOP que deben reactivarse)
-    const { data: leadsToRestart } = await supabaseClient
-      .from('leads')
-      .select('*')
-      .eq('ai_paused', true)
-      .not('auto_restart_scheduled_at', 'is', null)
-      .lte('auto_restart_scheduled_at', now);
-
-    console.log(`[process-followups] Leads para auto-restart: ${leadsToRestart?.length || 0}`);
-
-    for (const lead of leadsToRestart || []) {
-      console.log(`[process-followups] Auto-reactivando lead: ${lead.nombre} (${lead.id})`);
-      
-      // Obtener últimos mensajes para contexto
-      const { data: recentMessages } = await supabaseClient
-        .from('conversaciones')
-        .select('*')
-        .eq('lead_id', lead.id)
-        .order('created_at', { ascending: false })
-        .limit(10);
-
-      const contextSummary = recentMessages?.map(m => `[${m.emisor}]: ${m.mensaje}`).join('\n') || '';
-
-      // Mensaje de reactivación inteligente
-      const restartMessage = `Hola ${lead.nombre || 'amigo'}, retomo la conversación. Vi que hablaste con mi equipo. ¿En qué más puedo ayudarte?`;
-
-      // Insertar mensaje de reactivación
-      await supabaseClient.from('conversaciones').insert({
-        lead_id: lead.id,
-        emisor: 'SAMURAI',
-        mensaje: restartMessage,
-        platform: 'AUTO_RESTART',
-        metadata: { context: contextSummary, trigger: 'auto_restart' }
-      });
-
-      // Actualizar lead
-      await supabaseClient.from('leads').update({
-        ai_paused: false,
-        auto_restart_scheduled_at: null,
-        last_bot_message_at: now
-      }).eq('id', lead.id);
-
-      // Log de actividad
-      await supabaseClient.from('activity_logs').insert({
-        action: 'UPDATE',
-        resource: 'BRAIN',
-        description: `Auto-restart ejecutado para ${lead.nombre}`,
-        status: 'OK',
-        metadata: { lead_id: lead.id, trigger: 'auto_restart' }
-      });
-    }
-
-    // 4. PROCESAR FOLLOW-UPS REGULARES
-    const { data: leadsForFollowup } = await supabaseClient
-      .from('leads')
-      .select('*')
-      .eq('ai_paused', false)
-      .not('next_followup_at', 'is', null)
-      .lte('next_followup_at', now)
-      .lte('followup_stage', config.max_followup_stage);
-
-    console.log(`[process-followups] Leads para follow-up: ${leadsForFollowup?.length || 0}`);
-
-    for (const lead of leadsForFollowup || []) {
-      const stage = lead.followup_stage || 1;
-      console.log(`[process-followups] Enviando follow-up stage ${stage} a: ${lead.nombre} (${lead.id})`);
-
-      // Seleccionar mensaje según stage
-      let messageTemplate = config.stage_1_message;
-      if (stage === 2) messageTemplate = config.stage_2_message;
-      if (stage === 3) messageTemplate = config.stage_3_message;
-
-      const message = messageTemplate.replace('{nombre}', lead.nombre || 'amigo');
-
-      // Insertar mensaje
-      await supabaseClient.from('conversaciones').insert({
-        lead_id: lead.id,
-        emisor: 'SAMURAI',
-        mensaje: message,
-        platform: 'AUTO_FOLLOWUP',
-        metadata: { stage, trigger: 'followup' }
-      });
-
-      // Registrar en historial
-      await supabaseClient.from('followup_history').insert({
-        lead_id: lead.id,
-        stage,
-        message_sent: message
-      });
-
-      // Calcular próximo follow-up
-      const nextStage = stage + 1;
-      let nextFollowupAt = null;
-
-      if (nextStage <= config.max_followup_stage) {
-        let delayMinutes = config.stage_1_delay;
-        if (nextStage === 2) delayMinutes = config.stage_2_delay;
-        if (nextStage === 3) delayMinutes = config.stage_3_delay;
-
-        const nextTime = new Date(Date.now() + delayMinutes * 60 * 1000);
-        nextFollowupAt = nextTime.toISOString();
-      }
-
-      // Actualizar lead
-      await supabaseClient.from('leads').update({
-        followup_stage: nextStage,
-        next_followup_at: nextFollowupAt,
-        last_bot_message_at: now
-      }).eq('id', lead.id);
-    }
-
-    const summary = {
-      success: true,
-      timestamp: now,
-      leads_restarted: leadsToRestart?.length || 0,
-      followups_sent: leadsForFollowup?.length || 0,
-      config_active: config.enabled
+    const getDelay = (key: string, defaultVal: number) => {
+       const val = configs?.find(c => c.key === key)?.value;
+       return val ? parseInt(val) : defaultVal;
     };
 
-    console.log("[process-followups] Proceso completado:", summary);
+    const delays = {
+       1: getDelay('sales_reminder_1', 24), // Horas
+       2: getDelay('sales_reminder_2', 48), // Horas
+       3: getDelay('sales_reminder_3', 72), // Horas
+       4: getDelay('sales_reminder_4', 7)   // Días
+    };
+
+    // 2. BUSCAR LEADS EN INTENCIÓN ALTA (PENDIENTES DE PAGO)
+    const { data: hotLeads } = await supabaseClient
+      .from('leads')
+      .select('*')
+      .eq('buying_intent', 'ALTO')
+      .neq('ai_paused', true) // Si está pausado, no molestamos
+      .lt('followup_stage', 5); // 5 = Perdido o Completado
+
+    console.log(`[process-followups] Leads calientes detectados: ${hotLeads?.length || 0}`);
+
+    const results = [];
+
+    for (const lead of hotLeads || []) {
+       // Calcular tiempo desde el último mensaje del bot (teóricamente cuando se envió el link o el último recordatorio)
+       const lastInteraction = new Date(lead.last_message_at || lead.updated_at); 
+       const diffMs = now.getTime() - lastInteraction.getTime();
+       const diffHours = diffMs / (1000 * 60 * 60);
+       
+       const currentStage = lead.followup_stage || 0;
+       const nextStage = currentStage + 1;
+
+       // Determinar si toca enviar recordatorio
+       let shouldSend = false;
+       let waitHours = 0;
+
+       if (nextStage === 1) waitHours = delays[1];
+       else if (nextStage === 2) waitHours = delays[2];
+       else if (nextStage === 3) waitHours = delays[3];
+       else if (nextStage === 4) waitHours = delays[4] * 24; // Días a horas
+
+       if (diffHours >= waitHours) {
+          shouldSend = true;
+       }
+
+       if (shouldSend) {
+          console.log(`[process-followups] Ejecutando Stage ${nextStage} para ${lead.nombre}`);
+
+          let message = "";
+          
+          if (nextStage === 4) {
+             // ÚLTIMO INTENTO
+             message = `Hola ${lead.nombre}, noté que no pudiste completar tu reserva. ¿Hubo algún problema con el link? Si ya no estás interesado, avísame para liberar el lugar.`;
+          } else if (nextStage === 5) {
+             // LOGICA DE LEAD PERDIDO (Se ejecuta si ya pasó el stage 4 y sigue sin respuesta tras X días extra? 
+             // Simplificación: Al ejecutar stage 4, programamos el cierre.
+             // Aquí si entra al bucle de nuevo y stage es 4, pasamos a 5 (Perdido).
+          } else {
+             // RECORDATORIOS ESTÁNDAR
+             message = `Hola ${lead.nombre}, solo un recordatorio amable sobre tu reserva de $1500 MXN. ¿Te puedo ayudar con el proceso de pago?`;
+          }
+
+          // Si es el stage 5 (imaginario, lógica de cierre)
+          if (nextStage > 4) {
+             console.log(`[process-followups] Lead ${lead.nombre} marcado como PERDIDO.`);
+             await supabaseClient.from('leads').update({
+                buying_intent: 'PERDIDO', // O "BAJO"
+                followup_stage: 5,
+                summary: `[SISTEMA] Lead marcado como perdido tras 4 intentos de cobro sin respuesta.`
+             }).eq('id', lead.id);
+             
+             results.push({ lead: lead.nombre, action: 'MARK_LOST' });
+          } else {
+             // Enviar mensaje
+             await supabaseClient.from('conversaciones').insert({
+                lead_id: lead.id,
+                emisor: 'SAMURAI',
+                mensaje: message,
+                platform: 'AUTO_FOLLOWUP'
+             });
+
+             await supabaseClient.from('leads').update({
+                followup_stage: nextStage,
+                last_message_at: now.toISOString() // Reseteamos el reloj
+             }).eq('id', lead.id);
+
+             results.push({ lead: lead.nombre, action: `SENT_STAGE_${nextStage}` });
+          }
+       }
+    }
 
     return new Response(
-      JSON.stringify(summary),
+      JSON.stringify({ success: true, processed: results }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
 
   } catch (error) {
-    console.error("[process-followups] Error crítico:", error);
+    console.error("[process-followups] Error:", error);
     return new Response(
       JSON.stringify({ success: false, error: error.message }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

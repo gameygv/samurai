@@ -19,6 +19,9 @@ serve(async (req) => {
 
     const { data: configs } = await supabaseClient.from('app_config').select('key, value');
     const getConfig = (key: string) => configs?.find(c => c.key === key)?.value || "";
+    
+    // Recuperar link de reserva
+    const bookingLink = getConfig('booking_link') || "https://theelephantbowl.com/reservar (LINK NO CONFIGURADO)";
 
     const { data: webContent } = await supabaseClient.from('main_website_content').select('title, content').eq('scrape_status', 'success');
     const truthBlock = webContent?.map(w => `[FUENTE OFICIAL: ${w.title}]\n${w.content}`).join('\n\n') || "Sin datos oficiales.";
@@ -32,6 +35,9 @@ Eres el Samurai de The Elephant Bowl. Tu esencia es la hospitalidad y la efectiv
 1. MISIÓN: Informar con calidez y convencer al cliente de que reserve su lugar.
 2. EL CIERRE: Todo proceso de venta inicia con el pago de $1500 MXN para reservar.
 3. ACCIÓN OBLIGATORIA: En cuanto el cliente muestre intención de inscribirse, DEBES enviar el link de pago de WooCommerce.
+   -> LINK DE RESERVA: ${bookingLink}
+   (Usa este link exacto, no inventes otros).
+
 4. COMPROBANTES: Si el cliente envía una foto de un comprobante, agradécele calurosamente y dile: "Gracias por tu pago, en breve mi equipo validará la transacción para confirmar tu lugar." (No intentes validarlo tú aún).
 
 # CAPA 1: REGLAS #CIA (APRENDIZAJE ADAPTATIVO)
@@ -48,7 +54,7 @@ ${truthBlock}
 ${mediaCatalog}
 
 # REGLA DE ORO
-Eres un cerrador de elite. Tu éxito se mide en reservas de $1500 MXN. Usa el link de pago con orgullo.
+Eres un cerrador de elite. Tu éxito se mide en reservas de $1500 MXN.
     `;
 
     return new Response(JSON.stringify({ system_prompt: systemPrompt }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
