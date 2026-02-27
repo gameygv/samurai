@@ -92,48 +92,19 @@ const WebsiteContent = () => {
     const tid = toast.loading(`Actualizando Verdad Maestra: ${url}...`);
     
     try {
-      console.log('[WebsiteContent] Iniciando sincronización de:', url);
-      
       const { data, error } = await supabase.functions.invoke('scrape-website', {
         body: { url }
       });
-      
-      console.log('[WebsiteContent] Respuesta del scraper:', { data, error });
-      
-      // Validación 1: Error de invocación
+
       if (error) {
-        console.error('[WebsiteContent] Error de invocación:', error);
-        throw new Error(`Fallo crítico del servidor: ${error.message}`);
+        throw new Error(error.message || "Error de red al contactar el scraper.");
       }
-      
-      // Validación 2: Respuesta vacía
-      if (!data) {
-        throw new Error("El servidor no devolvió ninguna respuesta.");
-      }
-      
-      // Validación 3: Success flag
-      if (data.success === false) {
-        throw new Error(data.error || "El sitio web bloqueó el acceso.");
-      }
-      
-      // Validación 4: Contenido existe
-      if (!data.content) {
-        throw new Error("El servidor devolvió una respuesta sin contenido.");
-      }
-      
-      // Validación 5: Contenido suficiente
-      const content = data.content;
-      if (typeof content !== 'string') {
-        throw new Error("El contenido devuelto no es texto válido.");
-      }
-      
-      if (content.length < 50) {
-        throw new Error(`Contenido insuficiente (${content.length} caracteres). El sitio puede estar bloqueando el scraping.`);
+      if (!data || data.success === false) {
+        throw new Error(data?.error || "El scraper no pudo procesar la página.");
       }
 
-      console.log('[WebsiteContent] Contenido válido recibido:', content.length, 'caracteres');
+      const content = data.content || '';
 
-      // Actualizar base de datos
       const { error: dbError } = await supabase.from('main_website_content').update({
         content: content,
         content_length: content.length,
@@ -143,11 +114,9 @@ const WebsiteContent = () => {
       }).eq('id', pageId);
 
       if (dbError) {
-        console.error('[WebsiteContent] Error actualizando DB:', dbError);
         throw new Error(`Error guardando en base de datos: ${dbError.message}`);
       }
 
-      // Manejo de imágenes (opcional)
       if (data.images && Array.isArray(data.images) && data.images.length > 0) {
          setDetectedImages(data.images);
          toast.success(`¡Sincronizado! ${content.length} caracteres indexados. ${data.images.length} imágenes detectadas.`, { id: tid });
@@ -158,12 +127,9 @@ const WebsiteContent = () => {
       fetchPages();
       
     } catch (err: any) {
-      console.error('[WebsiteContent] Error en sincronización:', err);
-      
       const errorMessage = err.message || 'Error desconocido';
       toast.error(errorMessage, { id: tid });
       
-      // Guardar error en DB
       await supabase.from('main_website_content').update({
         scrape_status: 'error',
         error_message: errorMessage,
