@@ -15,7 +15,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { 
   Brain, AlertTriangle, GitBranch, Search, 
   Loader2, CheckCircle2, RefreshCw, Edit, Save, Trash2,
-  Terminal, Sparkles, ArrowRight, Lock
+  Terminal, Sparkles, ArrowRight, Lock, Plus
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { logActivity } from '@/utils/logger';
@@ -25,6 +25,7 @@ const LearningLog = () => {
   const [updating, setUpdating] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [errors, setErrors] = useState<any[]>([]);
+  const [versions, setVersions] = useState<any[]>([]); // Restaurado para evitar crash
   const [currentRelearningPrompt, setCurrentRelearningPrompt] = useState("");
   
   // Dialog State
@@ -46,6 +47,10 @@ const LearningLog = () => {
     try {
       const { data: errorsData } = await supabase.from('errores_ia').select('*').order('reported_at', { ascending: false });
       setErrors(errorsData || []);
+
+      // Restaurada la carga de versiones
+      const { data: versionsData } = await supabase.from('versiones_prompts_aprendidas').select('*').order('created_at', { ascending: false });
+      setVersions(versionsData || []);
 
       const { data: configData } = await supabase.from('app_config').select('value').eq('key', 'prompt_relearning').maybeSingle();
       setCurrentRelearningPrompt(configData?.value || "# Aún no hay lecciones inyectadas.");
@@ -205,6 +210,7 @@ const LearningLog = () => {
           <TabsList className="bg-slate-900 border border-slate-800 p-1">
             <TabsTrigger value="errores" className="gap-2"><AlertTriangle className="w-4 h-4" /> Reportes de Chat</TabsTrigger>
             <TabsTrigger value="prompt" className="gap-2"><Terminal className="w-4 h-4" /> Cerebro Complementario</TabsTrigger>
+            <TabsTrigger value="versiones" className="gap-2"><GitBranch className="w-4 h-4" /> Versiones</TabsTrigger>
           </TabsList>
 
           <TabsContent value="errores" className="mt-6 space-y-4">
@@ -367,6 +373,27 @@ const LearningLog = () => {
                       </CardContent>
                    </Card>
                 </div>
+             </div>
+          </TabsContent>
+          
+          <TabsContent value="versiones">
+             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-6">
+                {versions.length === 0 ? (
+                   <div className="col-span-full py-20 text-center text-slate-600 italic">No hay historial de versiones consolidado.</div>
+                ) : versions.map(v => (
+                   <Card key={v.version_id} className="bg-slate-900 border-slate-800 hover:border-indigo-500/50 transition-colors">
+                      <CardHeader className="pb-2">
+                         <div className="flex justify-between items-start">
+                            <Badge className="bg-indigo-600">{v.version_numero}</Badge>
+                            <span className="text-[10px] text-slate-500 font-mono">{new Date(v.created_at).toLocaleDateString()}</span>
+                         </div>
+                         <CardTitle className="text-sm text-white mt-2">Precisión IA: {v.test_accuracy_nuevo}%</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                         <p className="text-xs text-slate-400 line-clamp-3 italic">"{v.motivo_creacion || 'Consolidación de aprendizaje automático'}"</p>
+                      </CardContent>
+                   </Card>
+                ))}
              </div>
           </TabsContent>
         </Tabs>
