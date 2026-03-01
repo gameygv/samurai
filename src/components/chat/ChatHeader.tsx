@@ -13,12 +13,14 @@ interface ChatHeaderProps {
 }
 
 export const ChatHeader = ({ lead, isAiPaused, sending, onSendCommand }: ChatHeaderProps) => {
+  const initials = (lead?.nombre?.substring(0, 2) || 'CL').toUpperCase();
+
   return (
     <SheetHeader className="p-4 border-b border-slate-800 bg-slate-900/50 flex flex-row items-center justify-between gap-4 space-y-0">
       <div className="flex items-center gap-3">
         <Avatar className="h-10 w-10 border border-slate-700">
           <AvatarFallback className="bg-indigo-600 text-white font-bold">
-            {lead?.nombre?.substring(0, 2).toUpperCase() || 'CL'}
+            {initials}
           </AvatarFallback>
         </Avatar>
         <div>

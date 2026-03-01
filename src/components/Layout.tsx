@@ -75,6 +75,8 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
     }
   ];
 
+  const userInitials = (profile?.username?.substring(0, 2) || 'US').toUpperCase();
+
   return (
     <div className="flex min-h-screen bg-slate-950 text-white font-sans">
       <aside className="w-64 border-r border-slate-800 bg-slate-900/50 hidden md:flex flex-col">
@@ -138,7 +140,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="relative h-10 w-10 rounded-full hover:bg-slate-800">
                   <div className="h-9 w-9 rounded-full border border-slate-700 bg-slate-800 flex items-center justify-center text-red-500 font-bold overflow-hidden">
-                    {profile?.username?.substring(0, 2).toUpperCase() || 'US'}
+                    {userInitials}
                   </div>
                 </Button>
               </DropdownMenuTrigger>

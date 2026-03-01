@@ -55,6 +55,7 @@ const LearningLog = () => {
       setCurrentRelearningPrompt(configData?.value || "# Aún no hay lecciones inyectadas.");
 
     } catch (error) {
+      console.error('Error fetching learning log:', error);
       toast.error('Error cargando datos');
     } finally {
       setLoading(false);
@@ -155,7 +156,7 @@ const LearningLog = () => {
     }
   };
 
-  const filteredErrors = errors.filter(err => {
+  const filteredErrors = (errors || []).filter(err => {
     const matchesSearch = err.mensaje_cliente?.toLowerCase().includes(searchTerm.toLowerCase()) || 
                          err.categoria?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          err.correccion_sugerida?.toLowerCase().includes(searchTerm.toLowerCase());
@@ -163,7 +164,7 @@ const LearningLog = () => {
     return matchesSearch && matchesStatus;
   });
 
-  const validatedCount = errors.filter(e => e.estado_correccion === 'VALIDADA').length;
+  const validatedCount = (errors || []).filter(e => e.estado_correccion === 'VALIDADA').length;
 
   return (
     <Layout>
@@ -195,7 +196,7 @@ const LearningLog = () => {
              <div className="flex justify-between items-start">
                 <div>
                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Pendientes de Revisión</p>
-                   <h3 className="text-3xl font-bold text-white mt-1">{errors.filter(e => e.estado_correccion === 'REPORTADA').length}</h3>
+                   <h3 className="text-3xl font-bold text-white mt-1">{(errors || []).filter(e => e.estado_correccion === 'REPORTADA').length}</h3>
                 </div>
                 <div className="p-3 rounded-xl bg-yellow-500/10 text-yellow-500">
                    <AlertTriangle className="w-6 h-6" />
@@ -254,13 +255,13 @@ const LearningLog = () => {
                         <TableRow><TableCell colSpan={5} className="text-center h-32 text-slate-500 italic uppercase text-[10px]">No hay reportes que coincidan</TableCell></TableRow>
                      ) : (
                         filteredErrors.map(err => (
-                           <TableRow key={err.error_id} className="border-slate-800 hover:bg-slate-800/30 transition-colors">
+                           <TableRow key={err.error_id || Math.random()} className="border-slate-800 hover:bg-slate-800/30 transition-colors">
                               <TableCell className="text-[10px] text-slate-500 font-mono">
                                  {err.reported_at ? new Date(err.reported_at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : 'N/A'}
                               </TableCell>
                               <TableCell>
                                  <Badge variant="outline" className="text-[9px] border-indigo-500/30 text-indigo-400 font-bold">
-                                    {err.category || err.categoria}
+                                    {err.category || err.categoria || 'N/A'}
                                  </Badge>
                               </TableCell>
                               <TableCell className="max-w-md">
@@ -360,7 +361,7 @@ const LearningLog = () => {
                          <div className="p-3 bg-slate-950 rounded border border-slate-800 space-y-2">
                             <p className="text-[10px] text-slate-400 font-bold uppercase">Impacto:</p>
                             <div className="space-y-1.5">
-                               {errors.filter(e => e.estado_correccion === 'VALIDADA').slice(0, 3).map((e, i) => (
+                               {(errors || []).filter(e => e.estado_correccion === 'VALIDADA').slice(0, 3).map((e, i) => (
                                   <div key={i} className="flex items-center gap-2 text-[10px] text-slate-500">
                                      <ArrowRight className="w-2.5 h-2.5 text-indigo-500" />
                                      <span className="truncate">{e.correccion_sugerida}</span>
@@ -377,16 +378,16 @@ const LearningLog = () => {
           
           <TabsContent value="versiones">
              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-6">
-                {versions.length === 0 ? (
+                {(versions || []).length === 0 ? (
                    <div className="col-span-full py-20 text-center text-slate-600 italic">No hay historial de versiones consolidado.</div>
                 ) : versions.map(v => (
-                   <Card key={v.version_id} className="bg-slate-900 border-slate-800 hover:border-indigo-500/50 transition-colors">
+                   <Card key={v.version_id || Math.random()} className="bg-slate-900 border-slate-800 hover:border-indigo-500/50 transition-colors">
                       <CardHeader className="pb-2">
                          <div className="flex justify-between items-start">
-                            <Badge className="bg-indigo-600">{v.version_numero}</Badge>
-                            <span className="text-[10px] text-slate-500 font-mono">{new Date(v.created_at).toLocaleDateString()}</span>
+                            <Badge className="bg-indigo-600">{v.version_numero || 'N/V'}</Badge>
+                            <span className="text-[10px] text-slate-500 font-mono">{v.created_at ? new Date(v.created_at).toLocaleDateString() : '---'}</span>
                          </div>
-                         <CardTitle className="text-sm text-white mt-2">Precisión IA: {v.test_accuracy_nuevo}%</CardTitle>
+                         <CardTitle className="text-sm text-white mt-2">Precisión IA: {v.test_accuracy_nuevo || '0'}%</CardTitle>
                       </CardHeader>
                       <CardContent>
                          <p className="text-xs text-slate-400 line-clamp-3 italic">"{v.motivo_creacion || 'Consolidación de aprendizaje automático'}"</p>
@@ -407,15 +408,15 @@ const LearningLog = () => {
               </DialogHeader>
               <div className="space-y-4 py-4">
                  
-                 {selectedError?.mensaje_cliente !== 'Creación Manual' && (
+                 {selectedError?.mensaje_cliente && selectedError.mensaje_cliente !== 'Creación Manual' && (
                     <div className="bg-slate-950/50 p-3 rounded border border-slate-800 space-y-3">
                        <div className="flex gap-2 items-start">
                           <span className="text-[9px] font-bold bg-slate-800 px-1 rounded text-slate-400 uppercase">Input Cliente</span>
-                          <p className="text-xs text-slate-300 italic">"{selectedError?.mensaje_cliente}"</p>
+                          <p className="text-xs text-slate-300 italic">"{selectedError.mensaje_cliente}"</p>
                        </div>
                        <div className="flex gap-2 items-start">
                           <span className="text-[9px] font-bold bg-red-900/30 px-1 rounded text-red-400 uppercase">Fallo IA</span>
-                          <p className="text-xs text-red-300/80 italic">"{selectedError?.respuesta_ia}"</p>
+                          <p className="text-xs text-red-300/80 italic">"{selectedError.respuesta_ia}"</p>
                        </div>
                     </div>
                  )}
