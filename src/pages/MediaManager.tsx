@@ -8,9 +8,8 @@ import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { Image as ImageIcon, FileText, Upload, Trash2, Loader2, Scan, Eye, Edit, AlertTriangle, Sparkles, CheckCircle2 } from 'lucide-react';
+import { Image as ImageIcon, FileText, Upload, Trash2, Loader2, Scan, Eye, Edit, AlertTriangle, Sparkles, CheckCircle2, Info } from 'lucide-react';
 import { toast } from 'sonner';
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 
 const MediaManager = () => {
   const [assets, setAssets] = useState<any[]>([]);
@@ -18,15 +17,14 @@ const MediaManager = () => {
   const [uploading, setUploading] = useState(false);
   const [scanningId, setScanningId] = useState<string | null>(null);
   
-  // Dialog States
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [selectedAsset, setSelectedAsset] = useState<any>(null);
   
-  // Form States
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [title, setTitle] = useState('');
   const [instructions, setInstructions] = useState('');
+  const [ocrContent, setOcrContent] = useState('');
 
   useEffect(() => {
     fetchAssets();
@@ -43,9 +41,9 @@ const MediaManager = () => {
   };
 
   const handleScanOcr = async (asset: any) => {
-     if (asset.type !== 'IMAGE') return toast.error("Solo se puede escanear texto en imágenes.");
+     if (asset.type !== 'IMAGE') return toast.error("Solo se puede escanear imágenes.");
      setScanningId(asset.id);
-     const tid = toast.loading("Analizando contenido del activo visual...");
+     const tid = toast.loading("Analizando información del poster...");
      
      try {
         const { data, error } = await supabase.functions.invoke('scrape-website', {
@@ -53,15 +51,12 @@ const MediaManager = () => {
         });
 
         if (error) throw error;
-        if (!data || !data.success) throw new Error(data?.error || "La visión no detectó texto.");
-
+        
         const detectedText = data.content;
-        const baseInstructions = asset.ai_instructions?.split('--- OCR DATA ---')[0] || asset.ai_instructions || '';
-        const newInstructions = `${baseInstructions.trim()}\n\n--- OCR DATA ---\n${detectedText}`;
 
         const { error: updateErr } = await supabase
            .from('media_assets')
-           .update({ ai_instructions: newInstructions })
+           .update({ ocr_content: detectedText })
            .eq('id', asset.id);
 
         if (updateErr) throw updateErr;
@@ -112,8 +107,9 @@ const MediaManager = () => {
 
   const handleEdit = (asset: any) => {
      setSelectedAsset(asset);
-     setTitle(asset.title);
+     setTitle(asset.title || '');
      setInstructions(asset.ai_instructions || '');
+     setOcrContent(asset.ocr_content || '');
      setIsEditOpen(true);
   };
 
@@ -126,11 +122,12 @@ const MediaManager = () => {
            .update({
               title: title,
               ai_instructions: instructions
+              // ocr_content no es editable aquí por diseño del usuario
            })
            .eq('id', selectedAsset.id);
         
         if (error) throw error;
-        toast.success("Instrucciones actualizadas.");
+        toast.success("Información actualizada.");
         setIsEditOpen(false);
         fetchAssets();
      } catch (err: any) {
@@ -140,7 +137,7 @@ const MediaManager = () => {
      }
   };
 
-  const deleteAsset = async (id: string, url: string) => {
+  const deleteAsset = async (id: string) => {
     if (!confirm('¿Borrar permanentemente este asset?')) return;
     try {
       await supabase.from('media_assets').delete().eq('id', id);
@@ -155,6 +152,7 @@ const MediaManager = () => {
      setSelectedFile(null);
      setTitle('');
      setInstructions('');
+     setOcrContent('');
      setSelectedAsset(null);
   };
 
@@ -197,12 +195,12 @@ const MediaManager = () => {
                     )}
                     <div className="flex gap-2 w-full">
                        <Button variant="secondary" size="sm" className="flex-1 h-8 text-[10px]" onClick={() => handleEdit(asset)}><Edit className="w-3 h-3 mr-1" /> EDITAR</Button>
-                       <Button variant="destructive" size="sm" className="h-8 w-8 p-0" onClick={() => deleteAsset(asset.id, asset.url)}><Trash2 className="w-3 h-3" /></Button>
+                       <Button variant="destructive" size="sm" className="h-8 w-8 p-0" onClick={() => deleteAsset(asset.id)}><Trash2 className="w-3 h-3" /></Button>
                     </div>
                  </div>
                  
                  <div className="absolute top-2 right-2">
-                    {asset.ai_instructions?.includes('--- OCR DATA ---') ? (
+                    {asset.ocr_content ? (
                        <Badge className="bg-green-600 text-[8px] h-4">LECTURA OK</Badge>
                     ) : (
                        <Badge variant="outline" className="bg-slate-900/80 border-slate-700 text-[8px] h-4">SIN LECTURA</Badge>
@@ -214,7 +212,7 @@ const MediaManager = () => {
                  <p className="text-xs font-bold text-white truncate">{asset.title}</p>
                  <div className="space-y-1">
                     <p className="text-[9px] text-slate-500 uppercase font-bold flex items-center gap-1"><Sparkles className="w-2 h-2" /> Trigger de envío:</p>
-                    <p className="text-[10px] text-slate-300 italic line-clamp-2">{asset.ai_instructions?.split('--- OCR DATA ---')[0] || "No definido"}</p>
+                    <p className="text-[10px] text-slate-300 italic line-clamp-2">{asset.ai_instructions || "No definido"}</p>
                  </div>
               </div>
             </Card>
@@ -222,12 +220,11 @@ const MediaManager = () => {
         </div>
       </div>
       
-      {/* DIALOGS... (se mantienen igual que antes pero con textos actualizados) */}
       <Dialog open={isUploadOpen} onOpenChange={setIsUploadOpen}>
         <DialogContent className="bg-slate-900 border-slate-800 text-white max-w-lg">
           <DialogHeader>
              <DialogTitle>Subir Promo/Posters</DialogTitle>
-             <DialogDescription className="text-slate-400">Las imágenes de promociones que Samurai podrá enviar proactivamente.</DialogDescription>
+             <DialogDescription className="text-slate-400">Las imágenes que Samurai enviará proactivamente.</DialogDescription>
           </DialogHeader>
           <form onSubmit={handleUpload} className="space-y-4 pt-4">
              <div className="space-y-2">
@@ -235,15 +232,15 @@ const MediaManager = () => {
                 <Input type="file" onChange={e => setSelectedFile(e.target.files?.[0] || null)} className="bg-slate-950 border-slate-800" accept="image/*" />
              </div>
              <div className="space-y-2">
-                <Label>Título</Label>
+                <Label>Título del Poster</Label>
                 <Input value={title} onChange={e => setTitle(e.target.value)} placeholder="Ej: Taller Cuencos Marzo" className="bg-slate-950 border-slate-800" />
              </div>
              <div className="space-y-2">
-                <Label>¿Cuándo debe Samurai enviar esta imagen? (Trigger)</Label>
+                <Label>Trigger de Envío (Instrucción para la IA)</Label>
                 <Textarea 
                    value={instructions} 
                    onChange={e => setInstructions(e.target.value)} 
-                   placeholder="Ej: Si preguntan por precios de cursos o fechas de retiro." 
+                   placeholder="Ej: Envía esta imagen cuando el cliente pregunte por fechas o precios del nivel 1." 
                    className="bg-slate-950 border-slate-800 text-xs h-24" 
                 />
              </div>
@@ -256,7 +253,9 @@ const MediaManager = () => {
 
       <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
         <DialogContent className="bg-slate-900 border-slate-800 text-white max-w-lg">
-          <DialogHeader><DialogTitle>Editar Activo Visual</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle>Editar Activo Visual</DialogTitle>
+          </DialogHeader>
           <div className="space-y-4 pt-4">
              <div className="space-y-2">
                 <Label>Título</Label>
@@ -264,12 +263,21 @@ const MediaManager = () => {
              </div>
              <div className="space-y-2">
                 <Label>Trigger de Envío</Label>
-                <Textarea value={instructions} onChange={e => setInstructions(e.target.value)} className="bg-slate-950 border-slate-800 text-xs h-40" />
+                <Textarea value={instructions} onChange={e => setInstructions(e.target.value)} className="bg-slate-950 border-slate-800 text-xs h-32" />
+             </div>
+             <div className="space-y-2">
+                <Label className="flex items-center gap-2">
+                  Contenido Detectado (OCR)
+                  <Badge variant="outline" className="text-[8px] h-3 px-1 border-slate-700 text-slate-500">Solo Lectura</Badge>
+                </Label>
+                <div className="bg-black/40 border border-slate-800 rounded p-3 text-[10px] text-slate-500 font-mono h-32 overflow-y-auto">
+                   {ocrContent || "Usa el botón 'Analizar Poster' en la tarjeta para extraer el texto de la imagen."}
+                </div>
              </div>
           </div>
           <DialogFooter>
              <Button variant="ghost" onClick={() => setIsEditOpen(false)}>Cancelar</Button>
-             <Button className="bg-indigo-600" onClick={handleUpdateAsset} disabled={uploading}>Guardar</Button>
+             <Button className="bg-indigo-600" onClick={handleUpdateAsset} disabled={uploading}>Guardar Cambios</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
