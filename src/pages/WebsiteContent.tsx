@@ -9,27 +9,11 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { 
   Globe, Loader2, RefreshCw, CheckCircle2, AlertCircle, Search, 
-  FileText, DatabaseZap, Eye, Scan, ExternalLink, ChevronRight,
-  Info, ShieldCheck, ImagePlus, ImageIcon
+  FileText, Eye, Scan, ExternalLink, Plus, Edit2, Trash2, Settings, ImagePlus, ImageIcon
 } from 'lucide-react';
 import { toast } from 'sonner';
-
-const CORE_URLS = [
-  { url: 'https://theelephantbowl.com/', title: 'Home / Inicio' },
-  { url: 'https://theelephantbowl.com/cursos/', title: 'Página Principal de Cursos' },
-  { url: 'https://theelephantbowl.com/curso-nivel-1/', title: 'Curso Nivel 1' },
-  { url: 'https://theelephantbowl.com/curso-nivel-2/', title: 'Curso Nivel 2' },
-  { url: 'https://theelephantbowl.com/curso-nivel-3/', title: 'Curso Nivel 3' },
-  { url: 'https://theelephantbowl.com/curso-online-conviertete-en-cuencoterapeuta/', title: 'Curso Online: Cuencoterapeuta' },
-  { url: 'https://theelephantbowl.com/curso-online-la-psicoacustica/', title: 'Curso Online: Psicoacústica' },
-  { url: 'https://theelephantbowl.com/curso-online-facilitadores-de-cuencos/', title: 'Curso Online: Facilitadores' },
-  { url: 'https://theelephantbowl.com/comunidad/', title: 'Comunidad' },
-  { url: 'https://theelephantbowl.com/historia/', title: 'Nuestra Historia' },
-  { url: 'https://theelephantbowl.com/expertos/', title: 'Expertos y Guías' },
-  { url: 'https://theelephantbowl.com/biblioteca/', title: 'Biblioteca de Recursos' },
-  { url: 'https://theelephantbowl.com/ubicaciones/', title: 'Ubicaciones' },
-  { url: 'https://theelephantbowl.com/contacto/', title: 'Contacto' }
-];
+import { EditPageDialog } from '@/components/website/EditPageDialog';
+import { SyncSettingsDialog } from '@/components/website/SyncSettingsDialog';
 
 const WebsiteContent = () => {
   const [pages, setPages] = useState<any[]>([]);
@@ -39,6 +23,11 @@ const WebsiteContent = () => {
   const [syncingId, setSyncingId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   
+  // Dialog States
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [pageToEdit, setPageToEdit] = useState<any | null>(null);
+
   const [detectedImages, setDetectedImages] = useState<string[]>([]);
   const [importingImage, setImportingImage] = useState<string | null>(null);
 
@@ -66,26 +55,6 @@ const WebsiteContent = () => {
     }
   };
 
-  const handleInitCoreUrls = async () => {
-     setSyncing(true);
-     try {
-        await supabase.from('main_website_content').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-        
-        const payload = CORE_URLS.map(page => ({
-           ...page,
-           scrape_status: 'pending'
-        }));
-        const { error } = await supabase.from('main_website_content').insert(payload);
-        if (error) throw error;
-        toast.success("Fuentes de Verdad inyectadas.");
-        fetchPages();
-     } catch (err: any) {
-        toast.error("Error: " + err.message);
-     } finally {
-        setSyncing(false);
-     }
-  };
-
   const handleSyncSingle = async (pageId: string, url: string) => {
     setSyncingId(pageId);
     setDetectedImages([]);
@@ -96,16 +65,12 @@ const WebsiteContent = () => {
         body: { url }
       });
 
-      if (error) {
-        throw new Error(error.message || "Error de red al contactar el scraper.");
-      }
-      if (!data || data.success === false) {
-        throw new Error(data?.error || "El scraper no pudo procesar la página.");
-      }
+      if (error) throw new Error(error.message);
+      if (!data || data.success === false) throw new Error(data?.error || "Fallo en el scraper.");
 
       const content = data.content || '';
 
-      const { error: dbError } = await supabase.from('main_website_content').update({
+      await supabase.from('main_website_content').update({
         content: content,
         content_length: content.length,
         scrape_status: 'success',
@@ -113,46 +78,45 @@ const WebsiteContent = () => {
         last_scraped_at: new Date().toISOString()
       }).eq('id', pageId);
 
-      if (dbError) {
-        throw new Error(`Error guardando en base de datos: ${dbError.message}`);
-      }
-
-      if (data.images && Array.isArray(data.images) && data.images.length > 0) {
-         setDetectedImages(data.images);
-         toast.success(`¡Sincronizado! ${content.length} caracteres indexados. ${data.images.length} imágenes detectadas.`, { id: tid });
-      } else {
-         toast.success(`Contenido actualizado: ${content.length} caracteres indexados.`, { id: tid });
-      }
+      if (data.images && Array.isArray(data.images)) setDetectedImages(data.images);
       
+      toast.success(`¡Sincronizado! ${content.length} caracteres indexados.`, { id: tid });
       fetchPages();
       
     } catch (err: any) {
-      const errorMessage = err.message || 'Error desconocido';
-      toast.error(errorMessage, { id: tid });
-      
+      toast.error(err.message, { id: tid });
       await supabase.from('main_website_content').update({
         scrape_status: 'error',
-        error_message: errorMessage,
+        error_message: err.message,
         last_scraped_at: new Date().toISOString()
       }).eq('id', pageId);
-      
       fetchPages();
     } finally {
       setSyncingId(null);
     }
   };
 
+  const handleDeletePage = async (id: string, title: string) => {
+    if (!confirm(`¿Borrar permanentemente "${title}" de la base de conocimiento?`)) return;
+    try {
+      const { error } = await supabase.from('main_website_content').delete().eq('id', id);
+      if (error) throw error;
+      toast.success("Página eliminada.");
+      fetchPages();
+    } catch (err: any) {
+      toast.error(err.message);
+    }
+  };
+
   const handleImportToMedia = async (imageUrl: string) => {
      setImportingImage(imageUrl);
      try {
-        const { error } = await supabase.from('media_assets').insert({
+        await supabase.from('media_assets').insert({
            title: `Importado de ${selectedPage?.title || 'Web'}`,
            url: imageUrl,
            type: 'IMAGE',
            ai_instructions: `VINCULADO A: ${selectedPage?.title}\nURL ORIGEN: ${selectedPage?.url}`
         });
-
-        if (error) throw error;
         toast.success("Imagen enviada al Media Manager.");
      } catch (err: any) {
         toast.error("Error al importar imagen.");
@@ -163,7 +127,6 @@ const WebsiteContent = () => {
 
   const handleSyncAll = async () => {
     setSyncing(true);
-    toast.info("Iniciando sincronización masiva de todas las fuentes...");
     try {
       const { data, error } = await supabase.functions.invoke('scrape-main-website', {});
       if (error) throw error;
@@ -194,8 +157,8 @@ const WebsiteContent = () => {
             <p className="text-slate-400">Control de indexación y visión de theelephantbowl.com</p>
           </div>
           <div className="flex gap-3">
-            <Button onClick={handleInitCoreUrls} variant="outline" className="border-indigo-500/30 text-indigo-400 hover:bg-indigo-500/10">
-               <RefreshCw className="w-4 h-4 mr-2" /> Reiniciar URLs Críticas
+            <Button onClick={() => setIsSettingsOpen(true)} variant="outline" className="border-slate-800 text-slate-400">
+               <Settings className="w-4 h-4 mr-2" /> Programación
             </Button>
             <Button onClick={handleSyncAll} disabled={syncing || pages.length === 0} className="bg-indigo-600 hover:bg-indigo-700 shadow-lg shadow-indigo-900/20">
               {syncing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />} 
@@ -205,8 +168,14 @@ const WebsiteContent = () => {
         </div>
 
         <div className="flex-1 flex gap-6 min-h-0">
-          <Card className="w-80 bg-slate-900 border-slate-800 flex flex-col">
-            <div className="p-4 border-b border-slate-800">
+          <Card className="w-96 bg-slate-900 border-slate-800 flex flex-col">
+            <div className="p-4 border-b border-slate-800 space-y-4">
+               <Button 
+                onClick={() => { setPageToEdit(null); setIsEditOpen(true); }} 
+                className="w-full bg-slate-800 hover:bg-slate-700 text-xs h-8 border border-slate-700"
+               >
+                 <Plus className="w-3 h-3 mr-2" /> Nueva Página
+               </Button>
                <div className="relative">
                   <Search className="absolute left-2 top-2.5 h-3.5 w-3.5 text-slate-500" />
                   <Input 
@@ -226,7 +195,7 @@ const WebsiteContent = () => {
                         key={page.id}
                         className={`w-full group rounded-lg transition-all border ${selectedPage?.id === page.id ? 'bg-indigo-600/20 border-indigo-500/50' : 'hover:bg-slate-800/50 border-transparent'}`}
                      >
-                        <div className="flex items-center p-3">
+                        <div className="flex items-center p-3 gap-2">
                           <button
                             onClick={() => setSelectedPage(page)}
                             className="flex-1 text-left min-w-0"
@@ -237,15 +206,23 @@ const WebsiteContent = () => {
                                 <span className="text-[9px] text-slate-600 font-mono truncate">{page.url.replace('https://theelephantbowl.com', '')}</span>
                             </div>
                           </button>
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
-                            className={`h-7 w-7 transition-all ${selectedPage?.id === page.id ? 'text-white' : 'text-slate-600 hover:text-indigo-400'}`}
-                            onClick={(e) => { e.stopPropagation(); handleSyncSingle(page.id, page.url); }}
-                            disabled={syncingId === page.id}
-                          >
-                            {syncingId === page.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
-                          </Button>
+                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                             <Button size="icon" variant="ghost" className="h-6 w-6 text-slate-500 hover:text-white" onClick={(e) => { e.stopPropagation(); setPageToEdit(page); setIsEditOpen(true); }}>
+                                <Edit2 className="w-3 h-3" />
+                             </Button>
+                             <Button size="icon" variant="ghost" className="h-6 w-6 text-slate-500 hover:text-red-500" onClick={(e) => { e.stopPropagation(); handleDeletePage(page.id, page.title); }}>
+                                <Trash2 className="w-3 h-3" />
+                             </Button>
+                             <Button 
+                               variant="ghost" 
+                               size="icon" 
+                               className={`h-6 w-6 ${selectedPage?.id === page.id ? 'text-white' : 'text-slate-600 hover:text-indigo-400'}`}
+                               onClick={(e) => { e.stopPropagation(); handleSyncSingle(page.id, page.url); }}
+                               disabled={syncingId === page.id}
+                             >
+                               {syncingId === page.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+                             </Button>
+                          </div>
                         </div>
                      </div>
                   ))}
@@ -264,7 +241,7 @@ const WebsiteContent = () => {
                            </div>
                            <div>
                               <CardTitle className="text-white text-lg">{selectedPage.title}</CardTitle>
-                              <a href={selectedPage.url} target="_blank" className="text-[10px] text-indigo-400 flex items-center gap-1 hover:underline">
+                              <a href={selectedPage.url} target="_blank" rel="noreferrer" className="text-[10px] text-indigo-400 flex items-center gap-1 hover:underline">
                                  {selectedPage.url} <ExternalLink className="w-2.5 h-2.5" />
                               </a>
                            </div>
@@ -327,7 +304,7 @@ const WebsiteContent = () => {
                                  ) : detectedImages.map((img, i) => (
                                     <Card key={i} className="bg-slate-950 border-slate-800 overflow-hidden group">
                                        <div className="aspect-square bg-black relative">
-                                          <img src={img} className="w-full h-full object-cover opacity-60 group-hover:opacity-100 transition-opacity" />
+                                          <img src={img} className="w-full h-full object-cover opacity-60 group-hover:opacity-100 transition-opacity" alt="Scraped item" />
                                           <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center p-4">
                                              <Button 
                                                size="sm" 
@@ -357,6 +334,18 @@ const WebsiteContent = () => {
           </Card>
         </div>
       </div>
+
+      <EditPageDialog 
+        open={isEditOpen} 
+        onOpenChange={setIsEditOpen} 
+        page={pageToEdit} 
+        onSuccess={fetchPages} 
+      />
+
+      <SyncSettingsDialog 
+        open={isSettingsOpen} 
+        onOpenChange={setIsSettingsOpen} 
+      />
     </Layout>
   );
 };
