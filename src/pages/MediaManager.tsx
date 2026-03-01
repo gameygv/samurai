@@ -8,7 +8,8 @@ import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { Image as ImageIcon, FileText, Upload, Trash2, Loader2, Scan, Eye, Edit, AlertTriangle, Sparkles, CheckCircle2, Info } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Image as ImageIcon, FileText, Upload, Trash2, Loader2, Scan, Eye, Edit, AlertTriangle, Sparkles, CheckCircle2, Info, CreditCard } from 'lucide-react';
 import { toast } from 'sonner';
 
 const MediaManager = () => {
@@ -25,6 +26,7 @@ const MediaManager = () => {
   const [title, setTitle] = useState('');
   const [instructions, setInstructions] = useState('');
   const [ocrContent, setOcrContent] = useState('');
+  const [category, setCategory] = useState('POSTER');
 
   useEffect(() => {
     fetchAssets();
@@ -43,7 +45,7 @@ const MediaManager = () => {
   const handleScanOcr = async (asset: any) => {
      if (asset.type !== 'IMAGE') return toast.error("Solo se puede escanear imágenes.");
      setScanningId(asset.id);
-     const tid = toast.loading("Analizando información del poster...");
+     const tid = toast.loading("Analizando información visual...");
      
      try {
         const { data, error } = await supabase.functions.invoke('scrape-website', {
@@ -61,7 +63,7 @@ const MediaManager = () => {
 
         if (updateErr) throw updateErr;
 
-        toast.success("Contenido del poster indexado correctamente.", { id: tid });
+        toast.success("Contenido indexado correctamente.", { id: tid });
         fetchAssets();
      } catch (err: any) {
         toast.error(`Error al leer imagen: ${err.message}`, { id: tid });
@@ -91,10 +93,11 @@ const MediaManager = () => {
         title: title || selectedFile.name,
         url: publicUrl,
         type,
-        ai_instructions: instructions || null
+        ai_instructions: instructions || null,
+        category
       });
 
-      toast.success('Asset subido a la biblioteca.');
+      toast.success('Asset subido correctamente.');
       setIsUploadOpen(false);
       resetForms();
       fetchAssets();
@@ -110,6 +113,7 @@ const MediaManager = () => {
      setTitle(asset.title || '');
      setInstructions(asset.ai_instructions || '');
      setOcrContent(asset.ocr_content || '');
+     setCategory(asset.category || 'POSTER');
      setIsEditOpen(true);
   };
 
@@ -120,9 +124,9 @@ const MediaManager = () => {
         const { error } = await supabase
            .from('media_assets')
            .update({
-              title: title,
-              ai_instructions: instructions
-              // ocr_content no es editable aquí por diseño del usuario
+              title,
+              ai_instructions: instructions,
+              category
            })
            .eq('id', selectedAsset.id);
         
@@ -153,6 +157,7 @@ const MediaManager = () => {
      setTitle('');
      setInstructions('');
      setOcrContent('');
+     setCategory('POSTER');
      setSelectedAsset(null);
   };
 
@@ -164,7 +169,7 @@ const MediaManager = () => {
             <h1 className="text-3xl font-bold text-white flex items-center gap-2">
                <ImageIcon className="w-8 h-8 text-indigo-500" /> Media Manager
             </h1>
-            <p className="text-slate-400 text-sm">Biblioteca visual para que Samurai reconozca posters y promociones.</p>
+            <p className="text-slate-400 text-sm">Biblioteca visual para Posters (Layer 4) y Comprobantes (Layer 5).</p>
           </div>
           <Button className="bg-indigo-600 hover:bg-indigo-700 shadow-lg shadow-indigo-900/20" onClick={() => { resetForms(); setIsUploadOpen(true); }}>
              <Upload className="w-4 h-4 mr-2" /> Subir Nuevo Asset
@@ -190,7 +195,7 @@ const MediaManager = () => {
                  <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-all flex flex-col items-center justify-center gap-2 p-4">
                     {asset.type === 'IMAGE' && (
                        <Button size="sm" className="w-full bg-indigo-600 h-8 text-[10px] font-bold" onClick={() => handleScanOcr(asset)} disabled={scanningId === asset.id}>
-                          {scanningId === asset.id ? <Loader2 className="w-3 h-3 animate-spin mr-2" /> : <Scan className="w-3 h-3 mr-2" />} ANALIZAR POSTER
+                          {scanningId === asset.id ? <Loader2 className="w-3 h-3 animate-spin mr-2" /> : <Scan className="w-3 h-3 mr-2" />} ANALIZAR OCR
                        </Button>
                     )}
                     <div className="flex gap-2 w-full">
@@ -199,19 +204,21 @@ const MediaManager = () => {
                     </div>
                  </div>
                  
-                 <div className="absolute top-2 right-2">
-                    {asset.ocr_content ? (
-                       <Badge className="bg-green-600 text-[8px] h-4">LECTURA OK</Badge>
-                    ) : (
-                       <Badge variant="outline" className="bg-slate-900/80 border-slate-700 text-[8px] h-4">SIN LECTURA</Badge>
-                    )}
+                 <div className="absolute top-2 left-2 flex gap-1">
+                    <Badge className={asset.category === 'PAYMENT' ? 'bg-orange-600' : 'bg-indigo-600'}>
+                       {asset.category}
+                    </Badge>
+                    {asset.ocr_content && <Badge className="bg-green-600 text-[8px] h-4">LECTURA OK</Badge>}
                  </div>
               </div>
               
               <div className="p-4 space-y-3">
                  <p className="text-xs font-bold text-white truncate">{asset.title}</p>
                  <div className="space-y-1">
-                    <p className="text-[9px] text-slate-500 uppercase font-bold flex items-center gap-1"><Sparkles className="w-2 h-2" /> Trigger de envío:</p>
+                    <p className="text-[9px] text-slate-500 uppercase font-bold flex items-center gap-1">
+                       {asset.category === 'POSTER' ? <Sparkles className="w-2 h-2" /> : <CreditCard className="w-2 h-2" />} 
+                       {asset.category === 'POSTER' ? 'Trigger Envío:' : 'Detalles Pago:'}
+                    </p>
                     <p className="text-[10px] text-slate-300 italic line-clamp-2">{asset.ai_instructions || "No definido"}</p>
                  </div>
               </div>
@@ -223,24 +230,33 @@ const MediaManager = () => {
       <Dialog open={isUploadOpen} onOpenChange={setIsUploadOpen}>
         <DialogContent className="bg-slate-900 border-slate-800 text-white max-w-lg">
           <DialogHeader>
-             <DialogTitle>Subir Promo/Posters</DialogTitle>
-             <DialogDescription className="text-slate-400">Las imágenes que Samurai enviará proactivamente.</DialogDescription>
+             <DialogTitle>Subir Nuevo Recurso Visual</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleUpload} className="space-y-4 pt-4">
+             <div className="space-y-2">
+                <Label>Categoría</Label>
+                <Select value={category} onValueChange={setCategory}>
+                   <SelectTrigger className="bg-slate-950 border-slate-800"><SelectValue /></SelectTrigger>
+                   <SelectContent className="bg-slate-900 text-white">
+                      <SelectItem value="POSTER">Poster Promocional (Ventas)</SelectItem>
+                      <SelectItem value="PAYMENT">Comprobante / Recibo (Ojo de Halcón)</SelectItem>
+                   </SelectContent>
+                </Select>
+             </div>
              <div className="space-y-2">
                 <Label>Archivo</Label>
                 <Input type="file" onChange={e => setSelectedFile(e.target.files?.[0] || null)} className="bg-slate-950 border-slate-800" accept="image/*" />
              </div>
              <div className="space-y-2">
-                <Label>Título del Poster</Label>
+                <Label>Título</Label>
                 <Input value={title} onChange={e => setTitle(e.target.value)} placeholder="Ej: Taller Cuencos Marzo" className="bg-slate-950 border-slate-800" />
              </div>
              <div className="space-y-2">
-                <Label>Trigger de Envío (Instrucción para la IA)</Label>
+                <Label>{category === 'POSTER' ? 'Trigger de Envío' : 'Instrucciones Ojo de Halcón'}</Label>
                 <Textarea 
                    value={instructions} 
                    onChange={e => setInstructions(e.target.value)} 
-                   placeholder="Ej: Envía esta imagen cuando el cliente pregunte por fechas o precios del nivel 1." 
+                   placeholder={category === 'POSTER' ? "Ej: Enviar cuando pregunten por precios del curso..." : "Ej: Validar monto de $1500..."}
                    className="bg-slate-950 border-slate-800 text-xs h-24" 
                 />
              </div>
@@ -253,25 +269,30 @@ const MediaManager = () => {
 
       <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
         <DialogContent className="bg-slate-900 border-slate-800 text-white max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Editar Activo Visual</DialogTitle>
-          </DialogHeader>
+          <DialogHeader><DialogTitle>Editar Asset</DialogTitle></DialogHeader>
           <div className="space-y-4 pt-4">
+             <div className="space-y-2">
+                <Label>Categoría</Label>
+                <Select value={category} onValueChange={setCategory}>
+                   <SelectTrigger className="bg-slate-950 border-slate-800"><SelectValue /></SelectTrigger>
+                   <SelectContent className="bg-slate-900 text-white">
+                      <SelectItem value="POSTER">Poster Promocional</SelectItem>
+                      <SelectItem value="PAYMENT">Comprobante / Recibo</SelectItem>
+                   </SelectContent>
+                </Select>
+             </div>
              <div className="space-y-2">
                 <Label>Título</Label>
                 <Input value={title} onChange={e => setTitle(e.target.value)} className="bg-slate-950 border-slate-800" />
              </div>
              <div className="space-y-2">
-                <Label>Trigger de Envío</Label>
+                <Label>Instrucciones / Trigger</Label>
                 <Textarea value={instructions} onChange={e => setInstructions(e.target.value)} className="bg-slate-950 border-slate-800 text-xs h-32" />
              </div>
              <div className="space-y-2">
-                <Label className="flex items-center gap-2">
-                  Contenido Detectado (OCR)
-                  <Badge variant="outline" className="text-[8px] h-3 px-1 border-slate-700 text-slate-500">Solo Lectura</Badge>
-                </Label>
+                <Label>Contenido Detectado (OCR)</Label>
                 <div className="bg-black/40 border border-slate-800 rounded p-3 text-[10px] text-slate-500 font-mono h-32 overflow-y-auto">
-                   {ocrContent || "Usa el botón 'Analizar Poster' en la tarjeta para extraer el texto de la imagen."}
+                   {ocrContent || "Usa 'Analizar OCR' en la tarjeta para extraer texto."}
                 </div>
              </div>
           </div>

@@ -26,12 +26,16 @@ serve(async (req) => {
     const { data: webContent } = await supabaseClient.from('main_website_content').select('title, content').eq('scrape_status', 'success');
     const truthBlock = webContent?.map((w: any) => `[FUENTE OFICIAL: ${w.title}]\n${w.content}`).join('\n\n') || "Sin datos oficiales.";
 
-    // --- CAPA 4: CATÁLOGO VISUAL (REFINADO CON TRIGGER Y OCR) ---
-    const { data: mediaAssets } = await supabaseClient.from('media_assets').select('title, url, ai_instructions, ocr_content');
+    // --- CAPA 4: CATÁLOGO VISUAL (SOLO POSTERS) ---
+    const { data: mediaAssets } = await supabaseClient
+      .from('media_assets')
+      .select('title, url, ai_instructions, ocr_content')
+      .eq('category', 'POSTER'); // FILTRO CRÍTICO
+
     const mediaCatalog = mediaAssets?.map((m: any) => (
       `[POSTER: ${m.title}]\n` +
       `- CUÁNDO ENVIAR: ${m.ai_instructions || "No especificado"}\n` +
-      `- CONTENIDO DEL POSTER: ${m.ocr_content || "Sin lectura OCR aún"}\n` +
+      `- CONTENIDO DEL POSTER: ${m.ocr_content || "Sin lectura OCR"}\n` +
       `- URL DE IMAGEN: ${m.url}`
     )).join('\n\n');
 
