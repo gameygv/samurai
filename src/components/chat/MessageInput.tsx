@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Loader2, Send, ShieldAlert } from 'lucide-react';
@@ -7,10 +7,16 @@ interface MessageInputProps {
   onSendMessage: (text: string) => void;
   sending: boolean;
   isAiPaused: boolean;
+  initialValue?: string;
 }
 
-export const MessageInput = ({ onSendMessage, sending, isAiPaused }: MessageInputProps) => {
-  const [message, setMessage] = useState('');
+export const MessageInput = ({ onSendMessage, sending, isAiPaused, initialValue = '' }: MessageInputProps) => {
+  const [message, setMessage] = useState(initialValue);
+
+  // Sync internal state with prop changes (e.g. from AiSuggestions)
+  useEffect(() => {
+    setMessage(initialValue);
+  }, [initialValue]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();

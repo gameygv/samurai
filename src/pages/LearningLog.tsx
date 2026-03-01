@@ -15,7 +15,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { 
   Brain, AlertTriangle, GitBranch, Search, 
   Loader2, CheckCircle2, RefreshCw, Edit, Save, Trash2,
-  Terminal, Sparkles, ArrowRight, Lock, Plus
+  Terminal, Sparkles, ArrowRight, Lock, Plus, Zap
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { logActivity } from '@/utils/logger';

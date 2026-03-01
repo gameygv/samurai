@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { 
   BookOpen, Brain, Zap, ShieldAlert, 
   Terminal, Play, Pause, ShoppingCart, LinkIcon,
-  Layers, Eye, Database, ShieldCheck, Heart
+  Layers, Eye, Database, ShieldCheck, Heart, RefreshCcw
 } from 'lucide-react';
 
 const Manual = () => {
