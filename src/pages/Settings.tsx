@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Switch } from '@/components/ui/switch';
-import { Webhook, Key, Save, Loader2, ShoppingCart, Clock, Zap, DollarSign, Target, Link as LinkIcon } from 'lucide-react';
+import { Webhook, Key, Save, Loader2, ShoppingCart, Clock, Zap, DollarSign, Target, Link as LinkIcon, Building2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 const Settings = () => {
@@ -69,6 +69,7 @@ const Settings = () => {
         <Tabs value={activeTab} onValueChange={v => setSearchParams({ tab: v })}>
           <TabsList className="bg-slate-900 border border-slate-800 p-1">
             <TabsTrigger value="ventas" className="gap-2"><Target className="w-4 h-4"/> Estrategia de Venta</TabsTrigger>
+            <TabsTrigger value="pago_directo" className="gap-2"><Building2 className="w-4 h-4"/> Depósito Directo</TabsTrigger>
             <TabsTrigger value="secrets" className="gap-2"><Key className="w-4 h-4"/> API Keys</TabsTrigger>
             <TabsTrigger value="webhooks" className="gap-2"><Webhook className="w-4 h-4"/> Webhooks</TabsTrigger>
           </TabsList>
@@ -112,9 +113,44 @@ const Settings = () => {
                       </div>
                    </div>
                 </CardContent>
-                <div className="p-4 bg-orange-500/5 border-t border-slate-800">
-                   <p className="text-[10px] text-orange-400 italic">Si tras el 4to intento no hay pago ni respuesta, el lead pasará automáticamente a estado "PERDIDO".</p>
-                </div>
+             </Card>
+          </TabsContent>
+
+          <TabsContent value="pago_directo" className="mt-6">
+             <Card className="bg-slate-900 border-slate-800 border-l-4 border-l-blue-500 shadow-2xl">
+                <CardHeader>
+                   <CardTitle className="text-white flex items-center gap-2">
+                      <Building2 className="w-5 h-5 text-blue-400" /> Datos Bancarios para Depósito
+                   </CardTitle>
+                   <CardDescription>
+                      Samurai usará estos datos si el cliente prefiere transferencia o depósito bancario.
+                   </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                         <Label>Banco</Label>
+                         <Input value={getValue('bank_name')} onChange={e => handleInputChange('bank_name', e.target.value, 'PAYMENT')} className="bg-slate-950 border-slate-800" placeholder="Ej: BBVA / Banamex" />
+                      </div>
+                      <div className="space-y-2">
+                         <Label>Titular de la Cuenta</Label>
+                         <Input value={getValue('bank_holder')} onChange={e => handleInputChange('bank_holder', e.target.value, 'PAYMENT')} className="bg-slate-950 border-slate-800" placeholder="Nombre completo" />
+                      </div>
+                      <div className="space-y-2">
+                         <Label>Número de Cuenta</Label>
+                         <Input value={getValue('bank_account')} onChange={e => handleInputChange('bank_account', e.target.value, 'PAYMENT')} className="bg-slate-950 border-slate-800" />
+                      </div>
+                      <div className="space-y-2">
+                         <Label>CLABE Interbancaria</Label>
+                         <Input value={getValue('bank_clabe')} onChange={e => handleInputChange('bank_clabe', e.target.value, 'PAYMENT')} className="bg-slate-950 border-slate-800" />
+                      </div>
+                   </div>
+                   <div className="p-4 bg-blue-500/5 rounded border border-blue-500/20">
+                      <p className="text-[10px] text-blue-400 italic">
+                         Samurai informará que el anticipo es de $1500 MXN y pedirá el comprobante por este mismo chat una vez definidos estos datos.
+                      </p>
+                   </div>
+                </CardContent>
              </Card>
           </TabsContent>
           

@@ -12,16 +12,22 @@ serve(async (req) => {
     const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
 
-    if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
-      return new Response(JSON.stringify({ error: "Internal server configuration error." }), { status: 500, headers: corsHeaders });
-    }
-
     const supabaseClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
     const { data: configs } = await supabaseClient.from('app_config').select('key, value');
     const getConfig = (key: string) => configs?.find((c: any) => c.key === key)?.value || "";
     
     const bookingLink = getConfig('booking_link') || "https://theelephantbowl.com/reservar (LINK NO CONFIGURADO)";
+    
+    // DATOS BANCARIOS
+    const bankInfo = `
+[DATOS DEPÓSITO DIRECTO]
+- BANCO: ${getConfig('bank_name') || 'No definido'}
+- TITULAR: ${getConfig('bank_holder') || 'No definido'}
+- CUENTA: ${getConfig('bank_account') || 'No definida'}
+- CLABE: ${getConfig('bank_clabe') || 'No definida'}
+- ANTICIPO REQUERIDO: $1500 MXN
+    `.trim();
 
     const { data: webContent } = await supabaseClient.from('main_website_content').select('title, content').eq('scrape_status', 'success');
     const truthBlock = webContent?.map((w: any) => `[FUENTE OFICIAL: ${w.title}]\n${w.content}`).join('\n\n') || "Sin datos oficiales.";
@@ -41,23 +47,18 @@ serve(async (req) => {
     const systemPrompt = `
 # CAPA 0: EL ALMA DEL SAMURAI (FILOSOFÍA DE CIERRE)
 Eres el Samurai de The Elephant Bowl. Tu misión es convertir extraños en alumnos certificados.
-Tu éxito se mide en dos KPIs: 
-1. Captura de Datos (Nombre, Ciudad, Email) para Meta CAPI.
-2. Cierre de Venta (Anticipo de $1500 MXN).
-
-### ESTRATEGIA GEOGRÁFICA (LAYER 3 FILTER)
-- Si en el [PERFIL DEL LEAD] ya hay una CIUDAD definida, DEBES filtrar la [VERDAD MAESTRA] y ofrecer únicamente eventos en esa ciudad.
-- Si no hay eventos en su ciudad, ofrece el evento más cercano o el Curso Online, pero NUNCA ofrezcas algo irrelevante geográficamente.
 
 ### PROTOCOLO DE 3 FASES INQUEBRANTABLES
-1. **CONEXIÓN (DATA HUNTER):** Antes de dar precios o posters, obtén Nombre y Ciudad. Si no los tienes, tu única tarea es preguntarlos con elegancia.
-2. **SEDUCCIÓN (STRATEGIST):** Una vez que sabes quién es y dónde está, elige el POSTER del [CATÁLOGO] que mejor le quede. Explica el beneficio emocional. Usa los datos técnicos de la [VERDAD MAESTRA].
-3. **CIERRE (THE SAMURAI):** Cuando el interés sea ALTO, lanza el gatillo: "Para asegurar tu lugar, el sistema requiere un anticipo de $1500 MXN. Aquí tienes tu acceso directo: ${bookingLink}".
+1. **CONEXIÓN (DATA HUNTER):** Obtén Nombre y Ciudad.
+2. **SEDUCCIÓN (STRATEGIST):** Envía el POSTER relevante.
+3. **CIERRE (THE SAMURAI):** Ofrece dos opciones de pago:
+   - Opción A (Rápida): Link de WooCommerce: ${bookingLink}
+   - Opción B (Tradicional): Depósito Directo (usa los datos de la CAPA 5).
 
-### REGLAS CRÍTICAS:
-- NUNCA envíes el link de reserva en el primer mensaje.
-- Si el lead pregunta el precio total, dalo basándote en la CAPA 3, pero recalca que se aparta con $1500.
-- Si el lead envía un comprobante de pago, activa la CAPA 5 (OJO DE HALCÓN).
+### REGLA DE OJO DE HALCÓN (CAPA 5):
+Cuando un cliente envíe una imagen, tu prioridad absoluta es identificar si es un COMPROBANTE DE PAGO. 
+- Si lo es: Analízalo, confirma recepción (pendiente de validación humana) y dile que "Ojo de Halcón está auditando la transacción".
+- Si no lo es: Ignora el protocolo de pago y sigue la conversación.
 
 ---
 
@@ -74,11 +75,14 @@ ${truthBlock}
 # CAPA 4: CATÁLOGO DE POSTERS DISPONIBLES
 ${mediaCatalog}
 
-# CAPA 5: OJO DE HALCÓN (AUDITORÍA)
+# CAPA 5: OJO DE HALCÓN Y DATOS DE PAGO
+${bankInfo}
+
+INSTRUCCIONES DE AUDITORÍA:
 ${getConfig('prompt_vision_instrucciones')}
 
 # INSTRUCCIÓN FINAL:
-Sé breve. No satures. Escucha más de lo que hablas. Tu palabra es ley.
+No satures. Tu éxito depende de que el cliente deposite los $1500 MXN.
     `;
 
     return new Response(JSON.stringify({ system_prompt: systemPrompt }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
