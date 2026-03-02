@@ -18,7 +18,7 @@ interface MemoryPanelProps {
   saving: boolean;
   onReset: () => void;
   onToggleFollowup?: () => void;
-  onAnalysisComplete?: () => void; // Nuevo prop para refrescar
+  onAnalysisComplete?: () => void;
 }
 
 export const MemoryPanel = ({
@@ -33,6 +33,52 @@ export const MemoryPanel = ({
   const [syncingCapi, setSyncingCapi] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
 
+  const handleRunAnalysis = async () => {
+     setAnalyzing(true);
+     const tid = toast.loading("GPT-4o escaneando chat en busca de datos...");
+     try {
+        const { data, error } = await supabase.functions.invoke('analyze-leads', {
+           body: { lead_id: currentAnalysis.id, force: true }
+        });
+        
+        if (error) throw new Error(error.message);
+        
+        if (data.success && data.lead) {
+           const { email, ciudad, nombre } = data.lead;
+           
+           // Actualizamos el formulario local para que el cambio se vea YA
+           setMemoryForm({
+              ...memoryForm,
+              nombre: nombre || memoryForm.nombre,
+              email: email || memoryForm.email,
+              ciudad: ciudad || memoryForm.ciudad,
+              summary: data.lead.summary || memoryForm.summary,
+              perfil_psicologico: data.lead.perfil_psicologico || memoryForm.perfil_psicologico,
+              buying_intent: data.lead.buying_intent || memoryForm.buying_intent
+           });
+
+           const found = [];
+           if (data.extracted.email) found.push("Email");
+           if (data.extracted.ciudad) found.push("Ciudad");
+
+           if (found.length > 0) {
+              toast.success(`¡Datos capturados: ${found.join(', ')}!`, { id: tid });
+           } else {
+              toast.info("Análisis completo (Sin datos nuevos detectados).", { id: tid });
+           }
+           
+           // Avisamos al padre para que refresque el objeto lead global
+           if (onAnalysisComplete) onAnalysisComplete();
+        }
+     } catch (err: any) {
+        console.error(err);
+        toast.error("Error en análisis: " + err.message, { id: tid });
+     } finally {
+        setAnalyzing(false);
+     }
+  };
+
+  // ... (resto de funciones handleSaveCorrection, handleSyncToCapi, handleFlushMemory se mantienen igual)
   const handleSaveCorrection = async () => {
     if (!correctionText.trim()) return;
     setIsReporting(true);
@@ -45,7 +91,6 @@ export const MemoryPanel = ({
         categoria: 'CONDUCTA',
         estado_correccion: 'REPORTADA'
       });
-
       if (error) throw error;
       toast.success('Lección aprendida enviada a Bitácora');
       setCorrectionText('');
@@ -54,45 +99,6 @@ export const MemoryPanel = ({
     } finally {
       setIsReporting(false);
     }
-  };
-
-  const handleRunAnalysis = async () => {
-     setAnalyzing(true);
-     const tid = toast.loading("GPT-4o escaneando chat en busca de datos...");
-     try {
-        const { data, error } = await supabase.functions.invoke('analyze-leads', {
-           body: { lead_id: currentAnalysis.id, force: true }
-        });
-        
-        if (error) throw new Error(error.message);
-        
-        // Verificamos si hubo éxito real
-        if (data.results && data.results.length > 0) {
-           const res = data.results[0];
-           if (res.status === 'updated') {
-              // Safety check: Aseguramos que extracted exista
-              const extracted = res.extracted || {};
-              const details = [];
-              if (extracted.email) details.push('Email');
-              if (extracted.city) details.push('Ciudad');
-              
-              const msg = details.length > 0 ? `¡Datos Capturados! ${details.join(', ')}` : "Análisis completado (Sin datos nuevos)";
-              toast.success(msg, { id: tid });
-              
-              // Forzar recarga en el padre
-              if (onAnalysisComplete) onAnalysisComplete();
-           } else {
-              toast.info("Análisis completado, pero no se detectaron datos nuevos.", { id: tid });
-           }
-        } else {
-           toast.warning("La IA no devolvió resultados legibles.", { id: tid });
-        }
-     } catch (err: any) {
-        console.error(err);
-        toast.error("Fallo en análisis: " + err.message, { id: tid });
-     } finally {
-        setAnalyzing(false);
-     }
   };
 
   const handleSyncToCapi = async () => {
@@ -105,7 +111,6 @@ export const MemoryPanel = ({
         const { data: configData } = await supabase.from('app_config').select('*').in('key', ['meta_pixel_id', 'meta_access_token', 'meta_test_mode', 'meta_test_event_code']);
         const config: any = {};
         configData?.forEach(c => config[c.key.replace('meta_', '')] = c.value);
-        
         config.test_mode = config.test_mode === 'true';
 
         const { error } = await supabase.functions.invoke('meta-capi-sender', {
@@ -119,20 +124,15 @@ export const MemoryPanel = ({
                     fn: currentAnalysis.nombre,
                     ct: currentAnalysis.ciudad
                  },
-                 custom_data: { 
-                    intent: currentAnalysis.buying_intent,
-                    stage: 'prospect'
-                 }
+                 custom_data: { intent: currentAnalysis.buying_intent }
               },
               config
            }
         });
-
         if (error) throw error;
-        
         await supabase.from('leads').update({ capi_lead_event_sent_at: new Date().toISOString() }).eq('id', currentAnalysis.id);
         toast.success("Evento enviado a Meta Conversions API.");
-        if (onAnalysisComplete) onAnalysisComplete(); // Refrescar estado del botón
+        if (onAnalysisComplete) onAnalysisComplete();
      } catch (err: any) {
         toast.error("Error CAPI: " + err.message);
      } finally {
