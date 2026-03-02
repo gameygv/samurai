@@ -6,8 +6,19 @@ import { MessageList } from './chat/MessageList';
 import { MessageInput } from './chat/MessageInput';
 import { MemoryPanel } from './chat/MemoryPanel';
 import { AiSuggestions } from './chat/AiSuggestions';
+import { Button } from '@/components/ui/button';
+import { Zap, CreditCard, Link as LinkIcon, FileText, X, Menu } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { toast } from 'sonner';
 import { sendEvolutionMessage } from '@/utils/messagingService';
+import { cn } from '@/lib/utils';
 
 interface ChatViewerProps {
   lead: any;
@@ -22,6 +33,12 @@ const ChatViewer = ({ lead: initialLead, open, onOpenChange }: ChatViewerProps) 
   const [sending, setSending] = useState(false);
   const [isEditingMemory, setIsEditingMemory] = useState(false);
   
+  // Mobile View State
+  const [showMemoryMobile, setShowMemoryMobile] = useState(false);
+  
+  // Quick Actions Data
+  const [quickActions, setQuickActions] = useState<any>({});
+
   // AI Co-pilot state
   const [suggestions, setSuggestions] = useState<any[]>([]);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
@@ -37,6 +54,7 @@ const ChatViewer = ({ lead: initialLead, open, onOpenChange }: ChatViewerProps) 
         setLead(initialLead);
         updateMemoryForm(initialLead);
      }
+     fetchQuickActions();
   }, [initialLead]);
 
   useEffect(() => {
@@ -51,6 +69,17 @@ const ChatViewer = ({ lead: initialLead, open, onOpenChange }: ChatViewerProps) 
       return () => { supabase.removeChannel(channel); };
     }
   }, [open, lead?.id]);
+
+  const fetchQuickActions = async () => {
+     const { data } = await supabase.from('app_config').select('key, value').in('key', ['wc_url', 'wc_product_id', 'bank_name', 'bank_account', 'bank_clabe', 'bank_holder']);
+     if (data) {
+        const config: any = data.reduce((acc, item) => ({...acc, [item.key]: item.value}), {});
+        setQuickActions({
+           paymentLink: `${config.wc_url || 'https://site.com'}/checkout/?add-to-cart=${config.wc_product_id || '0'}`,
+           bankInfo: `Banco: ${config.bank_name}\nCuenta: ${config.bank_account}\nCLABE: ${config.bank_clabe}\nTitular: ${config.bank_holder}`
+        });
+     }
+  };
 
   const updateMemoryForm = (data: any) => {
      setMemoryForm({
@@ -122,24 +151,69 @@ const ChatViewer = ({ lead: initialLead, open, onOpenChange }: ChatViewerProps) 
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full sm:max-w-6xl flex flex-row bg-slate-950 border-l border-slate-800 text-white p-0 overflow-hidden">
+      <SheetContent className="w-full sm:max-w-6xl flex flex-col sm:flex-row bg-slate-950 border-l border-slate-800 text-white p-0 overflow-hidden">
         
-        <div className="flex-1 min-w-0 flex flex-col h-full bg-slate-950">
+        {/* CHAT AREA (Flexible) */}
+        <div className={cn("flex-1 min-w-0 flex flex-col h-full bg-slate-950 transition-all", showMemoryMobile ? "hidden sm:flex" : "flex")}>
           <ChatHeader lead={lead} isAiPaused={lead.ai_paused} sending={sending} onSendCommand={handleSendMessage} />
+          
           <MessageList messages={messages} loading={loading} />
           
-          <div className="p-4 bg-slate-900/50 border-t border-slate-800">
+          <div className="p-4 bg-slate-900/50 border-t border-slate-800 relative">
+            
+            {/* Quick Actions Toolbar */}
+            <div className="absolute right-4 -top-12 flex gap-2">
+               <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                     <Button size="sm" className="bg-indigo-600 hover:bg-indigo-700 h-8 w-8 p-0 rounded-full shadow-lg shadow-indigo-900/50 border border-indigo-500/50">
+                        <Zap className="w-4 h-4 text-white" />
+                     </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="bg-slate-900 border-slate-800 text-white w-56">
+                     <DropdownMenuLabel className="text-[10px] uppercase text-slate-500 font-bold">Scripts de Cierre</DropdownMenuLabel>
+                     <DropdownMenuSeparator className="bg-slate-800"/>
+                     <DropdownMenuItem onClick={() => setDraftMessage(quickActions.paymentLink)} className="cursor-pointer hover:bg-indigo-600/20 text-xs">
+                        <LinkIcon className="w-3 h-3 mr-2 text-indigo-400" /> Link de Pago
+                     </DropdownMenuItem>
+                     <DropdownMenuItem onClick={() => setDraftMessage(quickActions.bankInfo)} className="cursor-pointer hover:bg-indigo-600/20 text-xs">
+                        <CreditCard className="w-3 h-3 mr-2 text-indigo-400" /> Datos Bancarios
+                     </DropdownMenuItem>
+                     <DropdownMenuItem onClick={() => setDraftMessage("Hola! Te comparto la información completa del taller...")} className="cursor-pointer hover:bg-indigo-600/20 text-xs">
+                        <FileText className="w-3 h-3 mr-2 text-indigo-400" /> Info General
+                     </DropdownMenuItem>
+                  </DropdownMenuContent>
+               </DropdownMenu>
+               
+               {/* Mobile Toggle for Memory */}
+               <Button size="sm" variant="secondary" className="sm:hidden h-8 w-8 p-0 rounded-full border border-slate-700" onClick={() => setShowMemoryMobile(true)}>
+                  <Menu className="w-4 h-4" />
+               </Button>
+            </div>
+
             <AiSuggestions suggestions={suggestions} loading={loadingSuggestions} onSelect={setDraftMessage} onRefresh={() => fetchAiSuggestions(messages)} />
             <MessageInput onSendMessage={handleSendMessage} sending={sending} isAiPaused={lead.ai_paused} initialValue={draftMessage} />
           </div>
         </div>
 
-        <MemoryPanel 
-          currentAnalysis={lead} isEditing={isEditingMemory} setIsEditing={setIsEditingMemory}
-          memoryForm={memoryForm} setMemoryForm={setMemoryForm} onSave={saveMemory} saving={sending}
-          onReset={() => {}} onToggleFollowup={() => handleSendMessage(lead.ai_paused ? '#START' : '#STOP')}
-          onAnalysisComplete={fetchMessages}
-        />
+        {/* MEMORY PANEL (Responsive) */}
+        <div className={cn(
+           "w-full sm:w-[340px] sm:min-w-[340px] flex-shrink-0 bg-slate-900/50 border-l border-slate-800 flex flex-col overflow-y-auto absolute sm:relative z-20 h-full transition-transform duration-300",
+           showMemoryMobile ? "translate-x-0" : "translate-x-full sm:translate-x-0"
+        )}>
+           {/* Mobile Header for Panel */}
+           <div className="sm:hidden p-4 border-b border-slate-800 flex justify-between items-center bg-slate-900">
+              <span className="font-bold text-sm">Ficha Táctica</span>
+              <Button variant="ghost" size="sm" onClick={() => setShowMemoryMobile(false)}><X className="w-4 h-4" /></Button>
+           </div>
+
+           <MemoryPanel 
+             currentAnalysis={lead} isEditing={isEditingMemory} setIsEditing={setIsEditingMemory}
+             memoryForm={memoryForm} setMemoryForm={setMemoryForm} onSave={saveMemory} saving={sending}
+             onReset={() => {}} onToggleFollowup={() => handleSendMessage(lead.ai_paused ? '#START' : '#STOP')}
+             onAnalysisComplete={fetchMessages}
+           />
+        </div>
+
       </SheetContent>
     </Sheet>
   );

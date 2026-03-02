@@ -5,7 +5,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { 
-  Trello, Loader2, TrendingUp, User, Fingerprint, Image, Target, DollarSign, UserPlus, Mail, ShieldCheck, MapPin, Clock, AlertTriangle
+  Trello, Loader2, TrendingUp, User, Fingerprint, Image, Target, DollarSign, UserPlus, Mail, ShieldCheck, MapPin, Clock, AlertTriangle, GripVertical
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import ChatViewer from '@/components/ChatViewer';
@@ -18,6 +18,9 @@ const Pipeline = () => {
   const [selectedLead, setSelectedLead] = useState<any>(null);
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  
+  // Drag & Drop State
+  const [draggedLeadId, setDraggedLeadId] = useState<string | null>(null);
 
   const TICKET_PRICE = 1500;
 
@@ -31,9 +34,10 @@ const Pipeline = () => {
     fetchLeads();
     
     const channel = supabase
-      .channel('pipeline-live-v5')
+      .channel('pipeline-live-v6')
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'leads' }, (payload) => {
-         fetchLeads(); // Refrescamos todo para ordenar
+         // Optimistic UI update logic could go here, but fetching is safer for consistency
+         fetchLeads(); 
       })
       .subscribe();
 
@@ -52,9 +56,32 @@ const Pipeline = () => {
     setLoading(false);
   };
 
+  const handleDragStart = (e: React.DragEvent, leadId: string) => {
+     setDraggedLeadId(leadId);
+     e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDrop = async (e: React.DragEvent, targetIntent: string) => {
+     e.preventDefault();
+     if (!draggedLeadId) return;
+
+     // Optimistic Update
+     const leadId = draggedLeadId;
+     setLeads(prev => prev.map(l => l.id === leadId ? { ...l, buying_intent: targetIntent } : l));
+     setDraggedLeadId(null);
+
+     try {
+        const { error } = await supabase.from('leads').update({ buying_intent: targetIntent }).eq('id', leadId);
+        if (error) throw error;
+        toast.success(`Lead movido a ${targetIntent}`);
+     } catch (err: any) {
+        toast.error("Error al mover lead");
+        fetchLeads(); // Revert
+     }
+  };
+
   const getLeadsByIntent = (intent: string) => leads.filter(l => (l.buying_intent || 'BAJO').toUpperCase() === intent);
   
-  // Helper para tiempo relativo
   const getTimeAgo = (dateStr: string | null) => {
      if (!dateStr) return { text: 'N/A', status: 'normal' };
      const diff = new Date().getTime() - new Date(dateStr).getTime();
@@ -97,8 +124,13 @@ const Pipeline = () => {
           {columns.map((col) => {
             const leadsInCol = getLeadsByIntent(col.id);
             return (
-              <div key={col.id} className={cn("rounded-xl border flex flex-col min-h-0 shadow-2xl overflow-hidden", col.color)}>
-                <div className="p-4 border-b border-slate-800/50 bg-slate-900/40 flex justify-between items-center">
+              <div 
+                 key={col.id} 
+                 className={cn("rounded-xl border flex flex-col min-h-0 shadow-2xl overflow-hidden transition-colors", col.color)}
+                 onDragOver={(e) => e.preventDefault()}
+                 onDrop={(e) => handleDrop(e, col.id)}
+              >
+                <div className="p-4 border-b border-slate-800/50 bg-slate-900/40 flex justify-between items-center cursor-default">
                    <div>
                       <h3 className="font-bold text-xs text-white uppercase tracking-widest flex items-center gap-2">
                          <col.icon className="w-4 h-4 text-indigo-400" /> {col.title}
@@ -112,30 +144,41 @@ const Pipeline = () => {
                   {leadsInCol.map((lead) => {
                     const timeAgo = getTimeAgo(lead.last_message_at);
                     return (
-                    <Card key={lead.id} className={cn("bg-slate-900 border-slate-800 hover:border-indigo-500/50 transition-all cursor-pointer group relative overflow-hidden", timeAgo.status === 'stale' && "opacity-80")} onClick={() => { setSelectedLead(lead); setIsChatOpen(true); }}>
-                      <div className={cn("absolute left-0 top-0 bottom-0 w-1", lead.ai_paused ? "bg-red-500" : (timeAgo.status === 'stale' ? 'bg-yellow-600' : 'bg-emerald-500'))} />
-                      <CardContent className="p-3 pl-5 space-y-2">
-                         <div className="flex justify-between items-start">
-                            <div>
-                               <p className="text-xs font-bold text-white group-hover:text-indigo-400 transition-colors truncate max-w-[150px]">{lead.nombre || lead.telefono}</p>
-                               <div className="flex gap-1 mt-1">
-                                  {lead.ciudad && <Badge variant="outline" className="text-[8px] h-4 px-1 border-slate-700 text-slate-400"><MapPin className="w-2 h-2 mr-1"/>{lead.ciudad}</Badge>}
-                                  {lead.email && <Badge variant="outline" className="text-[8px] h-4 px-1 border-emerald-500/30 text-emerald-500"><Mail className="w-2 h-2"/></Badge>}
+                    <div 
+                        key={lead.id} 
+                        draggable 
+                        onDragStart={(e) => handleDragStart(e, lead.id)}
+                        className="cursor-move"
+                    >
+                       <Card 
+                           className={cn("bg-slate-900 border-slate-800 hover:border-indigo-500/50 transition-all group relative overflow-hidden", timeAgo.status === 'stale' && "opacity-80")} 
+                           onClick={() => { setSelectedLead(lead); setIsChatOpen(true); }}
+                       >
+                         <div className={cn("absolute left-0 top-0 bottom-0 w-1", lead.ai_paused ? "bg-red-500" : (timeAgo.status === 'stale' ? 'bg-yellow-600' : 'bg-emerald-500'))} />
+                         <CardContent className="p-3 pl-5 space-y-2">
+                            <div className="flex justify-between items-start">
+                               <div>
+                                  <p className="text-xs font-bold text-white group-hover:text-indigo-400 transition-colors truncate max-w-[150px]">{lead.nombre || lead.telefono}</p>
+                                  <div className="flex gap-1 mt-1">
+                                     {lead.ciudad && <Badge variant="outline" className="text-[8px] h-4 px-1 border-slate-700 text-slate-400"><MapPin className="w-2 h-2 mr-1"/>{lead.ciudad}</Badge>}
+                                     {lead.email && <Badge variant="outline" className="text-[8px] h-4 px-1 border-emerald-500/30 text-emerald-500"><Mail className="w-2 h-2"/></Badge>}
+                                  </div>
+                               </div>
+                               <div className="flex flex-col items-end gap-1">
+                                  <GripVertical className="w-3 h-3 text-slate-700 opacity-0 group-hover:opacity-100" />
+                                  {lead.ai_paused && <Badge variant="destructive" className="h-4 px-1 text-[8px] bg-red-600">STOP</Badge>}
+                                  {timeAgo.status === 'stale' && <AlertTriangle className="w-3 h-3 text-yellow-600" />}
                                </div>
                             </div>
-                            <div className="flex flex-col items-end gap-1">
-                               {lead.ai_paused && <Badge variant="destructive" className="h-4 px-1 text-[8px] bg-red-600">STOP</Badge>}
-                               {timeAgo.status === 'stale' && <AlertTriangle className="w-3 h-3 text-yellow-600" />}
+                            <div className="flex items-center justify-between pt-2 border-t border-slate-800/50 text-[8px] text-slate-500">
+                               <span className="font-bold uppercase tracking-wider">Fase: {lead.followup_stage}</span>
+                               <span className={cn("font-mono flex items-center gap-1", timeAgo.status === 'fresh' ? "text-green-400" : (timeAgo.status === 'stale' ? "text-red-400" : "text-slate-500"))}>
+                                  <Clock className="w-2.5 h-2.5" /> {timeAgo.text}
+                               </span>
                             </div>
-                         </div>
-                         <div className="flex items-center justify-between pt-2 border-t border-slate-800/50 text-[8px] text-slate-500">
-                            <span className="font-bold uppercase tracking-wider">Fase: {lead.followup_stage}</span>
-                            <span className={cn("font-mono flex items-center gap-1", timeAgo.status === 'fresh' ? "text-green-400" : (timeAgo.status === 'stale' ? "text-red-400" : "text-slate-500"))}>
-                               <Clock className="w-2.5 h-2.5" /> {timeAgo.text}
-                            </span>
-                         </div>
-                      </CardContent>
-                    </Card>
+                         </CardContent>
+                       </Card>
+                    </div>
                   )})}
                 </div>
               </div>
