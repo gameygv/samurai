@@ -7,11 +7,10 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-// Helper: Búsqueda recursiva de una llave en un objeto JSON profundo
+// Helper: Búsqueda recursiva
 function findValue(obj: any, keyToFind: string): any {
   if (!obj || typeof obj !== 'object') return null;
   if (keyToFind in obj) return obj[keyToFind];
-  
   for (const key in obj) {
     const found = findValue(obj[key], keyToFind);
     if (found) return found;
@@ -35,92 +34,92 @@ serve(async (req) => {
     const body = await req.json();
     const eventName = (body.event || body.type || "").toLowerCase();
     
-    // Filtro básico: Solo nos interesan mensajes nuevos
     if (eventName !== 'messages.upsert') {
         return new Response(JSON.stringify({ ignored: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    // Extracción agnóstica de datos del mensaje
-    // Buscamos 'message' y 'key' donde sea que estén
     const messageData = findValue(body, 'message'); 
-    const keyData = findValue(body, 'key');
-
-    if (!messageData || keyData?.fromMe) return new Response('Ignored (Self/NoData)');
-
-    const phone = keyData?.remoteJid?.split('@')[0];
-    const msgType = Object.keys(messageData || {})[0];
     
+    // Ignorar mensajes propios
+    const fromMe = findValue(body, 'fromMe') || body.data?.key?.fromMe;
+    if (!messageData || fromMe) return new Response('Ignored (Self/NoData)');
+
+    const phone = findValue(body, 'remoteJid')?.split('@')[0];
     let messageText = "";
 
     // --- PROCESAMIENTO INTELIGENTE ---
     
-    // 1. Audio (Prioridad Alta)
-    if (msgType === 'audioMessage' || findValue(messageData, 'audioMessage')) {
-        console.log(`[Audio Detectado] Escaneando payload para ${phone}...`);
+    // Detectar si es Audio
+    const audioObj = findValue(messageData, 'audioMessage');
+    
+    if (audioObj) {
+        console.log(`[Audio] Procesando para ${phone}...`);
         
-        // Búsqueda Profunda del Base64
-        const foundBase64 = findValue(body, 'base64');
-        
-        if (foundBase64) {
-            try {
-                // Limpieza de headers data:image...
-                const cleanBase64 = foundBase64.includes(',') ? foundBase64.split(',')[1] : foundBase64;
-                
-                const formData = new FormData();
-                formData.append("model", "whisper-1");
-                
+        // 1. Intentar Base64
+        let audioBase64 = findValue(body, 'base64');
+        // 2. Intentar URL
+        const audioUrl = findValue(audioObj, 'url');
+
+        try {
+            const formData = new FormData();
+            formData.append("model", "whisper-1");
+            let blob;
+
+            if (audioBase64) {
+                console.log("[Audio] Usando Base64...");
+                const cleanBase64 = audioBase64.replace(/^data:.*;base64,/, "");
                 const binaryString = atob(cleanBase64);
                 const bytes = new Uint8Array(binaryString.length);
-                for (let i = 0; i < binaryString.length; i++) {
-                    bytes[i] = binaryString.charCodeAt(i);
-                }
-                const blob = new Blob([bytes], { type: 'audio/ogg' });
-                formData.append("file", blob, "audio.ogg");
+                for (let i = 0; i < binaryString.length; i++) bytes[i] = binaryString.charCodeAt(i);
+                blob = new Blob([bytes], { type: 'audio/ogg' });
+            } 
+            else if (audioUrl) {
+                console.log(`[Audio] Descargando desde URL: ${audioUrl}`);
+                const audioRes = await fetch(audioUrl, {
+                    headers: { 
+                        'User-Agent': 'Mozilla/5.0 (compatible; SamuraiBot/1.0)',
+                        'Accept': '*/*'
+                    }
+                });
+                
+                if (!audioRes.ok) throw new Error(`Fallo descarga audio: ${audioRes.status}`);
+                blob = await audioRes.blob();
+            }
 
+            if (blob) {
+                formData.append("file", blob, "audio.ogg");
                 const whisperRes = await fetch("https://api.openai.com/v1/audio/transcriptions", {
                     method: "POST",
                     headers: { "Authorization": `Bearer ${apiKey}` },
                     body: formData
                 });
-                
                 const whisperData = await whisperRes.json();
                 
                 if (whisperData.text) {
                     messageText = `[TRANSCRIPCIÓN AUDIO]: "${whisperData.text}"`;
                 } else {
-                    console.error("Whisper Error:", whisperData);
-                    messageText = "[AUDIO INDESCIFRABLE - PIDE TEXTO]";
+                    console.error("Whisper Fail:", whisperData);
+                    messageText = "[AUDIO SIN INTELIGIBILIDAD]";
                 }
-            } catch (e) {
-                console.error("Audio Processing Error:", e);
-                messageText = "[ERROR TÉCNICO PROCESANDO AUDIO]";
-            }
-        } else {
-            // Si no hay base64, intentamos con URL si existe
-            const foundUrl = findValue(messageData, 'url');
-            if (foundUrl) {
-               messageText = `[AUDIO URL DETECTADA: ${foundUrl} - Intentando descargar...]`;
-               // Aquí se podría implementar descarga por URL, pero base64 es más seguro.
-               // Por ahora, avisamos al admin.
             } else {
-               messageText = "[AUDIO SIN DATOS - Evolution no envió base64]";
+                messageText = "[AUDIO SIN DATOS - Falló Base64 y URL]";
             }
+        } catch (e) {
+            console.error("Audio Error:", e);
+            messageText = `[ERROR AUDIO: ${e.message}]`;
         }
     } 
-    // 2. Texto
-    else if (msgType === 'conversation') {
-        messageText = messageData.conversation;
-    } else if (msgType === 'extendedTextMessage') {
-        messageText = messageData.extendedTextMessage.text;
-    } else {
-        // Búsqueda de texto en cualquier parte profunda (ej: caption de imagen)
-        const deepText = findValue(messageData, 'text') || findValue(messageData, 'caption') || findValue(messageData, 'conversation');
-        messageText = deepText || "[ARCHIVO MULTIMEDIA / DESCONOCIDO]";
+    // Texto Normal
+    else {
+        messageText = findValue(messageData, 'conversation') || 
+                      findValue(messageData, 'text') || 
+                      findValue(messageData, 'caption') ||
+                      "[MULTIMEDIA/STICKER]";
     }
 
-    if (!messageText || messageText.includes('DESCONOCIDO')) return new Response('No valid content');
+    if (!messageText || messageText.includes('MULTIMEDIA')) return new Response('No valid content');
 
-    // --- LOGICA DB ---
+    // --- LOGICA DB (LEAD) ---
     let { data: lead } = await supabaseClient.from('leads').select('*').or(`telefono.ilike.%${phone}%`).maybeSingle();
     if (!lead) {
         const { data: newLead } = await supabaseClient.from('leads').insert({ 
@@ -165,11 +164,9 @@ serve(async (req) => {
     const mediaUrl = mediaMatch ? mediaMatch[1] : null;
 
     if (evoUrl && evoKey) {
-        let sent = false;
-        
-        // Intento 1: Media
-        if (mediaUrl) {
-            try {
+        try {
+            if (mediaUrl) {
+                // Intento enviar imagen
                 let sendMediaUrl = evoUrl;
                 if(evoUrl.includes('sendText')) sendMediaUrl = evoUrl.replace('sendText', 'sendMedia');
                 
@@ -184,27 +181,24 @@ serve(async (req) => {
                         delay: 1000
                     })
                 });
-                sent = true;
-                textToSend = ""; // Ya se fue como caption
-            } catch (e) {
-                console.error("Fallo envío media, fallback a texto");
+            } else {
+                // Intento enviar texto
+                await fetch(evoUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'apikey': evoKey },
+                    body: JSON.stringify({ number: phone, text: textToSend, delay: 1000 })
+                });
             }
-        }
 
-        // Intento 2: Texto (Si no hubo media o falló)
-        if (textToSend) {
-            await fetch(evoUrl, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'apikey': evoKey },
-                body: JSON.stringify({ number: phone, text: textToSend, delay: 1200 })
-            });
-        }
+            const logMsg = mediaUrl ? `[IMG: ${mediaUrl}] ${rawAnswer}` : rawAnswer;
+            await supabaseClient.from('conversaciones').insert({ lead_id: lead.id, emisor: 'SAMURAI', mensaje: logMsg, platform: 'WHATSAPP_AUTO' });
 
-        const logMsg = mediaUrl ? `[IMG: ${mediaUrl}] ${rawAnswer}` : rawAnswer;
-        await supabaseClient.from('conversaciones').insert({ lead_id: lead.id, emisor: 'SAMURAI', mensaje: logMsg, platform: 'WHATSAPP_AUTO' });
+        } catch (sendErr) {
+            console.error("Evolution Send Error:", sendErr);
+        }
     }
 
-    return new Response(JSON.stringify({ success: true }));
+    return new Response(JSON.stringify({ success: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
   } catch (error: any) {
     return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: corsHeaders });
