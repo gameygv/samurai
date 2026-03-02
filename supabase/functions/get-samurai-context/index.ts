@@ -17,7 +17,10 @@ serve(async (req) => {
     const { data: configs } = await supabaseClient.from('app_config').select('key, value');
     const getConfig = (key: string) => configs?.find((c: any) => c.key === key)?.value || "";
     
-    const bookingLink = getConfig('booking_link') || "https://theelephantbowl.com/reservar";
+    // CONSTRUCCIÓN DINÁMICA DEL LINK DE PAGO
+    const wcUrl = getConfig('wc_url') || "https://theelephantbowl.com";
+    const productId = getConfig('wc_product_id') || "1483"; // ID por defecto
+    const bookingLink = `${wcUrl}/checkout/?add-to-cart=${productId}`;
     
     // DATOS BANCARIOS
     const bankInfo = `
@@ -63,7 +66,7 @@ Tu objetivo es guiar al cliente por estas 3 fases sin saltarte pasos:
 ### FASE 3: CIERRE DUAL ($1500 MXN)
 - Si el cliente muestra interés ("Sí quiero", "Cómo me inscribo"), despliega el CIERRE.
 - Debes ofrecer DOS caminos claros:
-  1. **Opción A (Tarjeta/Automático):** Envía el link de WooCommerce: ${bookingLink}
+  1. **Opción A (Tarjeta/Automático):** Envía el link de Reserva Directa: ${bookingLink}
   2. **Opción B (Efectivo/Transferencia):** Ofrece los datos bancarios directos (${bankInfo}).
   
 - **IMPORTANTE:** En este punto el cliente entra en estado de SEGUIMIENTO. Si no responde, yo me encargaré de recordarle automáticamente. Tú solo asegúrate de dar las opciones.

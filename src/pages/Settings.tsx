@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Webhook, Key, Save, Loader2, ShoppingCart, Clock, Zap, DollarSign, Target, Link as LinkIcon, Building2, Brain, Store } from 'lucide-react';
+import { Webhook, Key, Save, Loader2, ShoppingCart, Clock, Zap, DollarSign, Target, Link as LinkIcon, Building2, Brain, Store, Hash } from 'lucide-react';
 import { toast } from 'sonner';
 
 const Settings = () => {
@@ -124,16 +124,21 @@ const Settings = () => {
                          <Input type="password" value={getValue('wc_secret')} onChange={e => handleInputChange('wc_secret', e.target.value, 'WOOCOMMERCE')} className="bg-slate-950" />
                       </div>
                    </div>
-                   <div className="space-y-2 pt-2">
+                   <div className="space-y-2 pt-2 bg-slate-950 p-4 rounded border border-slate-800">
                       <Label className="text-xs text-green-500 uppercase font-bold flex items-center gap-2">
-                         <LinkIcon className="w-4 h-4" /> Link Directo al Producto (Checkout)
+                         <Hash className="w-4 h-4" /> ID del Producto Principal (Checkout Automático)
                       </Label>
-                      <Input 
-                        value={getValue('booking_link')} 
-                        onChange={e => handleInputChange('booking_link', e.target.value, 'SALES')} 
-                        placeholder="https://theelephantbowl.com/checkout/..."
-                        className="bg-slate-900 border-slate-700 text-indigo-300 font-mono" 
-                      />
+                      <div className="flex items-center gap-4">
+                         <Input 
+                           value={getValue('wc_product_id')} 
+                           onChange={e => handleInputChange('wc_product_id', e.target.value, 'SALES')} 
+                           placeholder="Ej: 1483"
+                           className="bg-slate-900 border-slate-700 text-white font-mono w-32 text-center" 
+                         />
+                         <p className="text-xs text-slate-500 italic">
+                            Samurai generará el link: <span className="text-indigo-400 font-mono">/checkout/?add-to-cart={getValue('wc_product_id') || 'ID'}</span>
+                         </p>
+                      </div>
                    </div>
                 </CardContent>
              </Card>

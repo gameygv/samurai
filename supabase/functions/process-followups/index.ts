@@ -29,8 +29,11 @@ serve(async (req) => {
        4: parseInt(getConfig('sales_reminder_4', 7)) * 24   
     };
 
-    const bookingLink = getConfig('booking_link', 'https://theelephantbowl.com/reservar');
-    const wcUrl = getConfig('wc_url');
+    // CONSTRUCCIÓN DINÁMICA DEL LINK DE PAGO
+    const wcUrl = getConfig('wc_url') || "https://theelephantbowl.com";
+    const productId = getConfig('wc_product_id') || "1483"; 
+    const bookingLink = `${wcUrl}/checkout/?add-to-cart=${productId}`;
+
     const wcKey = getConfig('wc_key');
     const wcSecret = getConfig('wc_secret');
 
