@@ -6,9 +6,10 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { BrainCircuit, Edit2, X, Save, Loader2, Bot, TrendingUp, AlertCircle, RotateCcw, Clock, Play, Pause, ShieldAlert, Zap, Calendar, Trash2, RefreshCw, MapPin, User, FileText, Mail, Fingerprint } from 'lucide-react';
+import { BrainCircuit, Edit2, X, Save, Loader2, Bot, TrendingUp, AlertCircle, RotateCcw, Clock, Play, Pause, ShieldAlert, Zap, Calendar, Trash2, RefreshCw, MapPin, User, FileText, Mail, Fingerprint, Send } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
 
 interface MemoryPanelProps {
   currentAnalysis: any;
@@ -31,6 +32,7 @@ export const MemoryPanel = ({
   const [correctionText, setCorrectionText] = useState('');
   const [isReporting, setIsReporting] = useState(false);
   const [flushing, setFlushing] = useState(false);
+  const [syncingCapi, setSyncingCapi] = useState(false);
 
   const handleSaveCorrection = async () => {
     if (!correctionText.trim()) return;
@@ -55,6 +57,40 @@ export const MemoryPanel = ({
     }
   };
 
+  const handleSyncToCapi = async () => {
+     if (!currentAnalysis.email || !currentAnalysis.nombre) {
+        toast.error("Faltan datos críticos (Email/Nombre) para el evento CAPI.");
+        return;
+     }
+     setSyncingCapi(true);
+     try {
+        const { data: configData } = await supabase.from('app_config').select('*').in('key', ['meta_pixel_id', 'meta_access_token']);
+        const config: any = {};
+        configData?.forEach(c => config[c.key.replace('meta_', '')] = c.value);
+
+        const { error } = await supabase.functions.invoke('meta-capi-sender', {
+           body: {
+              eventData: {
+                 event_name: 'Lead',
+                 lead_id: currentAnalysis.id,
+                 user_data: { ph: currentAnalysis.telefono, em: currentAnalysis.email },
+                 custom_data: { city: currentAnalysis.ciudad, intent: currentAnalysis.buying_intent }
+              },
+              config
+           }
+        });
+
+        if (error) throw error;
+        
+        await supabase.from('leads').update({ capi_lead_event_sent_at: new Date().toISOString() }).eq('id', currentAnalysis.id);
+        toast.success("Evento enviado a Meta Conversions API.");
+     } catch (err: any) {
+        toast.error("Error CAPI: " + err.message);
+     } finally {
+        setSyncingCapi(false);
+     }
+  };
+
   const handleFlushMemory = async () => {
     if (!confirm("¿Deseas borrar la memoria de este lead?")) return;
     setFlushing(true);
@@ -77,7 +113,7 @@ export const MemoryPanel = ({
     <div className="w-[320px] bg-slate-900/30 flex flex-col overflow-y-auto border-l border-slate-800">
       <div className="p-4 space-y-6">
 
-        {/* 1. SECCIÓN DE MEJORA #CORREGIRIA */}
+        {/* 1. MEJORA #CORREGIRIA */}
         <div className="space-y-3">
            <div className="flex items-center justify-between">
               <h4 className="text-[10px] font-bold text-yellow-500 uppercase tracking-widest flex items-center gap-2">
@@ -145,21 +181,19 @@ export const MemoryPanel = ({
               </div>
            </div>
 
-           <div className="space-y-1">
-              <Label className="text-[9px] text-slate-500 uppercase">Intención de Compra</Label>
-              {isEditing ? (
-                 <Select value={memoryForm.buying_intent} onValueChange={v => setMemoryForm({...memoryForm, buying_intent: v})}>
-                    <SelectTrigger className="h-7 text-xs bg-slate-950 border-slate-800"><SelectValue /></SelectTrigger>
-                    <SelectContent className="bg-slate-900 text-white">
-                       <SelectItem value="BAJO">Bajo</SelectItem>
-                       <SelectItem value="MEDIO">Medio</SelectItem>
-                       <SelectItem value="ALTO">Alto 🔥</SelectItem>
-                    </SelectContent>
-                 </Select>
-              ) : (
-                 <Badge className={currentAnalysis.buying_intent === 'ALTO' ? 'bg-green-600' : 'bg-slate-800'}>{currentAnalysis.buying_intent || 'BAJO'}</Badge>
-              )}
-           </div>
+           {!isEditing && currentAnalysis.email && currentAnalysis.nombre && (
+              <Button 
+                onClick={handleSyncToCapi} 
+                disabled={syncingCapi || !!currentAnalysis.capi_lead_event_sent_at}
+                className={cn(
+                    "w-full h-8 text-[9px] font-bold uppercase",
+                    currentAnalysis.capi_lead_event_sent_at ? "bg-emerald-600/20 text-emerald-500 border border-emerald-500/30" : "bg-indigo-600"
+                )}
+              >
+                 {syncingCapi ? <Loader2 className="w-3 h-3 animate-spin mr-2"/> : <Send className="w-3 h-3 mr-2"/>}
+                 {currentAnalysis.capi_lead_event_sent_at ? '✓ Enviado a CAPI' : 'Sincronizar con CAPI'}
+              </Button>
+           )}
         </div>
 
         {/* 3. PERFIL PSICOGRÁFICO */}
@@ -181,23 +215,7 @@ export const MemoryPanel = ({
            )}
         </div>
 
-        {/* 4. RESUMEN VIVO */}
-        <div className="border-t border-slate-800 pt-6 space-y-3">
-           <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest flex items-center gap-2">
-               <FileText className="w-3 h-3" /> Resumen de Charla
-           </h4>
-           {isEditing ? (
-              <Textarea 
-                value={memoryForm.summary || ''}
-                onChange={e => setMemoryForm({...memoryForm, summary: e.target.value})}
-                className="bg-slate-950 border-slate-800 text-[10px] h-20"
-              />
-           ) : (
-              <p className="text-[11px] text-slate-300 leading-relaxed">"{currentAnalysis.summary || 'Sin resumen...'}"</p>
-           )}
-        </div>
-
-        {/* 5. CONTROLES DE IA */}
+        {/* 4. CONTROLES DE IA */}
         <div className="border-t border-slate-800 pt-6">
            <Button 
              variant="outline" 
