@@ -52,7 +52,7 @@ serve(async (req) => {
         console.log(`[Audio] Detectado para ${phone}. Procesando...`);
         let audioBase64 = findValue(body, 'base64');
 
-        // Fallback API si no hay base64
+        // Fallback API
         if (!audioBase64 && evoUrl && evoKey) {
             try {
                 let getBase64Url = evoUrl.replace('message/sendText', 'chat/getBase64FromMediaMessage');
@@ -113,30 +113,26 @@ serve(async (req) => {
 
     if (lead.ai_paused) return new Response('AI Paused');
 
-    // --- CEREBRO IA (ORDEN CORREGIDO PARA EVITAR LATENCIA) ---
+    // --- CEREBRO IA ---
     const { data: kernelData } = await supabaseClient.functions.invoke('get-samurai-context');
-    
-    // 1. Traer historial ANTES de insertar el nuevo (para evitar duplicados o race conditions)
     const { data: historyMsgs } = await supabaseClient.from('conversaciones')
         .select('emisor, mensaje')
         .eq('lead_id', lead.id)
         .order('created_at', { ascending: true })
         .limit(15);
 
-    // 2. Insertar el mensaje nuevo en DB (persistencia)
+    // Persistencia + Inyección Contextual
     await supabaseClient.from('conversaciones').insert({ lead_id: lead.id, emisor: 'CLIENTE', mensaje: messageText, platform: 'WHATSAPP' });
 
-    // 3. Construir contexto IA inyectando el mensaje actual MANUALMENTE
     const messages = [
         { role: "system", content: kernelData?.system_prompt },
         ...(historyMsgs || []).map(m => ({
             role: (m.emisor === 'CLIENTE' || m.emisor === 'HUMANO') ? 'user' : 'assistant',
             content: m.mensaje
         })),
-        { role: "user", content: messageText } // <--- AQUÍ ESTÁ LA CLAVE: Inyección directa
+        { role: "user", content: messageText } 
     ];
 
-    // Llamada a OpenAI
     const aiRes = await fetch("https://api.openai.com/v1/chat/completions", {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
@@ -177,7 +173,18 @@ serve(async (req) => {
         } catch (sendErr) { console.error("Send Error:", sendErr); }
     }
 
-    return new Response(JSON.stringify({ success: true }));
+    // --- GATILLO DE ANÁLISIS AUTOMÁTICO (CRM + CAPI) ---
+    console.log(`[Webhook] Disparando análisis para lead: ${lead.id}`);
+    fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/analyze-leads`, {
+        method: 'POST',
+        headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${Deno.env.get('SUPABASE_ANON_KEY')}`
+        },
+        body: JSON.stringify({ lead_id: lead.id })
+    }).catch(err => console.error("[Webhook] Error disparando análisis:", err));
+
+    return new Response(JSON.stringify({ success: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
   } catch (error: any) {
     return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: corsHeaders });
