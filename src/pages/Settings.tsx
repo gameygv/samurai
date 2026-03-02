@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Webhook, Key, Save, Loader2, ShoppingCart, Clock, Zap, DollarSign, Target, Link as LinkIcon, Building2, Brain } from 'lucide-react';
+import { Webhook, Key, Save, Loader2, ShoppingCart, Clock, Zap, DollarSign, Target, Link as LinkIcon, Building2, Brain, Store } from 'lucide-react';
 import { toast } from 'sonner';
 
 const Settings = () => {
@@ -66,8 +66,9 @@ const Settings = () => {
         </div>
 
         <Tabs value={activeTab} onValueChange={v => setSearchParams({ tab: v })}>
-          <TabsList className="bg-slate-900 border border-slate-800 p-1">
-            <TabsTrigger value="ventas" className="gap-2"><Target className="w-4 h-4"/> Estrategia de Venta</TabsTrigger>
+          <TabsList className="bg-slate-900 border border-slate-800 p-1 flex-wrap h-auto">
+            <TabsTrigger value="ventas" className="gap-2"><Target className="w-4 h-4"/> Estrategia Venta</TabsTrigger>
+            <TabsTrigger value="woocommerce" className="gap-2"><Store className="w-4 h-4"/> WooCommerce</TabsTrigger>
             <TabsTrigger value="pago_directo" className="gap-2"><Building2 className="w-4 h-4"/> Depósito Directo</TabsTrigger>
             <TabsTrigger value="secrets" className="gap-2"><Key className="w-4 h-4"/> API Keys</TabsTrigger>
             <TabsTrigger value="webhooks" className="gap-2"><Webhook className="w-4 h-4"/> Webhooks</TabsTrigger>
@@ -76,13 +77,56 @@ const Settings = () => {
           <TabsContent value="ventas" className="mt-6 space-y-6">
              <Card className="bg-slate-900 border-slate-800 border-l-4 border-l-orange-500">
                 <CardHeader>
-                   <CardTitle className="text-white flex items-center gap-2"><DollarSign className="w-5 h-5 text-orange-500" /> Secuencia de Recordatorio de Pago</CardTitle>
+                   <CardTitle className="text-white flex items-center gap-2"><DollarSign className="w-5 h-5 text-orange-500" /> Secuencia de Recordatorio</CardTitle>
                    <CardDescription>Tiempos de espera para re-contactar tras enviar el link de reserva.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
-                   <div className="space-y-2 bg-slate-950 p-4 rounded border border-slate-800">
+                   <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+                      <div className="space-y-2">
+                         <Label className="text-xs text-slate-500 uppercase">Fase 1 (horas)</Label>
+                         <Input type="number" value={getValue('sales_reminder_1') || '24'} onChange={e => handleInputChange('sales_reminder_1', e.target.value, 'SALES')} className="bg-slate-950" />
+                      </div>
+                      <div className="space-y-2">
+                         <Label className="text-xs text-slate-500 uppercase">Fase 2 (horas)</Label>
+                         <Input type="number" value={getValue('sales_reminder_2') || '48'} onChange={e => handleInputChange('sales_reminder_2', e.target.value, 'SALES')} className="bg-slate-950" />
+                      </div>
+                      <div className="space-y-2">
+                         <Label className="text-xs text-slate-500 uppercase">Fase 3 (horas)</Label>
+                         <Input type="number" value={getValue('sales_reminder_3') || '72'} onChange={e => handleInputChange('sales_reminder_3', e.target.value, 'SALES')} className="bg-slate-950" />
+                      </div>
+                      <div className="space-y-2">
+                         <Label className="text-xs text-slate-500 uppercase">Fase 4 (días)</Label>
+                         <Input type="number" value={getValue('sales_reminder_4') || '7'} onChange={e => handleInputChange('sales_reminder_4', e.target.value, 'SALES')} className="bg-slate-950" />
+                      </div>
+                   </div>
+                </CardContent>
+             </Card>
+          </TabsContent>
+
+          <TabsContent value="woocommerce" className="mt-6">
+             <Card className="bg-slate-900 border-slate-800 border-l-4 border-l-pink-600">
+                <CardHeader>
+                   <CardTitle className="text-white flex items-center gap-2"><ShoppingCart className="w-5 h-5 text-pink-600" /> Integración Tienda</CardTitle>
+                   <CardDescription>Samurai verificará aquí si el cliente ya pagó antes de cobrarle.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                   <div className="space-y-2">
+                      <Label>URL de la Tienda</Label>
+                      <Input value={getValue('wc_url')} onChange={e => handleInputChange('wc_url', e.target.value, 'WOOCOMMERCE')} placeholder="https://theelephantbowl.com" className="bg-slate-950" />
+                   </div>
+                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                         <Label>Consumer Key (ck_...)</Label>
+                         <Input type="password" value={getValue('wc_key')} onChange={e => handleInputChange('wc_key', e.target.value, 'WOOCOMMERCE')} className="bg-slate-950" />
+                      </div>
+                      <div className="space-y-2">
+                         <Label>Consumer Secret (cs_...)</Label>
+                         <Input type="password" value={getValue('wc_secret')} onChange={e => handleInputChange('wc_secret', e.target.value, 'WOOCOMMERCE')} className="bg-slate-950" />
+                      </div>
+                   </div>
+                   <div className="space-y-2 pt-2">
                       <Label className="text-xs text-green-500 uppercase font-bold flex items-center gap-2">
-                         <LinkIcon className="w-4 h-4" /> Link de Reserva (WooCommerce)
+                         <LinkIcon className="w-4 h-4" /> Link Directo al Producto (Checkout)
                       </Label>
                       <Input 
                         value={getValue('booking_link')} 
@@ -90,25 +134,6 @@ const Settings = () => {
                         placeholder="https://theelephantbowl.com/checkout/..."
                         className="bg-slate-900 border-slate-700 text-indigo-300 font-mono" 
                       />
-                   </div>
-
-                   <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-                      <div className="space-y-2">
-                         <Label className="text-xs text-slate-500 uppercase">Intento 1 (horas)</Label>
-                         <Input type="number" value={getValue('sales_reminder_1') || '24'} onChange={e => handleInputChange('sales_reminder_1', e.target.value, 'SALES')} className="bg-slate-950" />
-                      </div>
-                      <div className="space-y-2">
-                         <Label className="text-xs text-slate-500 uppercase">Intento 2 (horas)</Label>
-                         <Input type="number" value={getValue('sales_reminder_2') || '48'} onChange={e => handleInputChange('sales_reminder_2', e.target.value, 'SALES')} className="bg-slate-950" />
-                      </div>
-                      <div className="space-y-2">
-                         <Label className="text-xs text-slate-500 uppercase">Intento 3 (horas)</Label>
-                         <Input type="number" value={getValue('sales_reminder_3') || '72'} onChange={e => handleInputChange('sales_reminder_3', e.target.value, 'SALES')} className="bg-slate-950" />
-                      </div>
-                      <div className="space-y-2">
-                         <Label className="text-xs text-slate-500 uppercase">Intento 4 (días)</Label>
-                         <Input type="number" value={getValue('sales_reminder_4') || '7'} onChange={e => handleInputChange('sales_reminder_4', e.target.value, 'SALES')} className="bg-slate-950" />
-                      </div>
                    </div>
                 </CardContent>
              </Card>
@@ -118,7 +143,7 @@ const Settings = () => {
              <Card className="bg-slate-900 border-slate-800 border-l-4 border-l-blue-500">
                 <CardHeader>
                    <CardTitle className="text-white flex items-center gap-2">
-                      <Building2 className="w-5 h-5 text-blue-400" /> Datos Bancarios
+                      <Building2 className="w-5 h-5 text-blue-400" /> Depósito Directo (Opción B)
                    </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -153,7 +178,7 @@ const Settings = () => {
                 <CardContent className="space-y-6">
                    <div className="space-y-2">
                       <Label className="flex items-center gap-2 text-indigo-400">
-                         <Zap className="w-4 h-4" /> OpenAI API Key (Recomendado para OCR/Visión)
+                         <Zap className="w-4 h-4" /> OpenAI API Key (Requerido para OCR/Visión)
                       </Label>
                       <Input 
                         type="password" 
@@ -162,12 +187,12 @@ const Settings = () => {
                         placeholder="sk-..." 
                         className="bg-slate-950 border-slate-800"
                       />
-                      <p className="text-[10px] text-slate-500">Se usará para el análisis de posters y comprobantes de pago (Ojo de Halcón).</p>
+                      <p className="text-[10px] text-slate-500">Motor de visión para Ojo de Halcón y Posters.</p>
                    </div>
                    
                    <div className="space-y-2">
                       <Label className="flex items-center gap-2 text-slate-400">
-                         <Brain className="w-4 h-4" /> Gemini API Key (Motor Secundario)
+                         <Brain className="w-4 h-4" /> Gemini API Key (Analítica Secundaria)
                       </Label>
                       <Input 
                         type="password" 
