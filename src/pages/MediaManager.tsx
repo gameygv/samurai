@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ImageIcon, FileText, Upload, Trash2, Loader2, Scan, Edit, Sparkles, CheckCircle2, CreditCard, Info, AlertCircle } from 'lucide-react';
+import { ImageIcon, FileText, Upload, Trash2, Loader2, Scan, Edit, Sparkles, CheckCircle2, CreditCard, Info, AlertCircle, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 
 const MediaManager = () => {
@@ -49,20 +49,12 @@ const MediaManager = () => {
      const tid = toast.loading("Ojo de Halcón analizando imagen...");
      
      try {
-        // Invocamos la función
         const { data, error } = await supabase.functions.invoke('scrape-website', {
            body: { url: asset.url, mode: 'VISION' }
         });
 
-        // Error de red o despliegue
-        if (error) {
-           throw new Error(error.message || "Error de conexión con el servidor.");
-        }
-
-        // Error lógico devuelto por la función
-        if (!data || data.success === false) {
-           throw new Error(data?.error || "La IA no pudo procesar la imagen.");
-        }
+        if (error) throw new Error(error.message);
+        if (!data || data.success === false) throw new Error(data?.error || "La IA no pudo procesar la imagen.");
         
         const detectedText = data.content;
 
@@ -76,12 +68,7 @@ const MediaManager = () => {
         toast.success("Análisis completado e indexado.", { id: tid });
         fetchAssets();
      } catch (err: any) {
-        console.error("OCR Error:", err);
-        toast.error(`${err.message}`, { 
-           id: tid,
-           duration: 5000,
-           icon: <AlertCircle className="text-red-500" />
-        });
+        toast.error(`${err.message}`, { id: tid });
      } finally {
         setScanningId(null);
      }
@@ -171,7 +158,7 @@ const MediaManager = () => {
             <h1 className="text-3xl font-bold text-white flex items-center gap-2">
                <ImageIcon className="w-8 h-8 text-indigo-500" /> Media Manager
             </h1>
-            <p className="text-slate-400 text-sm">Biblioteca visual para Posters (Layer 4). Samurai leerá estos archivos para dar contexto al cliente.</p>
+            <p className="text-slate-400 text-sm">Biblioteca visual para Posters (Fase 2) y Auditoría de Pagos (Fase 3).</p>
           </div>
           <Button className="bg-indigo-600 hover:bg-indigo-700 shadow-lg shadow-indigo-900/20" onClick={() => { resetForms(); setIsUploadOpen(true); }}>
              <Upload className="w-4 h-4 mr-2" /> Subir Poster/Archivo
@@ -221,15 +208,24 @@ const MediaManager = () => {
               
               <div className="p-4 space-y-3">
                  <p className="text-xs font-bold text-white truncate">{asset.title}</p>
-                 <div className="space-y-1">
-                    <p className="text-[9px] text-slate-500 uppercase font-bold flex items-center gap-1">
-                       {asset.category === 'PAYMENT' ? <CreditCard className="w-2 h-2 text-orange-400" /> : <Sparkles className="w-2 h-2 text-yellow-500" />} 
-                       {asset.category === 'PAYMENT' ? 'Auditoría Pago:' : 'Trigger Envío:'}
-                    </p>
-                    <p className="text-[10px] text-slate-400 italic line-clamp-2 leading-relaxed h-8">
-                       {asset.ai_instructions || "Sin instrucciones de envío."}
-                    </p>
-                 </div>
+                 
+                 {/* Visual Warning for Missing Instructions */}
+                 {!asset.ai_instructions && asset.category === 'POSTER' ? (
+                    <div className="p-2 bg-red-500/10 border border-red-500/20 rounded flex items-center gap-2 text-red-400">
+                        <AlertTriangle className="w-3 h-3 flex-shrink-0" />
+                        <span className="text-[9px] font-bold">SIN INSTRUCCIÓN (SAM NO LO USARÁ)</span>
+                    </div>
+                 ) : (
+                    <div className="space-y-1">
+                        <p className="text-[9px] text-slate-500 uppercase font-bold flex items-center gap-1">
+                        {asset.category === 'PAYMENT' ? <CreditCard className="w-2 h-2 text-orange-400" /> : <Sparkles className="w-2 h-2 text-yellow-500" />} 
+                        {asset.category === 'PAYMENT' ? 'Auditoría Pago:' : 'Trigger Envío:'}
+                        </p>
+                        <p className="text-[10px] text-slate-400 italic line-clamp-2 leading-relaxed h-8">
+                        {asset.ai_instructions}
+                        </p>
+                    </div>
+                 )}
               </div>
             </Card>
           ))}
@@ -260,12 +256,13 @@ const MediaManager = () => {
                 <Input value={title} onChange={e => setTitle(e.target.value)} placeholder="Ej: Taller Torreón Marzo" className="bg-slate-950 border-slate-800" required />
              </div>
              <div className="space-y-2">
-                <Label>{category === 'POSTER' ? 'Instrucciones para Samurai (Trigger)' : 'Reglas de Validación'}</Label>
+                <Label className="text-yellow-500 flex items-center gap-2"><Sparkles className="w-3 h-3"/> {category === 'POSTER' ? 'Instrucciones Clave (Trigger)' : 'Reglas de Validación'}</Label>
                 <Textarea 
                    value={instructions} 
                    onChange={e => setInstructions(e.target.value)} 
-                   placeholder={category === 'POSTER' ? "Ej: Enviar cuando pregunten fechas para Torreón..." : "Ej: Validar que sea un depósito de $1500..."}
-                   className="bg-slate-950 border-slate-800 text-xs h-24" 
+                   placeholder={category === 'POSTER' ? "Ej: Enviar cuando el cliente diga que es de TORREÓN..." : "Ej: Validar que sea un depósito de $1500..."}
+                   className="bg-slate-950 border-slate-800 text-xs h-24 focus:border-yellow-500" 
+                   required
                 />
              </div>
              <Button type="submit" className="w-full bg-indigo-600" disabled={uploading || !selectedFile}>
