@@ -36,7 +36,6 @@ const Index = () => {
     overallStatus: 'Sync Required' as 'Operational' | 'Degraded' | 'Sync Required'
   });
 
-  const [tasks, setTasks] = useState<any[]>([]);
   const [funnelData, setFunnelData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [latency, setLatency] = useState<number | null>(null);
@@ -72,7 +71,7 @@ const Index = () => {
         supabase.from('main_website_content').select('scrape_status'),
         supabase.from('errores_ia').select('count', { count: 'exact', head: true }).eq('estado_correccion', 'VALIDADA'),
         supabase.from('app_config').select('key').eq('key', 'prompt_adn_core').limit(1).maybeSingle(),
-        supabase.from('activity_logs').select('count', { count: 'exact', head: true }).like('description', '%Pago VALIDADO%')
+        supabase.from('activity_logs').select('count', { count: 'exact', head: true }).like('description', '%Venta CERRADA%')
       ]);
 
       const end = performance.now();
@@ -114,7 +113,6 @@ const Index = () => {
 
     } catch (err) {
       console.error("Dashboard error:", err);
-      setLatency(null); 
     } finally {
       setLoading(false);
     }
@@ -131,7 +129,7 @@ const Index = () => {
                <div className="w-8 h-8 rounded bg-red-600 flex items-center justify-center text-xs">侍</div>
                Samurai Command Center
             </h1>
-            <p className="text-slate-400">Operaciones Tácticas & Inteligencia de Datos</p>
+            <p className="text-slate-400 text-sm">Operaciones Tácticas & Inteligencia de Datos</p>
           </div>
           <div className="flex items-center gap-3 bg-slate-900/50 p-2 px-4 rounded-full border border-slate-800 h-10 shadow-lg">
              <div className={`w-2 h-2 rounded-full animate-pulse ${latency !== null ? 'bg-green-500' : 'bg-red-500'}`}></div>

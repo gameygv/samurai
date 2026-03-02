@@ -32,6 +32,7 @@ const AgentBrain = () => {
   const [masterPrompt, setMasterPrompt] = useState("");
   const [loadingMaster, setLoadingMaster] = useState(false);
 
+  // Simulation State
   const [simQuestion, setSimQuestion] = useState("");
   const [simSteps, setSimSteps] = useState<any[]>([]);
   const [simulating, setSimulating] = useState(false);
@@ -113,6 +114,7 @@ const AgentBrain = () => {
      setSimExplanation(null);
      
      try {
+        // Simulación visual de pasos
         const visualSteps = [
             { icon: Fingerprint, phase: "PHASE 1: DATA HUNTING", status: "Validando Nombre/Ciudad para Meta CAPI...", color: "text-indigo-400" },
             { icon: Image, phase: "PHASE 2: SEDUCTION", status: "Buscando Posters relevantes en Media Manager...", color: "text-emerald-400" },
@@ -147,7 +149,7 @@ const AgentBrain = () => {
             <h1 className="text-3xl font-bold text-white flex items-center gap-3">
                <BrainCircuit className="w-8 h-8 text-indigo-500" /> Jerarquía de Consciencia
             </h1>
-            <p className="text-slate-400">Control maestro de las 5 Capas del Samurai.</p>
+            <p className="text-slate-400 text-sm">Control maestro de las 5 Capas del Samurai.</p>
           </div>
           <Button onClick={handleSave} disabled={saving} className="bg-indigo-600 hover:bg-indigo-700 font-bold px-8 shadow-xl">
              {saving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />}
