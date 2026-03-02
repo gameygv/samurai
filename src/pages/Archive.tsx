@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { 
   Archive as ArchiveIcon, Search, Loader2, MessageSquare, 
-  Calendar, User, Bot, ArrowRight, Filter, RefreshCw, Trash2, Sparkles
+  Calendar, User, Bot, ArrowRight, Filter, RefreshCw, Trash2, Sparkles, Mail
 } from 'lucide-react';
 import { toast } from 'sonner';
 import ChatViewer from '@/components/ChatViewer';
@@ -37,6 +37,7 @@ const Archive = () => {
 
       if (error) throw error;
       
+      // Mostrar leads que tengan nombre real O mensajes
       const validLeads = (data || []).filter(l => (l.nombre && l.nombre !== 'Nuevo Lead WhatsApp') || (l.conversaciones && l.conversaciones.length > 0));
       setConversations(validLeads);
     } catch (err: any) {
@@ -49,9 +50,11 @@ const Archive = () => {
 
   const handleRunAnalysis = async () => {
      setAnalyzing(true);
-     toast.info("Iniciando análisis neuronal de conversaciones recientes...");
+     toast.info("Forzando extracción de datos (Emails/Nombres)...");
      try {
-        const { data, error } = await supabase.functions.invoke('analyze-leads', {});
+        const { data, error } = await supabase.functions.invoke('analyze-leads', {
+           body: { force: true } // FORCE MODE
+        });
         
         if (error) {
           const errorBody = await error.context.json();
@@ -59,16 +62,13 @@ const Archive = () => {
         }
         
         if (data.results && data.results.length > 0) {
-           toast.success(`Análisis completo: ${data.results.length} perfiles actualizados.`);
+           toast.success(`Análisis completo: ${data.results.length} perfiles enriquecidos.`);
            fetchArchive();
         } else {
            toast.info(data.message || "No se encontraron leads pendientes de análisis.");
         }
      } catch (err: any) {
         toast.error("Error en análisis: " + err.message);
-        if (err.message.includes("Gemini API Key")) {
-           toast.warning("Ve a Ajustes > API Keys y configura tu Gemini API Key.", { duration: 6000 });
-        }
      } finally {
         setAnalyzing(false);
      }
@@ -130,7 +130,7 @@ const Archive = () => {
               disabled={analyzing}
             >
               {analyzing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Sparkles className="w-4 h-4 mr-2" />}
-              Analizar Chats
+              Forzar Análisis
             </Button>
             <div className="relative w-full md:w-80">
               <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-500" />
@@ -170,7 +170,8 @@ const Archive = () => {
                     <TableCell>
                        <div className="flex flex-col">
                           <span className="font-bold text-slate-200">{lead.nombre || 'Sin nombre'}</span>
-                          <span className="text-[10px] text-slate-500 font-mono">{lead.telefono || 'Sin número'}</span>
+                          <span className="text-[10px] text-slate-500 font-mono truncate w-32" title={lead.telefono}>{lead.telefono || 'Sin número'}</span>
+                          {lead.email && <span className="text-[9px] text-emerald-500 flex items-center gap-1 mt-0.5"><Mail className="w-2.5 h-2.5"/> {lead.email}</span>}
                        </div>
                     </TableCell>
                     <TableCell>

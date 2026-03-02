@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import {
   MessageSquare, Search, Loader2, Phone, Zap, BrainCircuit,
   Clock, MapPin, UserCheck, Brain, RefreshCw, Sparkles,
-  AlertCircle, TrendingUp, Smile, Meh, Frown, Target
+  AlertCircle, TrendingUp, Smile, Meh, Frown, Target, Mail
 } from 'lucide-react';
 import { toast } from 'sonner';
 import ChatViewer from '@/components/ChatViewer';
@@ -62,9 +62,12 @@ const Leads = () => {
 
   const handleRunAnalysis = async () => {
      setAnalyzing(true);
-     const tid = toast.loading("Sincronizando con redes neuronales...");
+     // Enviamos force: true para obligar a la IA a re-leer los chats aunque sean recientes o cortos
+     const tid = toast.loading("Forzando re-análisis neuronal de conversaciones...");
      try {
-        const { data, error } = await supabase.functions.invoke('analyze-leads', {});
+        const { data, error } = await supabase.functions.invoke('analyze-leads', {
+           body: { force: true } 
+        });
         
         if (error) {
           const errorBody = await error.context.json();
@@ -72,16 +75,13 @@ const Leads = () => {
         }
         
         if (data.results && data.results.length > 0) {
-           toast.success(`Análisis completo: ${data.results.length} perfiles actualizados.`, { id: tid });
+           toast.success(`Datos extraídos: ${data.results.length} perfiles enriquecidos.`, { id: tid });
            fetchLeads();
         } else {
-           toast.info(data.message || "No se encontraron leads pendientes de análisis.", { id: tid });
+           toast.info(data.message || "No se encontraron leads pendientes.", { id: tid });
         }
      } catch (err: any) {
-        toast.error("Error en análisis: " + err.message, { id: tid });
-        if (err.message.includes("Gemini API Key")) {
-           toast.warning("Ve a Ajustes > API Keys y configura tu Gemini API Key.", { duration: 6000 });
-        }
+        toast.error("Error: " + err.message, { id: tid });
      } finally {
         setAnalyzing(false);
      }
@@ -149,13 +149,12 @@ const Leads = () => {
           </div>
           <div className="flex gap-3 items-center w-full md:w-auto">
              <Button 
-               variant="outline" 
-               className="border-indigo-500/30 text-indigo-400 hover:bg-indigo-500/10"
+               className="bg-indigo-600 hover:bg-indigo-700 shadow-lg shadow-indigo-900/20 text-white"
                onClick={handleRunAnalysis}
                disabled={analyzing}
              >
                 {analyzing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Sparkles className="w-4 h-4 mr-2" />}
-                Analizar Chats
+                Forzar Análisis IA
              </Button>
              <div className="relative w-full md:w-64">
                <Search className="absolute left-2 top-2.5 h-4 w-4 text-slate-500" />
@@ -232,7 +231,10 @@ const Leads = () => {
                             {lead.nombre || 'Desconocido'}
                             {lead.ai_paused && <Badge variant="destructive" className="h-4 px-1 text-[8px] bg-red-600">STOP</Badge>}
                          </span>
-                         <span className="text-[10px] text-slate-500 mt-0.5 font-mono">{lead.telefono || 'Sin número'}</span>
+                         <span className="text-[10px] text-slate-500 mt-0.5 font-mono truncate max-w-[120px]" title={lead.telefono}>
+                            {lead.telefono ? lead.telefono.substring(0, 15) + (lead.telefono.length > 15 ? '...' : '') : 'Sin número'}
+                         </span>
+                         {lead.email && <span className="text-[9px] text-emerald-500 flex items-center gap-1"><Mail className="w-2.5 h-2.5"/> {lead.email}</span>}
                       </div>
                     </TableCell>
                     <TableCell>
@@ -245,7 +247,7 @@ const Leads = () => {
                              {getAnalysisFreshness(lead.last_analyzed_at)}
                           </div>
                        ) : (
-                          <span className="text-[9px] text-slate-700 italic">Sin datos</span>
+                          <span className="text-[9px] text-slate-700 italic opacity-50">Sin datos</span>
                        )}
                     </TableCell>
                     <TableCell className="text-center">
