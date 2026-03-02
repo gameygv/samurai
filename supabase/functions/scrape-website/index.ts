@@ -12,7 +12,6 @@ const corsHeaders = {
 };
 
 serve(async (req) => {
-  // Manejo de Preflight CORS
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
@@ -26,23 +25,26 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
-    // --- MODO VISIÓN (GEMINI AI) ---
     if (mode === 'VISION') {
-       console.log(`[Vision AI] Iniciando análisis de imagen: ${url}`);
+       console.log(`[scrape-website] VISION mode started for URL: ${url}`);
        
-       // 1. Obtener API Key de Gemini
-       const { data: config } = await supabaseClient.from('app_config').select('value').eq('key', 'gemini_api_key').single();
-       if (!config?.value) throw new Error("Gemini API Key no configurada en Ajustes.");
-       
-       // 2. Descargar la imagen
+       const { data: config, error: configError } = await supabaseClient.from('app_config').select('value').eq('key', 'gemini_api_key').single();
+       if (configError || !config?.value) {
+         throw new Error("Gemini API Key not found in app_config.");
+       }
+       console.log("[scrape-website] Gemini API Key loaded.");
+
        const imgResponse = await fetch(url);
-       if (!imgResponse.ok) throw new Error(`Fallo al descargar imagen para OCR: ${imgResponse.statusText}`);
-       
+       if (!imgResponse.ok) {
+         throw new Error(`Failed to download image. Status: ${imgResponse.status} ${imgResponse.statusText}`);
+       }
+       console.log("[scrape-website] Image downloaded successfully.");
+
        const imgBlob = await imgResponse.blob();
        const arrayBuffer = await imgBlob.arrayBuffer();
        const base64String = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
+       console.log(`[scrape-website] Image converted to Base64. Mime-type: ${imgBlob.type}`);
 
-       // 3. Prompt Táctico basado en el tipo de archivo
        const prompt = `
          Actúa como el sistema de visión avanzada 'Ojo de Halcón' de Samurai AI.
          Analiza esta imagen y extrae el texto de forma estructurada.
@@ -69,28 +71,30 @@ serve(async (req) => {
           }]
        };
 
-       const response = await fetch(`${GEMINI_URL}?key=${config.value}`, {
+       const geminiResponse = await fetch(`${GEMINI_URL}?key=${config.value}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(geminiPayload)
        });
+       console.log(`[scrape-website] Gemini API response status: ${geminiResponse.status}`);
 
-       const data = await response.json();
-       
-       if (data.error) {
-          console.error("[Gemini Error]", data.error);
-          throw new Error(`Gemini API Error: ${data.error.message}`);
+       const responseBodyText = await geminiResponse.text();
+
+       if (!geminiResponse.ok) {
+         console.error("[scrape-website] Gemini API Error Response Body:", responseBodyText);
+         throw new Error(`Gemini API request failed with status ${geminiResponse.status}. Response: ${responseBodyText}`);
+       }
+
+       const data = JSON.parse(responseBodyText);
+       const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+
+       if (!text) {
+         console.warn("[scrape-website] Gemini responded OK but no text was found in candidates.", data);
+         throw new Error("Gemini analysis completed, but no text was extracted.");
        }
        
-       const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || "No se pudo extraer texto de la imagen.";
-
-       return new Response(JSON.stringify({ 
-          success: true, 
-          content: text, 
-          source: 'Gemini 1.5 Vision API' 
-       }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-       });
+       console.log("[scrape-website] VISION mode completed successfully.");
+       return new Response(JSON.stringify({ success: true, content: text }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     // --- MODO WEB (CHEERIO) ---
@@ -110,10 +114,7 @@ serve(async (req) => {
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
   } catch (error) {
-    console.error("[scrape-website] Error Crítico:", error.message);
-    return new Response(JSON.stringify({ success: false, error: error.message }), { 
-        status: 400, 
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-    });
+    console.error("[scrape-website] CRITICAL ERROR in function:", error.message);
+    return new Response(JSON.stringify({ success: false, error: error.message }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   }
 })
