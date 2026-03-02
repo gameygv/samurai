@@ -58,7 +58,6 @@ const Leads = () => {
 
   const handleRunAnalysis = async () => {
      setAnalyzing(true);
-     // Enviamos force: true para obligar a la IA a re-leer los chats aunque sean recientes o cortos
      const tid = toast.loading("Forzando re-análisis neuronal de conversaciones...");
      try {
         const { data, error } = await supabase.functions.invoke('analyze-leads', {
@@ -96,18 +95,6 @@ const Leads = () => {
      if (minutes < 60) return <span className="text-[9px] text-green-500 font-bold">Hace {minutes}m</span>;
      if (minutes < 1440) return <span className="text-[9px] text-slate-400">Hace {Math.floor(minutes/60)}h</span>;
      return <span className="text-[9px] text-slate-600">Hace {Math.floor(minutes/1440)}d</span>;
-  };
-
-  const getNextFollowup = (lead: any) => {
-     if (lead.ai_paused) return <span className="text-[9px] text-red-500/50 uppercase font-bold">Pausado</span>;
-     if (!lead.next_followup_at) return <span className="text-[9px] text-slate-700">Sin programar</span>;
-     
-     const diff = new Date(lead.next_followup_at).getTime() - new Date().getTime();
-     const minutes = Math.floor(diff / 60000);
-     
-     if (minutes <= 0) return <Badge className="bg-indigo-600 animate-pulse h-4 text-[8px]">DUE NOW</Badge>;
-     if (minutes < 60) return <span className="text-[9px] text-indigo-400 font-bold flex items-center gap-1"><Clock className="w-3 h-3"/> en {minutes}m</span>;
-     return <span className="text-[9px] text-slate-500 flex items-center gap-1"><Clock className="w-3 h-3"/> en {Math.floor(minutes/60)}h</span>;
   };
 
   const getMoodIcon = (mood: string) => {
@@ -164,49 +151,24 @@ const Leads = () => {
           </div>
         </div>
 
-        {/* INDICADORES DE CALOR (HEATMAP SUMMARY) */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <IntentCard 
-            label="Alta Intención 🔥" 
-            count={intentStats.alto} 
-            color="border-red-500/50" 
-            active={filterIntent === 'ALTO'} 
-            onClick={() => setFilterIntent(filterIntent === 'ALTO' ? 'ALL' : 'ALTO')}
-          />
-          <IntentCard 
-            label="Intención Media ⚡" 
-            count={intentStats.medio} 
-            color="border-yellow-500/50" 
-            active={filterIntent === 'MEDIO'} 
-            onClick={() => setFilterIntent(filterIntent === 'MEDIO' ? 'ALL' : 'MEDIO')}
-          />
-          <IntentCard 
-            label="Interés Inicial ❄️" 
-            count={intentStats.bajo} 
-            color="border-blue-500/50" 
-            active={filterIntent === 'BAJO'} 
-            onClick={() => setFilterIntent(filterIntent === 'BAJO' ? 'ALL' : 'BAJO')}
-          />
+          <IntentCard label="Alta Intención 🔥" count={intentStats.alto} color="border-red-500/50" active={filterIntent === 'ALTO'} onClick={() => setFilterIntent(filterIntent === 'ALTO' ? 'ALL' : 'ALTO')} />
+          <IntentCard label="Intención Media ⚡" count={intentStats.medio} color="border-yellow-500/50" active={filterIntent === 'MEDIO'} onClick={() => setFilterIntent(filterIntent === 'MEDIO' ? 'ALL' : 'MEDIO')} />
+          <IntentCard label="Interés Inicial ❄️" count={intentStats.bajo} color="border-blue-500/50" active={filterIntent === 'BAJO'} onClick={() => setFilterIntent(filterIntent === 'BAJO' ? 'ALL' : 'BAJO')} />
         </div>
 
         <Card className="bg-slate-900 border-slate-800">
           <CardHeader className="border-b border-slate-800 flex flex-row items-center justify-between">
             <CardTitle className="text-white flex items-center gap-2 text-sm uppercase tracking-widest">
-              <Target className="w-4 h-4 text-indigo-400" />
-              Prospectos en el Embudo
+              <Target className="w-4 h-4 text-indigo-400" /> Prospectos en el Embudo
             </CardTitle>
-            {filterIntent !== 'ALL' && (
-              <Button variant="ghost" size="sm" className="text-[10px] text-indigo-400" onClick={() => setFilterIntent('ALL')}>
-                Ver todos
-              </Button>
-            )}
           </CardHeader>
           <CardContent className="p-0">
             <Table>
               <TableHeader>
                 <TableRow className="border-slate-800 hover:bg-slate-900">
                   <TableHead className="text-slate-400 text-[10px] uppercase">Cliente</TableHead>
-                  <TableHead className="text-slate-400 text-[10px] uppercase">Datos CAPI</TableHead>
+                  <TableHead className="text-slate-400 text-[10px] uppercase">Datos CAPI (Salud)</TableHead>
                   <TableHead className="text-slate-400 text-[10px] uppercase text-center">IA Analysis</TableHead>
                   <TableHead className="text-slate-400 text-[10px] uppercase text-center">Ánimo</TableHead>
                   <TableHead className="text-slate-400 text-[10px] uppercase">Intención</TableHead>
@@ -216,66 +178,45 @@ const Leads = () => {
               <TableBody>
                 {loading ? (
                    <TableRow><TableCell colSpan={6} className="text-center h-32"><Loader2 className="w-6 h-6 animate-spin mx-auto text-indigo-600" /></TableCell></TableRow>
-                ) : filteredLeads.length === 0 ? (
-                  <TableRow><TableCell colSpan={6} className="text-center h-32 text-slate-500 italic">No se encontraron leads con estos criterios.</TableCell></TableRow>
                 ) : filteredLeads.map((lead) => (
                   <TableRow key={lead.id} className="border-slate-800 hover:bg-slate-800/30 transition-colors">
                     <TableCell>
                       <div className="flex flex-col">
                          <span className={cn("font-bold flex items-center gap-2", lead.nombre && !lead.nombre.includes('Nuevo') ? 'text-indigo-400' : 'text-slate-300')}>
-                            {lead.nombre && !lead.nombre.includes('Nuevo') && <UserCheck className="w-3.5 h-3.5" />}
                             {lead.nombre || 'Desconocido'}
                             {lead.ai_paused && <Badge variant="destructive" className="h-4 px-1 text-[8px] bg-red-600">STOP</Badge>}
                          </span>
-                         <span className="text-[10px] text-slate-500 mt-0.5 font-mono truncate max-w-[120px]" title={lead.telefono}>
-                            {lead.telefono ? lead.telefono.substring(0, 15) + (lead.telefono.length > 15 ? '...' : '') : 'Sin número'}
-                         </span>
+                         <span className="text-[10px] text-slate-500 mt-0.5 font-mono truncate max-w-[120px]">{lead.telefono}</span>
                       </div>
                     </TableCell>
                     <TableCell>
-                       {/* CAPI STATUS VISUALIZATION */}
                        <div className="flex flex-col gap-1">
                           {lead.email ? (
                              <span className="text-[9px] text-emerald-500 flex items-center gap-1"><Mail className="w-2.5 h-2.5"/> {lead.email}</span>
                           ) : (
-                             <span className="text-[9px] text-red-500 flex items-center gap-1 animate-pulse"><AlertCircle className="w-2.5 h-2.5"/> Falta Email</span>
+                             <span className="text-[9px] text-red-500 flex items-center gap-1 animate-pulse font-bold"><AlertCircle className="w-2.5 h-2.5"/> FALTA EMAIL</span>
                           )}
-                          
-                          {lead.capi_lead_event_sent_at ? (
-                             <Badge variant="outline" className="text-[8px] h-3 px-1 border-emerald-500/30 text-emerald-500 bg-emerald-500/10 w-fit">ENVIADO A META</Badge>
-                          ) : (
-                             lead.buying_intent === 'ALTO' ? (
-                                <Badge variant="outline" className="text-[8px] h-3 px-1 border-yellow-500/30 text-yellow-500 bg-yellow-500/10 w-fit">PENDIENTE ENVÍO</Badge>
-                             ) : null
-                          )}
+                          <span className="text-[9px] text-slate-500 flex items-center gap-1"><MapPin className="w-2.5 h-2.5"/> {lead.ciudad || 'CIUDAD DESCONOCIDA'}</span>
                        </div>
                     </TableCell>
                     <TableCell className="text-center">
                        {lead.summary ? (
-                          <div className="flex flex-col items-center gap-1" title={lead.summary}>
+                          <div className="flex flex-col items-center gap-1">
                              <Brain className="w-5 h-5 text-indigo-500" />
                              {getAnalysisFreshness(lead.last_analyzed_at)}
                           </div>
                        ) : (
-                          <span className="text-[9px] text-slate-700 italic opacity-50">Sin datos</span>
+                          <span className="text-[9px] text-slate-700 italic">Sin datos</span>
                        )}
                     </TableCell>
                     <TableCell className="text-center">
-                       <div className="flex justify-center">
-                          {getMoodIcon(lead.estado_emocional_actual)}
-                       </div>
+                       <div className="flex justify-center">{getMoodIcon(lead.estado_emocional_actual)}</div>
                     </TableCell>
                     <TableCell>
                        <div className="flex flex-col gap-1 w-[100px]">
-                          <div className="flex justify-between text-[8px] text-slate-500 font-bold uppercase">
-                             <span>{lead.buying_intent || 'BAJO'}</span>
-                             <TrendingUp className={cn("w-2.5 h-2.5", lead.buying_intent?.toUpperCase() === 'ALTO' ? 'text-green-500' : 'text-slate-500')} />
-                          </div>
+                          <div className="flex justify-between text-[8px] text-slate-500 font-bold uppercase"><span>{lead.buying_intent || 'BAJO'}</span></div>
                           <div className="h-1 bg-slate-800 rounded-full overflow-hidden">
-                             <div className={cn(
-                                "h-full transition-all duration-500",
-                                lead.buying_intent?.toUpperCase() === 'ALTO' ? 'bg-green-500' : lead.buying_intent?.toUpperCase() === 'MEDIO' ? 'bg-yellow-500' : 'bg-slate-700'
-                             )} style={{ width: lead.buying_intent?.toUpperCase() === 'ALTO' ? '90%' : lead.buying_intent?.toUpperCase() === 'MEDIO' ? '50%' : '10%' }} />
+                             <div className={cn("h-full transition-all duration-500", lead.buying_intent?.toUpperCase() === 'ALTO' ? 'bg-green-500' : lead.buying_intent?.toUpperCase() === 'MEDIO' ? 'bg-yellow-500' : 'bg-slate-700')} style={{ width: lead.buying_intent?.toUpperCase() === 'ALTO' ? '90%' : lead.buying_intent?.toUpperCase() === 'MEDIO' ? '50%' : '10%' }} />
                           </div>
                        </div>
                     </TableCell>
@@ -290,25 +231,14 @@ const Leads = () => {
             </Table>
           </CardContent>
         </Card>
-
-        {selectedLead && <ChatViewer lead={selectedLead} open={isChatOpen} onOpenChange={setIsChatOpen} />}
       </div>
     </Layout>
   );
 };
 
 const IntentCard = ({ label, count, color, active, onClick }: any) => (
-  <Card 
-    className={cn(
-      "bg-slate-900 border-slate-800 p-4 cursor-pointer transition-all hover:scale-[1.02]",
-      active ? cn("ring-2 ring-indigo-500", color) : "hover:border-slate-700"
-    )}
-    onClick={onClick}
-  >
-    <div className="flex justify-between items-center">
-      <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">{label}</span>
-      <span className="text-2xl font-bold text-white">{count}</span>
-    </div>
+  <Card className={cn("bg-slate-900 border-slate-800 p-4 cursor-pointer transition-all hover:scale-[1.02]", active ? cn("ring-2 ring-indigo-500", color) : "hover:border-slate-700")} onClick={onClick}>
+    <div className="flex justify-between items-center"><span className="text-xs font-bold text-slate-400 uppercase tracking-widest">{label}</span><span className="text-2xl font-bold text-white">{count}</span></div>
   </Card>
 );
 
