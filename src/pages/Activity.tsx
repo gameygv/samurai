@@ -66,6 +66,12 @@ const ActivityPage = () => {
                     <StatusLine label="Media Storage" status="OK" />
                  </CardContent>
               </Card>
+              
+              <div className="bg-indigo-900/10 border border-indigo-500/20 p-4 rounded-xl">
+                 <p className="text-[10px] text-indigo-300 italic leading-relaxed">
+                    Este monitor captura cada vez que Sam detecta un Email o una Ciudad, disparando automáticamente la sincronización con tu CRM y Meta CAPI.
+                 </p>
+              </div>
            </div>
         </div>
       </div>

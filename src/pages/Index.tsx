@@ -7,7 +7,6 @@ import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { SystemStatus } from '@/components/SystemStatus';
 import { BrainHealthCard } from '@/components/dashboard/BrainHealthCard';
-import { TaskRadar } from '@/components/dashboard/TaskRadar';
 import { cn } from '@/lib/utils';
 import { 
   Database, Shield, Activity, Terminal, AlertTriangle, 
@@ -126,7 +125,7 @@ const Index = () => {
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <h1 className="text-3xl font-bold text-white tracking-tight flex items-center gap-3">
-               <div className="w-8 h-8 rounded bg-red-600 flex items-center justify-center text-xs">侍</div>
+               <div className="w-8 h-8 rounded bg-red-600 flex items-center justify-center text-xs shadow-lg shadow-red-900/50">侍</div>
                Samurai Command Center
             </h1>
             <p className="text-slate-400 text-sm">Operaciones Tácticas & Inteligencia de Datos</p>
@@ -197,7 +196,7 @@ const Index = () => {
                 <QuickButton label="Probar IA" path="/brain?tab=simulador" icon={Zap} color="bg-indigo-600/10 text-indigo-500 border-indigo-500/20" />
                 <QuickButton label="Radar Leads" path="/leads" icon={MessageSquare} color="bg-emerald-600/10 text-emerald-500 border-emerald-500/20" />
                 <QuickButton label="Media Manager" path="/media" icon={ImageIcon} color="bg-blue-600/10 text-blue-500 border-blue-500/20" />
-                <QuickButton label="Tablero Pipeline" path="/pipeline" icon={Trello} color="bg-purple-600/10 text-purple-500 border-purple-500/20" />
+                <QuickButton label="Monitor Live" path="/activity" icon={Activity} color="bg-red-600/10 text-red-500 border-red-500/20" />
              </div>
           </div>
 
@@ -226,7 +225,7 @@ const Index = () => {
                  </div>
               </ScrollArea>
               <div className="p-2 bg-slate-900/50 border-t border-slate-800 text-center">
-                 <button onClick={() => window.location.href='/logs'} className="text-[8px] text-slate-500 hover:text-indigo-400 uppercase font-bold tracking-widest">Ver Historial Completo</button>
+                 <button onClick={() => window.location.href='/activity'} className="text-[8px] text-slate-500 hover:text-indigo-400 uppercase font-bold tracking-widest">Ver Monitor en Vivo</button>
               </div>
             </Card>
           </div>

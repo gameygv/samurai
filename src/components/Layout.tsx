@@ -2,9 +2,9 @@ import React, { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { 
   LayoutDashboard, Brain, Settings as SettingsIcon, Database, LogOut, 
-  Users, FileText, UserCircle, GraduationCap, MessageSquare, 
+  Users, FileText, UserCircle, MessageSquare, 
   GitBranch, Link as LinkIcon, Image, Sparkles, BookOpen, Clock,
-  Archive, Globe, CreditCard, BarChart3, Zap, Trello, Menu
+  Archive, Globe, CreditCard, BarChart3, Zap, Trello, Menu, Activity
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/context/AuthContext';
@@ -36,21 +36,21 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
       title: "PRINCIPAL",
       items: [
         { icon: LayoutDashboard, label: 'Dashboard', path: '/' },
+        { icon: Activity, label: 'Monitor Live', path: '/activity' },
       ]
     },
     {
       title: "SAMURAI AI",
       items: [
         { icon: Brain, label: 'Cerebro Core', path: '/brain' },
-        { icon: GitBranch, label: 'Control de Versiones', path: '/brain?tab=versiones' },
+        { icon: Zap, label: 'Bitácora #CIA', path: '/learning' },
       ]
     },
     {
       title: "RECURSOS",
       items: [
-        { icon: Zap, label: 'Bitácora #CIA (Aprendizaje)', path: '/learning' },
+        { icon: Globe, label: 'Verdad Maestra', path: '/website-content' },
         { icon: Database, label: 'Base Conocimiento', path: '/knowledge' },
-        { icon: Globe, label: 'Sitio Web Principal', path: '/website-content' },
         { icon: Image, label: 'Media Manager', path: '/media' },
       ]
     },
@@ -61,8 +61,6 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
         { icon: MessageSquare, label: 'Radar de Leads', path: '/leads' },
         { icon: CreditCard, label: 'Pagos & Ventas', path: '/payments' },
         { icon: Archive, label: 'Archivo de Chats', path: '/archive' },
-        { icon: Users, label: 'Usuarios', path: '/users' },
-        { icon: FileText, label: 'Logs & Actividad', path: '/logs' },
       ]
     },
     {
@@ -70,9 +68,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
       items: [
         { icon: BarChart3, label: 'Meta CAPI', path: '/meta-capi' },
         { icon: BookOpen, label: 'Manual de Ayuda', path: '/manual' },
-        { icon: Clock, label: 'Follow-ups Auto', path: '/settings?tab=ventas' },
-        { icon: LinkIcon, label: 'Integraciones', path: '/settings?tab=webhooks' },
-        { icon: SettingsIcon, label: 'API Keys', path: '/settings?tab=secrets' },
+        { icon: SettingsIcon, label: 'Ajustes', path: '/settings' },
       ]
     }
   ];
@@ -98,8 +94,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
               <div className="space-y-1">
                 {group.items.map((item) => {
                   const Icon = item.icon;
-                  const isActive = location.pathname === item.path.split('?')[0] && 
-                                  (!item.path.includes('tab=') || location.search.includes(item.path.split('?')[1]));
+                  const isActive = location.pathname === item.path;
                   
                   return (
                     <Link
@@ -123,19 +118,11 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
           ))}
         </div>
       </ScrollArea>
-
-      <div className="p-4 border-t border-slate-800">
-         <div className="flex items-center gap-2 px-2 py-1 mb-1">
-            <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
-            <span className="text-xs text-slate-400 font-mono">SAMURAI: ONLINE</span>
-         </div>
-      </div>
     </div>
   );
 
   return (
     <div className="flex min-h-screen bg-slate-950 text-white font-sans">
-      {/* Desktop Sidebar */}
       <aside className="w-64 border-r border-slate-800 bg-slate-900/50 hidden md:flex flex-col">
         <NavContent />
       </aside>
@@ -143,7 +130,6 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
       <main className="flex-1 overflow-auto flex flex-col">
         <header className="h-16 border-b border-slate-800 bg-slate-900/30 backdrop-blur-md flex items-center px-4 md:px-8 justify-between sticky top-0 z-10">
           <div className="flex items-center gap-4">
-            {/* Mobile Trigger */}
             <Sheet open={isMobileOpen} onOpenChange={setIsMobileOpen}>
               <SheetTrigger asChild>
                 <Button variant="ghost" size="icon" className="md:hidden text-slate-400">
@@ -154,10 +140,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
                 <NavContent />
               </SheetContent>
             </Sheet>
-
-            <h2 className="text-lg font-medium text-slate-200 truncate">
-              Panel de Control
-            </h2>
+            <h2 className="text-lg font-medium text-slate-200 truncate">Control Maestro</h2>
           </div>
           
           <div className="flex items-center gap-4">
@@ -169,31 +152,10 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
                   </div>
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent className="w-56 bg-slate-900 border-slate-800 text-slate-200" align="end" forceMount>
-                <DropdownMenuLabel className="font-normal">
-                  <div className="flex flex-col space-y-1">
-                    <p className="text-sm font-medium leading-none text-white">{profile?.full_name || 'Usuario'}</p>
-                    <p className="text-xs leading-none text-slate-500">{user?.email}</p>
-                  </div>
-                </DropdownMenuLabel>
+              <DropdownMenuContent className="w-56 bg-slate-900 border-slate-800 text-slate-200" align="end">
+                <DropdownMenuItem onClick={() => navigate('/profile')}>Mi Perfil</DropdownMenuItem>
                 <DropdownMenuSeparator className="bg-slate-800" />
-                <DropdownMenuItem className="focus:bg-slate-800 focus:text-white cursor-pointer" onClick={() => navigate('/profile')}>
-                  <UserCircle className="mr-2 h-4 w-4" />
-                  <span>Mi Perfil</span>
-                </DropdownMenuItem>
-                <DropdownMenuItem className="focus:bg-slate-800 focus:text-white cursor-pointer" onClick={() => navigate('/manual')}>
-                  <BookOpen className="mr-2 h-4 w-4" />
-                  <span>Manual de Ayuda</span>
-                </DropdownMenuItem>
-                <DropdownMenuItem className="focus:bg-slate-800 focus:text-white cursor-pointer" onClick={() => navigate('/settings')}>
-                  <SettingsIcon className="mr-2 h-4 w-4" />
-                  <span>Configuración API</span>
-                </DropdownMenuItem>
-                <DropdownMenuSeparator className="bg-slate-800" />
-                <DropdownMenuItem className="text-red-500 focus:bg-red-500/10 focus:text-red-500 cursor-pointer" onClick={handleLogout}>
-                  <LogOut className="mr-2 h-4 w-4" />
-                  <span>Cerrar Sesión</span>
-                </DropdownMenuItem>
+                <DropdownMenuItem className="text-red-500" onClick={handleLogout}>Cerrar Sesión</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
