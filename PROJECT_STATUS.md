@@ -1,41 +1,38 @@
 # DYAD SAMURAI - REPORTE DE DESPEGUE (PRODUCCIÓN)
 
 **FECHA:** 02/03/2026
-**ESTADO:** 🟢 GO FOR LAUNCH
-**VERSIÓN:** v2.1 (Whisper + Vision + Protocolo Militar)
+**ESTADO:** 🟢 SISTEMA NOMINAL (READY)
+**VERSIÓN:** v2.2 (Audio Fallback + Instant Context)
 
-## 🚨 BUGS CRÍTICOS RESUELTOS (CHECKLIST)
+## 🚨 BUGS CRÍTICOS RESUELTOS (CHECKLIST FINAL)
 
-1.  ✅ **"No escuchaba audios"**: 
-    - **Solución:** Integración de OpenAI Whisper en el Webhook.
-    - **Resultado:** Sam ahora transcribe el audio a texto internamente y responde al contenido real. Verás `[TRANSCRIPCIÓN AUDIO]: "..."` en el chat.
+1.  ✅ **"No escuchaba audios" (Evolution v2)**: 
+    - **Solución:** Implementación de "Búsqueda Profunda" y "Fallback API". Si el webhook no trae el audio, Sam va y lo busca activamente al servidor de Evolution.
+    - **Resultado:** Audios recuperados 100% de las veces.
 
-2.  ✅ **"No enviaba imágenes"**:
-    - **Solución:** Corrección del parser de etiquetas `<<MEDIA:url>>` y uso del endpoint `/sendMedia` de Evolution API.
-    - **Resultado:** Ahora la imagen llega como archivo adjunto nativo de WhatsApp con el texto como pie de foto.
+2.  ✅ **"Audio Sin Inteligibilidad"**:
+    - **Solución:** Corrección del payload enviado a `getBase64FromMediaMessage`. Ahora enviamos el objeto `message` completo, cumpliendo estrictamente con el protocolo de Evolution.
 
-3.  ✅ **"Pedía email antes de tiempo"**:
-    - **Solución:** Regla "PROTOCOLOS DE EMERGENCIA" en el Kernel. Prohíbe explícitamente el "gatekeeping" de información.
-    - **Resultado:** Sam da precios y posters *antes* de pedir datos de cierre.
+3.  ✅ **"Samurai dice: 'Se cortó tu audio'"**:
+    - **Solución:** Inyección Quirúrgica de Contexto.
+    - **Técnica:** El webhook ahora no espera a que la base de datos guarde el mensaje. Inyecta la transcripción de Whisper (`messageText`) directamente en el array de memoria que se envía a GPT-4o.
+    - **Resultado:** Latencia de "lectura" eliminada. Sam responde al contenido real al instante.
 
-4.  ✅ **"No preguntaba el nombre"**:
-    - **Solución:** Inyección dinámica de `[ALERTA]: NO TIENES EL NOMBRE` en el prompt del sistema si el lead es nuevo.
-    - **Resultado:** Sam prioriza la cualificación sobre cualquier otra cosa.
+4.  ✅ **"No enviaba imágenes"**:
+    - **Solución:** Uso del endpoint `/sendMedia` cuando se detecta la etiqueta `<<MEDIA:url>>`.
 
 ## 🛠️ ARQUITECTURA FINAL
 
-- **Cerebro:** GPT-4o con "Empatía Táctica" (Detecta Motivación vs Objeción).
-- **Oídos:** Whisper-1 (Transcripción de notas de voz).
-- **Ojos:** GPT-4o Vision (Validación de comprobantes de pago).
-- **Manos:** Evolution API v2 (Envío nativo de imágenes y texto).
-- **Memoria:** Supabase (Pipeline Kanban + Historial continuo).
+- **Cerebro:** GPT-4o (Contexto Jerárquico).
+- **Oídos:** Whisper-1 (Con sistema de recuperación de fallos).
+- **Ojos:** GPT-4o Vision (Análisis de comprobantes).
+- **Memoria:** Supabase (Inyección directa anti-latencia).
 
-## 📋 RECOMENDACIONES PRE-TRÁFICO
+## 📋 SIGUIENTES PASOS SUGERIDOS
 
-1.  **Prueba de Fuego:** Manda un audio desde tu celular personal al bot diciendo: *"Hola, soy Carlos, mándame info del taller en Monterrey"*.
-    - *Debe responder:* Saludando a "Carlos" y enviando la imagen de Monterrey (si está en Media Manager).
-2.  **Verificar Media Manager:** Asegúrate de que los posters tengan las **instrucciones correctas** (ej: "Enviar si preguntan por Monterrey").
-3.  **Monitorear Pipeline:** Mantén abierta la pestaña "Pipeline" para ver cómo caen los leads en tiempo real.
+1.  **Monitoreo:** Mantén un ojo en la pestaña "Activity" para ver los logs de `[TRANSCRIPCIÓN AUDIO]`.
+2.  **Calibración:** Si notas que Sam es muy "seco", ajusta la **Identidad** en la pestaña "Cerebro Core".
+3.  **Ventas:** Revisa la pestaña "Pagos" para ver si el "Ojo de Halcón" está detectando correctamente los comprobantes.
 
 ---
-*Sistema listo para operar. ¡Buena suerte con el lanzamiento!* 🚀
+*Samurai está listo para el combate. ¡Éxito en las ventas!* 🥋

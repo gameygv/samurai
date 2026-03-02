@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
-import { Wifi, WifiOff, Database, Brain, Zap, AlertCircle, Globe } from 'lucide-react';
+import { Wifi, WifiOff, Database, Brain, Zap, AlertCircle, Globe, Radio } from 'lucide-react';
 
 interface ServiceStatus {
   name: string;
@@ -17,7 +17,7 @@ export const SystemStatus = () => {
     { name: 'Database', status: 'checking', icon: Database },
     { name: 'Auth Core', status: 'checking', icon: Zap },
     { name: 'AI Brain', status: 'checking', icon: Brain },
-    { name: 'Web Scraper', status: 'checking', icon: Globe },
+    { name: 'Evolution Link', status: 'checking', icon: Radio },
   ]);
 
   useEffect(() => {
@@ -49,26 +49,23 @@ export const SystemStatus = () => {
     });
 
     // Check AI Brain (config table)
-    const { error: brainError } = await supabase.from('app_config').select('count', { count: 'exact', head: true });
+    const { data: configData, error: brainError } = await supabase.from('app_config').select('key, value');
     newStatuses.push({
       name: 'AI Brain',
       status: brainError ? 'offline' : 'online',
       icon: Brain
     });
 
-    // Check Web Scraper (main website content)
-    const { data: scrapData, error: scrapError } = await supabase
-        .from('main_website_content')
-        .select('scrape_status, last_scraped_at')
-        .order('last_scraped_at', { ascending: false })
-        .limit(1);
+    // Check Evolution API Config
+    const evoUrl = configData?.find(c => c.key === 'evolution_api_url')?.value;
+    const evoKey = configData?.find(c => c.key === 'evolution_api_key')?.value;
+    const hasEvo = !!(evoUrl && evoKey);
     
-    const isOk = scrapData && scrapData[0]?.scrape_status === 'success';
     newStatuses.push({
-      name: 'Web Scraper',
-      status: scrapError ? 'offline' : (isOk ? 'online' : 'offline'),
-      icon: Globe,
-      detail: scrapData && scrapData[0] ? new Date(scrapData[0].last_scraped_at).toLocaleTimeString() : undefined
+        name: 'Evolution Link',
+        status: hasEvo ? 'online' : 'offline',
+        icon: Radio,
+        detail: hasEvo ? 'Config OK' : 'Faltan Keys'
     });
 
     setServices(newStatuses);
@@ -90,7 +87,7 @@ export const SystemStatus = () => {
                 <Icon className={`w-4 h-4 transition-colors ${service.status === 'online' ? 'text-green-500' : service.status === 'offline' ? 'text-red-500' : 'text-slate-500'}`} />
                 <div className="flex flex-col">
                    <span className="text-xs text-slate-300">{service.name}</span>
-                   {service.detail && <span className="text-[9px] text-slate-600 font-mono">Últ: {service.detail}</span>}
+                   {service.detail && <span className="text-[9px] text-slate-600 font-mono">{service.detail}</span>}
                 </div>
               </div>
               <div className="flex items-center gap-2">
