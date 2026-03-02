@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0'
+import { encode } from "https://deno.land/std@0.208.0/encoding/base64.ts";
 import * as cheerio from "https://esm.sh/cheerio@1.0.0-rc.12"
 
 const GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent";
@@ -23,27 +24,21 @@ serve(async (req) => {
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-    )
+    );
 
     if (mode === 'VISION') {
-       console.log(`[scrape-website] VISION mode started for URL: ${url}`);
+       console.log(`[Vision AI] Iniciando análisis de imagen: ${url}`);
        
-       const { data: config, error: configError } = await supabaseClient.from('app_config').select('value').eq('key', 'gemini_api_key').single();
-       if (configError || !config?.value) {
-         throw new Error("Gemini API Key not found in app_config.");
-       }
-       console.log("[scrape-website] Gemini API Key loaded.");
-
+       const { data: config } = await supabaseClient.from('app_config').select('value').eq('key', 'gemini_api_key').single();
+       if (!config?.value) throw new Error("Gemini API Key no configurada en Ajustes.");
+       
        const imgResponse = await fetch(url);
-       if (!imgResponse.ok) {
-         throw new Error(`Failed to download image. Status: ${imgResponse.status} ${imgResponse.statusText}`);
-       }
-       console.log("[scrape-website] Image downloaded successfully.");
-
+       if (!imgResponse.ok) throw new Error(`Fallo al descargar imagen para OCR: ${imgResponse.statusText}`);
+       
        const imgBlob = await imgResponse.blob();
        const arrayBuffer = await imgBlob.arrayBuffer();
-       const base64String = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
-       console.log(`[scrape-website] Image converted to Base64. Mime-type: ${imgBlob.type}`);
+       // Usando el método oficial y robusto de Deno para Base64
+       const base64String = encode(arrayBuffer);
 
        const prompt = `
          Actúa como el sistema de visión avanzada 'Ojo de Halcón' de Samurai AI.
@@ -71,34 +66,44 @@ serve(async (req) => {
           }]
        };
 
-       const geminiResponse = await fetch(`${GEMINI_URL}?key=${config.value}`, {
+       const response = await fetch(`${GEMINI_URL}?key=${config.value}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(geminiPayload)
        });
-       console.log(`[scrape-website] Gemini API response status: ${geminiResponse.status}`);
 
-       const responseBodyText = await geminiResponse.text();
+       const responseBodyText = await response.text();
 
-       if (!geminiResponse.ok) {
-         console.error("[scrape-website] Gemini API Error Response Body:", responseBodyText);
-         throw new Error(`Gemini API request failed with status ${geminiResponse.status}. Response: ${responseBodyText}`);
+       if (!response.ok) {
+         console.error("[Gemini Error]", responseBodyText);
+         let errorMessage = `Gemini API Error (Status: ${response.status})`;
+         try {
+           const errorJson = JSON.parse(responseBodyText);
+           errorMessage = errorJson.error?.message || errorMessage;
+         } catch (e) {
+           errorMessage += `: ${responseBodyText}`;
+         }
+         throw new Error(errorMessage);
        }
-
+       
        const data = JSON.parse(responseBodyText);
        const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
 
        if (!text) {
-         console.warn("[scrape-website] Gemini responded OK but no text was found in candidates.", data);
-         throw new Error("Gemini analysis completed, but no text was extracted.");
+         throw new Error("Análisis completado, pero no se extrajo texto. La imagen podría estar en blanco o no ser soportada.");
        }
-       
-       console.log("[scrape-website] VISION mode completed successfully.");
-       return new Response(JSON.stringify({ success: true, content: text }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+
+       return new Response(JSON.stringify({ 
+          success: true, 
+          content: text, 
+          source: 'Gemini 1.5 Vision API' 
+       }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+       });
     }
 
     // --- MODO WEB (CHEERIO) ---
-    console.log(`[Web Scraper] Leyendo sitio: ${url}`);
+    const cheerio = await import("https://esm.sh/cheerio@1.0.0-rc.12");
     const webResponse = await fetch(url, { headers: { 'User-Agent': BROWSER_USER_AGENT } });
     if (!webResponse.ok) throw new Error(`HTTP ${webResponse.status}`);
 
@@ -114,7 +119,10 @@ serve(async (req) => {
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
   } catch (error) {
-    console.error("[scrape-website] CRITICAL ERROR in function:", error.message);
-    return new Response(JSON.stringify({ success: false, error: error.message }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    console.error("[scrape-website] Error Crítico:", error.message);
+    return new Response(JSON.stringify({ success: false, error: error.message }), { 
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+    });
   }
 })
