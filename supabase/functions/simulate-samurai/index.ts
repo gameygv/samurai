@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0'
 
@@ -25,8 +26,7 @@ serve(async (req) => {
     const { data: config } = await supabaseClient.from('app_config').select('value').eq('key', 'gemini_api_key').single();
     if (!config?.value) throw new Error("Gemini API Key no configurada.");
 
-    // 2. Obtener el Contexto Consolidado (Kernel) invocando la otra función interna o replicando lógica
-    // Invocamos get-samurai-context para tener la última versión del cerebro
+    // 2. Obtener el Contexto Consolidado (Kernel)
     const { data: kernelData, error: kernelError } = await supabaseClient.functions.invoke('get-samurai-context');
     if (kernelError) throw new Error("No se pudo obtener el contexto del Samurai.");
 

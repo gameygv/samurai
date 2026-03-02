@@ -114,7 +114,7 @@ const AgentBrain = () => {
      setSimExplanation(null);
      
      try {
-        // Simulación visual de pasos
+        // Simulación visual de pasos tácticos
         const visualSteps = [
             { icon: Fingerprint, phase: "PHASE 1: DATA HUNTING", status: "Validando Nombre/Ciudad para Meta CAPI...", color: "text-indigo-400" },
             { icon: Image, phase: "PHASE 2: SEDUCTION", status: "Buscando Posters relevantes en Media Manager...", color: "text-emerald-400" },
