@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ImageIcon, FileText, Upload, Trash2, Loader2, Scan, Edit, Sparkles, CheckCircle2, CreditCard, Info } from 'lucide-react';
+import { ImageIcon, FileText, Upload, Trash2, Loader2, Scan, Edit, Sparkles, CheckCircle2, CreditCard, Info, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 
 const MediaManager = () => {
@@ -46,15 +46,23 @@ const MediaManager = () => {
 
   const handleScanOcr = async (asset: any) => {
      setScanningId(asset.id);
-     const tid = toast.loading("Samurai analizando información visual...");
+     const tid = toast.loading("Ojo de Halcón analizando imagen...");
      
      try {
+        // Invocamos la función
         const { data, error } = await supabase.functions.invoke('scrape-website', {
            body: { url: asset.url, mode: 'VISION' }
         });
 
-        if (error) throw new Error(error.message || "Error de conexión con Edge Function");
-        if (!data.success) throw new Error(data.error || "Fallo en el procesamiento de imagen");
+        // Error de red o despliegue
+        if (error) {
+           throw new Error(error.message || "Error de conexión con el servidor.");
+        }
+
+        // Error lógico devuelto por la función
+        if (!data || data.success === false) {
+           throw new Error(data?.error || "La IA no pudo procesar la imagen.");
+        }
         
         const detectedText = data.content;
 
@@ -65,11 +73,15 @@ const MediaManager = () => {
 
         if (updateErr) throw updateErr;
 
-        toast.success("Imagen indexada correctamente en el cerebro.", { id: tid });
+        toast.success("Análisis completado e indexado.", { id: tid });
         fetchAssets();
      } catch (err: any) {
         console.error("OCR Error:", err);
-        toast.error(`Fallo al leer imagen: ${err.message}`, { id: tid });
+        toast.error(`${err.message}`, { 
+           id: tid,
+           duration: 5000,
+           icon: <AlertCircle className="text-red-500" />
+        });
      } finally {
         setScanningId(null);
      }
@@ -97,7 +109,7 @@ const MediaManager = () => {
         url: publicUrl,
         type,
         ai_instructions: instructions || null,
-        category: category // Asegurando que use la categoría seleccionada
+        category: category
       });
 
       toast.success('Asset guardado en la biblioteca.');
