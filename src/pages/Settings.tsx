@@ -7,8 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Switch } from '@/components/ui/switch';
-import { Webhook, Key, Save, Loader2, ShoppingCart, Clock, Zap, DollarSign, Target, Link as LinkIcon, Building2 } from 'lucide-react';
+import { Webhook, Key, Save, Loader2, ShoppingCart, Clock, Zap, DollarSign, Target, Link as LinkIcon, Building2, Brain } from 'lucide-react';
 import { toast } from 'sonner';
 
 const Settings = () => {
@@ -41,7 +40,7 @@ const Settings = () => {
     try {
       const { error } = await supabase.from('app_config').upsert(configs, { onConflict: 'key' });
       if (error) throw error;
-      toast.success('Configuración de ventas actualizada');
+      toast.success('Configuración actualizada correctamente');
     } catch (err: any) {
       toast.error(err.message);
     } finally {
@@ -62,7 +61,7 @@ const Settings = () => {
             <p className="text-slate-400">Parámetros tácticos del Samurai.</p>
           </div>
           <Button onClick={handleSaveAll} disabled={saving} className="bg-indigo-600">
-            {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />} Guardar
+            {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />} Guardar Todo
           </Button>
         </div>
 
@@ -91,7 +90,6 @@ const Settings = () => {
                         placeholder="https://theelephantbowl.com/checkout/..."
                         className="bg-slate-900 border-slate-700 text-indigo-300 font-mono" 
                       />
-                      <p className="text-[10px] text-slate-500">Este es el link que Samurai enviará automáticamente cuando el cliente quiera reservar.</p>
                    </div>
 
                    <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
@@ -117,44 +115,82 @@ const Settings = () => {
           </TabsContent>
 
           <TabsContent value="pago_directo" className="mt-6">
-             <Card className="bg-slate-900 border-slate-800 border-l-4 border-l-blue-500 shadow-2xl">
+             <Card className="bg-slate-900 border-slate-800 border-l-4 border-l-blue-500">
                 <CardHeader>
                    <CardTitle className="text-white flex items-center gap-2">
-                      <Building2 className="w-5 h-5 text-blue-400" /> Datos Bancarios para Depósito
+                      <Building2 className="w-5 h-5 text-blue-400" /> Datos Bancarios
                    </CardTitle>
-                   <CardDescription>
-                      Samurai usará estos datos si el cliente prefiere transferencia o depósito bancario.
-                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="space-y-2">
                          <Label>Banco</Label>
-                         <Input value={getValue('bank_name')} onChange={e => handleInputChange('bank_name', e.target.value, 'PAYMENT')} className="bg-slate-950 border-slate-800" placeholder="Ej: BBVA / Banamex" />
+                         <Input value={getValue('bank_name')} onChange={e => handleInputChange('bank_name', e.target.value, 'PAYMENT')} className="bg-slate-950" />
                       </div>
                       <div className="space-y-2">
-                         <Label>Titular de la Cuenta</Label>
-                         <Input value={getValue('bank_holder')} onChange={e => handleInputChange('bank_holder', e.target.value, 'PAYMENT')} className="bg-slate-950 border-slate-800" placeholder="Nombre completo" />
+                         <Label>Titular</Label>
+                         <Input value={getValue('bank_holder')} onChange={e => handleInputChange('bank_holder', e.target.value, 'PAYMENT')} className="bg-slate-950" />
                       </div>
                       <div className="space-y-2">
-                         <Label>Número de Cuenta</Label>
-                         <Input value={getValue('bank_account')} onChange={e => handleInputChange('bank_account', e.target.value, 'PAYMENT')} className="bg-slate-950 border-slate-800" />
+                         <Label>Cuenta</Label>
+                         <Input value={getValue('bank_account')} onChange={e => handleInputChange('bank_account', e.target.value, 'PAYMENT')} className="bg-slate-950" />
                       </div>
                       <div className="space-y-2">
-                         <Label>CLABE Interbancaria</Label>
-                         <Input value={getValue('bank_clabe')} onChange={e => handleInputChange('bank_clabe', e.target.value, 'PAYMENT')} className="bg-slate-950 border-slate-800" />
+                         <Label>CLABE</Label>
+                         <Input value={getValue('bank_clabe')} onChange={e => handleInputChange('bank_clabe', e.target.value, 'PAYMENT')} className="bg-slate-950" />
                       </div>
-                   </div>
-                   <div className="p-4 bg-blue-500/5 rounded border border-blue-500/20">
-                      <p className="text-[10px] text-blue-400 italic">
-                         Samurai informará que el anticipo es de $1500 MXN y pedirá el comprobante por este mismo chat una vez definidos estos datos.
-                      </p>
                    </div>
                 </CardContent>
              </Card>
           </TabsContent>
           
-          <TabsContent value="secrets" className="mt-6"><Card className="bg-slate-900 border-slate-800"><CardHeader><CardTitle>Tokens de Integración</CardTitle></CardHeader><CardContent className="space-y-4"><div className="space-y-2"><Label>Gemini API Key</Label><Input type="password" value={getValue('gemini_api_key')} onChange={e => handleInputChange('gemini_api_key', e.target.value, 'SECRET')} className="bg-slate-950"/></div></CardContent></Card></TabsContent>
+          <TabsContent value="secrets" className="mt-6">
+             <Card className="bg-slate-900 border-slate-800 border-l-4 border-l-purple-500">
+                <CardHeader>
+                   <CardTitle className="text-white flex items-center gap-2"><Key className="w-5 h-5 text-purple-500" /> Llaves de Inteligencia Artificial</CardTitle>
+                   <CardDescription>Configura los cerebros que alimentan al Samurai.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                   <div className="space-y-2">
+                      <Label className="flex items-center gap-2 text-indigo-400">
+                         <Zap className="w-4 h-4" /> OpenAI API Key (Recomendado para OCR/Visión)
+                      </Label>
+                      <Input 
+                        type="password" 
+                        value={getValue('openai_api_key')} 
+                        onChange={e => handleInputChange('openai_api_key', e.target.value, 'SECRET')} 
+                        placeholder="sk-..." 
+                        className="bg-slate-950 border-slate-800"
+                      />
+                      <p className="text-[10px] text-slate-500">Se usará para el análisis de posters y comprobantes de pago (Ojo de Halcón).</p>
+                   </div>
+                   
+                   <div className="space-y-2">
+                      <Label className="flex items-center gap-2 text-slate-400">
+                         <Brain className="w-4 h-4" /> Gemini API Key (Motor Secundario)
+                      </Label>
+                      <Input 
+                        type="password" 
+                        value={getValue('gemini_api_key')} 
+                        onChange={e => handleInputChange('gemini_api_key', e.target.value, 'SECRET')} 
+                        className="bg-slate-950 border-slate-800"
+                      />
+                   </div>
+                </CardContent>
+             </Card>
+          </TabsContent>
+
+          <TabsContent value="webhooks" className="mt-6">
+             <Card className="bg-slate-900 border-slate-800">
+                <CardHeader><CardTitle>Integraciones Externas</CardTitle></CardHeader>
+                <CardContent className="space-y-4">
+                   <div className="space-y-2">
+                      <Label>Webhook de Salida (Make.com)</Label>
+                      <Input value={getValue('webhook_sale')} onChange={e => handleInputChange('webhook_sale', e.target.value, 'WEBHOOK')} className="bg-slate-950" />
+                   </div>
+                </CardContent>
+             </Card>
+          </TabsContent>
         </Tabs>
       </div>
     </Layout>
