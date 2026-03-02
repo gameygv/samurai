@@ -5,7 +5,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { 
-  Trello, Loader2, Clock, TrendingUp, User, Smile, Meh, Frown
+  Trello, Loader2, Clock, TrendingUp, User, Smile, Meh, Frown, Fingerprint, Image, Target
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import ChatViewer from '@/components/ChatViewer';
@@ -17,19 +17,17 @@ const Pipeline = () => {
   const [isChatOpen, setIsChatOpen] = useState(false);
 
   const columns = [
-    { id: 'BAJO', title: 'Interés Inicial ❄️', color: 'border-blue-500/50 bg-blue-500/5' },
-    { id: 'MEDIO', title: 'Calificación ⚡', color: 'border-yellow-500/50 bg-yellow-500/5' },
-    { id: 'ALTO', title: 'Cierre Hot 🔥', color: 'border-red-500/50 bg-red-500/5' }
+    { id: 'BAJO', title: '1. CONEXIÓN (DATOS)', icon: Fingerprint, color: 'border-blue-500/50 bg-blue-500/5', desc: 'Cazando Nombre/Ciudad' },
+    { id: 'MEDIO', title: '2. SEDUCCIÓN (MEDIA)', icon: Image, color: 'border-yellow-500/50 bg-yellow-500/5', desc: 'Enamorando con Posters' },
+    { id: 'ALTO', title: '3. CIERRE ($1500)', icon: Target, color: 'border-red-500/50 bg-red-500/5', desc: 'Link de Pago Enviado' }
   ];
 
   useEffect(() => {
     fetchLeads();
     
     const channel = supabase
-      .channel('pipeline-live')
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'leads' }, (payload) => {
-        setLeads(prev => prev.map(l => l.id === payload.new.id ? payload.new : l));
-      })
+      .channel('pipeline-live-v2')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'leads' }, () => fetchLeads())
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
@@ -46,12 +44,8 @@ const Pipeline = () => {
     setLoading(false);
   };
 
-  // Comparación robusta: Convierte todo a mayúsculas para evitar errores de tipeo o IA
   const getLeadsByIntent = (intent: string) => {
-    return leads.filter(l => {
-        const leadIntent = (l.buying_intent || 'BAJO').toUpperCase();
-        return leadIntent === intent;
-    });
+    return leads.filter(l => (l.buying_intent || 'BAJO').toUpperCase() === intent);
   };
 
   const handleOpenChat = (lead: any) => {
@@ -67,16 +61,6 @@ const Pipeline = () => {
     }
   };
 
-  const getFollowupBadge = (date: string | null) => {
-     if (!date) return null;
-     const isOverdue = new Date(date) < new Date();
-     return (
-        <Badge variant="outline" className={cn("text-[8px] h-4 px-1", isOverdue ? "border-red-500 text-red-500 bg-red-500/10" : "border-indigo-500 text-indigo-500 bg-indigo-500/10")}>
-           {isOverdue ? "VENCIDO" : "PENDIENTE"}
-        </Badge>
-     );
-  };
-
   return (
     <Layout>
       <div className="max-w-[1800px] mx-auto space-y-6 h-[calc(100vh-140px)] flex flex-col">
@@ -84,82 +68,82 @@ const Pipeline = () => {
           <div>
             <h1 className="text-3xl font-bold text-white flex items-center gap-3">
               <Trello className="w-8 h-8 text-indigo-500" />
-              Pipeline de Conversión
+              Estrategia Samurai: Tablero de Fases
             </h1>
-            <p className="text-slate-400">Flujo táctico de prospectos segmentados por intención.</p>
+            <p className="text-slate-400">Visualización en tiempo real del flujo de conversión de The Elephant Bowl.</p>
           </div>
-          <div className="flex gap-3">
-             <Button variant="outline" className="border-slate-800 text-slate-400" onClick={fetchLeads}>
-                <Clock className="w-4 h-4 mr-2" /> Actualizar Radar
-             </Button>
-          </div>
+          <Button variant="outline" className="border-slate-800 text-slate-400" onClick={fetchLeads}>
+             <Clock className="w-4 h-4 mr-2" /> Sincronizar Radar
+          </Button>
         </div>
 
-        {loading ? (
-          <div className="flex-1 flex items-center justify-center">
-             <Loader2 className="w-10 h-10 animate-spin text-indigo-500" />
-          </div>
-        ) : (
-          <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-6 min-h-0">
-            {columns.map((col) => (
-              <div key={col.id} className={cn("rounded-xl border flex flex-col min-h-0", col.color)}>
-                <div className="p-4 border-b border-slate-800/50 flex justify-between items-center bg-slate-900/40 rounded-t-xl">
-                  <h3 className="font-bold text-sm text-slate-200 uppercase tracking-widest">{col.title}</h3>
-                  <Badge className="bg-slate-800 text-slate-400 border-slate-700">{getLeadsByIntent(col.id).length}</Badge>
+        <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-6 min-h-0">
+          {columns.map((col) => {
+            const ColumnIcon = col.icon;
+            const leadsInCol = getLeadsByIntent(col.id);
+            
+            return (
+              <div key={col.id} className={cn("rounded-xl border flex flex-col min-h-0 shadow-2xl", col.color)}>
+                <div className="p-4 border-b border-slate-800/50 flex flex-col gap-1 bg-slate-900/40 rounded-t-xl">
+                  <div className="flex justify-between items-center">
+                     <h3 className="font-bold text-xs text-white uppercase tracking-widest flex items-center gap-2">
+                        <ColumnIcon className="w-4 h-4 text-indigo-400" />
+                        {col.title}
+                     </h3>
+                     <Badge className="bg-slate-950 text-indigo-400 border-indigo-500/20">{leadsInCol.length}</Badge>
+                  </div>
+                  <p className="text-[10px] text-slate-500 font-mono italic">{col.desc}</p>
                 </div>
                 
                 <div className="flex-1 overflow-y-auto p-3 space-y-4 custom-scrollbar">
-                  {getLeadsByIntent(col.id).length === 0 ? (
-                     <div className="h-20 flex items-center justify-center text-[10px] text-slate-600 italic uppercase">
+                  {leadsInCol.length === 0 ? (
+                     <div className="h-32 flex flex-col items-center justify-center text-[10px] text-slate-700 italic uppercase gap-2 border border-dashed border-slate-800 rounded-xl">
+                        <TrendingUp className="w-6 h-6 opacity-10" />
                         Sin prospectos en esta fase
                      </div>
-                  ) : getLeadsByIntent(col.id).map((lead) => (
+                  ) : leadsInCol.map((lead) => (
                     <Card 
                       key={lead.id} 
-                      className="bg-slate-900 border-slate-800 hover:border-indigo-500/50 transition-all cursor-pointer group shadow-lg relative overflow-hidden"
+                      className="bg-slate-900 border-slate-800 hover:border-indigo-500/50 transition-all cursor-pointer group relative overflow-hidden"
                       onClick={() => handleOpenChat(lead)}
                     >
-                      {/* Borde izquierdo de estado */}
-                      <div className={cn("absolute left-0 top-0 bottom-0 w-1", lead.ai_paused ? "bg-red-500" : "bg-green-500")} />
+                      <div className={cn("absolute left-0 top-0 bottom-0 w-1", lead.ai_paused ? "bg-red-500" : "bg-indigo-600")} />
                       
                       <CardContent className="p-4 space-y-3 pl-5">
                          <div className="flex justify-between items-start">
                             <div className="flex items-center gap-2">
-                               <div className="w-8 h-8 rounded-lg bg-indigo-600/10 flex items-center justify-center text-indigo-500 border border-indigo-500/20">
+                               <div className="w-8 h-8 rounded-lg bg-slate-950 flex items-center justify-center text-slate-500 border border-slate-800 group-hover:border-indigo-500/30">
                                   <User className="w-4 h-4" />
                                </div>
                                <div>
-                                  <p className="text-xs font-bold text-white group-hover:text-indigo-400 transition-colors truncate max-w-[120px]">
+                                  <p className="text-xs font-bold text-white group-hover:text-indigo-400 transition-colors">
                                      {lead.nombre || lead.telefono || 'Anónimo'}
                                   </p>
-                                  <div className="flex items-center gap-2">
-                                     <p className="text-[9px] text-slate-500 font-mono">{lead.ciudad || 'Ubicación...'}</p>
-                                     {getFollowupBadge(lead.next_followup_at)}
-                                  </div>
+                                  <p className="text-[9px] text-slate-500 font-mono truncate max-w-[150px]">{lead.ciudad || 'Ubicación pendiente...'}</p>
                                </div>
                             </div>
+                            {lead.ai_paused && <Badge variant="destructive" className="h-4 px-1 text-[8px] bg-red-600">STOP</Badge>}
                          </div>
 
                          {lead.summary && (
-                            <p className="text-[10px] text-slate-400 italic line-clamp-2 leading-relaxed bg-slate-950/50 p-2 rounded border border-slate-800/50">
+                            <p className="text-[10px] text-slate-400 italic line-clamp-2 leading-relaxed bg-slate-950 p-2 rounded border border-slate-800/50">
                                "{lead.summary}"
                             </p>
                          )}
 
                          <div className="flex items-center justify-between pt-2 border-t border-slate-800/50">
                             <div className="flex items-center gap-2">
-                               <div className={cn("p-1 rounded bg-slate-950 border border-slate-800", getMoodColor(lead.estado_emocional_actual))}>
+                               <div className={cn("p-1 rounded bg-black/40", getMoodColor(lead.estado_emocional_actual))}>
                                   {lead.estado_emocional_actual === 'POSITIVO' ? <Smile className="w-3 h-3" /> : 
                                    lead.estado_emocional_actual === 'NEGATIVO' ? <Frown className="w-3 h-3" /> : 
                                    <Meh className="w-3 h-3" />}
                                </div>
-                               <span className="text-[9px] text-slate-500 font-bold uppercase tracking-tighter">
+                               <span className="text-[8px] text-slate-600 font-bold uppercase">
                                   {lead.estado_emocional_actual || 'NEUTRO'}
                                </span>
                             </div>
-                            <div className="flex items-center gap-1 text-[9px] text-slate-600 font-mono">
-                               <Clock className="w-3 h-3" />
-                               {lead.last_message_at ? new Date(lead.last_message_at).toLocaleDateString([], { month: 'short', day: 'numeric' }) : '---'}
+                            <div className="text-[8px] text-slate-700 font-mono">
+                               ACTIVO: {lead.last_message_at ? new Date(lead.last_message_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '---'}
                             </div>
                          </div>
                       </CardContent>
@@ -167,9 +151,9 @@ const Pipeline = () => {
                   ))}
                 </div>
               </div>
-            ))}
-          </div>
-        )}
+            );
+          })}
+        </div>
 
         {selectedLead && <ChatViewer lead={selectedLead} open={isChatOpen} onOpenChange={setIsChatOpen} />}
       </div>
