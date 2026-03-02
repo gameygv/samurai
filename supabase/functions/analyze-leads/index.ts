@@ -16,15 +16,13 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    // 1. Obtener parámetros (Soporte para forzar análisis)
     const { force } = await req.json().catch(() => ({}));
     
-    console.log(`[analyze-leads] Iniciando... Force Mode: ${force ? 'ON' : 'OFF'}`);
+    console.log(`[analyze-leads] Motor Forense Samurai v2.0 Iniciado. Force: ${force ? 'ON' : 'OFF'}`);
 
-    // 2. Obtener API Keys
+    // Configuración
     const { data: configs } = await supabaseClient.from('app_config').select('key, value');
     const getConfig = (key: string) => configs?.find(c => c.key === key)?.value || null;
-
     const apiKey = getConfig('gemini_api_key');
     const capiConfig = {
       pixel_id: getConfig('meta_pixel_id'),
@@ -33,74 +31,70 @@ serve(async (req) => {
       test_event_code: getConfig('meta_test_event_code'),
     };
 
-    if (!apiKey) {
-      throw new Error("Gemini API Key no configurada.");
-    }
+    if (!apiKey) throw new Error("Gemini API Key no configurada.");
 
-    // 3. Buscar leads (Priorizar los que tienen mensajes recientes)
+    // Selección de Leads (Prioridad a los que tienen actividad reciente y datos faltantes)
     const { data: activeLeads } = await supabaseClient
       .from('leads')
-      .select('id, nombre, ciudad, email, telefono, perfil_psicologico, last_analyzed_at, last_message_at, capi_lead_event_sent_at')
+      .select('*')
       .order('last_message_at', { ascending: false })
-      .limit(force ? 20 : 50);
+      .limit(force ? 25 : 50); // Lote más grande si es forzado
 
-    // Filtro: Si es forzado, analiza todo lo que tenga mensajes. Si no, solo lo nuevo.
     const leadsToAnalyze = activeLeads?.filter(l => {
-       if (!l.last_message_at) return false; // Sin mensajes no hay nada que analizar
-       if (force) return true; // Si forzamos, analizamos todo
-       if (!l.last_analyzed_at) return true; // Nunca analizado
-       return new Date(l.last_message_at) > new Date(l.last_analyzed_at); // Nuevos mensajes
-    }).slice(0, 10) || []; // Lote de 10 para no saturar
-
-    if (leadsToAnalyze.length === 0) {
-       return new Response(JSON.stringify({ message: "Todo al día. No se requiere análisis nuevo.", analyzed: 0 }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-    }
+       if (!l.last_message_at) return false;
+       if (force) return true;
+       // Si falta email o nombre y hay mensajes recientes, re-analizar
+       if ((!l.email || l.nombre.includes('Nuevo Lead')) && new Date(l.last_message_at) > new Date(Date.now() - 86400000)) return true;
+       // Si nunca se analizó
+       if (!l.last_analyzed_at) return true;
+       return new Date(l.last_message_at) > new Date(l.last_analyzed_at);
+    }).slice(0, 10) || [];
 
     const results = [];
     const logsToInsert = [];
 
-    // 4. Procesar cada lead
     for (const lead of leadsToAnalyze) {
        try {
+         // Obtener contexto completo
          const { data: messages } = await supabaseClient
             .from('conversaciones')
             .select('emisor, mensaje')
             .eq('lead_id', lead.id)
             .order('created_at', { ascending: true }) 
-            .limit(60);
+            .limit(100); // Más contexto para mejor detección
 
-         // Analizamos incluso con 1 mensaje si es forzado, para capturar datos iniciales
          if (!messages || messages.length === 0) continue;
 
          const transcript = messages.map(m => `${m.emisor}: ${m.mensaje}`).join('\n');
 
+         // PROMPT DE INGENIERÍA DE DATOS (META CAPI SPECIALIST)
          const prompt = `
-            Actúa como un Data Scientist experto en extracción de datos para CRM.
-            Analiza esta conversación de WhatsApp y extrae la información del cliente.
+            Eres el Analista de Datos Senior de Samurai AI. Tu misión es extraer datos estructurados para Meta Conversions API (CAPI).
             
-            HISTORIAL:
+            HISTORIAL DEL CHAT:
             ${transcript}
 
-            OBJETIVO: Rellenar la ficha del cliente para Meta CAPI.
+            INSTRUCCIONES DE EXTRACCIÓN FORENSE:
+            1. EMAIL (em): Busca cualquier patrón de correo (ej: @gmail, @hotmail). Prioridad Máxima.
+            2. NOMBRE (fn, ln): Deduce el nombre real por el contexto (ej: "Soy Laura", "Me llamo Carlos"). Si es compuesto, sepáralo.
+            3. UBICACIÓN (ct, st): Busca ciudades, estados o referencias geográficas (ej: "Soy de GDL", "Vivo en Roma Norte").
+            4. SCORE DE INTENCIÓN (0-100): 
+               - 0-30: Curiosidad general.
+               - 31-70: Pregunta precios, fechas, detalles.
+               - 71-100: Pide datos bancarios, link de pago, pregunta "¿todavía hay lugar?".
+            5. ARQUETIPO (Persona): Clasifica en [IMPULSIVO, ANALÍTICO, ESCÉPTICO, FAN, PRECIO_SENSIBLE].
             
-            INSTRUCCIONES DE EXTRACCIÓN:
-            1. NOMBRE REAL: Si el cliente dice su nombre (ej: "Soy Juan"), úsalo. Si no, intenta inferirlo. Si no hay nada, usa "null".
-            2. EMAIL: Busca patrones de correo electrónico. Si encuentras uno, extráelo. Si no, "null".
-            3. CIUDAD: Busca menciones de ubicación. Si no, "null".
-            4. INTENCIÓN: (BAJO, MEDIO, ALTO). ALTO si pregunta precios, fechas, cuentas o pide link.
-            5. ÁNIMO: (POSITIVO, NEUTRO, NEGATIVO).
-            6. RESUMEN: Resumen ejecutivo de 10 palabras sobre la situación actual.
-            7. PERFIL: 3 adjetivos sobre su personalidad.
-
-            Formato JSON estricto (devuelve null si no encuentras el dato específico, no uses "N/A"):
+            Formato JSON ESTRICTO (usa null si no encuentras el dato):
             {
-              "nombre_detectado": "string | null",
-              "email_detectado": "string | null",
-              "ciudad": "string | null",
-              "resumen": "string",
-              "intencion": "string",
-              "estado_animo": "string",
-              "perfil_psicologico": "string"
+              "fn": "string | null",
+              "ln": "string | null",
+              "email": "string | null",
+              "city": "string | null",
+              "state": "string | null",
+              "intent_score": number,
+              "intent_label": "BAJO" | "MEDIO" | "ALTO",
+              "archetype": "string",
+              "summary": "Resumen ejecutivo de 15 palabras."
             }
          `;
 
@@ -117,66 +111,87 @@ serve(async (req) => {
          const cleanJson = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
          const analysis = JSON.parse(cleanJson);
 
-         // Preparar actualización inteligente (solo sobrescribir si hay dato nuevo)
+         // Lógica de Actualización (Solo mejorar datos, no borrar)
          const updateData: any = {
             last_analyzed_at: new Date().toISOString(),
-            summary: analysis.resumen,
-            buying_intent: analysis.intencion,
-            estado_emocional_actual: analysis.estado_animo,
-            perfil_psicologico: analysis.perfil_psicologico
+            summary: analysis.summary,
+            buying_intent: analysis.intent_label,
+            confidence_score: analysis.intent_score, // Usamos la columna existente confidence_score para el score numérico
+            perfil_psicologico: `Arquetipo: ${analysis.archetype}. Estado: ${analysis.intent_score}/100`,
+            // Guardamos metadatos estructurados para uso futuro
+            metadata: { 
+               ...lead.metadata, 
+               capi_data: { 
+                  fn: analysis.fn, 
+                  ln: analysis.ln, 
+                  ct: analysis.city, 
+                  st: analysis.state, 
+                  zp: analysis.zip 
+               } 
+            }
          };
+
+         // Actualizar campos clave solo si la IA encontró algo mejor
+         if (analysis.email && (!lead.email || lead.email.length < 5)) updateData.email = analysis.email.toLowerCase().trim();
+         if (analysis.city) updateData.ciudad = analysis.city;
          
-         if (analysis.ciudad && analysis.ciudad !== 'null') updateData.ciudad = analysis.ciudad;
-         if (analysis.email_detectado && analysis.email_detectado !== 'null') updateData.email = analysis.email_detectado;
-         
-         // Solo actualizamos nombre si no tenemos uno bueno (ej: si se llamaba "Nuevo Lead...")
-         const currentName = lead.nombre || '';
-         if (analysis.nombre_detectado && analysis.nombre_detectado !== 'null') {
-             if (currentName.includes('Nuevo Lead') || currentName.length < 3) {
-                 updateData.nombre = analysis.nombre_detectado;
-             }
+         // Nombre inteligente
+         const detectedName = [analysis.fn, analysis.ln].filter(Boolean).join(' ');
+         if (detectedName.length > 2 && (lead.nombre.includes('Nuevo Lead') || lead.nombre.length < 3)) {
+            updateData.nombre = detectedName;
          }
 
          await supabaseClient.from('leads').update(updateData).eq('id', lead.id);
-         results.push({ lead: lead.nombre, ...updateData });
+         results.push({ lead: detectedName || lead.nombre, score: analysis.intent_score, email: analysis.email });
 
-         // --- EVENTO CAPI (Solo si intención ALTA y no enviado previamente) ---
-         if (analysis.intencion === 'ALTO' && !lead.capi_lead_event_sent_at && capiConfig.pixel_id) {
+         // --- DISPARO DE META CAPI (Solo si score > 70 y no enviado) ---
+         if (analysis.intent_score >= 70 && !lead.capi_lead_event_sent_at && capiConfig.pixel_id) {
+            
+            // Construir payload robusto para Meta
             const userData = {
-               ph: lead.telefono,
-               em: updateData.email || lead.email,
-               ct: updateData.ciudad || lead.ciudad
+               ph: lead.telefono, // Ya lo tenemos
+               em: updateData.email || lead.email, // Prioridad al nuevo
+               ct: analysis.city,
+               st: analysis.state,
+               fn: analysis.fn,
+               ln: analysis.ln
             };
+
+            // Limpiar valores nulos antes de enviar
+            Object.keys(userData).forEach(k => !userData[k] && delete userData[k]);
 
             const capiPayload = {
               eventData: {
-                event_name: 'Lead',
+                event_name: 'Lead', // Evento estándar
                 event_id: `${lead.id}_lead_${Date.now()}`,
                 user_data: userData,
                 custom_data: {
-                  intention: 'ALTO',
-                  psych_profile: analysis.perfil_psicologico,
-                  source: 'Samurai Auto-Analysis'
+                  intention_score: analysis.intent_score,
+                  customer_persona: analysis.archetype,
+                  lead_source: 'whatsapp_ai_chat'
                 },
               },
               config: capiConfig,
             };
 
-            // Invocamos CAPI de forma asíncrona (no bloqueante)
+            // Invocación asíncrona para no bloquear
             supabaseClient.functions.invoke('meta-capi-sender', { body: capiPayload });
             
+            // Marcar como enviado
             await supabaseClient.from('leads').update({ capi_lead_event_sent_at: new Date().toISOString() }).eq('id', lead.id);
+            
             logsToInsert.push({
                action: 'CREATE',
                resource: 'META_CAPI',
-               username: 'AI Analyst',
-               description: `Lead Calificado enviado a Meta: ${updateData.nombre || lead.nombre}`,
-               status: 'OK'
+               description: `Evento LEAD enviado (Score: ${analysis.intent_score}). Email: ${userData.em ? 'Sí' : 'No'}`,
+               status: 'OK',
+               metadata: { capi_payload_preview: userData }
             });
          }
 
        } catch (e) {
           console.error(`Error lead ${lead.id}:`, e);
+          results.push({ lead: lead.id, error: e.message });
        }
     }
 
@@ -185,7 +200,7 @@ serve(async (req) => {
     }
 
     return new Response(
-      JSON.stringify({ success: true, analyzed: results.length, results }),
+      JSON.stringify({ success: true, analyzed: results.length, details: results }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
 
