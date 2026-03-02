@@ -7,7 +7,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-// Helper: Búsqueda recursiva
+// Helper: Búsqueda recursiva de valores simples (texto, ids)
 function findValue(obj: any, keyToFind: string): any {
   if (!obj || typeof obj !== 'object') return null;
   if (keyToFind in obj) return obj[keyToFind];
@@ -16,6 +16,19 @@ function findValue(obj: any, keyToFind: string): any {
     if (found) return found;
   }
   return null;
+}
+
+// Helper: Búsqueda del OBJETO COMPLETO del mensaje (para la API)
+// Busca un objeto que tenga las propiedades 'key' y 'message' juntas.
+function findMessageObject(obj: any): any {
+    if (!obj || typeof obj !== 'object') return null;
+    if (obj.key && obj.message) return obj; // ¡Encontrado!
+    
+    for (const key in obj) {
+        const found = findMessageObject(obj[key]);
+        if (found) return found;
+    }
+    return null;
 }
 
 serve(async (req) => {
@@ -49,28 +62,63 @@ serve(async (req) => {
     const audioObj = findValue(messageData, 'audioMessage');
     
     if (audioObj) {
-        console.log(`[Audio] Detectado para ${phone}. Procesando...`);
+        console.log(`[Audio] Detectado para ${phone}. Iniciando protocolo de recuperación...`);
         let audioBase64 = findValue(body, 'base64');
+        let debugStatus = "INIT";
 
-        // Fallback API
-        if (!audioBase64 && evoUrl && evoKey) {
-            try {
-                let getBase64Url = evoUrl.replace('message/sendText', 'chat/getBase64FromMediaMessage');
-                const payload = { message: body.data?.message || messageData, convertToMp4: false };
-                const res = await fetch(getBase64Url, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'apikey': evoKey },
-                    body: JSON.stringify(payload)
-                });
-                if (res.ok) {
-                    const data = await res.json();
-                    if (data.base64) audioBase64 = data.base64;
+        // Fallback API si no viene el base64 directo
+        if (!audioBase64) {
+            if (evoUrl && evoKey) {
+                try {
+                    let getBase64Url = evoUrl.replace('message/sendText', 'chat/getBase64FromMediaMessage');
+                    
+                    // BUSQUEDA PROFUNDA del objeto mensaje correcto
+                    const msgObjectForApi = findMessageObject(body);
+
+                    if (!msgObjectForApi) {
+                        debugStatus = "MSG_OBJ_NOT_FOUND_IN_WEBHOOK";
+                        console.error("[Audio] No se encontró el objeto {key, message} en el payload.");
+                    } else {
+                        const payload = {
+                            message: msgObjectForApi, 
+                            convertToMp4: false
+                        };
+
+                        console.log(`[Audio] Solicitando a API: ${getBase64Url}`);
+                        const res = await fetch(getBase64Url, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', 'apikey': evoKey },
+                            body: JSON.stringify(payload)
+                        });
+
+                        if (res.ok) {
+                            const data = await res.json();
+                            if (data.base64) {
+                                audioBase64 = data.base64;
+                                debugStatus = "RECOVERED_VIA_API";
+                            } else {
+                                debugStatus = "API_OK_BUT_NO_BASE64";
+                            }
+                        } else {
+                            const errText = await res.text();
+                            console.error("[Audio] API Error:", res.status, errText);
+                            debugStatus = `API_ERROR_${res.status}`;
+                        }
+                    }
+                } catch (err) { 
+                    console.error("API Network Error:", err); 
+                    debugStatus = `NETWORK_ERROR_${err.message}`;
                 }
-            } catch (err) { console.error("API Fallback Error:", err); }
+            } else {
+                debugStatus = "NO_API_CONFIG";
+            }
+        } else {
+            debugStatus = "BASE64_IN_WEBHOOK";
         }
 
         if (audioBase64) {
             try {
+                // Limpieza del base64 (algunas veces trae prefijos)
                 const cleanBase64 = audioBase64.replace(/^data:.*;base64,/, "");
                 const binaryString = atob(cleanBase64);
                 const bytes = new Uint8Array(binaryString.length);
@@ -89,10 +137,13 @@ serve(async (req) => {
                 const whisperData = await whisperRes.json();
                 
                 if (whisperData.text) messageText = `[TRANSCRIPCIÓN AUDIO]: "${whisperData.text}"`;
-                else messageText = "[AUDIO SIN INTELIGIBILIDAD]";
-            } catch (e) { messageText = `[ERROR PROCESANDO AUDIO: ${e.message}]`; }
+                else messageText = `[AUDIO SIN INTELIGIBILIDAD - Whisper: ${JSON.stringify(whisperData)}]`;
+                
+            } catch (e) { 
+                messageText = `[ERROR PROCESANDO AUDIO: ${e.message}]`; 
+            }
         } else {
-            messageText = "[AUDIO FALLIDO - No se pudo obtener contenido]";
+            messageText = `[AUDIO FALLIDO - Diagnóstico: ${debugStatus}]`;
         }
     } else {
         messageText = findValue(messageData, 'conversation') || findValue(messageData, 'text') || findValue(messageData, 'caption') || "[MULTIMEDIA]";
@@ -121,9 +172,10 @@ serve(async (req) => {
         .order('created_at', { ascending: true })
         .limit(15);
 
-    // Persistencia + Inyección Contextual
+    // 1. Guardar mensaje del cliente
     await supabaseClient.from('conversaciones').insert({ lead_id: lead.id, emisor: 'CLIENTE', mensaje: messageText, platform: 'WHATSAPP' });
 
+    // 2. Inyectar manualmente el mensaje actual al contexto IA
     const messages = [
         { role: "system", content: kernelData?.system_prompt },
         ...(historyMsgs || []).map(m => ({
@@ -173,16 +225,12 @@ serve(async (req) => {
         } catch (sendErr) { console.error("Send Error:", sendErr); }
     }
 
-    // --- GATILLO DE ANÁLISIS AUTOMÁTICO (CRM + CAPI) ---
-    console.log(`[Webhook] Disparando análisis para lead: ${lead.id}`);
+    // --- TRIGGER ANALYTICS ---
     fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/analyze-leads`, {
         method: 'POST',
-        headers: { 
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${Deno.env.get('SUPABASE_ANON_KEY')}`
-        },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${Deno.env.get('SUPABASE_ANON_KEY')}` },
         body: JSON.stringify({ lead_id: lead.id })
-    }).catch(err => console.error("[Webhook] Error disparando análisis:", err));
+    }).catch(err => console.error("Analytics Trigger Error", err));
 
     return new Response(JSON.stringify({ success: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
