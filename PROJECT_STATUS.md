@@ -1,34 +1,41 @@
-# DYAD SAMURAI - MANUAL DE ESTADO Y REPORTE (v1.0-Sam)
+# DYAD SAMURAI - REPORTE DE DESPEGUE (PRODUCCIÓN)
 
-Este documento detalla el estado actual del sistema tras la implementación de la identidad "Sam" y la optimización de memoria conversacional.
+**FECHA:** 02/03/2026
+**ESTADO:** 🟢 GO FOR LAUNCH
+**VERSIÓN:** v2.1 (Whisper + Vision + Protocolo Militar)
 
-## 1. RESUMEN EJECUTIVO
+## 🚨 BUGS CRÍTICOS RESUELTOS (CHECKLIST)
 
-- **Estado del Sistema:** ✅ ONLINE (PRO)
-- **Motor IA:** 🧠 GPT-4o (Optimized)
-- **Identidad:** 👤 "Sam" (Asistente de Ventas)
-- **Conexión:** 🔌 Evolution API v2 (Directa)
+1.  ✅ **"No escuchaba audios"**: 
+    - **Solución:** Integración de OpenAI Whisper en el Webhook.
+    - **Resultado:** Sam ahora transcribe el audio a texto internamente y responde al contenido real. Verás `[TRANSCRIPCIÓN AUDIO]: "..."` en el chat.
 
-## 2. ARQUITECTURA DEL CEREBRO (Brain)
+2.  ✅ **"No enviaba imágenes"**:
+    - **Solución:** Corrección del parser de etiquetas `<<MEDIA:url>>` y uso del endpoint `/sendMedia` de Evolution API.
+    - **Resultado:** Ahora la imagen llega como archivo adjunto nativo de WhatsApp con el texto como pie de foto.
 
-- **Capa 1 (Memoria):** ✅ Historial completo de hilos inyectado en cada mensaje.
-- **Capa 2 (Identidad):** ✅ Reglas de seguridad activas (Prohibido decir "Samurai" o "Ojo de Halcón").
-- **Capa 3 (Verdad Maestra):** ✅ Scraper conectado a theelephantbowl.com.
-- **Capa 4 (Media):** ✅ Catálogo de imágenes con triggers contextuales.
-- **Capa 5 (Ojo de Halcón):** 👁️ Análisis de comprobantes vía OpenAI Vision.
+3.  ✅ **"Pedía email antes de tiempo"**:
+    - **Solución:** Regla "PROTOCOLOS DE EMERGENCIA" en el Kernel. Prohíbe explícitamente el "gatekeeping" de información.
+    - **Resultado:** Sam da precios y posters *antes* de pedir datos de cierre.
 
-## 3. HITOS RECIENTES
+4.  ✅ **"No preguntaba el nombre"**:
+    - **Solución:** Inyección dinámica de `[ALERTA]: NO TIENES EL NOMBRE` en el prompt del sistema si el lead es nuevo.
+    - **Resultado:** Sam prioriza la cualificación sobre cualquier otra cosa.
 
-- [x] **Memoria Continua:** El bot ya no olvida el nombre ni la ciudad del cliente durante la charla.
-- [x] **Webhook Robusto:** Manejo de errores 400 en Evolution API y validación de respuestas vacías.
-- [x] **Sugerencias Coherentes:** El panel de chat sugiere respuestas alineadas con la personalidad de Sam.
-- [x] **Auto-Discovery:** Extracción automática de email y ciudad en segundo plano.
+## 🛠️ ARQUITECTURA FINAL
 
-## 4. PRÓXIMOS PASOS RECOMENDADOS
+- **Cerebro:** GPT-4o con "Empatía Táctica" (Detecta Motivación vs Objeción).
+- **Oídos:** Whisper-1 (Transcripción de notas de voz).
+- **Ojos:** GPT-4o Vision (Validación de comprobantes de pago).
+- **Manos:** Evolution API v2 (Envío nativo de imágenes y texto).
+- **Memoria:** Supabase (Pipeline Kanban + Historial continuo).
 
-1.  **Monitorizar Cierres:** Usar la pestaña "Pipeline" para ver cómo "Sam" mueve los leads de "Conexión" a "Cierre".
-2.  **Nutrir Media Manager:** Subir posters de los próximos eventos con instrucciones claras (ej: "Enviar cuando pregunten por Monterrey").
-3.  **Refinar #CIA:** Si Sam comete un error de tono, usar la Bitácora para corregirlo permanentemente.
+## 📋 RECOMENDACIONES PRE-TRÁFICO
+
+1.  **Prueba de Fuego:** Manda un audio desde tu celular personal al bot diciendo: *"Hola, soy Carlos, mándame info del taller en Monterrey"*.
+    - *Debe responder:* Saludando a "Carlos" y enviando la imagen de Monterrey (si está en Media Manager).
+2.  **Verificar Media Manager:** Asegúrate de que los posters tengan las **instrucciones correctas** (ej: "Enviar si preguntan por Monterrey").
+3.  **Monitorear Pipeline:** Mantén abierta la pestaña "Pipeline" para ver cómo caen los leads en tiempo real.
 
 ---
-*Reporte generado automáticamente por Dyad System v1.0*
+*Sistema listo para operar. ¡Buena suerte con el lanzamiento!* 🚀

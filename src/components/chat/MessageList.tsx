@@ -1,6 +1,7 @@
 import React, { useRef, useEffect } from 'react';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Loader2, Bot, UserCog, Mic, Volume2 } from 'lucide-react';
+import { Loader2, Bot, UserCog, Mic, Volume2, Image as ImageIcon, FileText } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 
 interface MessageListProps {
   messages: any[];
@@ -16,54 +17,93 @@ export const MessageList = ({ messages, loading }: MessageListProps) => {
     }
   }, [messages]);
 
-  const isAudio = (text: string) => text.includes('<<AUDIO:') || text.includes('[AUDIO]');
+  const renderMessageContent = (text: string) => {
+    // 1. Detección de Transcripción de Audio
+    if (text.includes('[TRANSCRIPCIÓN AUDIO]:')) {
+      const cleanText = text.replace('[TRANSCRIPCIÓN AUDIO]:', '').trim();
+      return (
+        <div className="space-y-2">
+          <div className="flex items-center gap-2 text-xs text-indigo-300 font-bold uppercase bg-indigo-900/30 p-1.5 rounded">
+            <Mic className="w-3 h-3" /> Nota de Voz Transcrita
+          </div>
+          <p className="italic text-slate-300">"{cleanText.replace(/"/g, '')}"</p>
+        </div>
+      );
+    }
+
+    // 2. Detección de Imagen Enviada (Log del Webhook)
+    if (text.includes('[IMG:')) {
+      const imgMatch = text.match(/\[IMG: (.*?)\]/);
+      const url = imgMatch ? imgMatch[1] : '';
+      const caption = text.replace(/\[IMG: .*?\]/, '').trim();
+      
+      return (
+        <div className="space-y-3">
+          <div className="relative group overflow-hidden rounded-lg border border-slate-700 max-w-[200px]">
+             <img src={url} alt="Poster enviado" className="w-full h-auto object-cover opacity-80 group-hover:opacity-100 transition-opacity" />
+             <div className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity">
+                <a href={url} target="_blank" rel="noreferrer" className="text-[10px] text-white font-bold flex items-center gap-1 bg-black/80 px-2 py-1 rounded-full">
+                   <ImageIcon className="w-3 h-3" /> VER FULL
+                </a>
+             </div>
+          </div>
+          {caption && <p className="whitespace-pre-wrap leading-relaxed">{caption}</p>}
+        </div>
+      );
+    }
+
+    // 3. Texto Normal
+    return <p className="whitespace-pre-wrap leading-relaxed text-xs">{text}</p>;
+  };
 
   return (
-    <ScrollArea className="flex-1 p-4">
+    <ScrollArea className="flex-1 p-4 bg-slate-950">
       {loading ? (
         <div className="flex h-full items-center justify-center text-slate-500 text-xs">
           <Loader2 className="w-4 h-4 animate-spin mr-2" /> Cargando historial...
         </div>
       ) : (
-        <div className="space-y-4 pb-4">
+        <div className="space-y-6 pb-4">
           {messages.map((msg) => {
-            const audioMatch = msg.mensaje.match(/<<AUDIO:(.*?)>>/);
-            const audioUrl = audioMatch ? audioMatch[1] : null;
+            const isSamurai = msg.emisor === 'SAMURAI';
+            const isSystem = msg.emisor === 'SISTEMA' || msg.mensaje.includes('[ALERTA]');
+
+            if (isSystem) {
+               return (
+                  <div key={msg.id} className="flex justify-center my-4">
+                     <Badge variant="outline" className="text-[9px] border-yellow-500/30 text-yellow-500 bg-yellow-500/5 py-1">
+                        {msg.mensaje}
+                     </Badge>
+                  </div>
+               );
+            }
 
             return (
               <div key={msg.id} className={`flex ${msg.emisor === 'CLIENTE' ? 'justify-start' : 'justify-end'}`}>
-                <div
-                  className={`max-w-[85%] rounded-2xl p-3 text-sm shadow-sm relative group
-                    ${msg.emisor === 'CLIENTE' ? 'bg-slate-800 text-slate-200 rounded-tl-none' :
-                      msg.emisor === 'SAMURAI' ? 'bg-indigo-600 text-white rounded-tr-none' :
-                      'bg-slate-700 text-slate-300 rounded-tr-none border border-slate-600'}
-                    ${msg.mensaje.includes('#STOP') || msg.mensaje.includes('#START') || msg.mensaje.includes('#CIA') ? 'border-yellow-500/50 bg-yellow-900/10' : ''}
-                  `}
-                >
-                  {msg.emisor !== 'CLIENTE' && (
-                    <div className="text-[9px] opacity-70 mb-1 font-bold flex items-center gap-1 uppercase tracking-wider">
-                      {msg.emisor === 'SAMURAI' ? <Bot className="w-3 h-3" /> : <UserCog className="w-3 h-3" />}
-                      {msg.emisor}
-                    </div>
-                  )}
-
-                  {audioUrl ? (
-                    <div className="flex flex-col gap-2 min-w-[200px]">
-                      <div className="flex items-center gap-2 text-[10px] text-indigo-300 font-bold uppercase">
-                         <Mic className="w-3 h-3" /> Nota de Voz
-                      </div>
-                      <audio controls className="h-8 w-full filter invert brightness-200">
-                        <source src={audioUrl} type="audio/mpeg" />
-                        Tu navegador no soporta audio.
-                      </audio>
-                    </div>
-                  ) : (
-                    <p className="whitespace-pre-wrap leading-relaxed text-xs">{msg.mensaje}</p>
-                  )}
-                  
-                  <div className="text-[8px] opacity-0 group-hover:opacity-50 transition-opacity mt-1 text-right">
-                    {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                <div className={`flex flex-col max-w-[85%] ${msg.emisor === 'CLIENTE' ? 'items-start' : 'items-end'}`}>
+                   
+                   {/* Bubble */}
+                   <div
+                    className={`rounded-2xl p-3 text-sm shadow-md relative group border
+                      ${msg.emisor === 'CLIENTE' ? 'bg-slate-900 border-slate-800 text-slate-200 rounded-tl-none' :
+                        'bg-indigo-600/10 border-indigo-500/20 text-indigo-100 rounded-tr-none'}
+                    `}
+                  >
+                    {renderMessageContent(msg.mensaje)}
                   </div>
+
+                  {/* Meta info */}
+                  <div className="flex items-center gap-2 mt-1 px-1">
+                     <span className="text-[9px] text-slate-600 font-mono">
+                        {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                     </span>
+                     {isSamurai && (
+                        <span className="text-[8px] font-bold text-indigo-500 uppercase tracking-wider flex items-center gap-1">
+                           <Bot className="w-3 h-3" /> AI
+                        </span>
+                     )}
+                  </div>
+
                 </div>
               </div>
             );
