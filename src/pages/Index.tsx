@@ -66,7 +66,7 @@ const Index = () => {
         supabase.from('errores_ia').select('count', { count: 'exact', head: true }),
         supabase.from('errores_ia').select('count', { count: 'exact', head: true }).eq('estado_correccion', 'REPORTADA'),
         supabase.from('versiones_prompts_aprendidas').select('*').order('created_at', { ascending: true }),
-        supabase.from('activity_logs').select('*').order('created_at', { ascending: false }).limit(10),
+        supabase.from('activity_logs').select('*').order('created_at', { ascending: false }).limit(15),
         supabase.from('leads').select('id, nombre, next_followup_at').not('next_followup_at', 'is', null).order('next_followup_at', { ascending: true }).limit(5),
         supabase.from('leads').select('*'),
         supabase.from('main_website_content').select('scrape_status'),
@@ -114,7 +114,7 @@ const Index = () => {
 
     } catch (err) {
       console.error("Dashboard error:", err);
-      setLatency(null); // Indicate error state
+      setLatency(null); 
     } finally {
       setLoading(false);
     }
@@ -144,7 +144,7 @@ const Index = () => {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           <StatCard title="Salud Meta CAPI" value={`${stats.totalLeads > 0 ? Math.round((stats.capiReadyLeads / stats.totalLeads) * 100) : 0}%`} icon={Fingerprint} color="text-indigo-400" bg="bg-indigo-500/10" footer={`${stats.capiReadyLeads} Leads con Datos Full`} />
           <StatCard title="Alertas #CIA" value={stats.totalErrors} icon={AlertTriangle} color="text-yellow-500" bg="bg-yellow-500/10" footer="Mejoras de Conducta" />
-          <StatCard title="Ventas Validadas" value={stats.validatedSales} icon={DollarSign} color="text-emerald-500" bg="bg-emerald-500/10" footer="Reservas de $1500 Confirmadas" />
+          <StatCard title="Ventas Validadas" value={stats.validatedSales} icon={DollarSign} color="text-emerald-500" bg="bg-emerald-500/10" footer="Reservas Confirmadas" />
           <StatCard title="Total Prospectos" value={stats.totalLeads} icon={Users2} color="text-slate-400" bg="bg-slate-500/10" footer="Tráfico Acumulado" />
         </div>
 
@@ -198,36 +198,38 @@ const Index = () => {
              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <QuickButton label="Probar IA" path="/brain?tab=simulador" icon={Zap} color="bg-indigo-600/10 text-indigo-500 border-indigo-500/20" />
                 <QuickButton label="Radar Leads" path="/leads" icon={MessageSquare} color="bg-emerald-600/10 text-emerald-500 border-emerald-500/20" />
-                <QuickButton label="Media OCR" path="/media" icon={ImageIcon} color="bg-blue-600/10 text-blue-500 border-blue-500/20" />
-                <QuickButton label="Pipeline" path="/pipeline" icon={Trello} color="bg-purple-600/10 text-purple-500 border-purple-500/20" />
+                <QuickButton label="Media Manager" path="/media" icon={ImageIcon} color="bg-blue-600/10 text-blue-500 border-blue-500/20" />
+                <QuickButton label="Tablero Pipeline" path="/pipeline" icon={Trello} color="bg-purple-600/10 text-purple-500 border-purple-500/20" />
              </div>
           </div>
 
           <div className="lg:col-span-4 space-y-6">
             <SystemStatus />
             <BrainHealthCard health={brainHealth} />
-            <TaskRadar tasks={tasks} />
             
-            <Card className="bg-black border-slate-800 font-mono text-[9px] shadow-2xl flex flex-col rounded-xl overflow-hidden min-h-[250px]">
+            <Card className="bg-black border-slate-800 font-mono text-[9px] shadow-2xl flex flex-col rounded-xl overflow-hidden h-[300px]">
               <div className="px-4 py-2 border-b border-slate-800 bg-slate-900/80 flex items-center justify-center">
-                 <div className="flex items-center gap-2 text-slate-500"><Terminal className="w-3.5 h-3.5" /><span className="font-bold uppercase tracking-widest">System Log</span></div>
+                 <div className="flex items-center gap-2 text-slate-500"><Terminal className="w-3.5 h-3.5" /><span className="font-bold uppercase tracking-widest">Live Activity Log</span></div>
               </div>
-              <ScrollArea className="h-[200px] p-4">
+              <ScrollArea className="flex-1 p-4">
                  <div className="space-y-1.5">
                     {stats.recentLogs.map((log, i) => (
-                        <div key={i} className="flex items-start gap-2 border-l border-slate-800 pl-2">
-                          <span className="text-slate-600 shrink-0">[{new Date(log.created_at).toLocaleTimeString()}]</span> 
+                        <div key={i} className="flex items-start gap-2 border-l border-slate-800 pl-2 group">
+                          <span className="text-slate-600 shrink-0">[{new Date(log.created_at).toLocaleTimeString([], { hour12: false })}]</span> 
                           <span className={cn(
                               "shrink-0 px-1 rounded uppercase font-bold",
                               log.action === 'ERROR' ? 'bg-red-500/20 text-red-500' : 
                               log.action === 'CREATE' ? 'bg-green-500/20 text-green-500' :
                               'bg-indigo-500/20 text-indigo-400'
                           )}>{log.action}</span> 
-                          <span className="text-slate-400 truncate max-w-[200px]">{log.description}</span>
+                          <span className="text-slate-400 truncate max-w-[200px] group-hover:text-white transition-colors">{log.description}</span>
                         </div>
                     ))}
                  </div>
               </ScrollArea>
+              <div className="p-2 bg-slate-900/50 border-t border-slate-800 text-center">
+                 <button onClick={() => window.location.href='/logs'} className="text-[8px] text-slate-500 hover:text-indigo-400 uppercase font-bold tracking-widest">Ver Historial Completo</button>
+              </div>
             </Card>
           </div>
         </div>
@@ -239,7 +241,7 @@ const Index = () => {
 const QuickButton = ({ label, path, icon: Icon, color }: any) => (
    <Button 
      variant="outline" 
-     className={cn("flex flex-col h-20 gap-2 items-center justify-center border transition-all hover:scale-105", color)} 
+     className={cn("flex flex-col h-20 gap-2 items-center justify-center border transition-all hover:scale-105 active:scale-95", color)} 
      onClick={() => window.location.href = path}
    >
       <Icon className="w-5 h-5" />

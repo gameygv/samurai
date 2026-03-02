@@ -70,7 +70,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
       items: [
         { icon: BarChart3, label: 'Meta CAPI', path: '/meta-capi' },
         { icon: BookOpen, label: 'Manual de Ayuda', path: '/manual' },
-        { icon: Clock, label: 'Follow-ups Auto', path: '/settings?tab=followups' },
+        { icon: Clock, label: 'Follow-ups Auto', path: '/settings?tab=ventas' },
         { icon: LinkIcon, label: 'Integraciones', path: '/settings?tab=webhooks' },
         { icon: SettingsIcon, label: 'API Keys', path: '/settings?tab=secrets' },
       ]
@@ -98,7 +98,8 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
               <div className="space-y-1">
                 {group.items.map((item) => {
                   const Icon = item.icon;
-                  const isActive = location.pathname === item.path.split('?')[0];
+                  const isActive = location.pathname === item.path.split('?')[0] && 
+                                  (!item.path.includes('tab=') || location.search.includes(item.path.split('?')[1]));
                   
                   return (
                     <Link
