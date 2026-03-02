@@ -1,34 +1,34 @@
-# DYAD SAMURAI - MANUAL DE ESTADO Y REPORTE (v0.8.6-AI)
+# DYAD SAMURAI - MANUAL DE ESTADO Y REPORTE (v1.0-Sam)
 
-Este documento detalla el estado actual del sistema tras la implementación de la versión 0.8.6 (Command Center Upgrade).
+Este documento detalla el estado actual del sistema tras la implementación de la identidad "Sam" y la optimización de memoria conversacional.
 
 ## 1. RESUMEN EJECUTIVO
 
 - **Estado del Sistema:** ✅ ONLINE (PRO)
-- **Versión:** 0.8.6 (Command Center Edition)
-- **Base de Datos:** ✅ Conectada y Optimizada.
-- **Integraciones:** 🚀 WooCommerce Dynamic Links & Ojo de Halcón Ready.
+- **Motor IA:** 🧠 GPT-4o (Optimized)
+- **Identidad:** 👤 "Sam" (Asistente de Ventas)
+- **Conexión:** 🔌 Evolution API v2 (Directa)
 
 ## 2. ARQUITECTURA DEL CEREBRO (Brain)
 
-- **Capa 1 (CIA):** ✅ Aprendizaje autocorrectivo funcional.
-- **Capa 2 (ADN):** ✅ Identidad Samurai inyectada.
+- **Capa 1 (Memoria):** ✅ Historial completo de hilos inyectado en cada mensaje.
+- **Capa 2 (Identidad):** ✅ Reglas de seguridad activas (Prohibido decir "Samurai" o "Ojo de Halcón").
 - **Capa 3 (Verdad Maestra):** ✅ Scraper conectado a theelephantbowl.com.
 - **Capa 4 (Media):** ✅ Catálogo de imágenes con triggers contextuales.
-- **Capa 5 (Ojo de Halcón):** 👁️ Espacio reservado para visión financiera (Fase 2).
+- **Capa 5 (Ojo de Halcón):** 👁️ Análisis de comprobantes vía OpenAI Vision.
 
-## 3. NOVEDADES DEL DASHBOARD (v0.8.6)
+## 3. HITOS RECIENTES
 
-- [x] **Command Center UI:** Dashboard principal rediseñado con latencia y logs en tiempo real.
-- [x] **Radar de Leads:** Heatmap táctico para filtrar prospectos por intención de compra.
-- [x] **Simulador de Jerarquía:** Herramienta de auditoría para ver cómo piensa la IA.
-- [x] **Prompt Maestro Viewer:** Visor en tiempo real del Kernel consolidado.
+- [x] **Memoria Continua:** El bot ya no olvida el nombre ni la ciudad del cliente durante la charla.
+- [x] **Webhook Robusto:** Manejo de errores 400 en Evolution API y validación de respuestas vacías.
+- [x] **Sugerencias Coherentes:** El panel de chat sugiere respuestas alineadas con la personalidad de Sam.
+- [x] **Auto-Discovery:** Extracción automática de email y ciudad en segundo plano.
 
 ## 4. PRÓXIMOS PASOS RECOMENDADOS
 
-1.  **Llenar la Base de Conocimiento:** Usar la pestaña "Sincronizar" para leer las páginas de cursos de la web oficial.
-2.  **Configurar Ojo de Halcón:** En cuanto esté listo el módulo de visión, redactar las reglas en la Capa 5 del Cerebro.
-3.  **Monitoreo:** Usar el Radar de Leads para atacar a los usuarios con "Alta Intención".
+1.  **Monitorizar Cierres:** Usar la pestaña "Pipeline" para ver cómo "Sam" mueve los leads de "Conexión" a "Cierre".
+2.  **Nutrir Media Manager:** Subir posters de los próximos eventos con instrucciones claras (ej: "Enviar cuando pregunten por Monterrey").
+3.  **Refinar #CIA:** Si Sam comete un error de tono, usar la Bitácora para corregirlo permanentemente.
 
 ---
-*Reporte generado automáticamente por Dyad System v0.8.6*
+*Reporte generado automáticamente por Dyad System v1.0*
