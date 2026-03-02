@@ -50,49 +50,61 @@ serve(async (req) => {
         .select('emisor, mensaje')
         .eq('lead_id', lead.id)
         .order('created_at', { ascending: true })
-        .limit(15);
+        .limit(20);
 
-    // Mapear historial al formato de OpenAI
     const thread = (historyMsgs || []).map(m => ({
         role: (m.emisor === 'CLIENTE' || m.emisor === 'HUMANO') ? 'user' : 'assistant',
         content: m.mensaje
     }));
 
-    // 5. CONSTRUIR PROMPT DINÁMICO
+    // 5. ANÁLISIS DE DATOS FALTANTES (CRÍTICO)
+    const missing = [];
+    // Si el nombre es el default o es solo el número, falta nombre real.
+    if (!lead.nombre || lead.nombre === 'Cliente' || lead.nombre === 'Nuevo Lead WhatsApp' || lead.nombre === phone) missing.push("NOMBRE");
+    if (!lead.ciudad || lead.ciudad.length < 3) missing.push("CIUDAD");
+    if (!lead.email || lead.email.length < 5) missing.push("EMAIL");
+
+    let dataDirective = "";
+    if (missing.length > 0) {
+        dataDirective = `
+⚠️ ALERTA DE SISTEMA (DATOS FALTANTES):
+Todavía no tienes estos datos del cliente: [ ${missing.join(', ')} ].
+TU OBJETIVO INMEDIATO: Obtener ${missing[0]} y ${missing[1] || ''} en tu próxima respuesta.
+NO des precios ni info detallada (textos largos) hasta tener NOMBRE y CIUDAD.
+Pregunta de forma casual pero directa. Ej: "Claro, para ver disponibilidad en tu zona, ¿con quién tengo el gusto y de qué ciudad nos escribes?"
+        `.trim();
+    } else {
+        dataDirective = "✅ DATOS COMPLETOS. Tienes luz verde para proceder a LA VENTA (Fase 3: Link de pago).";
+    }
+
+    // 6. CONSTRUIR PROMPT DINÁMICO
     const { data: configs } = await supabaseClient.from('app_config').select('key, value');
     const apiKey = configs.find(c => c.key === 'openai_api_key')?.value;
     
     if (!apiKey) throw new Error("OpenAI API Key no configurada.");
 
-    // Perfil del lead para que la IA sepa qué datos ya tiene
-    const leadProfile = `
-DATOS ACTUALES DEL CLIENTE (Usa esto para no repetir preguntas):
-- NOMBRE: ${lead.nombre}
-- CIUDAD: ${lead.ciudad || 'Desconocida'}
-- EMAIL: ${lead.email || 'No capturado'}
-- INTENCIÓN: ${lead.buying_intent}
-    `.trim();
-
+    // Se inyecta la directiva justo antes del historial para condicionar la respuesta
     const messages = [
-        { role: "system", content: `${kernelData?.system_prompt}\n\n${leadProfile}` },
+        { role: "system", content: `${kernelData?.system_prompt}\n\n${dataDirective}` },
         ...thread
     ];
 
-    // 6. GENERAR RESPUESTA
+    // 7. GENERAR RESPUESTA (GPT-4o)
     const aiRes = await fetch("https://api.openai.com/v1/chat/completions", {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
             model: "gpt-4o",
             messages: messages,
-            temperature: 0.7
+            temperature: 0.5, // Bajamos temperatura para ser más preciso y menos "creativo/disperso"
+            max_tokens: 300
         })
     });
 
     const aiData = await aiRes.json();
     const finalAnswer = aiData.choices[0].message.content;
 
-    // 7. ENVIAR POR EVOLUTION API
+    // 8. ENVIAR POR EVOLUTION API
     const evoUrl = configs.find(c => c.key === 'evolution_api_url')?.value;
     const evoKey = configs.find(c => c.key === 'evolution_api_key')?.value;
 
@@ -103,11 +115,11 @@ DATOS ACTUALES DEL CLIENTE (Usa esto para no repetir preguntas):
             body: JSON.stringify({ number: phone, text: finalAnswer })
         });
 
-        // 8. GUARDAR RESPUESTA IA
+        // 9. GUARDAR RESPUESTA IA
         await supabaseClient.from('conversaciones').insert({ lead_id: lead.id, emisor: 'SAMURAI', mensaje: finalAnswer, platform: 'WHATSAPP_AUTO' });
     }
 
-    // 9. DISPARAR ANÁLISIS (Detección de datos en background)
+    // 10. DISPARAR ANÁLISIS EN SEGUNDO PLANO
     fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/analyze-leads`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${Deno.env.get('SUPABASE_ANON_KEY')}` },
