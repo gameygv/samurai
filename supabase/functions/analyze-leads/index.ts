@@ -24,6 +24,7 @@ serve(async (req) => {
 
     if (!apiKey) throw new Error("Gemini API Key missing.");
 
+    // Seleccionamos leads recientes O leads que nunca han sido analizados
     const { data: activeLeads } = await supabaseClient
       .from('leads')
       .select('*')
@@ -46,27 +47,29 @@ serve(async (req) => {
          const transcript = messages.map(m => `${m.emisor}: ${m.mensaje}`).join('\n');
 
          const prompt = `
-            Eres el Analista Maestro de Samurai AI. Tu objetivo es mapear al lead para Meta CAPI y Estrategia de Ventas Localizada.
+            Eres el Analista de Datos del CRM Samurai. Tu ÚNICA misión es extraer datos estructurados para Meta CAPI.
             
             HISTORIAL:
             ${transcript}
 
-            INSTRUCCIONES:
-            1. LOCALIZACIÓN: Sé extremadamente preciso. Si dice "estoy en la Roma", la ciudad es "CDMX". Si dice "cerca de la Minerva", es "Guadalajara".
-            2. INTENCIÓN: 
-               - BAJO: Saludo inicial.
-               - MEDIO: Pregunta por un curso específico o fechas.
-               - ALTO: Pidió el link de pago o detalles para depositar los $1500.
-            3. EMAIL: Extrae cualquier cadena que parezca un correo.
+            INSTRUCCIONES DE EXTRACCIÓN:
+            1. EMAIL: Busca patrones de correo (ej: @gmail, @hotmail). Si no hay, devuelve null.
+            2. CIUDAD: Infiere la ciudad por contexto (ej: "soy de GDL", "CDMX", "vivo en Monterrey"). Si es ambigua, null.
+            3. INTENCIÓN: 
+               - BAJO: Saludos, info general.
+               - MEDIO: Preguntas específicas (fechas, temario).
+               - ALTO: Pide link de pago, cuenta bancaria o precio final.
+            4. NOMBRE: Si el usuario dice "Soy Juan", extráelo.
             
-            Formato JSON:
+            Responde SOLO este JSON:
             {
-              "fn": "Nombre",
-              "ln": "Apellido",
-              "email": "email@... | null",
-              "city": "Ciudad Real",
+              "fn": "Nombre o null",
+              "ln": "Apellido o null",
+              "email": "email@dominio.com o null",
+              "city": "Ciudad o null",
               "intent_label": "BAJO" | "MEDIO" | "ALTO",
-              "summary": "Resumen de la situación actual."
+              "summary": "Resumen ejecutivo de 1 linea",
+              "psych_profile": "Perfil psicográfico breve (Analítico/Impulsivo/Amable)"
             }
          `;
 
@@ -86,15 +89,21 @@ serve(async (req) => {
             last_analyzed_at: new Date().toISOString(),
             summary: analysis.summary,
             buying_intent: analysis.intent_label,
-            ciudad: analysis.city || lead.ciudad
+            perfil_psicologico: analysis.psych_profile
          };
 
-         if (analysis.email) updateData.email = analysis.email;
+         // Solo actualizar si hay datos nuevos y valiosos
+         if (analysis.email && !lead.email) updateData.email = analysis.email;
+         if (analysis.city && !lead.ciudad) updateData.ciudad = analysis.city;
+         
          const detectedName = `${analysis.fn || ''} ${analysis.ln || ''}`.trim();
-         if (detectedName && (lead.nombre?.includes('Nuevo') || !lead.nombre)) updateData.nombre = detectedName;
+         // Si el nombre actual es genérico o nulo, y la IA encontró uno, actualízalo
+         if (detectedName && (lead.nombre?.includes('Nuevo') || !lead.nombre)) {
+            updateData.nombre = detectedName;
+         }
 
          await supabaseClient.from('leads').update(updateData).eq('id', lead.id);
-         results.push({ lead: lead.id, status: 'updated' });
+         results.push({ lead: lead.id, status: 'updated', data: updateData });
 
        } catch (e) { console.error(e); }
     }

@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import {
   MessageSquare, Search, Loader2, Phone, Zap, BrainCircuit,
   Clock, MapPin, UserCheck, Brain, RefreshCw, Sparkles,
-  AlertCircle, TrendingUp, Smile, Meh, Frown, Target, Mail, ShieldAlert
+  AlertCircle, TrendingUp, Smile, Meh, Frown, Target, Mail, ShieldAlert, CheckCircle2
 } from 'lucide-react';
 import { toast } from 'sonner';
 import ChatViewer from '@/components/ChatViewer';
@@ -97,14 +97,6 @@ const Leads = () => {
      return <span className="text-[9px] text-slate-600">Hace {Math.floor(minutes/1440)}d</span>;
   };
 
-  const getMoodIcon = (mood: string) => {
-    switch (mood?.toUpperCase()) {
-      case 'POSITIVO': return <Smile className="w-4 h-4 text-green-500" />;
-      case 'NEGATIVO': return <Frown className="w-4 h-4 text-red-500" />;
-      default: return <Meh className="w-4 h-4 text-slate-500" />;
-    }
-  };
-
   const filteredLeads = leads.filter(l => {
     const matchesSearch = (l.nombre?.toLowerCase().includes(searchTerm.toLowerCase()) || l.telefono?.includes(searchTerm));
     const matchesIntent = filterIntent === 'ALL' || l.buying_intent?.toUpperCase() === filterIntent;
@@ -168,21 +160,25 @@ const Leads = () => {
               <TableHeader>
                 <TableRow className="border-slate-800 hover:bg-slate-900">
                   <TableHead className="text-slate-400 text-[10px] uppercase">Cliente</TableHead>
-                  <TableHead className="text-slate-400 text-[10px] uppercase">Datos CAPI (Salud)</TableHead>
+                  <TableHead className="text-slate-400 text-[10px] uppercase">Salud de Datos (CAPI)</TableHead>
                   <TableHead className="text-slate-400 text-[10px] uppercase text-center">IA Analysis</TableHead>
-                  <TableHead className="text-slate-400 text-[10px] uppercase text-center">Ánimo</TableHead>
                   <TableHead className="text-slate-400 text-[10px] uppercase">Intención</TableHead>
                   <TableHead className="text-slate-400 text-[10px] uppercase text-right">Acciones</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {loading ? (
-                   <TableRow><TableCell colSpan={6} className="text-center h-32"><Loader2 className="w-6 h-6 animate-spin mx-auto text-indigo-600" /></TableCell></TableRow>
-                ) : filteredLeads.map((lead) => (
+                   <TableRow><TableCell colSpan={5} className="text-center h-32"><Loader2 className="w-6 h-6 animate-spin mx-auto text-indigo-600" /></TableCell></TableRow>
+                ) : filteredLeads.map((lead) => {
+                  const hasName = lead.nombre && !lead.nombre.includes('Nuevo');
+                  const hasEmail = lead.email && lead.email.length > 5;
+                  const hasCity = lead.ciudad && lead.ciudad.length > 2;
+                  
+                  return (
                   <TableRow key={lead.id} className="border-slate-800 hover:bg-slate-800/30 transition-colors">
                     <TableCell>
                       <div className="flex flex-col">
-                         <span className={cn("font-bold flex items-center gap-2", lead.nombre && !lead.nombre.includes('Nuevo') ? 'text-indigo-400' : 'text-slate-300')}>
+                         <span className={cn("font-bold flex items-center gap-2", hasName ? 'text-indigo-400' : 'text-slate-300')}>
                             {lead.nombre || 'Desconocido'}
                             {lead.ai_paused && <Badge variant="destructive" className="h-4 px-1 text-[8px] bg-red-600">STOP</Badge>}
                          </span>
@@ -190,13 +186,10 @@ const Leads = () => {
                       </div>
                     </TableCell>
                     <TableCell>
-                       <div className="flex flex-col gap-1">
-                          {lead.email ? (
-                             <span className="text-[9px] text-emerald-500 flex items-center gap-1"><Mail className="w-2.5 h-2.5"/> {lead.email}</span>
-                          ) : (
-                             <span className="text-[9px] text-red-500 flex items-center gap-1 animate-pulse font-bold"><AlertCircle className="w-2.5 h-2.5"/> FALTA EMAIL</span>
-                          )}
-                          <span className="text-[9px] text-slate-500 flex items-center gap-1"><MapPin className="w-2.5 h-2.5"/> {lead.ciudad || 'CIUDAD DESCONOCIDA'}</span>
+                       <div className="flex gap-2">
+                          <DataBadge label="NOMBRE" active={hasName} />
+                          <DataBadge label="EMAIL" active={hasEmail} />
+                          <DataBadge label="CIUDAD" active={hasCity} />
                        </div>
                     </TableCell>
                     <TableCell className="text-center">
@@ -208,9 +201,6 @@ const Leads = () => {
                        ) : (
                           <span className="text-[9px] text-slate-700 italic">Sin datos</span>
                        )}
-                    </TableCell>
-                    <TableCell className="text-center">
-                       <div className="flex justify-center">{getMoodIcon(lead.estado_emocional_actual)}</div>
                     </TableCell>
                     <TableCell>
                        <div className="flex flex-col gap-1 w-[100px]">
@@ -226,7 +216,7 @@ const Leads = () => {
                        </Button>
                     </TableCell>
                   </TableRow>
-                ))}
+                )})}
               </TableBody>
             </Table>
           </CardContent>
@@ -235,6 +225,13 @@ const Leads = () => {
     </Layout>
   );
 };
+
+const DataBadge = ({ label, active }: { label: string, active: boolean }) => (
+   <Badge variant="outline" className={cn("text-[8px] h-5 px-1.5 font-bold", active ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/30" : "bg-slate-800 text-slate-600 border-slate-700")}>
+      {active ? <CheckCircle2 className="w-2.5 h-2.5 mr-1" /> : <AlertCircle className="w-2.5 h-2.5 mr-1" />}
+      {label}
+   </Badge>
+);
 
 const IntentCard = ({ label, count, color, active, onClick }: any) => (
   <Card className={cn("bg-slate-900 border-slate-800 p-4 cursor-pointer transition-all hover:scale-[1.02]", active ? cn("ring-2 ring-indigo-500", color) : "hover:border-slate-700")} onClick={onClick}>
