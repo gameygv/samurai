@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0'
 import { corsHeaders } from '../_shared/cors.ts'
@@ -14,8 +15,7 @@ serve(async (req) => {
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
 
     if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
-      console.error("[process-followups] Missing Supabase environment variables.");
-      return new Response(JSON.stringify({ error: "Internal server configuration error." }), { status: 500, headers: corsHeaders });
+      return new Response(JSON.stringify({ error: "Internal server error." }), { status: 500, headers: corsHeaders });
     }
 
     const supabaseClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
@@ -31,10 +31,10 @@ serve(async (req) => {
     };
 
     const delays: any = {
-       1: getDelay('sales_reminder_1', 24), // Horas
-       2: getDelay('sales_reminder_2', 48), // Horas
-       3: getDelay('sales_reminder_3', 72), // Horas
-       4: getDelay('sales_reminder_4', 7)   // Días
+       1: getDelay('sales_reminder_1', 24), 
+       2: getDelay('sales_reminder_2', 48), 
+       3: getDelay('sales_reminder_3', 72), 
+       4: getDelay('sales_reminder_4', 7)   
     };
 
     // 2. BUSCAR LEADS EN INTENCIÓN ALTA (PENDIENTES DE PAGO)
@@ -45,7 +45,7 @@ serve(async (req) => {
       .neq('ai_paused', true)
       .lt('followup_stage', 5);
 
-    console.log(`[process-followups] Leads calientes detectados: ${hotLeads?.length || 0}`);
+    console.log(`[process-followups] Leads detectados: ${hotLeads?.length || 0}`);
 
     const results = [];
 
@@ -65,58 +65,37 @@ serve(async (req) => {
        else if (nextStage === 3) waitHours = delays[3];
        else if (nextStage === 4) waitHours = delays[4] * 24;
 
-       if (diffHours >= waitHours) {
-          shouldSend = true;
-       }
+       if (diffHours >= waitHours) shouldSend = true;
 
        if (shouldSend) {
-          console.log(`[process-followups] Ejecutando Stage ${nextStage} para ${lead.nombre}`);
-
           let message = "";
           
           if (nextStage === 4) {
-             message = `Hola ${lead.nombre}, noté que no pudiste completar tu reserva. ¿Hubo algún problema con el link? Si ya no estás interesado, avísame para liberar el lugar.`;
-          } else if (nextStage < 4) {
-             message = `Hola ${lead.nombre}, solo un recordatorio amable sobre tu reserva de $1500 MXN. ¿Te puedo ayudar con el proceso de pago?`;
-          }
-
-          if (nextStage > 4) {
-             console.log(`[process-followups] Lead ${lead.nombre} marcado como PERDIDO.`);
-             await supabaseClient.from('leads').update({
-                buying_intent: 'PERDIDO',
-                followup_stage: 5,
-                summary: `[SISTEMA] Lead marcado como perdido tras 4 intentos de cobro sin respuesta.`
-             }).eq('id', lead.id);
-             
-             results.push({ lead: lead.nombre, action: 'MARK_LOST' });
+             message = `Hola ${lead.nombre}, noté que no pudiste completar tu reserva de $1500 MXN. ¿Hubo algún problema técnico con el link? Si ya no deseas el lugar, avísame para liberarlo a otra persona en lista de espera.`;
           } else {
-             await supabaseClient.from('conversaciones').insert({
-                lead_id: lead.id,
-                emisor: 'SAMURAI',
-                mensaje: message,
-                platform: 'AUTO_FOLLOWUP'
-             });
-
-             await supabaseClient.from('leads').update({
-                followup_stage: nextStage,
-                last_message_at: now.toISOString()
-             }).eq('id', lead.id);
-
-             results.push({ lead: lead.nombre, action: `SENT_STAGE_${nextStage}` });
+             message = `Hola ${lead.nombre}, ¿cómo vas con tu proceso de reserva? Solo quería confirmarte que sigo guardando tu lugar para el taller. Avísame si necesitas apoyo con el pago de los $1500.`;
           }
+
+          // Guardar mensaje y avanzar fase
+          await supabaseClient.from('conversaciones').insert({
+              lead_id: lead.id,
+              emisor: 'SAMURAI',
+              mensaje: message,
+              platform: 'AUTO_FOLLOWUP'
+          });
+
+          await supabaseClient.from('leads').update({
+              followup_stage: nextStage,
+              last_message_at: now.toISOString()
+          }).eq('id', lead.id);
+
+          results.push({ lead: lead.nombre, stage: nextStage });
        }
     }
 
-    return new Response(
-      JSON.stringify({ success: true, processed: results }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    )
+    return new Response(JSON.stringify({ success: true, processed: results }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
   } catch (error: any) {
-    console.error("[process-followups] Critical error:", error);
-    return new Response(
-      JSON.stringify({ success: false, error: error.message }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    )
+    return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: corsHeaders });
   }
 })
