@@ -34,77 +34,39 @@ serve(async (req) => {
     const body = await req.json();
     const eventName = (body.event || body.type || "").toLowerCase();
     
-    // Filtro estricto para mensajes nuevos
     if (eventName !== 'messages.upsert') {
         return new Response(JSON.stringify({ ignored: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     const messageData = findValue(body, 'message'); 
-    
-    // Ignorar mensajes propios
     const fromMe = findValue(body, 'fromMe') || body.data?.key?.fromMe;
     if (!messageData || fromMe) return new Response('Ignored (Self/NoData)');
 
     const phone = findValue(body, 'remoteJid')?.split('@')[0];
     let messageText = "";
 
-    // --- PROCESAMIENTO INTELIGENTE ---
-    
+    // --- PROCESAMIENTO INTELIGENTE DE AUDIO ---
     const audioObj = findValue(messageData, 'audioMessage');
     
     if (audioObj) {
-        console.log(`[Audio] Detectado para ${phone}. Iniciando recuperación...`);
-        
+        console.log(`[Audio] Detectado para ${phone}. Procesando...`);
         let audioBase64 = findValue(body, 'base64');
-        let errorDetalle = "";
 
-        // 2. Fallback: Pedir a Evolution API si no viene en el webhook
+        // Fallback API si no hay base64
         if (!audioBase64 && evoUrl && evoKey) {
             try {
-                // Transformación segura de URL
-                // De: http://.../message/sendText/instancia
-                // A:  http://.../chat/getBase64FromMediaMessage/instancia
-                let getBase64Url = evoUrl;
-                if (evoUrl.includes('/message/sendText')) {
-                    getBase64Url = evoUrl.replace('/message/sendText', '/chat/getBase64FromMediaMessage');
-                } else {
-                    // Si la URL no tiene el formato estándar, intentamos inferir o fallar
-                    console.warn("URL de Evolution no estándar, intentando reemplazo simple...");
-                    // Esto asume que el usuario puso la URL completa del endpoint de texto
-                }
-
-                console.log(`[Audio] Solicitando Base64 a: ${getBase64Url}`);
-
-                // Payload CRÍTICO: Debe ser el objeto 'message' completo que contiene 'key'
-                // body.data suele ser la estructura correcta en v2
-                const payload = {
-                    message: body.data, 
-                    convertToMp4: false
-                };
-
+                let getBase64Url = evoUrl.replace('message/sendText', 'chat/getBase64FromMediaMessage');
+                const payload = { message: body.data?.message || messageData, convertToMp4: false };
                 const res = await fetch(getBase64Url, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'apikey': evoKey },
                     body: JSON.stringify(payload)
                 });
-
                 if (res.ok) {
                     const data = await res.json();
-                    if (data.base64) {
-                        audioBase64 = data.base64;
-                        console.log("[Audio] ¡Recuperado vía API!");
-                    } else {
-                        errorDetalle = "API respondió OK pero sin base64";
-                    }
-                } else {
-                    const errText = await res.text();
-                    console.error("[Audio] Fallo API Evolution:", errText);
-                    errorDetalle = `Error API: ${res.status}`;
+                    if (data.base64) audioBase64 = data.base64;
                 }
-            } catch (err) {
-                console.error("[Audio] Error de Red:", err);
-                errorDetalle = `Error Red: ${err.message}`;
-            }
+            } catch (err) { console.error("API Fallback Error:", err); }
         }
 
         if (audioBase64) {
@@ -124,34 +86,21 @@ serve(async (req) => {
                     headers: { "Authorization": `Bearer ${apiKey}` },
                     body: formData
                 });
-                
                 const whisperData = await whisperRes.json();
                 
-                if (whisperData.text) {
-                    messageText = `[TRANSCRIPCIÓN AUDIO]: "${whisperData.text}"`;
-                } else {
-                    console.error("Whisper Fail:", whisperData);
-                    messageText = "[AUDIO SIN INTELIGIBILIDAD]";
-                }
-            } catch (e) {
-                console.error("Audio Decode Error:", e);
-                messageText = `[ERROR PROCESANDO AUDIO]`;
-            }
+                if (whisperData.text) messageText = `[TRANSCRIPCIÓN AUDIO]: "${whisperData.text}"`;
+                else messageText = "[AUDIO SIN INTELIGIBILIDAD]";
+            } catch (e) { messageText = `[ERROR PROCESANDO AUDIO: ${e.message}]`; }
         } else {
-            messageText = `[AUDIO FALLIDO - ${errorDetalle || 'No se pudo obtener datos'}]`;
+            messageText = "[AUDIO FALLIDO - No se pudo obtener contenido]";
         }
-    } 
-    // Texto Normal
-    else {
-        messageText = findValue(messageData, 'conversation') || 
-                      findValue(messageData, 'text') || 
-                      findValue(messageData, 'caption') ||
-                      "[MULTIMEDIA/STICKER]";
+    } else {
+        messageText = findValue(messageData, 'conversation') || findValue(messageData, 'text') || findValue(messageData, 'caption') || "[MULTIMEDIA]";
     }
 
     if (!messageText || messageText.includes('MULTIMEDIA')) return new Response('No valid content');
 
-    // --- LOGICA DB (LEAD) ---
+    // --- LOGICA DB ---
     let { data: lead } = await supabaseClient.from('leads').select('*').or(`telefono.ilike.%${phone}%`).maybeSingle();
     if (!lead) {
         const { data: newLead } = await supabaseClient.from('leads').insert({ 
@@ -162,26 +111,38 @@ serve(async (req) => {
         lead = newLead;
     }
 
-    await supabaseClient.from('conversaciones').insert({ lead_id: lead.id, emisor: 'CLIENTE', mensaje: messageText, platform: 'WHATSAPP' });
-    
     if (lead.ai_paused) return new Response('AI Paused');
 
-    // --- CEREBRO IA ---
+    // --- CEREBRO IA (ORDEN CORREGIDO PARA EVITAR LATENCIA) ---
     const { data: kernelData } = await supabaseClient.functions.invoke('get-samurai-context');
-    const { data: historyMsgs } = await supabaseClient.from('conversaciones').select('emisor, mensaje').eq('lead_id', lead.id).order('created_at', { ascending: true }).limit(15);
+    
+    // 1. Traer historial ANTES de insertar el nuevo (para evitar duplicados o race conditions)
+    const { data: historyMsgs } = await supabaseClient.from('conversaciones')
+        .select('emisor, mensaje')
+        .eq('lead_id', lead.id)
+        .order('created_at', { ascending: true })
+        .limit(15);
 
+    // 2. Insertar el mensaje nuevo en DB (persistencia)
+    await supabaseClient.from('conversaciones').insert({ lead_id: lead.id, emisor: 'CLIENTE', mensaje: messageText, platform: 'WHATSAPP' });
+
+    // 3. Construir contexto IA inyectando el mensaje actual MANUALMENTE
+    const messages = [
+        { role: "system", content: kernelData?.system_prompt },
+        ...(historyMsgs || []).map(m => ({
+            role: (m.emisor === 'CLIENTE' || m.emisor === 'HUMANO') ? 'user' : 'assistant',
+            content: m.mensaje
+        })),
+        { role: "user", content: messageText } // <--- AQUÍ ESTÁ LA CLAVE: Inyección directa
+    ];
+
+    // Llamada a OpenAI
     const aiRes = await fetch("https://api.openai.com/v1/chat/completions", {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
             model: "gpt-4o",
-            messages: [
-                { role: "system", content: kernelData?.system_prompt },
-                ...(historyMsgs || []).map(m => ({
-                    role: (m.emisor === 'CLIENTE' || m.emisor === 'HUMANO') ? 'user' : 'assistant',
-                    content: m.mensaje
-                }))
-            ],
+            messages: messages,
             temperature: 0.3
         })
     });
@@ -189,7 +150,7 @@ serve(async (req) => {
     const aiData = await aiRes.json();
     const rawAnswer = aiData.choices?.[0]?.message?.content || "";
 
-    // --- ENVÍO (ROBUSTO) ---
+    // --- ENVÍO ---
     const mediaRegex = /<<MEDIA:(.*?)>>/;
     const mediaMatch = rawAnswer.match(mediaRegex);
     let textToSend = rawAnswer.replace(mediaRegex, '').trim();
@@ -198,19 +159,11 @@ serve(async (req) => {
     if (evoUrl && evoKey) {
         try {
             if (mediaUrl) {
-                let sendMediaUrl = evoUrl;
-                if(evoUrl.includes('sendText')) sendMediaUrl = evoUrl.replace('sendText', 'sendMedia');
-                
+                let sendMediaUrl = evoUrl.replace('sendText', 'sendMedia');
                 await fetch(sendMediaUrl, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'apikey': evoKey },
-                    body: JSON.stringify({
-                        number: phone,
-                        mediatype: "image",
-                        media: mediaUrl,
-                        caption: textToSend,
-                        delay: 1000
-                    })
+                    body: JSON.stringify({ number: phone, mediatype: "image", media: mediaUrl, caption: textToSend, delay: 1000 })
                 });
             } else {
                 await fetch(evoUrl, {
@@ -219,16 +172,12 @@ serve(async (req) => {
                     body: JSON.stringify({ number: phone, text: textToSend, delay: 1000 })
                 });
             }
-
             const logMsg = mediaUrl ? `[IMG: ${mediaUrl}] ${rawAnswer}` : rawAnswer;
             await supabaseClient.from('conversaciones').insert({ lead_id: lead.id, emisor: 'SAMURAI', mensaje: logMsg, platform: 'WHATSAPP_AUTO' });
-
-        } catch (sendErr) {
-            console.error("Evolution Send Error:", sendErr);
-        }
+        } catch (sendErr) { console.error("Send Error:", sendErr); }
     }
 
-    return new Response(JSON.stringify({ success: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    return new Response(JSON.stringify({ success: true }));
 
   } catch (error: any) {
     return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: corsHeaders });
