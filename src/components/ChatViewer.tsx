@@ -40,10 +40,8 @@ const ChatViewer = ({ lead: initialLead, open, onOpenChange }: ChatViewerProps) 
     perfil_psicologico: ''
   });
 
-  // Sync initial prop to state whenever it changes
   useEffect(() => {
      if (initialLead) {
-        console.log("ChatViewer: Initial Lead loaded", initialLead);
         setLead(initialLead);
         updateMemoryForm(initialLead);
      }
@@ -61,19 +59,12 @@ const ChatViewer = ({ lead: initialLead, open, onOpenChange }: ChatViewerProps) 
            table: 'leads', 
            filter: `id=eq.${lead.id}` 
         }, (payload) => {
-           console.log("ChatViewer: REALTIME UPDATE RECEIVED!", payload.new);
            setLead(payload.new);
            updateMemoryForm(payload.new);
-           
-           if (payload.new.email && !lead.email) {
-              toast.success("¡Email capturado!", { description: payload.new.email });
-           }
         })
         .subscribe();
 
-      return () => { 
-         supabase.removeChannel(channel); 
-      };
+      return () => { supabase.removeChannel(channel); };
     }
   }, [open, lead?.id]);
 
@@ -102,13 +93,13 @@ const ChatViewer = ({ lead: initialLead, open, onOpenChange }: ChatViewerProps) 
 
   const fetchMessages = async () => {
     setLoading(true);
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from('conversaciones')
       .select('*')
       .eq('lead_id', lead.id)
       .order('created_at', { ascending: true });
 
-    if (!error && data) {
+    if (data) {
       setMessages(data);
       fetchAiSuggestions(data);
     }
@@ -120,14 +111,10 @@ const ChatViewer = ({ lead: initialLead, open, onOpenChange }: ChatViewerProps) 
     setLoadingSuggestions(true);
     try {
       const transcript = msgs.slice(-10).map(m => `${m.emisor}: ${m.mensaje}`).join('\n');
-      const { data, error } = await supabase.functions.invoke('get-ai-suggestions', {
+      const { data } = await supabase.functions.invoke('get-ai-suggestions', {
         body: { lead_id: lead.id, transcript }
       });
-      if (!error && data.suggestions) {
-        setSuggestions(data.suggestions);
-      }
-    } catch (err) {
-      console.error("Error fetching suggestions:", err);
+      if (data?.suggestions) setSuggestions(data.suggestions);
     } finally {
       setLoadingSuggestions(false);
     }
@@ -136,33 +123,14 @@ const ChatViewer = ({ lead: initialLead, open, onOpenChange }: ChatViewerProps) 
   const handleSendMessage = async (text: string) => {
     setSending(true);
     try {
-      const { error } = await supabase.from('conversaciones').insert({
-        lead_id: lead.id,
-        mensaje: text,
-        emisor: 'HUMANO',
-        platform: 'PANEL'
-      });
-
-      if (error) throw error;
-      
-      await triggerMakeWebhook('webhook_sale', {
-        type: 'outgoing_message',
-        lead_id: lead.id,
-        phone: lead.telefono,
-        message: text,
-        kommo_id: lead.kommo_id
-      });
-
+      await supabase.from('conversaciones').insert({ lead_id: lead.id, mensaje: text, emisor: 'HUMANO', platform: 'PANEL' });
+      await triggerMakeWebhook('webhook_sale', { type: 'outgoing_message', lead_id: lead.id, phone: lead.telefono, message: text, kommo_id: lead.kommo_id });
       fetchMessages();
       setDraftMessage('');
-      
       if (text.includes('#STOP') || text.includes('#START')) {
          const isPaused = text.includes('#STOP');
          await supabase.from('leads').update({ ai_paused: isPaused }).eq('id', lead.id);
-         toast.success(isPaused ? 'IA Detenida' : 'IA Reactivada');
       }
-    } catch (error: any) {
-      toast.error('Error enviando mensaje');
     } finally {
       setSending(false);
     }
@@ -171,9 +139,7 @@ const ChatViewer = ({ lead: initialLead, open, onOpenChange }: ChatViewerProps) 
   const saveMemory = async () => {
      setSending(true);
      try {
-        const { error } = await supabase
-           .from('leads')
-           .update({
+        await supabase.from('leads').update({
               nombre: memoryForm.nombre,
               email: memoryForm.email,
               summary: memoryForm.summary,
@@ -183,58 +149,32 @@ const ChatViewer = ({ lead: initialLead, open, onOpenChange }: ChatViewerProps) 
               next_followup_at: memoryForm.next_followup_at,
               ciudad: memoryForm.ciudad,
               perfil_psicologico: memoryForm.perfil_psicologico
-           })
-           .eq('id', lead.id);
-        
-        if (error) throw error;
-        toast.success('Datos actualizados');
+           }).eq('id', lead.id);
+        toast.success('Cambios guardados');
         setIsEditingMemory(false);
-     } catch (err: any) {
-        toast.error(err.message);
      } finally {
         setSending(false);
      }
   };
 
-  const handleToggleFollowup = async () => {
-    try {
-      const isCurrentlyPaused = lead.ai_paused;
-      const cmd = isCurrentlyPaused ? '#START' : '#STOP';
-      await handleSendMessage(cmd);
-    } catch (err: any) {
-      toast.error('Error al cambiar estado de la IA');
-    }
-  };
+  const handleToggleFollowup = () => handleSendMessage(lead.ai_paused ? '#START' : '#STOP');
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full sm:max-w-5xl flex flex-row bg-slate-950 border-l border-slate-800 text-white p-0 overflow-hidden">
+      <SheetContent className="w-full sm:max-w-6xl flex flex-row bg-slate-950 border-l border-slate-800 text-white p-0 overflow-hidden">
         
-        <div className="flex-1 flex flex-col h-full bg-slate-950">
-          <ChatHeader 
-            lead={lead} 
-            isAiPaused={lead.ai_paused} 
-            sending={sending} 
-            onSendCommand={handleSendMessage} 
-          />
+        {/* Lado Izquierdo: Chat (Flexible con min-w-0 para no romper flex) */}
+        <div className="flex-1 min-w-0 flex flex-col h-full bg-slate-950">
+          <ChatHeader lead={lead} isAiPaused={lead.ai_paused} sending={sending} onSendCommand={handleSendMessage} />
           <MessageList messages={messages} loading={loading} />
           
-          <div className="p-3 bg-slate-900 border-t border-slate-800">
-            <AiSuggestions 
-              suggestions={suggestions} 
-              loading={loadingSuggestions} 
-              onSelect={setDraftMessage} 
-              onRefresh={() => fetchAiSuggestions(messages)}
-            />
-            <MessageInput 
-              onSendMessage={handleSendMessage} 
-              sending={sending} 
-              isAiPaused={lead.ai_paused}
-              initialValue={draftMessage}
-            />
+          <div className="p-4 bg-slate-900/50 border-t border-slate-800">
+            <AiSuggestions suggestions={suggestions} loading={loadingSuggestions} onSelect={setDraftMessage} onRefresh={() => fetchAiSuggestions(messages)} />
+            <MessageInput onSendMessage={handleSendMessage} sending={sending} isAiPaused={lead.ai_paused} initialValue={draftMessage} />
           </div>
         </div>
 
+        {/* Lado Derecho: Memoria (Ancho Fijo) */}
         <MemoryPanel 
           currentAnalysis={lead} 
           isEditing={isEditingMemory}

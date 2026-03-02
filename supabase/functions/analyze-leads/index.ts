@@ -8,129 +8,81 @@ const corsHeaders = {
 }
 
 serve(async (req) => {
-  // Manejo de pre-flight CORS
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders })
-  }
+  if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders })
 
   try {
-    const supabaseClient = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-    );
-
+    const supabaseClient = createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '');
     const { lead_id } = await req.json();
-    if (!lead_id) throw new Error("ID de Lead no proporcionado.");
 
-    console.log(`[analyze-leads] Iniciando análisis para Lead: ${lead_id}`);
-
-    // 1. Obtener Configuración (API Key)
-    const { data: config } = await supabaseClient.from('app_config').select('value').eq('key', 'openai_api_key').single();
-    if (!config?.value) throw new Error("OpenAI API Key no encontrada en app_config.");
-
-    // 2. Obtener Historial de Mensajes
-    const { data: messages, error: msgError } = await supabaseClient
-        .from('conversaciones')
-        .select('emisor, mensaje')
-        .eq('lead_id', lead_id)
-        .order('created_at', { ascending: true }) 
-        .limit(40);
-
-    if (msgError || !messages || messages.length === 0) {
-        throw new Error("No hay mensajes suficientes para analizar.");
-    }
-
+    // 1. Obtener datos actuales del lead y Config de Meta
+    const { data: lead } = await supabaseClient.from('leads').select('*').eq('id', lead_id).single();
+    const { data: configs } = await supabaseClient.from('app_config').select('key, value').in('key', ['openai_api_key', 'meta_pixel_id', 'meta_access_token']);
+    
+    const getConfig = (key) => configs.find(c => c.key === key)?.value;
+    const apiKey = getConfig('openai_api_key');
+    
+    // 2. Obtener historial
+    const { data: messages } = await supabaseClient.from('conversaciones').select('emisor, mensaje').eq('lead_id', lead_id).order('created_at', { ascending: true }).limit(40);
     const transcript = messages.map(m => `[${m.emisor}]: ${m.mensaje}`).join('\n');
 
-    // 3. Petición a OpenAI (GPT-4o) con Prompt de Extracción Pura
+    // 3. IA Extrae Datos
     const response = await fetch("https://api.openai.com/v1/chat/completions", {
         method: 'POST',
-        headers: {
-            'Authorization': `Bearer ${config.value}`,
-            'Content-Type': 'application/json'
-        },
+        headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
             model: "gpt-4o",
             messages: [
-                { 
-                    role: "system", 
-                    content: "Eres un extractor de datos clínico. Tu salida DEBE ser un JSON puro. No hables, solo extrae." 
-                },
-                { 
-                    role: "user", 
-                    content: `Extrae la siguiente información del chat:
-                    1. EMAIL: Busca patrones @.
-                    2. CIUDAD: Ubicación mencionada.
-                    3. NOMBRE: Nombre real del cliente.
-                    4. INTENT: BAJO, MEDIO o ALTO (si pidió reserva/pago).
-                    5. SUMMARY: Resumen de 15 palabras.
-                    6. PSYCH: Perfil psicológico breve.
-
-                    CHAT:
-                    ${transcript}
-
-                    FORMATO JSON OBLIGATORIO:
-                    {
-                        "email": "valor o null",
-                        "ciudad": "valor o null",
-                        "nombre": "valor o null",
-                        "buying_intent": "ALTO/MEDIO/BAJO",
-                        "summary": "texto",
-                        "perfil_psicologico": "texto"
-                    }`
-                }
+                { role: "system", content: "Extrae JSON puro: {email, ciudad, nombre, intent, summary, psych}" },
+                { role: "user", content: `Analiza este chat:\n${transcript}` }
             ],
-            response_format: { type: "json_object" },
-            temperature: 0
+            response_format: { type: "json_object" }
         })
     });
-
-    if (!response.ok) {
-        const err = await response.text();
-        throw new Error(`OpenAI falló: ${err}`);
-    }
 
     const aiData = await response.json();
     const result = JSON.parse(aiData.choices[0].message.content);
 
-    // 4. Actualizar Base de Datos (Limpiando nulos para no borrar datos existentes)
-    const updatePayload: any = {
-        last_ai_analysis: new Date().toISOString()
+    // 4. Guardar en DB
+    const updatePayload = {
+        last_ai_analysis: new Date().toISOString(),
+        buying_intent: result.intent,
+        summary: result.summary,
+        perfil_psicologico: result.psych
     };
 
-    if (result.email) updatePayload.email = result.email.trim();
-    if (result.ciudad) updatePayload.ciudad = result.ciudad.trim();
-    if (result.nombre && result.nombre.length > 2) updatePayload.nombre = result.nombre.trim();
-    if (result.buying_intent) updatePayload.buying_intent = result.buying_intent;
-    if (result.summary) updatePayload.summary = result.summary;
-    if (result.perfil_psicologico) updatePayload.perfil_psicologico = result.perfil_psicologico;
+    if (result.email) updatePayload.email = result.email.toLowerCase().trim();
+    if (result.ciudad) updatePayload.ciudad = result.ciudad;
+    if (result.nombre && (!lead.nombre || lead.nombre.includes('Nuevo'))) updatePayload.nombre = result.nombre;
 
-    console.log("[analyze-leads] Guardando datos extraídos:", updatePayload);
+    const { data: updatedLead } = await supabaseClient.from('leads').update(updatePayload).eq('id', lead_id).select().single();
 
-    const { data: updatedLead, error: updateError } = await supabaseClient
-        .from('leads')
-        .update(updatePayload)
-        .eq('id', lead_id)
-        .select()
-        .single();
+    // 5. AUTO-CAPI: Si hay email y no se ha enviado hoy, disparamos a Meta
+    const pixelId = getConfig('meta_pixel_id');
+    const token = getConfig('meta_access_token');
 
-    if (updateError) throw updateError;
+    if (updatedLead.email && updatedLead.nombre && !updatedLead.capi_lead_event_sent_at && pixelId && token) {
+        console.log(`[auto-capi] Disparando evento para ${updatedLead.email}`);
+        await supabaseClient.functions.invoke('meta-capi-sender', {
+            body: {
+                eventData: {
+                    event_name: 'Lead',
+                    lead_id: updatedLead.id,
+                    user_data: { 
+                        ph: updatedLead.telefono, 
+                        em: updatedLead.email, 
+                        fn: updatedLead.nombre, 
+                        ct: updatedLead.ciudad 
+                    }
+                },
+                config: { pixel_id: pixelId, access_token: token }
+            }
+        });
+        await supabaseClient.from('leads').update({ capi_lead_event_sent_at: new Date().toISOString() }).eq('id', lead_id);
+    }
 
-    // 5. Retornar éxito al frontend
-    return new Response(
-        JSON.stringify({ 
-            success: true, 
-            lead: updatedLead, 
-            extracted: result 
-        }), 
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    return new Response(JSON.stringify({ success: true, lead: updatedLead }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
-  } catch (error: any) {
-    console.error("[analyze-leads] Error Crítico:", error.message);
-    return new Response(
-        JSON.stringify({ success: false, error: error.message }), 
-        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } } // Retornamos 200 con success:false para manejarlo en UI
-    );
+  } catch (error) {
+    return new Response(JSON.stringify({ error: error.message }), { status: 200, headers: corsHeaders });
   }
 })
