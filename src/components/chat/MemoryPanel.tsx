@@ -1,12 +1,9 @@
 import React, { useState } from 'react';
-import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { BrainCircuit, Edit2, X, Save, Loader2, Bot, TrendingUp, AlertCircle, RotateCcw, Clock, Play, Pause, ShieldAlert, Zap, Calendar, Trash2, RefreshCw, MapPin, User, FileText, Mail, Fingerprint, Send, Sparkles } from 'lucide-react';
+import { BrainCircuit, Edit2, Save, Loader2, ShieldAlert, Zap, MapPin, User, Mail, Fingerprint, Send, Sparkles, RefreshCw, RotateCcw, Play, Pause } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -60,21 +57,22 @@ export const MemoryPanel = ({
 
   const handleRunAnalysis = async () => {
      setAnalyzing(true);
-     const tid = toast.loading("Analizando conversación...");
+     const tid = toast.loading("Analizando conversación en busca de datos...");
      try {
         const { data, error } = await supabase.functions.invoke('analyze-leads', {
            body: { lead_id: currentAnalysis.id, force: true }
         });
         
         if (error) throw new Error(error.message);
-        if (data.analyzed > 0) {
-           toast.success("¡Datos extraídos! Actualizando panel...", { id: tid });
-           // La suscripción realtime en ChatViewer se encargará de refrescar los datos visualmente
+        
+        if (data.results && data.results.length > 0 && data.results[0].status === 'updated') {
+           toast.success("¡Datos extraídos! El panel se actualizará en breve.", { id: tid });
         } else {
-           toast.info("La IA no detectó datos nuevos en el chat.", { id: tid });
+           toast.info("La IA no detectó datos nuevos (Email/Ciudad) en el chat reciente.", { id: tid });
         }
      } catch (err: any) {
-        toast.error("Error análisis: " + err.message, { id: tid });
+        console.error(err);
+        toast.error("Fallo en análisis: " + err.message, { id: tid });
      } finally {
         setAnalyzing(false);
      }
@@ -91,7 +89,6 @@ export const MemoryPanel = ({
         const config: any = {};
         configData?.forEach(c => config[c.key.replace('meta_', '')] = c.value);
         
-        // Convertir string "true" a boolean real
         config.test_mode = config.test_mode === 'true';
 
         const { error } = await supabase.functions.invoke('meta-capi-sender', {
@@ -99,12 +96,11 @@ export const MemoryPanel = ({
               eventData: {
                  event_name: 'Lead',
                  lead_id: currentAnalysis.id,
-                 // Mapeo Estricto para EMQ (Event Match Quality)
                  user_data: { 
                     ph: currentAnalysis.telefono, 
                     em: currentAnalysis.email,
-                    fn: currentAnalysis.nombre, // Nombre para matching
-                    ct: currentAnalysis.ciudad  // Ciudad para matching
+                    fn: currentAnalysis.nombre,
+                    ct: currentAnalysis.ciudad
                  },
                  custom_data: { 
                     intent: currentAnalysis.buying_intent,
@@ -118,7 +114,7 @@ export const MemoryPanel = ({
         if (error) throw error;
         
         await supabase.from('leads').update({ capi_lead_event_sent_at: new Date().toISOString() }).eq('id', currentAnalysis.id);
-        toast.success("Evento enviado a Meta Conversions API (Action: Chat).");
+        toast.success("Evento enviado a Meta Conversions API.");
      } catch (err: any) {
         toast.error("Error CAPI: " + err.message);
      } finally {
@@ -135,7 +131,8 @@ export const MemoryPanel = ({
         estado_emocional_actual: 'NEUTRO',
         buying_intent: 'BAJO',
         perfil_psicologico: null,
-        ciudad: null
+        ciudad: null,
+        email: null
       }).eq('id', currentAnalysis.id);
       toast.success('Memoria reseteada.');
     } finally {
@@ -160,7 +157,7 @@ export const MemoryPanel = ({
              placeholder="Ej: No ofrezcas descuento todavía..."
              className="bg-slate-950 border-slate-800 text-xs min-h-[60px]"
            />
-           <Button onClick={handleSaveCorrection} disabled={isReporting || !correctionText.trim()} className="w-full h-8 text-[10px] bg-yellow-600 font-bold">
+           <Button onClick={handleSaveCorrection} disabled={isReporting || !correctionText.trim()} className="w-full h-8 text-[10px] bg-yellow-600 font-bold hover:bg-yellow-700">
              {isReporting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Zap className="w-3 h-3 mr-2" />} Guardar Regla
            </Button>
         </div>
@@ -172,10 +169,10 @@ export const MemoryPanel = ({
                   <Fingerprint className="w-3 h-3" /> Datos Meta CAPI
               </h4>
               <div className="flex gap-1">
-                 <Button variant="ghost" size="icon" className="h-6 w-6 text-indigo-400" onClick={handleRunAnalysis} disabled={analyzing} title="Analizar Chat con IA">
+                 <Button variant="ghost" size="icon" className="h-6 w-6 text-indigo-400 hover:bg-indigo-500/10" onClick={handleRunAnalysis} disabled={analyzing} title="Analizar Chat Ahora">
                     {analyzing ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
                  </Button>
-                 {!isEditing && <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setIsEditing(true)}><Edit2 className="w-3 h-3" /></Button>}
+                 {!isEditing && <Button variant="ghost" size="icon" className="h-6 w-6 text-slate-400 hover:text-white" onClick={() => setIsEditing(true)}><Edit2 className="w-3 h-3" /></Button>}
               </div>
            </div>
            
@@ -186,7 +183,7 @@ export const MemoryPanel = ({
                     <Input 
                         value={memoryForm.nombre || ''} 
                         onChange={e => setMemoryForm({...memoryForm, nombre: e.target.value})} 
-                        className="h-7 text-xs bg-slate-900 border-slate-700" 
+                        className="h-7 text-xs bg-slate-900 border-slate-700 focus:border-indigo-500" 
                         placeholder="Nombre completo"
                     />
                  ) : (
@@ -200,7 +197,7 @@ export const MemoryPanel = ({
                     <Input 
                         value={memoryForm.email || ''} 
                         onChange={e => setMemoryForm({...memoryForm, email: e.target.value})} 
-                        className="h-7 text-xs bg-slate-900 border-slate-700" 
+                        className="h-7 text-xs bg-slate-900 border-slate-700 focus:border-indigo-500" 
                         placeholder="cliente@email.com"
                     />
                  ) : (
@@ -213,7 +210,12 @@ export const MemoryPanel = ({
               <div className="space-y-1">
                  <Label className="text-[9px] text-slate-500 uppercase flex items-center gap-1"><MapPin className="w-2.5 h-2.5"/> Ciudad</Label>
                  {isEditing ? (
-                    <Input value={memoryForm.ciudad || ''} onChange={e => setMemoryForm({...memoryForm, ciudad: e.target.value})} className="h-7 text-xs bg-slate-900 border-slate-700" />
+                    <Input 
+                        value={memoryForm.ciudad || ''} 
+                        onChange={e => setMemoryForm({...memoryForm, ciudad: e.target.value})} 
+                        className="h-7 text-xs bg-slate-900 border-slate-700 focus:border-indigo-500"
+                        placeholder="Ciudad"
+                    />
                  ) : (
                     <div className="text-xs text-slate-300">{currentAnalysis.ciudad || 'Pendiente'}</div>
                  )}
@@ -226,7 +228,7 @@ export const MemoryPanel = ({
                 disabled={syncingCapi || !!currentAnalysis.capi_lead_event_sent_at}
                 className={cn(
                     "w-full h-8 text-[9px] font-bold uppercase",
-                    currentAnalysis.capi_lead_event_sent_at ? "bg-emerald-600/20 text-emerald-500 border border-emerald-500/30" : "bg-indigo-600"
+                    currentAnalysis.capi_lead_event_sent_at ? "bg-emerald-600/20 text-emerald-500 border border-emerald-500/30" : "bg-indigo-600 hover:bg-indigo-700"
                 )}
               >
                  {syncingCapi ? <Loader2 className="w-3 h-3 animate-spin mr-2"/> : <Send className="w-3 h-3 mr-2"/>}
@@ -244,7 +246,7 @@ export const MemoryPanel = ({
               <Textarea 
                 value={memoryForm.perfil_psicologico || ''}
                 onChange={e => setMemoryForm({...memoryForm, perfil_psicologico: e.target.value})}
-                className="bg-slate-950 border-slate-800 text-[10px] min-h-[80px]"
+                className="bg-slate-950 border-slate-800 text-[10px] min-h-[80px] focus:border-emerald-500"
                 placeholder="Notas sobre el comportamiento del cliente..."
               />
            ) : (
@@ -270,7 +272,7 @@ export const MemoryPanel = ({
         </div>
 
         {isEditing && (
-           <Button onClick={onSave} disabled={saving} className="w-full bg-indigo-600 h-9 font-bold">
+           <Button onClick={onSave} disabled={saving} className="w-full bg-indigo-600 h-9 font-bold hover:bg-indigo-700">
               {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4 mr-2" />} Guardar Datos
            </Button>
         )}

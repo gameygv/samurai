@@ -40,9 +40,10 @@ const ChatViewer = ({ lead: initialLead, open, onOpenChange }: ChatViewerProps) 
     perfil_psicologico: ''
   });
 
-  // Sync initial prop to state
+  // Sync initial prop to state whenever it changes
   useEffect(() => {
      if (initialLead) {
+        console.log("ChatViewer: Initial Lead loaded", initialLead);
         setLead(initialLead);
         updateMemoryForm(initialLead);
      }
@@ -52,7 +53,8 @@ const ChatViewer = ({ lead: initialLead, open, onOpenChange }: ChatViewerProps) 
     if (open && lead?.id) {
       fetchMessages();
       
-      // Suscripción Realtime para actualizar la ficha técnica en vivo
+      console.log("ChatViewer: Subscribing to realtime updates for lead", lead.id);
+      
       const channel = supabase
         .channel(`lead-monitor-${lead.id}`)
         .on('postgres_changes', { 
@@ -61,13 +63,20 @@ const ChatViewer = ({ lead: initialLead, open, onOpenChange }: ChatViewerProps) 
            table: 'leads', 
            filter: `id=eq.${lead.id}` 
         }, (payload) => {
-           console.log("Lead actualizado en tiempo real:", payload.new);
+           console.log("ChatViewer: REALTIME UPDATE RECEIVED!", payload.new);
            setLead(payload.new);
            updateMemoryForm(payload.new);
+           // Notificar al usuario visualmente que algo cambió
+           if (payload.new.email !== lead.email || payload.new.buying_intent !== lead.buying_intent) {
+              toast.success("¡Datos del cliente actualizados por la IA!", { duration: 2000 });
+           }
         })
         .subscribe();
 
-      return () => { supabase.removeChannel(channel); };
+      return () => { 
+         console.log("ChatViewer: Unsubscribing");
+         supabase.removeChannel(channel); 
+      };
     }
   }, [open, lead?.id]);
 
@@ -95,7 +104,6 @@ const ChatViewer = ({ lead: initialLead, open, onOpenChange }: ChatViewerProps) 
 
     if (!error && data) {
       setMessages(data);
-      // Fetch suggestions after loading messages
       fetchAiSuggestions(data);
     }
     setLoading(false);
@@ -222,7 +230,7 @@ const ChatViewer = ({ lead: initialLead, open, onOpenChange }: ChatViewerProps) 
         </div>
 
         <MemoryPanel 
-          currentAnalysis={lead} // Usamos 'lead' del estado local, que se actualiza en tiempo real
+          currentAnalysis={lead} 
           isEditing={isEditingMemory}
           setIsEditing={setIsEditingMemory}
           memoryForm={memoryForm}
