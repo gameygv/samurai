@@ -15,7 +15,8 @@ interface ChatViewerProps {
   onOpenChange: (open: boolean) => void;
 }
 
-const ChatViewer = ({ lead, open, onOpenChange }: ChatViewerProps) => {
+const ChatViewer = ({ lead: initialLead, open, onOpenChange }: ChatViewerProps) => {
+  const [lead, setLead] = useState(initialLead);
   const [messages, setMessages] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
@@ -28,33 +29,61 @@ const ChatViewer = ({ lead, open, onOpenChange }: ChatViewerProps) => {
   
   // Local Memory State
   const [memoryForm, setMemoryForm] = useState({
-    nombre: lead.nombre || '',
-    email: lead.email || '',
-    summary: lead.summary || '',
-    mood: lead.estado_emocional_actual || 'NEUTRO',
-    buying_intent: lead.buying_intent || 'BAJO',
-    followup_stage: lead.followup_stage || 0,
-    next_followup_at: lead.next_followup_at || null,
-    ciudad: lead.ciudad || '',
-    perfil_psicologico: lead.perfil_psicologico || ''
+    nombre: '',
+    email: '',
+    summary: '',
+    mood: 'NEUTRO',
+    buying_intent: 'BAJO',
+    followup_stage: 0,
+    next_followup_at: null,
+    ciudad: '',
+    perfil_psicologico: ''
   });
 
+  // Sync initial prop to state
   useEffect(() => {
-    if (open && lead) {
+     if (initialLead) {
+        setLead(initialLead);
+        updateMemoryForm(initialLead);
+     }
+  }, [initialLead]);
+
+  useEffect(() => {
+    if (open && lead?.id) {
       fetchMessages();
-      setMemoryForm({
-        nombre: lead.nombre || '',
-        email: lead.email || '',
-        summary: lead.summary || '',
-        mood: lead.estado_emocional_actual || 'NEUTRO',
-        buying_intent: lead.buying_intent || 'BAJO',
-        followup_stage: lead.followup_stage || 0,
-        next_followup_at: lead.next_followup_at || null,
-        ciudad: lead.ciudad || '',
-        perfil_psicologico: lead.perfil_psicologico || ''
-      });
+      
+      // Suscripción Realtime para actualizar la ficha técnica en vivo
+      const channel = supabase
+        .channel(`lead-monitor-${lead.id}`)
+        .on('postgres_changes', { 
+           event: 'UPDATE', 
+           schema: 'public', 
+           table: 'leads', 
+           filter: `id=eq.${lead.id}` 
+        }, (payload) => {
+           console.log("Lead actualizado en tiempo real:", payload.new);
+           setLead(payload.new);
+           updateMemoryForm(payload.new);
+        })
+        .subscribe();
+
+      return () => { supabase.removeChannel(channel); };
     }
-  }, [open, lead]);
+  }, [open, lead?.id]);
+
+  const updateMemoryForm = (data: any) => {
+     setMemoryForm({
+        nombre: data.nombre || '',
+        email: data.email || '',
+        summary: data.summary || '',
+        mood: data.estado_emocional_actual || 'NEUTRO',
+        buying_intent: data.buying_intent || 'BAJO',
+        followup_stage: data.followup_stage || 0,
+        next_followup_at: data.next_followup_at || null,
+        ciudad: data.ciudad || '',
+        perfil_psicologico: data.perfil_psicologico || ''
+     });
+  };
 
   const fetchMessages = async () => {
     setLoading(true);
@@ -146,7 +175,6 @@ const ChatViewer = ({ lead, open, onOpenChange }: ChatViewerProps) => {
         if (error) throw error;
         toast.success('Datos actualizados');
         setIsEditingMemory(false);
-        // Opcional: Refrescar lead padre
      } catch (err: any) {
         toast.error(err.message);
      } finally {
@@ -194,7 +222,7 @@ const ChatViewer = ({ lead, open, onOpenChange }: ChatViewerProps) => {
         </div>
 
         <MemoryPanel 
-          currentAnalysis={{...lead, ...memoryForm}} // Pasar datos actualizados para preview live
+          currentAnalysis={lead} // Usamos 'lead' del estado local, que se actualiza en tiempo real
           isEditing={isEditingMemory}
           setIsEditing={setIsEditingMemory}
           memoryForm={memoryForm}

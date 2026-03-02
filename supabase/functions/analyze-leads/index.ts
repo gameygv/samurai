@@ -16,7 +16,7 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    const { force } = await req.json().catch(() => ({}));
+    const { force, lead_id } = await req.json().catch(() => ({}));
     
     const { data: configs } = await supabaseClient.from('app_config').select('key, value');
     const getConfig = (key: string) => configs?.find(c => c.key === key)?.value || null;
@@ -24,13 +24,18 @@ serve(async (req) => {
 
     if (!apiKey) throw new Error("Gemini API Key missing.");
 
-    // Seleccionamos leads recientes O leads que nunca han sido analizados
-    const { data: activeLeads } = await supabaseClient
-      .from('leads')
-      .select('*')
-      .order('last_message_at', { ascending: false })
-      .limit(10);
+    // Construcción de query dinámica
+    let query = supabaseClient.from('leads').select('*');
+    
+    if (lead_id) {
+       // Modo Quirúrgico: Analizar un lead específico (usado desde el chat)
+       query = query.eq('id', lead_id);
+    } else {
+       // Modo Barrido: Analizar los más recientes
+       query = query.order('last_message_at', { ascending: false }).limit(10);
+    }
 
+    const { data: activeLeads } = await query;
     const results = [];
 
     for (const lead of activeLeads || []) {
@@ -59,7 +64,7 @@ serve(async (req) => {
                - BAJO: Saludos, info general.
                - MEDIO: Preguntas específicas (fechas, temario).
                - ALTO: Pide link de pago, cuenta bancaria o precio final.
-            4. NOMBRE: Si el usuario dice "Soy Juan", extráelo.
+            4. NOMBRE: Si el usuario dice "Soy Juan", extráelo. Si el lead ya tiene nombre, confírmalo o mejóralo.
             
             Responde SOLO este JSON:
             {
@@ -92,23 +97,31 @@ serve(async (req) => {
             perfil_psicologico: analysis.psych_profile
          };
 
-         // Solo actualizar si hay datos nuevos y valiosos
-         if (analysis.email && !lead.email) updateData.email = analysis.email;
-         if (analysis.city && !lead.ciudad) updateData.ciudad = analysis.city;
+         // Lógica de actualización inteligente: Solo sobrescribir si hay dato nuevo
+         if (analysis.email) updateData.email = analysis.email;
+         if (analysis.city) updateData.city = analysis.city; // Guardamos en 'city' temporalmente para mapear a 'ciudad'
          
+         // Mapeo correcto a columnas de la BD
+         if (updateData.city) {
+             updateData.ciudad = updateData.city;
+             delete updateData.city;
+         }
+
          const detectedName = `${analysis.fn || ''} ${analysis.ln || ''}`.trim();
-         // Si el nombre actual es genérico o nulo, y la IA encontró uno, actualízalo
-         if (detectedName && (lead.nombre?.includes('Nuevo') || !lead.nombre)) {
-            updateData.nombre = detectedName;
+         // Actualizar nombre si el actual es genérico o nulo, O si la IA encontró uno mejor
+         if (detectedName && detectedName.length > 2) {
+             if (!lead.nombre || lead.nombre.includes('Nuevo') || lead.nombre.includes('Lead')) {
+                 updateData.nombre = detectedName;
+             }
          }
 
          await supabaseClient.from('leads').update(updateData).eq('id', lead.id);
          results.push({ lead: lead.id, status: 'updated', data: updateData });
 
-       } catch (e) { console.error(e); }
+       } catch (e) { console.error(`Error procesando lead ${lead.id}:`, e); }
     }
 
-    return new Response(JSON.stringify({ success: true, analyzed: results.length }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    return new Response(JSON.stringify({ success: true, analyzed: results.length, results }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
   } catch (error: any) {
     return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: corsHeaders })

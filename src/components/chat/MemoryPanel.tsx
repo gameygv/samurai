@@ -6,7 +6,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { BrainCircuit, Edit2, X, Save, Loader2, Bot, TrendingUp, AlertCircle, RotateCcw, Clock, Play, Pause, ShieldAlert, Zap, Calendar, Trash2, RefreshCw, MapPin, User, FileText, Mail, Fingerprint, Send } from 'lucide-react';
+import { BrainCircuit, Edit2, X, Save, Loader2, Bot, TrendingUp, AlertCircle, RotateCcw, Clock, Play, Pause, ShieldAlert, Zap, Calendar, Trash2, RefreshCw, MapPin, User, FileText, Mail, Fingerprint, Send, Sparkles } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -33,6 +33,7 @@ export const MemoryPanel = ({
   const [isReporting, setIsReporting] = useState(false);
   const [flushing, setFlushing] = useState(false);
   const [syncingCapi, setSyncingCapi] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
 
   const handleSaveCorrection = async () => {
     if (!correctionText.trim()) return;
@@ -55,6 +56,28 @@ export const MemoryPanel = ({
     } finally {
       setIsReporting(false);
     }
+  };
+
+  const handleRunAnalysis = async () => {
+     setAnalyzing(true);
+     const tid = toast.loading("Analizando conversación...");
+     try {
+        const { data, error } = await supabase.functions.invoke('analyze-leads', {
+           body: { lead_id: currentAnalysis.id, force: true }
+        });
+        
+        if (error) throw new Error(error.message);
+        if (data.analyzed > 0) {
+           toast.success("¡Datos extraídos! Actualizando panel...", { id: tid });
+           // La suscripción realtime en ChatViewer se encargará de refrescar los datos visualmente
+        } else {
+           toast.info("La IA no detectó datos nuevos en el chat.", { id: tid });
+        }
+     } catch (err: any) {
+        toast.error("Error análisis: " + err.message, { id: tid });
+     } finally {
+        setAnalyzing(false);
+     }
   };
 
   const handleSyncToCapi = async () => {
@@ -115,7 +138,6 @@ export const MemoryPanel = ({
         ciudad: null
       }).eq('id', currentAnalysis.id);
       toast.success('Memoria reseteada.');
-      window.location.reload();
     } finally {
       setFlushing(false);
     }
@@ -149,7 +171,12 @@ export const MemoryPanel = ({
               <h4 className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest flex items-center gap-2">
                   <Fingerprint className="w-3 h-3" /> Datos Meta CAPI
               </h4>
-              {!isEditing && <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setIsEditing(true)}><Edit2 className="w-3 h-3" /></Button>}
+              <div className="flex gap-1">
+                 <Button variant="ghost" size="icon" className="h-6 w-6 text-indigo-400" onClick={handleRunAnalysis} disabled={analyzing} title="Analizar Chat con IA">
+                    {analyzing ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+                 </Button>
+                 {!isEditing && <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setIsEditing(true)}><Edit2 className="w-3 h-3" /></Button>}
+              </div>
            </div>
            
            <div className="space-y-3 bg-slate-950/50 p-3 rounded-lg border border-slate-800">
