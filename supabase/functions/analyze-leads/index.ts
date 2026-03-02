@@ -1,11 +1,9 @@
 // @ts-nocheck
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0'
+import { corsHeaders } from '../_shared/cors.ts'
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
+const OPENAI_URL = "https://api.openai.com/v1/chat/completions";
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders })
@@ -14,19 +12,20 @@ serve(async (req) => {
     const supabaseClient = createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '');
     const { lead_id } = await req.json();
 
-    // 1. Obtener datos actuales del lead y Config de Meta
+    // 1. Configuración
     const { data: lead } = await supabaseClient.from('leads').select('*').eq('id', lead_id).single();
-    const { data: configs } = await supabaseClient.from('app_config').select('key, value').in('key', ['openai_api_key', 'meta_pixel_id', 'meta_access_token']);
+    const { data: configs } = await supabaseClient.from('app_config').select('key, value').in('key', ['openai_api_key', 'meta_pixel_id', 'meta_access_token', 'webhook_sale']);
     
     const getConfig = (key) => configs.find(c => c.key === key)?.value;
     const apiKey = getConfig('openai_api_key');
+    const webhookUrl = getConfig('webhook_sale');
     
-    // 2. Obtener historial
+    // 2. Historial
     const { data: messages } = await supabaseClient.from('conversaciones').select('emisor, mensaje').eq('lead_id', lead_id).order('created_at', { ascending: true }).limit(40);
     const transcript = messages.map(m => `[${m.emisor}]: ${m.mensaje}`).join('\n');
 
     // 3. IA Extrae Datos
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    const response = await fetch(OPENAI_URL, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -43,36 +42,48 @@ serve(async (req) => {
     const result = JSON.parse(aiData.choices[0].message.content);
 
     // 4. Guardar en DB
-    const updatePayload = {
-        last_ai_analysis: new Date().toISOString(),
-        buying_intent: result.intent,
-        summary: result.summary,
-        perfil_psicologico: result.psych
-    };
+    const updatePayload: any = { last_ai_analysis: new Date().toISOString() };
+    let dataDiscovered = false;
 
-    if (result.email) updatePayload.email = result.email.toLowerCase().trim();
-    if (result.ciudad) updatePayload.ciudad = result.ciudad;
-    if (result.nombre && (!lead.nombre || lead.nombre.includes('Nuevo'))) updatePayload.nombre = result.nombre;
+    if (result.email && result.email !== lead.email) { updatePayload.email = result.email.toLowerCase().trim(); dataDiscovered = true; }
+    if (result.ciudad && result.ciudad !== lead.ciudad) { updatePayload.ciudad = result.ciudad; dataDiscovered = true; }
+    if (result.nombre && (!lead.nombre || lead.nombre.includes('Nuevo'))) { updatePayload.nombre = result.nombre; dataDiscovered = true; }
+    
+    updatePayload.buying_intent = result.intent;
+    updatePayload.summary = result.summary;
+    updatePayload.perfil_psicologico = result.psych;
 
     const { data: updatedLead } = await supabaseClient.from('leads').update(updatePayload).eq('id', lead_id).select().single();
 
-    // 5. AUTO-CAPI: Si hay email y no se ha enviado hoy, disparamos a Meta
+    // 5. NOTIFICAR AL CRM (Make.com) si hay datos nuevos
+    if (dataDiscovered && webhookUrl) {
+        console.log(`[crm-sync] Notificando a Make.com sobre nuevos datos de ${updatedLead.id}`);
+        await fetch(webhookUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                type: 'lead_data_updated',
+                lead_id: updatedLead.id,
+                nombre: updatedLead.nombre,
+                email: updatedLead.email,
+                ciudad: updatedLead.ciudad,
+                intent: updatedLead.buying_intent,
+                source: 'samurai_ia_discovery'
+            })
+        }).catch(e => console.error("Error Webhook:", e));
+    }
+
+    // 6. AUTO-CAPI (Meta)
     const pixelId = getConfig('meta_pixel_id');
     const token = getConfig('meta_access_token');
 
     if (updatedLead.email && updatedLead.nombre && !updatedLead.capi_lead_event_sent_at && pixelId && token) {
-        console.log(`[auto-capi] Disparando evento para ${updatedLead.email}`);
         await supabaseClient.functions.invoke('meta-capi-sender', {
             body: {
                 eventData: {
                     event_name: 'Lead',
                     lead_id: updatedLead.id,
-                    user_data: { 
-                        ph: updatedLead.telefono, 
-                        em: updatedLead.email, 
-                        fn: updatedLead.nombre, 
-                        ct: updatedLead.ciudad 
-                    }
+                    user_data: { ph: updatedLead.telefono, em: updatedLead.email, fn: updatedLead.nombre, ct: updatedLead.ciudad }
                 },
                 config: { pixel_id: pixelId, access_token: token }
             }
