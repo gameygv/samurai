@@ -27,17 +27,9 @@ const ChatViewer = ({ lead: initialLead, open, onOpenChange }: ChatViewerProps) 
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
   const [draftMessage, setDraftMessage] = useState('');
   
-  // Local Memory State
   const [memoryForm, setMemoryForm] = useState({
-    nombre: '',
-    email: '',
-    summary: '',
-    mood: 'NEUTRO',
-    buying_intent: 'BAJO',
-    followup_stage: 0,
-    next_followup_at: null,
-    ciudad: '',
-    perfil_psicologico: ''
+    nombre: '', email: '', summary: '', mood: 'NEUTRO', buying_intent: 'BAJO',
+    followup_stage: 0, next_followup_at: null, ciudad: '', perfil_psicologico: ''
   });
 
   useEffect(() => {
@@ -50,55 +42,28 @@ const ChatViewer = ({ lead: initialLead, open, onOpenChange }: ChatViewerProps) 
   useEffect(() => {
     if (open && lead?.id) {
       fetchMessages();
-      
-      const channel = supabase
-        .channel(`lead-monitor-${lead.id}`)
-        .on('postgres_changes', { 
-           event: 'UPDATE', 
-           schema: 'public', 
-           table: 'leads', 
-           filter: `id=eq.${lead.id}` 
-        }, (payload) => {
+      const channel = supabase.channel(`lead-monitor-${lead.id}`)
+        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'leads', filter: `id=eq.${lead.id}` }, (payload) => {
            setLead(payload.new);
            updateMemoryForm(payload.new);
         })
         .subscribe();
-
       return () => { supabase.removeChannel(channel); };
     }
   }, [open, lead?.id]);
 
   const updateMemoryForm = (data: any) => {
      setMemoryForm({
-        nombre: data.nombre || '',
-        email: data.email || '',
-        summary: data.summary || '',
-        mood: data.estado_emocional_actual || 'NEUTRO',
-        buying_intent: data.buying_intent || 'BAJO',
-        followup_stage: data.followup_stage || 0,
-        next_followup_at: data.next_followup_at || null,
-        ciudad: data.ciudad || '',
-        perfil_psicologico: data.perfil_psicologico || ''
+        nombre: data.nombre || '', email: data.email || '', summary: data.summary || '',
+        mood: data.estado_emocional_actual || 'NEUTRO', buying_intent: data.buying_intent || 'BAJO',
+        followup_stage: data.followup_stage || 0, next_followup_at: data.next_followup_at || null,
+        ciudad: data.ciudad || '', perfil_psicologico: data.perfil_psicologico || ''
      });
-  };
-
-  const fetchLeadData = async () => {
-     if (!lead?.id) return;
-     const { data } = await supabase.from('leads').select('*').eq('id', lead.id).single();
-     if (data) {
-        setLead(data);
-        updateMemoryForm(data);
-     }
   };
 
   const fetchMessages = async () => {
     setLoading(true);
-    const { data } = await supabase
-      .from('conversaciones')
-      .select('*')
-      .eq('lead_id', lead.id)
-      .order('created_at', { ascending: true });
-
+    const { data } = await supabase.from('conversaciones').select('*').eq('lead_id', lead.id).order('created_at', { ascending: true });
     if (data) {
       setMessages(data);
       fetchAiSuggestions(data);
@@ -110,11 +75,11 @@ const ChatViewer = ({ lead: initialLead, open, onOpenChange }: ChatViewerProps) 
     if (msgs.length === 0) return;
     setLoadingSuggestions(true);
     try {
-      const transcript = msgs.slice(-10).map(m => `${m.emisor}: ${m.mensaje}`).join('\n');
-      const { data } = await supabase.functions.invoke('get-ai-suggestions', {
+      const transcript = msgs.slice(-8).map(m => `${m.emisor}: ${m.mensaje}`).join('\n');
+      const { data, error } = await supabase.functions.invoke('get-ai-suggestions', {
         body: { lead_id: lead.id, transcript }
       });
-      if (data?.suggestions) setSuggestions(data.suggestions);
+      if (!error && data?.suggestions) setSuggestions(data.suggestions);
     } finally {
       setLoadingSuggestions(false);
     }
@@ -123,15 +88,9 @@ const ChatViewer = ({ lead: initialLead, open, onOpenChange }: ChatViewerProps) 
   const handleSendMessage = async (text: string) => {
     setSending(true);
     try {
-      // Send message via Evolution API
       const apiResponse = await sendEvolutionMessage(lead.telefono, text);
-      if (!apiResponse) {
-        // Error is already shown by toast in the service
-        setSending(false);
-        return;
-      }
+      if (!apiResponse) { setSending(false); return; }
 
-      // If successful, log it in our DB
       await supabase.from('conversaciones').insert({ lead_id: lead.id, mensaje: text, emisor: 'HUMANO', platform: 'PANEL' });
       
       fetchMessages();
@@ -150,30 +109,21 @@ const ChatViewer = ({ lead: initialLead, open, onOpenChange }: ChatViewerProps) 
      setSending(true);
      try {
         await supabase.from('leads').update({
-              nombre: memoryForm.nombre,
-              email: memoryForm.email,
-              summary: memoryForm.summary,
-              estado_emocional_actual: memoryForm.mood,
-              buying_intent: memoryForm.buying_intent,
-              followup_stage: memoryForm.followup_stage,
-              next_followup_at: memoryForm.next_followup_at,
-              ciudad: memoryForm.ciudad,
-              perfil_psicologico: memoryForm.perfil_psicologico
+              nombre: memoryForm.nombre, email: memoryForm.email, summary: memoryForm.summary,
+              estado_emocional_actual: memoryForm.mood, buying_intent: memoryForm.buying_intent,
+              ciudad: memoryForm.ciudad, perfil_psicologico: memoryForm.perfil_psicologico
            }).eq('id', lead.id);
-        toast.success('Cambios guardados');
+        toast.success('Memoria del Samurai actualizada');
         setIsEditingMemory(false);
      } finally {
         setSending(false);
      }
   };
 
-  const handleToggleFollowup = () => handleSendMessage(lead.ai_paused ? '#START' : '#STOP');
-
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="w-full sm:max-w-6xl flex flex-row bg-slate-950 border-l border-slate-800 text-white p-0 overflow-hidden">
         
-        {/* Lado Izquierdo: Chat (Flexible con min-w-0 para no romper flex) */}
         <div className="flex-1 min-w-0 flex flex-col h-full bg-slate-950">
           <ChatHeader lead={lead} isAiPaused={lead.ai_paused} sending={sending} onSendCommand={handleSendMessage} />
           <MessageList messages={messages} loading={loading} />
@@ -184,18 +134,11 @@ const ChatViewer = ({ lead: initialLead, open, onOpenChange }: ChatViewerProps) 
           </div>
         </div>
 
-        {/* Lado Derecho: Memoria (Ancho Fijo) */}
         <MemoryPanel 
-          currentAnalysis={lead} 
-          isEditing={isEditingMemory}
-          setIsEditing={setIsEditingMemory}
-          memoryForm={memoryForm}
-          setMemoryForm={setMemoryForm}
-          onSave={saveMemory}
-          saving={sending}
-          onReset={() => {}}
-          onToggleFollowup={handleToggleFollowup}
-          onAnalysisComplete={fetchLeadData}
+          currentAnalysis={lead} isEditing={isEditingMemory} setIsEditing={setIsEditingMemory}
+          memoryForm={memoryForm} setMemoryForm={setMemoryForm} onSave={saveMemory} saving={sending}
+          onReset={() => {}} onToggleFollowup={() => handleSendMessage(lead.ai_paused ? '#START' : '#STOP')}
+          onAnalysisComplete={fetchMessages}
         />
       </SheetContent>
     </Sheet>

@@ -18,7 +18,7 @@ serve(async (req) => {
 
     const { lead_id, transcript } = await req.json();
 
-    // 1. Obtener Datos del Lead
+    // 1. Obtener Datos del Lead para saber qué falta
     const { data: lead } = await supabaseClient.from('leads').select('nombre, ciudad, email').eq('id', lead_id).single();
     
     const missingData = [];
@@ -26,46 +26,40 @@ serve(async (req) => {
     if (!lead?.ciudad) missingData.push("CIUDAD");
     if (!lead?.nombre || lead.nombre.includes('Nuevo')) missingData.push("NOMBRE");
 
-    // 2. Obtener Configuración y Contexto Maestro
-    const [{ data: configs }, { data: kernelData }] = await Promise.all([
-       supabaseClient.from('app_config').select('key, value'),
-       supabaseClient.functions.invoke('get-samurai-context') // Heredar identidad de Sam
-    ]);
+    // 2. Obtener Contexto Maestro (Sam Persona)
+    const { data: kernelData } = await supabaseClient.functions.invoke('get-samurai-context');
 
+    const { data: configs } = await supabaseClient.from('app_config').select('key, value');
     const apiKey = configs?.find(c => c.key === 'openai_api_key')?.value;
+
     if (!apiKey) throw new Error("OpenAI API Key no configurada.");
 
-    // Extraer solo las reglas de identidad del Kernel para no gastar tantos tokens, 
-    // pero asegurando que se mantenga el personaje.
-    const personaRules = kernelData?.system_prompt 
-       ? kernelData.system_prompt.split('---')[0] // Tomamos la primera parte (Identidad + Reglas Seguridad)
-       : "Eres Sam, asistente de ventas amable y espiritual.";
-
     const prompt = `
-      ${personaRules}
+      ${kernelData?.system_prompt}
       
-      ESTADO DEL LEAD:
+      ---
+      CONTEXTO DEL LEAD ACTUAL:
       - Nombre: ${lead?.nombre || 'Desconocido'}
-      - Datos Faltantes: ${missingData.join(', ') || 'Ninguno, tenemos todo.'}
+      - Datos Faltantes: ${missingData.join(', ') || 'Ninguno, proceder al cierre.'}
 
-      HISTORIAL RECIENTE DEL CHAT:
+      HISTORIAL RECIENTE:
       ${transcript}
 
       TU TAREA:
-      Genera 3 opciones de respuesta CORTAS (max 15 palabras) para que el vendedor humano las use.
-      Deben sonar como tú (Sam).
+      Eres el Co-piloto de Sam. Genera 3 opciones de respuesta CORTAS (max 20 palabras) para que el humano las use.
+      Deben sonar exactamente como Sam.
       
       ESTRATEGIA:
-      - Si hay "Datos Faltantes", la opción [VENTA] DEBE intentar conseguirlos sutilmente.
-      - Si el cliente ya dio los datos, ve al CIERRE (Link de pago).
-      - Mantén el tono espiritual pero profesional.
+      - Si faltan datos, la opción [VENTA] DEBE pedirlos.
+      - Si ya tenemos todo, la opción [VENTA] debe dar el link de pago.
+      - La opción [EMPATIA] debe conectar con el sentimiento del cliente.
 
       RESPONDE SOLO EN JSON:
       {
         "suggestions": [
-          {"type": "EMPATIA", "text": "Frase conectando con su emoción..."},
-          {"type": "VENTA", "text": "Frase táctica para avanzar al pago o pedir dato..."},
-          {"type": "TECNICA", "text": "Respuesta informativa breve..."}
+          {"type": "EMPATIA", "text": "Frase conectando espiritualmente..."},
+          {"type": "VENTA", "text": "Frase para avanzar en el embudo o cerrar..."},
+          {"type": "TECNICA", "text": "Dato específico sobre el taller o cuencos..."}
         ]
       }
     `;

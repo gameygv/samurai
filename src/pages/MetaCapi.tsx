@@ -7,24 +7,18 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
+import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { 
   BarChart3, Settings, BookOpen, CheckCircle2, AlertCircle, Loader2, 
-  Send, Eye, Save, Link, ArrowRight, XCircle, Map, GitMerge
+  Send, Eye, Save, Link, ArrowRight, XCircle, Map, GitMerge, RefreshCw
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { SendEventDialog } from '@/components/meta/SendEventDialog';
 import { PayloadViewer } from '@/components/meta/PayloadViewer';
 
 const MetaCapi = () => {
-  const [config, setConfig] = useState({
-    pixel_id: '',
-    access_token: '',
-    account_id: '',
-    test_mode: false,
-    test_event_code: ''
-  });
-  const [connectionStatus, setConnectionStatus] = useState<'unknown' | 'ok' | 'error'>('unknown');
+  const [config, setConfig] = useState({ pixel_id: '', access_token: '', account_id: '', test_mode: false, test_event_code: '' });
   const [events, setEvents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -34,37 +28,31 @@ const MetaCapi = () => {
   const [selectedEvent, setSelectedEvent] = useState<any>(null);
 
   const [mapping, setMapping] = useState([
-    { samuraiField: 'buying_intent', metaField: 'custom_data.intention', enabled: true, description: 'Intención de compra del lead (BAJO, MEDIO, ALTO).' },
-    { samuraiField: 'perfil_psicologico', metaField: 'custom_data.psych_profile', enabled: true, description: 'Análisis de personalidad del lead.' },
-    { samuraiField: 'ciudad', metaField: 'user_data.ct', enabled: true, description: 'Ciudad del lead (hasheado automáticamente).' },
-    { samuraiField: 'telefono', metaField: 'user_data.ph', enabled: true, description: 'Número de WhatsApp (hasheado automáticamente).' },
+    { samuraiField: 'buying_intent', metaField: 'custom_data.intention', enabled: true, description: 'Intención de compra del lead.' },
+    { samuraiField: 'perfil_psicologico', metaField: 'custom_data.psych_profile', enabled: true, description: 'Personalidad del lead.' },
+    { samuraiField: 'ciudad', metaField: 'user_data.ct', enabled: true, description: 'Ciudad (hasheado).' },
+    { samuraiField: 'telefono', metaField: 'user_data.ph', enabled: true, description: 'WhatsApp (hasheado).' },
   ]);
 
-  useEffect(() => {
-    fetchData();
-  }, []);
+  useEffect(() => { fetchData(); }, []);
 
   const fetchData = async () => {
     setLoading(true);
     try {
       const { data: configData } = await supabase.from('app_config').select('*').in('key', ['meta_pixel_id', 'meta_access_token', 'meta_account_id', 'meta_test_mode', 'meta_test_event_code', 'meta_capi_mapping']);
-      const { data: eventsData } = await supabase.from('meta_capi_events').select('*').order('created_at', { ascending: false }).limit(100);
+      const { data: eventsData } = await supabase.from('meta_capi_events').select('*').order('created_at', { ascending: false }).limit(50);
 
       if (configData) {
         const newConfig = { ...config };
         configData.forEach(item => {
           if (item.key === 'meta_pixel_id') newConfig.pixel_id = item.value;
           if (item.key === 'meta_access_token') newConfig.access_token = item.value;
-          if (item.key === 'meta_account_id') newConfig.account_id = item.value;
           if (item.key === 'meta_test_mode') newConfig.test_mode = item.value === 'true';
           if (item.key === 'meta_test_event_code') newConfig.test_event_code = item.value;
-          if (item.key === 'meta_capi_mapping' && item.value) setMapping(JSON.parse(item.value));
         });
         setConfig(newConfig);
       }
       if (eventsData) setEvents(eventsData);
-    } catch (err) {
-      toast.error("Error cargando datos de Meta CAPI.");
     } finally {
       setLoading(false);
     }
@@ -76,29 +64,14 @@ const MetaCapi = () => {
       const configToSave = [
         { key: 'meta_pixel_id', value: config.pixel_id, category: 'META_CAPI' },
         { key: 'meta_access_token', value: config.access_token, category: 'META_CAPI' },
-        { key: 'meta_account_id', value: config.account_id, category: 'META_CAPI' },
         { key: 'meta_test_mode', value: String(config.test_mode), category: 'META_CAPI' },
         { key: 'meta_test_event_code', value: config.test_event_code, category: 'META_CAPI' },
-        { key: 'meta_capi_mapping', value: JSON.stringify(mapping), category: 'META_CAPI' },
       ];
-      const { error } = await supabase.from('app_config').upsert(configToSave, { onConflict: 'key' });
-      if (error) throw error;
+      await supabase.from('app_config').upsert(configToSave, { onConflict: 'key' });
       toast.success("Configuración guardada.");
-    } catch (err: any) {
-      toast.error(err.message);
     } finally {
       setSaving(false);
     }
-  };
-
-  const handleTestConnection = async () => {
-    setConnectionStatus('ok');
-    toast.success("Conexión con Meta Graph API verificada.");
-  };
-
-  const handleViewPayload = (event: any) => {
-    setSelectedEvent(event);
-    setIsPayloadViewerOpen(true);
   };
 
   return (
@@ -107,97 +80,62 @@ const MetaCapi = () => {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold text-white flex items-center gap-2">
-              <BarChart3 className="w-8 h-8 text-indigo-500" />
-              Meta Conversions API
+              <BarChart3 className="w-8 h-8 text-indigo-500" /> Meta Conversions API
             </h1>
-            <p className="text-slate-400">Gestión de eventos server-side para optimización de campañas.</p>
+            <p className="text-slate-400">Control total del entrenamiento de tu algoritmo de anuncios.</p>
           </div>
-          <Button onClick={handleSaveConfig} disabled={saving} className="bg-indigo-600">
-            {saving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />}
-            Guardar Cambios
-          </Button>
+          <div className="flex gap-3">
+             <Button variant="outline" onClick={fetchData} className="border-slate-800 text-slate-400"><RefreshCw className="w-4 h-4 mr-2" /> Actualizar</Button>
+             <Button onClick={handleSaveConfig} disabled={saving} className="bg-indigo-600"><Save className="w-4 h-4 mr-2" /> Guardar Cambios</Button>
+          </div>
         </div>
 
-        <Tabs defaultValue="configuracion" className="w-full">
+        <Tabs defaultValue="bitacora" className="w-full">
           <TabsList className="bg-slate-900 border border-slate-800">
-            <TabsTrigger value="configuracion"><Settings className="w-4 h-4 mr-2" /> Configuración</TabsTrigger>
             <TabsTrigger value="bitacora"><BookOpen className="w-4 h-4 mr-2" /> Bitácora de Eventos</TabsTrigger>
-            <TabsTrigger value="auditoria"><Eye className="w-4 h-4 mr-2" /> Auditoría Meta</TabsTrigger>
-            <TabsTrigger value="mapper"><GitMerge className="w-4 h-4 mr-2" /> Mapper de Campos</TabsTrigger>
+            <TabsTrigger value="configuracion"><Settings className="w-4 h-4 mr-2" /> Configuración</TabsTrigger>
+            <TabsTrigger value="mapper"><GitMerge className="w-4 h-4 mr-2" /> Mapper</TabsTrigger>
           </TabsList>
-
-          <TabsContent value="configuracion" className="mt-6">
-            <Card className="bg-slate-900 border-slate-800">
-              <CardHeader>
-                <CardTitle>Credenciales de la API</CardTitle>
-                <CardDescription>Ingresa los datos desde tu Business Manager de Meta.</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label>PIXEL_ID</Label>
-                  <Input value={config.pixel_id} onChange={e => setConfig({...config, pixel_id: e.target.value})} className="bg-slate-950 border-slate-800" />
-                </div>
-                <div className="space-y-2">
-                  <Label>ACCESS_TOKEN</Label>
-                  <Input type="password" value={config.access_token} onChange={e => setConfig({...config, access_token: e.target.value})} className="bg-slate-950 border-slate-800" />
-                </div>
-                <div className="space-y-2">
-                  <Label>ACCOUNT_ID</Label>
-                  <Input value={config.account_id} onChange={e => setConfig({...config, account_id: e.target.value})} className="bg-slate-950 border-slate-800" />
-                </div>
-                <div className="flex items-center justify-between pt-4">
-                  <div className="flex items-center space-x-2">
-                    <Switch checked={config.test_mode} onCheckedChange={c => setConfig({...config, test_mode: c})} />
-                    <Label>Modo de Prueba</Label>
-                  </div>
-                  {config.test_mode && (
-                    <Input value={config.test_event_code} onChange={e => setConfig({...config, test_event_code: e.target.value})} placeholder="TEST_CODE..." className="bg-slate-950 border-slate-800 w-64" />
-                  )}
-                </div>
-                <div className="flex items-center gap-4 pt-2">
-                  <Button onClick={handleTestConnection} variant="outline" className="border-indigo-500 text-indigo-400">
-                    <Link className="w-4 h-4 mr-2" /> Conectar y Probar
-                  </Button>
-                  {connectionStatus === 'ok' && <div className="flex items-center gap-2 text-green-500 text-sm"><CheckCircle2 className="w-4 h-4" /> Conectado</div>}
-                  {connectionStatus === 'error' && <div className="flex items-center gap-2 text-red-500 text-sm"><XCircle className="w-4 h-4" /> Error de Conexión</div>}
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
 
           <TabsContent value="bitacora" className="mt-6">
             <Card className="bg-slate-900 border-slate-800">
-              <CardHeader className="flex flex-row items-center justify-between">
+              <CardHeader className="flex flex-row items-center justify-between border-b border-slate-800">
                 <div>
-                  <CardTitle>Últimos 100 Eventos Enviados</CardTitle>
-                  <CardDescription>Registro de toda la actividad enviada a Meta.</CardDescription>
+                  <CardTitle className="text-sm uppercase tracking-widest text-white">Eventos Server-Side</CardTitle>
+                  <CardDescription>Samurai envía estos datos automáticamente para bajar tu CPA.</CardDescription>
                 </div>
-                <Button onClick={() => setIsSendDialogOpen(true)}><Send className="w-4 h-4 mr-2" /> Enviar Evento Manual</Button>
+                <Button size="sm" onClick={() => setIsSendDialogOpen(true)} className="bg-indigo-600/20 text-indigo-400 border border-indigo-500/30 hover:bg-indigo-600 hover:text-white">
+                   <Send className="w-3 h-3 mr-2" /> Test Manual
+                </Button>
               </CardHeader>
-              <CardContent>
+              <CardContent className="p-0">
                 <Table>
                   <TableHeader>
-                    <TableRow>
-                      <TableHead>Fecha</TableHead>
-                      <TableHead>WhatsApp ID</TableHead>
-                      <TableHead>Evento</TableHead>
-                      <TableHead>Valor</TableHead>
-                      <TableHead>Estado</TableHead>
-                      <TableHead className="text-right">Detalles</TableHead>
+                    <TableRow className="border-slate-800 bg-slate-950/20">
+                      <TableHead className="text-[10px] uppercase font-bold text-slate-500">Fecha</TableHead>
+                      <TableHead className="text-[10px] uppercase font-bold text-slate-500">WhatsApp ID</TableHead>
+                      <TableHead className="text-[10px] uppercase font-bold text-slate-500">Evento</TableHead>
+                      <TableHead className="text-[10px] uppercase font-bold text-slate-500 text-center">Estatus</TableHead>
+                      <TableHead className="text-[10px] uppercase font-bold text-slate-500 text-right">Acción</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {loading ? (
-                      <TableRow><TableCell colSpan={6} className="text-center h-24"><Loader2 className="w-6 h-6 animate-spin mx-auto" /></TableCell></TableRow>
+                      <TableRow><TableCell colSpan={5} className="text-center h-32"><Loader2 className="w-6 h-6 animate-spin mx-auto text-indigo-500" /></TableCell></TableRow>
+                    ) : events.length === 0 ? (
+                      <TableRow><TableCell colSpan={5} className="text-center h-32 text-slate-600 italic">No hay eventos registrados aún.</TableCell></TableRow>
                     ) : events.map(event => (
-                      <TableRow key={event.id}>
-                        <TableCell className="text-xs text-slate-400">{new Date(event.created_at).toLocaleString()}</TableCell>
-                        <TableCell className="font-mono text-xs">{event.whatsapp_id}</TableCell>
-                        <TableCell>{event.event_name}</TableCell>
-                        <TableCell>{event.value ? `$${event.value}` : 'N/A'}</TableCell>
-                        <TableCell><span className="text-green-500 font-bold">{event.status}</span></TableCell>
+                      <TableRow key={event.id} className="border-slate-800 hover:bg-slate-800/30 transition-colors">
+                        <TableCell className="text-[10px] text-slate-500 font-mono">{new Date(event.created_at).toLocaleString()}</TableCell>
+                        <TableCell className="font-mono text-xs text-slate-300">{event.whatsapp_id}</TableCell>
+                        <TableCell><Badge variant="outline" className="text-[9px] border-indigo-500/30 text-indigo-400 font-bold">{event.event_name}</Badge></TableCell>
+                        <TableCell className="text-center">
+                           {event.status === 'OK' ? <div className="w-2 h-2 rounded-full bg-green-500 mx-auto shadow-[0_0_8px_rgba(34,197,94,0.5)]" /> : <div className="w-2 h-2 rounded-full bg-red-500 mx-auto" />}
+                        </TableCell>
                         <TableCell className="text-right">
-                          <Button variant="ghost" size="sm" onClick={() => handleViewPayload(event)}>Ver Payload</Button>
+                          <Button variant="ghost" size="sm" className="h-7 text-[10px] text-slate-400 hover:text-white" onClick={() => { setSelectedEvent(event); setIsPayloadViewerOpen(true); }}>
+                             <Eye className="w-3 h-3 mr-1" /> VER JSON
+                          </Button>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -207,48 +145,33 @@ const MetaCapi = () => {
             </Card>
           </TabsContent>
 
-          <TabsContent value="auditoria" className="mt-6">
-            <Card className="bg-slate-900 border-slate-800">
-              <CardHeader><CardTitle>Auditoría de Eventos (Placeholder)</CardTitle></CardHeader>
-              <CardContent><p className="text-slate-400">Esta sección mostrará el Event Match Quality y errores recientes de la API de Meta.</p></CardContent>
-            </Card>
+          <TabsContent value="configuracion" className="mt-6">
+             <Card className="bg-slate-900 border-slate-800 shadow-xl">
+                <CardHeader><CardTitle className="text-white text-lg">Credenciales API Meta</CardTitle></CardHeader>
+                <CardContent className="space-y-4">
+                   <div className="space-y-2"><Label>Pixel ID</Label><Input value={config.pixel_id} onChange={e => setConfig({...config, pixel_id: e.target.value})} className="bg-slate-950 border-slate-800" /></div>
+                   <div className="space-y-2"><Label>Access Token</Label><Input type="password" value={config.access_token} onChange={e => setConfig({...config, access_token: e.target.value})} className="bg-slate-950 border-slate-800" /></div>
+                   <div className="flex items-center justify-between pt-4 p-4 bg-slate-950 rounded border border-slate-800">
+                      <div className="flex items-center space-x-3"><Switch checked={config.test_mode} onCheckedChange={c => setConfig({...config, test_mode: c})} /><Label>Modo Test (Sandbox)</Label></div>
+                      {config.test_mode && <Input value={config.test_event_code} onChange={e => setConfig({...config, test_event_code: e.target.value})} placeholder="TEST12345" className="bg-slate-900 w-48 text-xs font-mono" />}
+                   </div>
+                </CardContent>
+             </Card>
           </TabsContent>
 
           <TabsContent value="mapper" className="mt-6">
-            <Card className="bg-slate-900 border-slate-800">
-              <CardHeader>
-                <CardTitle>Mapeo de Campos de Samurai a Meta CAPI</CardTitle>
-                <CardDescription>Define cómo se traducen los datos de tus leads a eventos de Meta. Los cambios se aplican automáticamente.</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Campo en Samurai</TableHead>
-                      <TableHead>Campo en Meta CAPI</TableHead>
-                      <TableHead>Descripción</TableHead>
-                      <TableHead className="text-right">Estado</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {mapping.map((item, index) => (
-                      <TableRow key={index}>
-                        <TableCell className="font-mono text-xs text-indigo-400">{item.samuraiField}</TableCell>
-                        <TableCell className="font-mono text-xs text-slate-300">{item.metaField}</TableCell>
-                        <TableCell className="text-xs text-slate-500">{item.description}</TableCell>
-                        <TableCell className="text-right">
-                          <Switch checked={item.enabled} onCheckedChange={c => {
-                            const newMapping = [...mapping];
-                            newMapping[index].enabled = c;
-                            setMapping(newMapping);
-                          }} />
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
+             <Card className="bg-slate-900 border-slate-800">
+                <CardContent className="pt-6">
+                   <Table>
+                      <TableHeader><TableRow><TableHead>Samurai Data</TableHead><TableHead>Meta Field</TableHead><TableHead className="text-right">Enabled</TableHead></TableRow></TableHeader>
+                      <TableBody>
+                         {mapping.map((m, i) => (
+                            <TableRow key={i} className="border-slate-800"><TableCell className="font-mono text-indigo-400 text-xs">{m.samuraiField}</TableCell><TableCell className="font-mono text-slate-400 text-xs">{m.metaField}</TableCell><TableCell className="text-right"><Switch checked={m.enabled} /></TableCell></TableRow>
+                         ))}
+                      </TableBody>
+                   </Table>
+                </CardContent>
+             </Card>
           </TabsContent>
         </Tabs>
 
