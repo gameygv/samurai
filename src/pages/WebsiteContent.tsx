@@ -102,6 +102,7 @@ const WebsiteContent = () => {
       const { error } = await supabase.from('main_website_content').delete().eq('id', id);
       if (error) throw error;
       toast.success("Página eliminada.");
+      setSelectedPage(null); // Deseleccionar
       fetchPages();
     } catch (err: any) {
       toast.error(err.message);
@@ -207,12 +208,6 @@ const WebsiteContent = () => {
                             </div>
                           </button>
                           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                             <Button size="icon" variant="ghost" className="h-6 w-6 text-slate-500 hover:text-white" onClick={(e) => { e.stopPropagation(); setPageToEdit(page); setIsEditOpen(true); }}>
-                                <Edit2 className="w-3 h-3" />
-                             </Button>
-                             <Button size="icon" variant="ghost" className="h-6 w-6 text-slate-500 hover:text-red-500" onClick={(e) => { e.stopPropagation(); handleDeletePage(page.id, page.title); }}>
-                                <Trash2 className="w-3 h-3" />
-                             </Button>
                              <Button 
                                variant="ghost" 
                                size="icon" 
@@ -235,20 +230,30 @@ const WebsiteContent = () => {
                 <>
                   <CardHeader className="border-b border-slate-800 bg-slate-950/20 py-4">
                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-4">
-                           <div className="w-12 h-12 rounded-xl bg-indigo-600/10 flex items-center justify-center border border-indigo-500/20">
+                        <div className="flex items-center gap-4 overflow-hidden">
+                           <div className="w-12 h-12 rounded-xl bg-indigo-600/10 flex items-center justify-center border border-indigo-500/20 shrink-0">
                               <Globe className="w-6 h-6 text-indigo-400" />
                            </div>
-                           <div>
-                              <CardTitle className="text-white text-lg">{selectedPage.title}</CardTitle>
-                              <a href={selectedPage.url} target="_blank" rel="noreferrer" className="text-[10px] text-indigo-400 flex items-center gap-1 hover:underline">
+                           <div className="min-w-0">
+                              <CardTitle className="text-white text-lg truncate">{selectedPage.title}</CardTitle>
+                              <a href={selectedPage.url} target="_blank" rel="noreferrer" className="text-[10px] text-indigo-400 flex items-center gap-1 hover:underline truncate">
                                  {selectedPage.url} <ExternalLink className="w-2.5 h-2.5" />
                               </a>
                            </div>
                         </div>
-                        <Badge className={selectedPage.scrape_status === 'success' ? 'bg-green-600/20 text-green-500 border-green-500/30' : 'bg-red-600/20 text-red-500'}>
-                           {selectedPage.scrape_status === 'success' ? '✓ INDEXADO' : '⚠ ERROR'}
-                        </Badge>
+                        <div className="flex items-center gap-3 shrink-0">
+                           <div className="flex gap-1">
+                              <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-slate-400 hover:text-white" onClick={() => { setPageToEdit(selectedPage); setIsEditOpen(true); }} title="Editar URL/Título">
+                                 <Edit2 className="w-4 h-4" />
+                              </Button>
+                              <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-slate-400 hover:text-red-500" onClick={() => handleDeletePage(selectedPage.id, selectedPage.title)} title="Eliminar Página">
+                                 <Trash2 className="w-4 h-4" />
+                              </Button>
+                           </div>
+                           <Badge className={selectedPage.scrape_status === 'success' ? 'bg-green-600/20 text-green-500 border-green-500/30' : 'bg-red-600/20 text-red-500'}>
+                              {selectedPage.scrape_status === 'success' ? '✓ INDEXADO' : '⚠ ERROR'}
+                           </Badge>
+                        </div>
                      </div>
                   </CardHeader>
                   
@@ -279,7 +284,7 @@ const WebsiteContent = () => {
                            ) : (
                               <div className="h-full flex flex-col items-center justify-center text-slate-600 italic text-center gap-4">
                                  <RefreshCw className="w-8 h-8 opacity-20" />
-                                 <p>Página sin contenido indexado.<br/>Pulsa el botón de refrescar arriba a la derecha.</p>
+                                 <p>Página sin contenido indexado.<br/>Pulsa el botón de refrescar en el menú lateral.</p>
                               </div>
                            )}
                         </ScrollArea>
