@@ -38,9 +38,8 @@ const Index = () => {
 
   const [tasks, setTasks] = useState<any[]>([]);
   const [funnelData, setFunnelData] = useState<any[]>([]);
-  const [recentChats, setRecentChats] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [latency, setLatency] = useState<number>(0);
+  const [latency, setLatency] = useState<number | null>(null);
 
   useEffect(() => {
     fetchDashboardData();
@@ -113,11 +112,9 @@ const Index = () => {
         capiReadyLeads: capiReady
       });
 
-      const { data: chats } = await supabase.from('conversaciones').select('*, leads(nombre)').order('created_at', { ascending: false }).limit(6);
-      if (chats) setRecentChats(chats);
-
     } catch (err) {
       console.error("Dashboard error:", err);
+      setLatency(null); // Indicate error state
     } finally {
       setLoading(false);
     }
@@ -137,15 +134,15 @@ const Index = () => {
             <p className="text-slate-400">Operaciones Tácticas & Inteligencia de Datos</p>
           </div>
           <div className="flex items-center gap-3 bg-slate-900/50 p-2 px-4 rounded-full border border-slate-800 h-10 shadow-lg">
-             <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
+             <div className={`w-2 h-2 rounded-full animate-pulse ${latency !== null ? 'bg-green-500' : 'bg-red-500'}`}></div>
              <span className="text-[10px] font-mono text-slate-300 uppercase tracking-widest">
-                KERNEL: ONLINE | LATENCY: {latency}ms
+                {latency !== null ? `KERNEL: ONLINE | LATENCY: ${latency}ms` : 'KERNEL: RECONNECTING...'}
              </span>
           </div>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-          <StatCard title="Salud Meta CAPI" value={`${Math.round((stats.capiReadyLeads / (stats.totalLeads || 1)) * 100)}%`} icon={Fingerprint} color="text-indigo-400" bg="bg-indigo-500/10" footer={`${stats.capiReadyLeads} Leads con Datos Full`} />
+          <StatCard title="Salud Meta CAPI" value={`${stats.totalLeads > 0 ? Math.round((stats.capiReadyLeads / stats.totalLeads) * 100) : 0}%`} icon={Fingerprint} color="text-indigo-400" bg="bg-indigo-500/10" footer={`${stats.capiReadyLeads} Leads con Datos Full`} />
           <StatCard title="Alertas #CIA" value={stats.totalErrors} icon={AlertTriangle} color="text-yellow-500" bg="bg-yellow-500/10" footer="Mejoras de Conducta" />
           <StatCard title="Ventas Validadas" value={stats.validatedSales} icon={DollarSign} color="text-emerald-500" bg="bg-emerald-500/10" footer="Reservas de $1500 Confirmadas" />
           <StatCard title="Total Prospectos" value={stats.totalLeads} icon={Users2} color="text-slate-400" bg="bg-slate-500/10" footer="Tráfico Acumulado" />
@@ -186,9 +183,9 @@ const Index = () => {
                      <div className="relative w-32 h-32 flex items-center justify-center">
                         <svg className="w-full h-full transform -rotate-90">
                            <circle cx="64" cy="64" r="58" stroke="currentColor" strokeWidth="8" fill="transparent" className="text-slate-800" />
-                           <circle cx="64" cy="64" r="58" stroke="currentColor" strokeWidth="8" fill="transparent" strokeDasharray={364} strokeDashoffset={364 - (364 * (stats.capiReadyLeads / (stats.totalLeads || 1)))} className="text-indigo-500 transition-all duration-1000" />
+                           <circle cx="64" cy="64" r="58" stroke="currentColor" strokeWidth="8" fill="transparent" strokeDasharray={364} strokeDashoffset={364 - (364 * (stats.totalLeads > 0 ? (stats.capiReadyLeads / stats.totalLeads) : 0))} className="text-indigo-500 transition-all duration-1000" />
                         </svg>
-                        <span className="absolute text-2xl font-bold text-white">{Math.round((stats.capiReadyLeads / (stats.totalLeads || 1)) * 100)}%</span>
+                        <span className="absolute text-2xl font-bold text-white">{Math.round((stats.totalLeads > 0 ? (stats.capiReadyLeads / stats.totalLeads) : 0) * 100)}%</span>
                      </div>
                      <div className="text-center space-y-1">
                         <p className="text-[10px] text-slate-400 uppercase font-bold">Calidad de Datos</p>
@@ -212,7 +209,7 @@ const Index = () => {
             <TaskRadar tasks={tasks} />
             
             <Card className="bg-black border-slate-800 font-mono text-[9px] shadow-2xl flex flex-col rounded-xl overflow-hidden min-h-[250px]">
-              <div className="px-4 py-2 border-b border-slate-800 bg-slate-900/80 flex items-center justify-between">
+              <div className="px-4 py-2 border-b border-slate-800 bg-slate-900/80 flex items-center justify-center">
                  <div className="flex items-center gap-2 text-slate-500"><Terminal className="w-3.5 h-3.5" /><span className="font-bold uppercase tracking-widest">System Log</span></div>
               </div>
               <ScrollArea className="h-[200px] p-4">

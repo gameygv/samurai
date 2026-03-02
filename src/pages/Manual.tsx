@@ -7,7 +7,8 @@ import { Badge } from '@/components/ui/badge';
 import { 
   BookOpen, Brain, Zap, ShieldAlert, 
   Terminal, Play, Pause, ShoppingCart, LinkIcon,
-  Layers, Eye, Database, ShieldCheck, Heart, RefreshCcw
+  Layers, Eye, Database, ShieldCheck, Heart, RefreshCcw,
+  MessageCircle, DollarSign, Clock
 } from 'lucide-react';
 
 const Manual = () => {
@@ -27,6 +28,7 @@ const Manual = () => {
         <Tabs defaultValue="arquitectura" className="w-full">
           <TabsList className="bg-slate-900 border border-slate-800 w-full justify-start p-1 h-auto flex-wrap">
             <TabsTrigger value="arquitectura" className="py-2 px-4"><Layers className="w-4 h-4 mr-2"/> Arquitectura</TabsTrigger>
+            <TabsTrigger value="automatizacion" className="py-2 px-4"><Clock className="w-4 h-4 mr-2"/> Automatización</TabsTrigger>
             <TabsTrigger value="comandos" className="py-2 px-4"><Terminal className="w-4 h-4 mr-2"/> Comandos</TabsTrigger>
             <TabsTrigger value="vision" className="py-2 px-4"><Eye className="w-4 h-4 mr-2"/> Ojo de Halcón</TabsTrigger>
             <TabsTrigger value="aprendizaje" className="py-2 px-4"><Zap className="w-4 h-4 mr-2"/> Aprendizaje</TabsTrigger>
@@ -41,11 +43,11 @@ const Manual = () => {
                    </CardHeader>
                    <CardContent className="space-y-4">
                       {[
-                        { l: "Layer 1: #CIA", d: "Reglas de aprendizaje. Lo que se corrige en la Bitácora manda sobre todo lo demás.", c: "text-red-500 font-bold" },
-                        { l: "Layer 2: ADN Core", d: "Identidad, tono y protocolos de venta del Samurai.", c: "text-indigo-400 font-bold" },
-                        { l: "Layer 3: Verdad Maestra", d: "Datos indexados del sitio web oficial (theelephantbowl.com).", c: "text-green-400 font-bold" },
-                        { l: "Layer 4: Media Catalog", d: "Posters y promociones disponibles para enviar.", c: "text-blue-400 font-bold" },
-                        { l: "Layer 5: Ojo de Halcón", d: "Instrucciones de visión financiera y validación de pagos.", c: "text-red-600 font-bold" }
+                        { l: "Layer 0: PROTOCOLO", d: "Reglas inamovibles: Pedir Nombre/Ciudad -> Enviar Poster -> Cerrar Venta.", c: "text-white font-bold" },
+                        { l: "Layer 1: #CIA", d: "Reglas de aprendizaje. Lo que se corrige en la Bitácora manda sobre el ADN.", c: "text-red-500 font-bold" },
+                        { l: "Layer 2: Verdad Maestra", d: "Datos indexados del sitio web oficial y documentos PDF subidos.", c: "text-green-400 font-bold" },
+                        { l: "Layer 3: Media Catalog", d: "Posters y promociones disponibles para enviar (Triggers).", c: "text-blue-400 font-bold" },
+                        { l: "Layer 4: ADN / Alma", d: "Identidad, tono y estilo de redacción.", c: "text-purple-400 font-bold" }
                       ].map((item, i) => (
                         <div key={i} className="bg-slate-950 p-3 rounded border border-slate-800">
                            <p className={`text-xs ${item.c}`}>{item.l}</p>
@@ -62,11 +64,37 @@ const Manual = () => {
                       </CardHeader>
                       <CardContent className="text-xs text-slate-400 leading-relaxed space-y-3">
                          <p>Samurai siempre consultará primero si hay una regla **#CIA** que aplique al contexto actual.</p>
-                         <p>Si un dato (como un precio) está en la **Verdad Maestra**, ese dato es ley. Nunca inventará información que no esté en la Layer 3.</p>
+                         <p>Si un dato (como un precio) está en la **Verdad Maestra**, ese dato es ley. Nunca inventará información que no esté en la Layer 2.</p>
                          <p>El bot solo enviará imágenes si detecta que el **Trigger** configurado en el Media Manager coincide con la necesidad del cliente.</p>
                       </CardContent>
                    </Card>
                 </div>
+             </div>
+          </TabsContent>
+
+          <TabsContent value="automatizacion" className="mt-6 space-y-6">
+             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <Card className="bg-slate-900 border-slate-800 border-t-4 border-t-blue-500">
+                   <CardHeader>
+                      <CardTitle className="text-white flex items-center gap-2 text-sm"><MessageCircle className="w-4 h-4 text-blue-500"/> Reactivación (Leads Fríos)</CardTitle>
+                   </CardHeader>
+                   <CardContent className="text-xs text-slate-400 space-y-2">
+                      <p><strong>¿Para quién?</strong> Clientes que saludaron o preguntaron info general pero dejaron de contestar (Intención BAJA/MEDIA).</p>
+                      <p><strong>¿Qué hace?</strong> Espera X horas (configurables) de silencio. Si no responden, envía un mensaje amable: <em>"¿Pudiste revisar la info? Sigo aquí..."</em>.</p>
+                      <p><strong>Frecuencia:</strong> Solo se envía 1 vez para no ser invasivo.</p>
+                   </CardContent>
+                </Card>
+
+                <Card className="bg-slate-900 border-slate-800 border-t-4 border-t-orange-500">
+                   <CardHeader>
+                      <CardTitle className="text-white flex items-center gap-2 text-sm"><DollarSign className="w-4 h-4 text-orange-500"/> Cierre de Ventas (Leads Calientes)</CardTitle>
+                   </CardHeader>
+                   <CardContent className="text-xs text-slate-400 space-y-2">
+                      <p><strong>¿Para quién?</strong> Clientes que ya pidieron link de pago o cuenta bancaria (Intención ALTA).</p>
+                      <p><strong>¿Qué hace?</strong> Inicia una secuencia de 4 mensajes escalonados (24h, 48h, 72h...) presionando el cierre o preguntando si hubo error técnico.</p>
+                      <p><strong>Stop Automático:</strong> Si WooCommerce detecta el pago, la secuencia se detiene y envía agradecimiento.</p>
+                   </CardContent>
+                </Card>
              </div>
           </TabsContent>
 
