@@ -5,7 +5,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { 
-  Trello, Loader2, Clock, TrendingUp, User, Smile, Meh, Frown, Fingerprint, Image, Target, AlertCircle
+  Trello, Loader2, Clock, TrendingUp, User, Smile, Meh, Frown, Fingerprint, Image, Target, AlertCircle, DollarSign
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import ChatViewer from '@/components/ChatViewer';
@@ -16,10 +16,12 @@ const Pipeline = () => {
   const [selectedLead, setSelectedLead] = useState<any>(null);
   const [isChatOpen, setIsChatOpen] = useState(false);
 
+  const TICKET_PRICE = 1500;
+
   const columns = [
-    { id: 'BAJO', title: '1. CONEXIÓN (DATOS)', icon: Fingerprint, color: 'border-blue-500/50 bg-blue-500/5', desc: 'Cazando Nombre/Ciudad' },
-    { id: 'MEDIO', title: '2. SEDUCCIÓN (MEDIA)', icon: Image, color: 'border-yellow-500/50 bg-yellow-500/5', desc: 'Enamorando con Posters' },
-    { id: 'ALTO', title: '3. CIERRE ($1500)', icon: Target, color: 'border-red-500/50 bg-red-500/5', desc: 'Link de Pago Enviado' }
+    { id: 'BAJO', title: '1. CONEXIÓN', icon: Fingerprint, color: 'border-blue-500/50 bg-blue-500/5', desc: 'Datos Incompletos' },
+    { id: 'MEDIO', title: '2. SEDUCCIÓN', icon: Image, color: 'border-yellow-500/50 bg-yellow-500/5', desc: 'Interés Validado' },
+    { id: 'ALTO', title: '3. CIERRE ($)', icon: Target, color: 'border-red-500/50 bg-red-500/5', desc: 'Link Enviado' }
   ];
 
   useEffect(() => {
@@ -38,6 +40,7 @@ const Pipeline = () => {
     const { data } = await supabase
       .from('leads')
       .select('*')
+      .neq('buying_intent', 'COMPRADO') // No mostrar ya vendidos
       .order('last_message_at', { ascending: false });
     
     if (data) setLeads(data);
@@ -59,26 +62,40 @@ const Pipeline = () => {
     setIsChatOpen(true);
   };
 
+  const totalValue = leads.filter(l => l.buying_intent === 'ALTO').length * TICKET_PRICE;
+  const potentialValue = leads.length * TICKET_PRICE;
+
   return (
     <Layout>
       <div className="max-w-[1800px] mx-auto space-y-6 h-[calc(100vh-140px)] flex flex-col">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <h1 className="text-3xl font-bold text-white flex items-center gap-3">
               <Trello className="w-8 h-8 text-indigo-500" />
-              Tablero Táctico de Fases
+              Tablero Táctico
             </h1>
-            <p className="text-slate-400">Detección de leads estancados y control de flujo de $1500.</p>
+            <p className="text-slate-400">Gestión visual del flujo de ventas.</p>
           </div>
-          <Button variant="outline" className="border-slate-800 text-slate-400" onClick={fetchLeads}>
-             <Clock className="w-4 h-4 mr-2" /> Sincronizar Radar
-          </Button>
+          <div className="flex items-center gap-4">
+             <div className="bg-emerald-500/10 border border-emerald-500/30 px-4 py-2 rounded-lg text-right">
+                <p className="text-[10px] text-emerald-400 uppercase font-bold tracking-widest">En Cierre (Hot)</p>
+                <p className="text-xl font-bold text-white">${totalValue.toLocaleString()} MXN</p>
+             </div>
+             <div className="bg-slate-900 border border-slate-800 px-4 py-2 rounded-lg text-right hidden md:block">
+                <p className="text-[10px] text-slate-500 uppercase font-bold tracking-widest">Pipeline Total</p>
+                <p className="text-xl font-bold text-slate-300">${potentialValue.toLocaleString()}</p>
+             </div>
+             <Button variant="outline" size="icon" className="border-slate-800 text-slate-400" onClick={fetchLeads}>
+                <Clock className="w-4 h-4" />
+             </Button>
+          </div>
         </div>
 
         <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-6 min-h-0">
           {columns.map((col) => {
             const ColumnIcon = col.icon;
             const leadsInCol = getLeadsByIntent(col.id);
+            const colValue = leadsInCol.length * TICKET_PRICE;
             
             return (
               <div key={col.id} className={cn("rounded-xl border flex flex-col min-h-0 shadow-2xl", col.color)}>
@@ -90,14 +107,17 @@ const Pipeline = () => {
                      </h3>
                      <Badge className="bg-slate-950 text-indigo-400 border-indigo-500/20">{leadsInCol.length}</Badge>
                   </div>
-                  <p className="text-[10px] text-slate-500 font-mono italic">{col.desc}</p>
+                  <div className="flex justify-between items-center">
+                     <p className="text-[10px] text-slate-500 font-mono italic">{col.desc}</p>
+                     <span className="text-[10px] font-bold text-slate-400">${colValue.toLocaleString()}</span>
+                  </div>
                 </div>
                 
                 <div className="flex-1 overflow-y-auto p-3 space-y-4 custom-scrollbar">
                   {leadsInCol.length === 0 ? (
                      <div className="h-32 flex flex-col items-center justify-center text-[10px] text-slate-700 italic uppercase gap-2 border border-dashed border-slate-800 rounded-xl">
                         <TrendingUp className="w-6 h-6 opacity-10" />
-                        Sin prospectos en esta fase
+                        Sin prospectos
                      </div>
                   ) : leadsInCol.map((lead) => {
                     const stale = isStale(lead.last_message_at);
@@ -140,7 +160,7 @@ const Pipeline = () => {
                            <div className="flex items-center justify-between pt-2 border-t border-slate-800/50">
                               <div className="flex items-center gap-2">
                                  <div className="text-[8px] text-slate-600 font-bold uppercase">
-                                    RECORDATORIOS:
+                                    MSG:
                                  </div>
                                  <div className="flex gap-0.5">
                                     {[1,2,3,4].map(n => (
@@ -149,7 +169,7 @@ const Pipeline = () => {
                                  </div>
                               </div>
                               <div className="text-[8px] text-slate-700 font-mono">
-                                 ACTIVO: {lead.last_message_at ? new Date(lead.last_message_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '---'}
+                                 {lead.last_message_at ? new Date(lead.last_message_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
                               </div>
                            </div>
                         </CardContent>
