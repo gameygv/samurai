@@ -5,7 +5,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { 
-  Trello, Loader2, Clock, TrendingUp, User, Smile, Meh, Frown, Fingerprint, Image, Target, AlertCircle, DollarSign, UserPlus
+  Trello, Loader2, Clock, TrendingUp, User, Smile, Meh, Frown, Fingerprint, Image, Target, AlertCircle, DollarSign, UserPlus, MailWarning
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import ChatViewer from '@/components/ChatViewer';
@@ -65,7 +65,6 @@ const Pipeline = () => {
   };
 
   const totalValue = leads.filter(l => l.buying_intent === 'ALTO').length * TICKET_PRICE;
-  const potentialValue = leads.length * TICKET_PRICE;
 
   return (
     <Layout>
@@ -124,6 +123,8 @@ const Pipeline = () => {
                      </div>
                   ) : leadsInCol.map((lead) => {
                     const stale = isStale(lead.last_message_at);
+                    const missingEmail = !lead.email || lead.email.length < 5;
+                    
                     return (
                       <Card 
                         key={lead.id} 
@@ -151,6 +152,7 @@ const Pipeline = () => {
                               <div className="flex flex-col items-end gap-1">
                                  {lead.ai_paused && <Badge variant="destructive" className="h-4 px-1 text-[8px] bg-red-600">STOP</Badge>}
                                  {stale && <Badge variant="outline" className="h-4 px-1 text-[8px] border-orange-500 text-orange-500 animate-pulse">ESTANCADO</Badge>}
+                                 {missingEmail && <Badge variant="secondary" className="h-4 px-1 text-[8px] bg-yellow-500/10 text-yellow-500 border-yellow-500/30">FALTA EMAIL</Badge>}
                               </div>
                            </div>
 

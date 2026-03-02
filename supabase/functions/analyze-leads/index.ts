@@ -18,136 +18,134 @@ serve(async (req) => {
 
     const { force, lead_id } = await req.json().catch(() => ({}));
     
-    // 1. Obtener API Key
+    // 1. Configuración
     const { data: configs } = await supabaseClient.from('app_config').select('key, value');
     const getConfig = (key: string) => configs?.find(c => c.key === key)?.value || null;
     const apiKey = getConfig('openai_api_key');
+    const metaPixelId = getConfig('meta_pixel_id');
+    const metaToken = getConfig('meta_access_token');
 
     if (!apiKey) throw new Error("OpenAI API Key no configurada.");
 
     let query = supabaseClient.from('leads').select('*');
-    if (lead_id) {
-       query = query.eq('id', lead_id);
-    } else {
-       query = query.order('last_message_at', { ascending: false }).limit(10);
-    }
+    if (lead_id) query = query.eq('id', lead_id);
+    else query = query.order('last_message_at', { ascending: false }).limit(10);
 
     const { data: activeLeads } = await query;
     const results = [];
 
-    console.log(`[analyze-leads] Procesando ${activeLeads?.length || 0} leads...`);
-
     for (const lead of activeLeads || []) {
        try {
-         // Obtener últimos 50 mensajes (suficiente contexto)
+         // Análisis solo si no se ha analizado recientemente o si es forzado
+         if (!force && lead.last_analyzed_at && new Date() - new Date(lead.last_analyzed_at) < 1000 * 60 * 60) continue;
+
          const { data: messages } = await supabaseClient
             .from('conversaciones')
             .select('emisor, mensaje')
             .eq('lead_id', lead.id)
             .order('created_at', { ascending: true }) 
-            .limit(50);
+            .limit(100);
 
-         if (!messages || messages.length === 0) {
-             results.push({ lead: lead.id, status: 'skipped_no_messages' });
-             continue;
-         }
+         if (!messages || messages.length === 0) continue;
 
-         const transcript = messages.map(m => `[${m.emisor}]: ${m.mensaje}`).join('\n');
+         const transcript = messages.map(m => `${m.emisor}: ${m.mensaje}`).join('\n');
 
          const prompt = `
             ACTÚA COMO UN MOTOR DE EXTRACCIÓN DE DATOS (DATA SCRAPER).
-            Tu única misión es leer el historial de chat y rellenar los campos faltantes en el JSON.
-
-            HISTORIAL DEL CHAT:
-            ---
+            
+            HISTORIAL:
             ${transcript}
-            ---
 
-            INSTRUCCIONES DE EXTRACCIÓN (PRIORIDAD ALTA):
-            1. EMAIL: Busca cualquier string con formato de correo (ej: "usuario@gmail.com"). Si el usuario envía SOLO el correo en un mensaje, tómalo inmediatamente.
-            2. CIUDAD: Busca menciones de ubicación (ej: "soy de Hermosillo", "vivo en CDMX").
-            3. NOMBRE: Si el usuario se presenta ("Soy Jorge"), extráelo.
-            4. INTENCIÓN: 
-               - BAJO: Solo saluda.
-               - MEDIO: Hace preguntas específicas.
-               - ALTO: Pide precio, cuenta bancaria, link de pago o confirma asistencia.
+            EXTRAER DATOS EXACTOS:
+            1. EMAIL: Busca patrones @ (ej: gmail, outlook).
+            2. CIUDAD: Busca menciones geográficas.
+            3. INTENCIÓN: BAJO, MEDIO, ALTO.
+            4. NOMBRE: Si se presenta.
 
-            FORMATO DE RESPUESTA (JSON ÚNICAMENTE):
+            JSON:
             {
-              "email": "string o null",
-              "city": "string o null",
-              "full_name": "string o null", 
-              "intent": "BAJO" | "MEDIO" | "ALTO",
-              "summary": "Resumen técnico de 1 frase",
-              "psych_profile": "Perfil en 3 palabras (Ej: Directo, Desconfiado)"
+              "fn": "string|null",
+              "email": "string|null",
+              "city": "string|null",
+              "intent": "BAJO|MEDIO|ALTO",
+              "summary": "1 frase resumen",
+              "psych": "3 adjetivos"
             }
          `;
 
          const response = await fetch(OPENAI_URL, {
             method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${apiKey}`,
-              'Content-Type': 'application/json'
-            },
+            headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              model: "gpt-4o", // Usando el modelo más capaz para seguir instrucciones
-              messages: [
-                { role: "system", content: "Eres una API que solo responde JSON válido. No incluyas markdown ```json." },
-                { role: "user", content: prompt }
-              ],
-              temperature: 0 // Temperatura 0 para máxima precisión determinista
+              model: "gpt-4o",
+              messages: [{ role: "system", content: "Responde solo JSON válido." }, { role: "user", content: prompt }],
+              response_format: { type: "json_object" }
             })
          });
 
-         if (!response.ok) {
-            const errorBody = await response.json();
-            throw new Error(`OpenAI Error: ${errorBody.error.message}`);
-         }
-
          const aiData = await response.json();
-         let rawText = aiData.choices[0]?.message?.content;
-         
-         // Limpieza de JSON por si acaso
-         rawText = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
-         
-         console.log(`[analyze-leads] AI Response for ${lead.id}:`, rawText);
-
-         const analysis = JSON.parse(rawText);
+         const analysis = JSON.parse(aiData.choices[0]?.message?.content || '{}');
 
          const updateData: any = {
             last_analyzed_at: new Date().toISOString(),
             summary: analysis.summary,
             buying_intent: analysis.intent,
-            perfil_psicologico: analysis.psych_profile
+            perfil_psicologico: analysis.psych
          };
 
-         // Solo sobrescribir si la IA encontró algo válido
-         if (analysis.email && analysis.email.includes('@')) updateData.email = analysis.email;
-         if (analysis.city) updateData.ciudad = analysis.city;
+         let dataDiscovered = false;
+
+         // Actualización de Email (Prioridad Crítica)
+         if (analysis.email && (!lead.email || lead.email.length < 5)) {
+             updateData.email = analysis.email;
+             dataDiscovered = true;
+         }
          
-         // Nombre: Lógica conservadora para no borrar nombres reales
-         if (analysis.full_name && analysis.full_name.length > 2) {
+         // Actualización de Ciudad
+         if (analysis.city && (!lead.ciudad || lead.ciudad.length < 3)) {
+             updateData.ciudad = analysis.city;
+         }
+
+         // Nombre (Conservador)
+         if (analysis.fn && analysis.fn.length > 2) {
              const currentName = lead.nombre || '';
-             // Si no tiene nombre O tiene nombre genérico, actualizamos
-             if (!currentName || currentName.includes('Nuevo') || currentName.includes('Lead') || currentName.length < 3) {
-                 updateData.nombre = analysis.full_name;
+             if (!currentName || currentName.includes('Nuevo') || currentName.includes('Lead')) {
+                 updateData.nombre = analysis.fn;
              }
          }
 
-         const { error: updateError } = await supabaseClient.from('leads').update(updateData).eq('id', lead.id);
-         if (updateError) throw updateError;
+         await supabaseClient.from('leads').update(updateData).eq('id', lead.id);
 
-         results.push({ lead: lead.id, status: 'updated', extracted: analysis });
+         // --- AUTO TRIGGER META CAPI ---
+         // Si descubrimos un email y tenemos configuración de Meta, disparamos el evento automáticamente
+         if (dataDiscovered && metaPixelId && metaToken) {
+             console.log(`[analyze-leads] Email descubierto para ${lead.id}. Disparando CAPI...`);
+             await supabaseClient.functions.invoke('meta-capi-sender', {
+                 body: {
+                     eventData: {
+                         event_name: 'Lead',
+                         lead_id: lead.id,
+                         user_data: {
+                             em: updateData.email,
+                             ph: lead.telefono,
+                             fn: updateData.nombre || lead.nombre,
+                             ct: updateData.ciudad || lead.ciudad
+                         },
+                         custom_data: { source: 'auto_analysis', intent: analysis.intent }
+                     },
+                     config: { pixel_id: metaPixelId, access_token: metaToken }
+                 }
+             });
+             // Marcamos que ya se envió
+             await supabaseClient.from('leads').update({ capi_lead_event_sent_at: new Date().toISOString() }).eq('id', lead.id);
+         }
 
-       } catch (e) { 
-           console.error(`Error procesando lead ${lead.id}:`, e);
-           results.push({ lead: lead.id, status: 'error', error: e.message });
-       }
+         results.push({ lead: lead.id, status: 'updated', discovered: dataDiscovered });
+
+       } catch (e) { console.error(`Error ${lead.id}:`, e); }
     }
 
-    return new Response(JSON.stringify({ success: true, count: results.length, results }), { 
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-    });
+    return new Response(JSON.stringify({ success: true, count: results.length, results }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
   } catch (error: any) {
     return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: corsHeaders })

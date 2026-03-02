@@ -22,44 +22,46 @@ serve(async (req) => {
 
     const { lead_id, transcript } = await req.json();
 
-    // 1. Obtener API Key de OpenAI
+    // Obtener datos actuales del lead para ver qué falta
+    const { data: lead } = await supabaseClient.from('leads').select('nombre, ciudad, email').eq('id', lead_id).single();
+    
+    const missingData = [];
+    if (!lead?.email) missingData.push("EMAIL (CRÍTICO para reservar)");
+    if (!lead?.ciudad) missingData.push("CIUDAD (para dar fechas)");
+    if (!lead?.nombre || lead.nombre.includes('Nuevo')) missingData.push("NOMBRE");
+
     const { data: config } = await supabaseClient.from('app_config').select('value').eq('key', 'openai_api_key').single();
     if (!config?.value) throw new Error("OpenAI API Key no configurada.");
 
-    // 2. Obtener ADN Samurai para el tono
-    const { data: adn } = await supabaseClient.from('app_config').select('value').eq('key', 'prompt_adn_core').single();
-
     const prompt = `
-      Actúa como el Samurai, el cerrador de ventas de elite de The Elephant Bowl.
+      Actúa como el Samurai, cerrador de ventas experto.
       
-      CONOCIMIENTO BASE:
-      ${adn?.value}
+      ESTADO DEL LEAD:
+      - Nombre: ${lead?.nombre || 'Desconocido'}
+      - Datos Faltantes: ${missingData.join(', ') || 'Ninguno, tenemos todo.'}
 
-      HISTORIAL DE CHAT RECIENTE:
+      HISTORIAL RECIENTE:
       ${transcript}
 
       TU TAREA:
-      Genera 3 opciones de respuesta CORTAS y TÁCTICAS para el vendedor humano.
-      - Opción 1 [EMPATIA]: Conecta emocionalmente.
-      - Opción 2 [VENTA]: Empuja al cierre o pide el dato faltante (Email/Ciudad).
-      - Opción 3 [TECNICA]: Resuelve dudas sobre cuencos o talleres.
+      Genera 3 opciones de respuesta CORTAS para el vendedor humano.
+      
+      IMPORTANTE:
+      Si hay "Datos Faltantes", la opción [VENTA] DEBE enfocarse en pedir ese dato sutilmente para avanzar (ej: "Para enviarte el link, ¿me regalas tu correo?").
 
       RESPONDE SOLO EN JSON:
       {
         "suggestions": [
-          {"type": "EMPATIA", "text": "..."},
-          {"type": "VENTA", "text": "..."},
-          {"type": "TECNICA", "text": "..."}
+          {"type": "EMPATIA", "text": "Frase conectando con su emoción..."},
+          {"type": "VENTA", "text": "Frase de cierre o petición de dato faltante..."},
+          {"type": "TECNICA", "text": "Respuesta informativa breve..."}
         ]
       }
     `;
 
     const response = await fetch(OPENAI_URL, {
       method: 'POST',
-      headers: { 
-        'Authorization': `Bearer ${config.value}`,
-        'Content-Type': 'application/json' 
-      },
+      headers: { 'Authorization': `Bearer ${config.value}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ 
         model: "gpt-4o",
         messages: [{ role: "user", content: prompt }],
