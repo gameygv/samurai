@@ -68,12 +68,12 @@ const Login = () => {
         <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-red-600 to-indigo-600"></div>
 
         <CardHeader className="text-center space-y-2">
-          <div className="mx-auto w-14 h-14 rounded-full bg-red-600 flex items-center justify-center mb-2 shadow-lg shadow-red-900/50 ring-4 ring-slate-800">
-            <span className="text-white font-bold text-3xl pb-1">侍</span>
+          <div className="mx-auto w-16 h-16 rounded-full bg-red-600 flex items-center justify-center mb-4 shadow-lg shadow-red-900/50 ring-4 ring-slate-800 animate-in zoom-in duration-500">
+            <span className="text-white font-bold text-4xl pb-1">侍</span>
           </div>
-          <CardTitle className="text-2xl font-bold text-white tracking-tight">SAMURAI PANEL v0.804</CardTitle>
+          <CardTitle className="text-3xl font-bold text-white tracking-tight">SAMURAI v1.0</CardTitle>
           <CardDescription className="text-slate-400">
-            Control de Inteligencia Artificial
+            Sistema Operativo de Ventas & Inteligencia Artificial
           </CardDescription>
         </CardHeader>
 
@@ -83,7 +83,7 @@ const Login = () => {
               <WifiOff className="w-5 h-5 text-red-500 mt-0.5" />
               <div className="text-xs text-red-400">
                 <p className="font-bold">Error de Conexión</p>
-                <p>No se puede alcanzar la base de datos.</p>
+                <p>No se puede alcanzar la base de datos Supabase.</p>
                 <Button variant="link" className="p-0 h-auto text-red-300 text-[10px]" onClick={checkDbConnection}>
                    <RefreshCw className="w-3 h-3 mr-1" /> Reintentar conexión
                 </Button>
@@ -95,14 +95,14 @@ const Login = () => {
             <div className="space-y-2">
               <Label htmlFor="username" className="text-slate-300 font-medium">Nombre de Usuario</Label>
               <div className="relative group">
-                <User className="absolute left-3 top-3 h-4 w-4 text-slate-500 group-focus-within:text-indigo-400" />
+                <User className="absolute left-3 top-3 h-4 w-4 text-slate-500 group-focus-within:text-indigo-400 transition-colors" />
                 <Input
                   id="username"
                   type="text"
                   placeholder="Ej: gamey"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  className="pl-10 bg-slate-950 border-slate-800 text-white placeholder:text-slate-600 focus:border-indigo-500 h-11"
+                  className="pl-10 bg-slate-950 border-slate-800 text-white placeholder:text-slate-600 focus:border-indigo-500 h-11 transition-all"
                   required
                   autoFocus
                 />
@@ -116,18 +116,18 @@ const Login = () => {
                 placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="bg-slate-950 border-slate-800 text-white focus:border-indigo-500 h-11"
+                className="bg-slate-950 border-slate-800 text-white focus:border-indigo-500 h-11 transition-all"
                 required
               />
             </div>
 
             <Button 
               type="submit" 
-              className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold h-11 shadow-lg shadow-indigo-900/20 mt-2"
+              className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold h-11 shadow-lg shadow-indigo-900/20 mt-2 transition-all hover:scale-[1.02]"
               disabled={loading}
             >
               {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ShieldCheck className="mr-2 h-4 w-4" />}
-              {loading ? 'Validando...' : 'Acceder al Sistema'}
+              {loading ? 'Validando Credenciales...' : 'Iniciar Sesión'}
             </Button>
           </form>
         </CardContent>
@@ -137,7 +137,11 @@ const Login = () => {
             <AlertCircle className="w-3 h-3" /> Acceso Restringido
           </p>
           <div className="flex items-center gap-2">
-             {dbStatus === 'ok' && <span className="text-[9px] text-green-500 font-bold tracking-widest uppercase flex items-center gap-1"><Wifi className="w-3 h-3"/> System Online</span>}
+             {dbStatus === 'ok' && (
+                <span className="text-[9px] text-green-500 font-bold tracking-widest uppercase flex items-center gap-1 animate-pulse">
+                   <Wifi className="w-3 h-3"/> System Online
+                </span>
+             )}
           </div>
         </CardFooter>
       </Card>
