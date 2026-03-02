@@ -53,8 +53,6 @@ const ChatViewer = ({ lead: initialLead, open, onOpenChange }: ChatViewerProps) 
     if (open && lead?.id) {
       fetchMessages();
       
-      console.log("ChatViewer: Subscribing to realtime updates for lead", lead.id);
-      
       const channel = supabase
         .channel(`lead-monitor-${lead.id}`)
         .on('postgres_changes', { 
@@ -66,15 +64,14 @@ const ChatViewer = ({ lead: initialLead, open, onOpenChange }: ChatViewerProps) 
            console.log("ChatViewer: REALTIME UPDATE RECEIVED!", payload.new);
            setLead(payload.new);
            updateMemoryForm(payload.new);
-           // Notificar al usuario visualmente que algo cambió
-           if (payload.new.email !== lead.email || payload.new.buying_intent !== lead.buying_intent) {
-              toast.success("¡Datos del cliente actualizados por la IA!", { duration: 2000 });
+           
+           if (payload.new.email && !lead.email) {
+              toast.success("¡Email capturado!", { description: payload.new.email });
            }
         })
         .subscribe();
 
       return () => { 
-         console.log("ChatViewer: Unsubscribing");
          supabase.removeChannel(channel); 
       };
     }
@@ -92,6 +89,15 @@ const ChatViewer = ({ lead: initialLead, open, onOpenChange }: ChatViewerProps) 
         ciudad: data.ciudad || '',
         perfil_psicologico: data.perfil_psicologico || ''
      });
+  };
+
+  const fetchLeadData = async () => {
+     if (!lead?.id) return;
+     const { data } = await supabase.from('leads').select('*').eq('id', lead.id).single();
+     if (data) {
+        setLead(data);
+        updateMemoryForm(data);
+     }
   };
 
   const fetchMessages = async () => {
@@ -239,6 +245,7 @@ const ChatViewer = ({ lead: initialLead, open, onOpenChange }: ChatViewerProps) 
           saving={sending}
           onReset={() => {}}
           onToggleFollowup={handleToggleFollowup}
+          onAnalysisComplete={fetchLeadData}
         />
       </SheetContent>
     </Sheet>

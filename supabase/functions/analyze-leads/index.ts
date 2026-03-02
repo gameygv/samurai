@@ -18,14 +18,14 @@ serve(async (req) => {
 
     const { force, lead_id } = await req.json().catch(() => ({}));
     
+    // 1. Obtener API Key
     const { data: configs } = await supabaseClient.from('app_config').select('key, value');
     const getConfig = (key: string) => configs?.find(c => c.key === key)?.value || null;
     const apiKey = getConfig('openai_api_key');
 
-    if (!apiKey) throw new Error("OpenAI API Key no configurada en Ajustes.");
+    if (!apiKey) throw new Error("OpenAI API Key no configurada.");
 
     let query = supabaseClient.from('leads').select('*');
-    
     if (lead_id) {
        query = query.eq('id', lead_id);
     } else {
@@ -35,40 +35,51 @@ serve(async (req) => {
     const { data: activeLeads } = await query;
     const results = [];
 
+    console.log(`[analyze-leads] Procesando ${activeLeads?.length || 0} leads...`);
+
     for (const lead of activeLeads || []) {
        try {
+         // Obtener últimos 50 mensajes (suficiente contexto)
          const { data: messages } = await supabaseClient
             .from('conversaciones')
             .select('emisor, mensaje')
             .eq('lead_id', lead.id)
             .order('created_at', { ascending: true }) 
-            .limit(100);
+            .limit(50);
 
-         if (!messages || messages.length === 0) continue;
+         if (!messages || messages.length === 0) {
+             results.push({ lead: lead.id, status: 'skipped_no_messages' });
+             continue;
+         }
 
-         const transcript = messages.map(m => `${m.emisor}: ${m.mensaje}`).join('\n');
+         const transcript = messages.map(m => `[${m.emisor}]: ${m.mensaje}`).join('\n');
 
          const prompt = `
-            Analiza la siguiente transcripción de chat y extrae los datos solicitados en formato JSON.
-            
-            HISTORIAL:
-            ${transcript}
+            ACTÚA COMO UN MOTOR DE EXTRACCIÓN DE DATOS (DATA SCRAPER).
+            Tu única misión es leer el historial de chat y rellenar los campos faltantes en el JSON.
 
-            EXTRAER:
-            1. EMAIL: Patrón de correo (ej: @gmail, @hotmail). Si no hay, devuelve null.
-            2. CIUDAD: Infiere la ciudad por contexto (ej: "soy de GDL", "CDMX", "vivo en Monterrey"). Si es ambigua, null.
-            3. INTENCIÓN: Basado en el último mensaje del cliente, clasifica como BAJO, MEDIO o ALTO.
-            4. NOMBRE: Si el usuario dice "Soy Juan", extráelo.
-            
-            Responde únicamente con el siguiente objeto JSON:
+            HISTORIAL DEL CHAT:
+            ---
+            ${transcript}
+            ---
+
+            INSTRUCCIONES DE EXTRACCIÓN (PRIORIDAD ALTA):
+            1. EMAIL: Busca cualquier string con formato de correo (ej: "usuario@gmail.com"). Si el usuario envía SOLO el correo en un mensaje, tómalo inmediatamente.
+            2. CIUDAD: Busca menciones de ubicación (ej: "soy de Hermosillo", "vivo en CDMX").
+            3. NOMBRE: Si el usuario se presenta ("Soy Jorge"), extráelo.
+            4. INTENCIÓN: 
+               - BAJO: Solo saluda.
+               - MEDIO: Hace preguntas específicas.
+               - ALTO: Pide precio, cuenta bancaria, link de pago o confirma asistencia.
+
+            FORMATO DE RESPUESTA (JSON ÚNICAMENTE):
             {
-              "fn": "Nombre o null",
-              "ln": "Apellido o null",
-              "email": "email@dominio.com o null",
-              "city": "Ciudad o null",
-              "intent_label": "BAJO" | "MEDIO" | "ALTO",
-              "summary": "Resumen ejecutivo de 1 linea sobre la necesidad del cliente",
-              "psych_profile": "Perfil psicográfico breve (Ej: Analítico, Impulsivo, Amable, Decidido)"
+              "email": "string o null",
+              "city": "string o null",
+              "full_name": "string o null", 
+              "intent": "BAJO" | "MEDIO" | "ALTO",
+              "summary": "Resumen técnico de 1 frase",
+              "psych_profile": "Perfil en 3 palabras (Ej: Directo, Desconfiado)"
             }
          `;
 
@@ -79,12 +90,12 @@ serve(async (req) => {
               'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-              model: "gpt-4o",
+              model: "gpt-4o", // Usando el modelo más capaz para seguir instrucciones
               messages: [
-                { role: "system", content: "Eres una herramienta de extracción de datos que solo responde con JSON." },
+                { role: "system", content: "Eres una API que solo responde JSON válido. No incluyas markdown ```json." },
                 { role: "user", content: prompt }
               ],
-              response_format: { type: "json_object" }
+              temperature: 0 // Temperatura 0 para máxima precisión determinista
             })
          });
 
@@ -94,35 +105,49 @@ serve(async (req) => {
          }
 
          const aiData = await response.json();
-         const rawText = aiData.choices[0]?.message?.content;
-         if (!rawText) continue;
+         let rawText = aiData.choices[0]?.message?.content;
          
+         // Limpieza de JSON por si acaso
+         rawText = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
+         
+         console.log(`[analyze-leads] AI Response for ${lead.id}:`, rawText);
+
          const analysis = JSON.parse(rawText);
 
          const updateData: any = {
             last_analyzed_at: new Date().toISOString(),
             summary: analysis.summary,
-            buying_intent: analysis.intent_label,
+            buying_intent: analysis.intent,
             perfil_psicologico: analysis.psych_profile
          };
 
-         if (analysis.email) updateData.email = analysis.email;
+         // Solo sobrescribir si la IA encontró algo válido
+         if (analysis.email && analysis.email.includes('@')) updateData.email = analysis.email;
          if (analysis.city) updateData.ciudad = analysis.city;
-
-         const detectedName = `${analysis.fn || ''} ${analysis.ln || ''}`.trim();
-         if (detectedName && detectedName.length > 2) {
-             if (!lead.nombre || lead.nombre.includes('Nuevo') || lead.nombre.includes('Lead')) {
-                 updateData.nombre = detectedName;
+         
+         // Nombre: Lógica conservadora para no borrar nombres reales
+         if (analysis.full_name && analysis.full_name.length > 2) {
+             const currentName = lead.nombre || '';
+             // Si no tiene nombre O tiene nombre genérico, actualizamos
+             if (!currentName || currentName.includes('Nuevo') || currentName.includes('Lead') || currentName.length < 3) {
+                 updateData.nombre = analysis.full_name;
              }
          }
 
-         await supabaseClient.from('leads').update(updateData).eq('id', lead.id);
-         results.push({ lead: lead.id, status: 'updated', data: updateData });
+         const { error: updateError } = await supabaseClient.from('leads').update(updateData).eq('id', lead.id);
+         if (updateError) throw updateError;
 
-       } catch (e) { console.error(`Error procesando lead ${lead.id}:`, e); }
+         results.push({ lead: lead.id, status: 'updated', extracted: analysis });
+
+       } catch (e) { 
+           console.error(`Error procesando lead ${lead.id}:`, e);
+           results.push({ lead: lead.id, status: 'error', error: e.message });
+       }
     }
 
-    return new Response(JSON.stringify({ success: true, analyzed: results.length, results }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    return new Response(JSON.stringify({ success: true, count: results.length, results }), { 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+    });
 
   } catch (error: any) {
     return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: corsHeaders })

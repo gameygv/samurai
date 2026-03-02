@@ -18,12 +18,13 @@ interface MemoryPanelProps {
   saving: boolean;
   onReset: () => void;
   onToggleFollowup?: () => void;
+  onAnalysisComplete?: () => void; // Nuevo prop para refrescar
 }
 
 export const MemoryPanel = ({
   currentAnalysis, isEditing, setIsEditing,
   memoryForm, setMemoryForm, onSave, saving,
-  onReset, onToggleFollowup
+  onReset, onToggleFollowup, onAnalysisComplete
 }: MemoryPanelProps) => {
 
   const [correctionText, setCorrectionText] = useState('');
@@ -57,7 +58,7 @@ export const MemoryPanel = ({
 
   const handleRunAnalysis = async () => {
      setAnalyzing(true);
-     const tid = toast.loading("Analizando conversación en busca de datos...");
+     const tid = toast.loading("GPT-4o escaneando chat en busca de datos...");
      try {
         const { data, error } = await supabase.functions.invoke('analyze-leads', {
            body: { lead_id: currentAnalysis.id, force: true }
@@ -65,10 +66,24 @@ export const MemoryPanel = ({
         
         if (error) throw new Error(error.message);
         
-        if (data.results && data.results.length > 0 && data.results[0].status === 'updated') {
-           toast.success("¡Datos extraídos! El panel se actualizará en breve.", { id: tid });
+        // Verificamos si hubo éxito real
+        if (data.results && data.results.length > 0) {
+           const res = data.results[0];
+           if (res.status === 'updated') {
+              const extracted = res.extracted;
+              const details = [];
+              if (extracted.email) details.push('Email');
+              if (extracted.city) details.push('Ciudad');
+              
+              toast.success(`¡Datos Capturados! ${details.join(', ')}`, { id: tid });
+              
+              // Forzar recarga en el padre
+              if (onAnalysisComplete) onAnalysisComplete();
+           } else {
+              toast.info("Análisis completado, pero no se detectaron datos nuevos.", { id: tid });
+           }
         } else {
-           toast.info("La IA no detectó datos nuevos (Email/Ciudad) en el chat reciente.", { id: tid });
+           toast.warning("La IA no devolvió resultados legibles.", { id: tid });
         }
      } catch (err: any) {
         console.error(err);
@@ -115,6 +130,7 @@ export const MemoryPanel = ({
         
         await supabase.from('leads').update({ capi_lead_event_sent_at: new Date().toISOString() }).eq('id', currentAnalysis.id);
         toast.success("Evento enviado a Meta Conversions API.");
+        if (onAnalysisComplete) onAnalysisComplete(); // Refrescar estado del botón
      } catch (err: any) {
         toast.error("Error CAPI: " + err.message);
      } finally {
@@ -135,6 +151,7 @@ export const MemoryPanel = ({
         email: null
       }).eq('id', currentAnalysis.id);
       toast.success('Memoria reseteada.');
+      if (onAnalysisComplete) onAnalysisComplete();
     } finally {
       setFlushing(false);
     }
@@ -169,7 +186,7 @@ export const MemoryPanel = ({
                   <Fingerprint className="w-3 h-3" /> Datos Meta CAPI
               </h4>
               <div className="flex gap-1">
-                 <Button variant="ghost" size="icon" className="h-6 w-6 text-indigo-400 hover:bg-indigo-500/10" onClick={handleRunAnalysis} disabled={analyzing} title="Analizar Chat Ahora">
+                 <Button variant="ghost" size="icon" className="h-6 w-6 text-indigo-400 hover:bg-indigo-500/10" onClick={handleRunAnalysis} disabled={analyzing} title="Analizar Chat Ahora (GPT-4o)">
                     {analyzing ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
                  </Button>
                  {!isEditing && <Button variant="ghost" size="icon" className="h-6 w-6 text-slate-400 hover:text-white" onClick={() => setIsEditing(true)}><Edit2 className="w-3 h-3" /></Button>}
