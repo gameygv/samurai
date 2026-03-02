@@ -53,7 +53,8 @@ const MediaManager = () => {
            body: { url: asset.url, mode: 'VISION' }
         });
 
-        if (error) throw error;
+        if (error) throw new Error(error.message || "Error de conexión con Edge Function");
+        if (!data.success) throw new Error(data.error || "Fallo en el procesamiento de imagen");
         
         const detectedText = data.content;
 
@@ -67,6 +68,7 @@ const MediaManager = () => {
         toast.success("Imagen indexada correctamente en el cerebro.", { id: tid });
         fetchAssets();
      } catch (err: any) {
+        console.error("OCR Error:", err);
         toast.error(`Fallo al leer imagen: ${err.message}`, { id: tid });
      } finally {
         setScanningId(null);
@@ -149,6 +151,9 @@ const MediaManager = () => {
      setSelectedAsset(null);
   };
 
+  // Función auxiliar para determinar si es un pago
+  const isPayment = (cat: string) => cat === 'PAYMENT';
+
   return (
     <Layout>
       <div className="max-w-7xl mx-auto space-y-6 pb-12">
@@ -198,8 +203,8 @@ const MediaManager = () => {
                  </div>
                  
                  <div className="absolute top-2 left-2 flex gap-1">
-                    <Badge className={asset.category === 'POSTER' ? 'bg-indigo-600' : 'bg-orange-600'}>
-                       {asset.category === 'POSTER' ? 'POSTER' : 'PAGO'}
+                    <Badge className={isPayment(asset.category) ? 'bg-orange-600' : 'bg-indigo-600'}>
+                       {isPayment(asset.category) ? 'PAGO' : 'POSTER'}
                     </Badge>
                     {asset.ocr_content && <Badge className="bg-green-600 text-[8px] h-4">LECTURA OK</Badge>}
                  </div>
@@ -209,8 +214,8 @@ const MediaManager = () => {
                  <p className="text-xs font-bold text-white truncate">{asset.title}</p>
                  <div className="space-y-1">
                     <p className="text-[9px] text-slate-500 uppercase font-bold flex items-center gap-1">
-                       {asset.category === 'POSTER' ? <Sparkles className="w-2 h-2 text-yellow-500" /> : <CreditCard className="w-2 h-2 text-orange-400" />} 
-                       {asset.category === 'POSTER' ? 'Trigger Envío:' : 'Auditoría Pago:'}
+                       {isPayment(asset.category) ? <CreditCard className="w-2 h-2 text-orange-400" /> : <Sparkles className="w-2 h-2 text-yellow-500" />} 
+                       {isPayment(asset.category) ? 'Auditoría Pago:' : 'Trigger Envío:'}
                     </p>
                     <p className="text-[10px] text-slate-400 italic line-clamp-2 leading-relaxed h-8">
                        {asset.ai_instructions || "Sin instrucciones de envío."}

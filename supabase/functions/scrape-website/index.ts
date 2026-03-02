@@ -1,15 +1,20 @@
 // @ts-nocheck
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0'
-import { corsHeaders } from '../_shared/cors.ts'
-import { cheerio } from 'https://deno.land/x/cheerio@1.0.7/mod.ts'
+import * as cheerio from "https://esm.sh/cheerio@1.0.0-rc.12"
 
 const GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent";
 const BROWSER_USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36';
 
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
+
 serve(async (req) => {
+  // Manejo de Preflight CORS
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders })
+    return new Response('ok', { headers: corsHeaders });
   }
 
   try {
@@ -37,23 +42,22 @@ serve(async (req) => {
        const arrayBuffer = await imgBlob.arrayBuffer();
        const base64String = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
 
-       // 3. Prompt Táctico basado en el tipo de archivo (Samurai vs Ojo de Halcón)
+       // 3. Prompt Táctico basado en el tipo de archivo
        const prompt = `
          Actúa como el sistema de visión avanzada 'Ojo de Halcón' de Samurai AI.
          Analiza esta imagen y extrae el texto de forma estructurada.
 
          IDENTIFICACIÓN:
-         1. Si es un POSTER PROMOCIONAL (Talleres, Cursos, Precios): 
-            - Extrae el TÍTULO del curso.
-            - Extrae FECHAS, CIUDAD y PRECIOS.
+         1. Si es un POSTER PROMOCIONAL: 
+            - Extrae TÍTULO, FECHAS, CIUDAD y PRECIOS.
             - Resume qué incluye el taller.
             
-         2. Si es un COMPROBANTE DE PAGO (Boucher, SPEI, Ticket OXXO):
+         2. Si es un COMPROBANTE DE PAGO:
             - Extrae MONTO EXACTO, BANCO, FECHA y FOLIO/REFERENCIA.
-            - Determina si el estado es EXITOSO o si parece sospechoso/editado.
+            - Determina si el estado es EXITOSO.
          
          SALIDA REQUERIDA:
-         Texto estructurado y fácil de leer para la memoria de la IA. No uses markdown complejo.
+         Texto claro y conciso. No uses JSON, usa texto plano estructurado con guiones.
        `;
 
        const geminiPayload = {
@@ -75,7 +79,7 @@ serve(async (req) => {
        
        if (data.error) {
           console.error("[Gemini Error]", data.error);
-          throw new Error(data.error.message);
+          throw new Error(`Gemini API Error: ${data.error.message}`);
        }
        
        const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || "No se pudo extraer texto de la imagen.";
