@@ -28,45 +28,32 @@ export const CreateLeadDialog = ({ open, onOpenChange, onSuccess }: CreateLeadDi
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.nombre || !formData.telefono) {
-      toast.error('Nombre y Teléfono son obligatorios para el registro.');
+      toast.error('Nombre y Teléfono son obligatorios.');
       return;
     }
 
     setLoading(true);
     try {
-      // 1. Crear Lead
       const { data: lead, error: leadError } = await supabase
         .from('leads')
         .insert({
           nombre: formData.nombre,
           telefono: formData.telefono,
           email: formData.email || null,
-          summary: formData.nota || 'Lead registrado manualmente desde Panel.',
-          buying_intent: 'BAJO', // Inicia en bajo hasta calificarlo
-          estado_emocional_actual: 'NEUTRO',
-          ai_paused: true // IMPORTANTE: Pausar IA por defecto para que no conteste sola si no es WhatsApp
+          summary: formData.nota || 'Registro manual.',
+          buying_intent: 'BAJO',
+          ai_paused: true 
         })
-        .select()
-        .single();
+        .select().single();
 
       if (leadError) throw leadError;
 
-      // 2. Insertar mensaje inicial como bitácora
-      if (formData.nota) {
-        await supabase.from('conversaciones').insert({
-          lead_id: lead.id,
-          emisor: 'SISTEMA',
-          mensaje: `[REGISTRO MANUAL] Nota inicial: ${formData.nota}`,
-          platform: 'PANEL'
-        });
-      }
-
-      toast.success('Prospecto registrado en el sistema.');
+      toast.success('Prospecto registrado correctamente.');
       onSuccess();
       onOpenChange(false);
       setFormData({ nombre: '', telefono: '', email: '', platform: 'WHATSAPP', nota: '' });
     } catch (err: any) {
-      toast.error("Error al crear lead: " + err.message);
+      toast.error("Error: " + err.message);
     } finally {
       setLoading(false);
     }
@@ -79,77 +66,30 @@ export const CreateLeadDialog = ({ open, onOpenChange, onSuccess }: CreateLeadDi
           <DialogTitle className="flex items-center gap-2 text-indigo-400">
             <UserPlus className="w-5 h-5" /> Nuevo Prospecto
           </DialogTitle>
-          <DialogDescription>
-             Registra un cliente potencial manualmente.
-          </DialogDescription>
+          <DialogDescription>Añade un cliente manualmente al embudo.</DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4 pt-2">
-          
-          <div className="p-3 bg-blue-900/10 border border-blue-900/30 rounded text-xs text-blue-300 flex gap-2">
-             <Info className="w-4 h-4 shrink-0 mt-0.5" />
-             <p>La IA iniciará en modo <strong>PAUSA (#STOP)</strong> para evitar mensajes automáticos no deseados. Actívala manualmente si deseas.</p>
-          </div>
-
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>Nombre Completo *</Label>
-              <Input 
-                value={formData.nombre} 
-                onChange={e => setFormData({...formData, nombre: e.target.value})}
-                className="bg-slate-950 border-slate-800"
-                placeholder="Ej: Laura Méndez"
-              />
+              <Input value={formData.nombre} onChange={e => setFormData({...formData, nombre: e.target.value})} className="bg-slate-950 border-slate-800" placeholder="Ej: Laura M." />
             </div>
             <div className="space-y-2">
-              <Label>Teléfono / ID *</Label>
-              <Input 
-                value={formData.telefono} 
-                onChange={e => setFormData({...formData, telefono: e.target.value})}
-                className="bg-slate-950 border-slate-800"
-                placeholder="521..."
-              />
+              <Label>Teléfono *</Label>
+              <Input value={formData.telefono} onChange={e => setFormData({...formData, telefono: e.target.value})} className="bg-slate-950 border-slate-800" placeholder="521..." />
             </div>
           </div>
-          
+          <div className="space-y-2"><Label>Email</Label><Input value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} className="bg-slate-950 border-slate-800" placeholder="email@test.com" /></div>
           <div className="space-y-2">
-            <Label>Email (Opcional)</Label>
-            <Input 
-              value={formData.email} 
-              onChange={e => setFormData({...formData, email: e.target.value})}
-              className="bg-slate-950 border-slate-800"
-              placeholder="cliente@email.com"
-            />
-          </div>
-
-          <div className="space-y-2">
-             <Label>Canal de Origen</Label>
+             <Label>Canal</Label>
              <Select value={formData.platform} onValueChange={v => setFormData({...formData, platform: v})}>
                 <SelectTrigger className="bg-slate-950 border-slate-800"><SelectValue /></SelectTrigger>
-                <SelectContent className="bg-slate-900 border-slate-800 text-white">
-                   <SelectItem value="WHATSAPP">WhatsApp</SelectItem>
-                   <SelectItem value="INSTAGRAM">Instagram</SelectItem>
-                   <SelectItem value="TELEFONO">Llamada Telefónica</SelectItem>
-                   <SelectItem value="PRESENCIAL">Visita / Evento</SelectItem>
-                </SelectContent>
+                <SelectContent className="bg-slate-900 text-white"><SelectItem value="WHATSAPP">WhatsApp</SelectItem><SelectItem value="INSTAGRAM">Instagram</SelectItem><SelectItem value="TELEFONO">Llamada</SelectItem></SelectContent>
              </Select>
           </div>
-
-          <div className="space-y-2">
-            <Label>Nota de Contexto</Label>
-            <Textarea 
-              value={formData.nota} 
-              onChange={e => setFormData({...formData, nota: e.target.value})}
-              className="bg-slate-950 border-slate-800 h-20 text-xs"
-              placeholder="Ej: Interesada en curso de cuencos nivel 1. Contactar el martes."
-            />
-          </div>
-
+          <div className="space-y-2"><Label>Nota Inicial</Label><Textarea value={formData.nota} onChange={e => setFormData({...formData, nota: e.target.value})} className="bg-slate-950 border-slate-800 h-20 text-xs" /></div>
           <DialogFooter>
-            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>Cancelar</Button>
-            <Button type="submit" className="bg-indigo-600 hover:bg-indigo-700" disabled={loading}>
-              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4 mr-2" />}
-              Registrar Lead
-            </Button>
+            <Button type="submit" className="w-full bg-indigo-600" disabled={loading}>{loading ? <Loader2 className="animate-spin" /> : 'Registrar Lead'}</Button>
           </DialogFooter>
         </form>
       </DialogContent>
