@@ -71,7 +71,7 @@ const Login = () => {
           <div className="mx-auto w-16 h-16 rounded-full bg-red-600 flex items-center justify-center mb-4 shadow-lg shadow-red-900/50 ring-4 ring-slate-800 animate-in zoom-in duration-500">
             <span className="text-white font-bold text-4xl pb-1">侍</span>
           </div>
-          <CardTitle className="text-3xl font-bold text-white tracking-tight">SAMURAI v1.2</CardTitle>
+          <CardTitle className="text-3xl font-bold text-white tracking-tight">SAMURAI v1.6</CardTitle>
           <CardDescription className="text-slate-400">
             Sistema Operativo de Ventas & Inteligencia Artificial
           </CardDescription>

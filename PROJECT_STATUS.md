@@ -1,38 +1,37 @@
-# DYAD SAMURAI - REPORTE DE DESPEGUE (PRODUCCIÓN)
+# DYAD SAMURAI - REPORTE DE ESTADO (STABLE)
 
 **FECHA:** 02/03/2026
-**ESTADO:** 🟢 SISTEMA NOMINAL (READY)
-**VERSIÓN:** v2.2 (Audio Fallback + Instant Context)
+**VERSIÓN:** v1.6 (Producción)
+**ESTADO:** 🟢 SISTEMA NOMINAL
 
-## 🚨 BUGS CRÍTICOS RESUELTOS (CHECKLIST FINAL)
+## 🏆 RESUMEN EJECUTIVO
+El sistema ha completado su fase de calibración. Todos los módulos críticos (Audio, Visión, Lógica de Ventas y Conexión de Datos) operan en sincronía.
 
-1.  ✅ **"No escuchaba audios" (Evolution v2)**: 
-    - **Solución:** Implementación de "Búsqueda Profunda" y "Fallback API". Si el webhook no trae el audio, Sam va y lo busca activamente al servidor de Evolution.
-    - **Resultado:** Audios recuperados 100% de las veces.
+## 🧩 MÓDULOS ACTIVOS
 
-2.  ✅ **"Audio Sin Inteligibilidad"**:
-    - **Solución:** Corrección del payload enviado a `getBase64FromMediaMessage`. Ahora enviamos el objeto `message` completo, cumpliendo estrictamente con el protocolo de Evolution.
+### 1. 🎧 Módulo Auditivo (Whisper + Deep Search)
+- **Capacidad:** Escucha notas de voz de WhatsApp.
+- **Resiliencia:** Implementa "Búsqueda Profunda" para encontrar el audio incluso si el webhook cambia de estructura.
+- **Velocidad:** Inyección directa al contexto para evitar la latencia de lectura ("Se cortó tu audio" eliminado).
 
-3.  ✅ **"Samurai dice: 'Se cortó tu audio'"**:
-    - **Solución:** Inyección Quirúrgica de Contexto.
-    - **Técnica:** El webhook ahora no espera a que la base de datos guarde el mensaje. Inyecta la transcripción de Whisper (`messageText`) directamente en el array de memoria que se envía a GPT-4o.
-    - **Resultado:** Latencia de "lectura" eliminada. Sam responde al contenido real al instante.
+### 2. 🧠 Cerebro Táctico (Protocolo 3 Fases)
+- **Fase 1:** Captura de Datos (Meta CAPI). No suelta precios sin negociar datos.
+- **Fase 2:** Seducción Visual. Envía posters específicos por ciudad desde el Media Manager.
+- **Fase 3:** Cierre ($1500). Maneja objeciones y ofrece links de pago/transferencia.
 
-4.  ✅ **"No enviaba imágenes"**:
-    - **Solución:** Uso del endpoint `/sendMedia` cuando se detecta la etiqueta `<<MEDIA:url>>`.
+### 3. 📊 Circuito de Datos (Real-time CRM)
+- **Disparo:** Cada mensaje activa un análisis silencioso.
+- **Acción:** Si se detecta un nuevo Email o Ciudad, se actualiza el CRM y se envía el evento `Lead` a Facebook Ads automáticamente.
 
-## 🛠️ ARQUITECTURA FINAL
+### 4. 👁️ Ojo de Halcón (Visión)
+- **Capacidad:** Lee comprobantes de pago (fotos/PDFs).
+- **Validación:** Extrae montos y referencias para auditoría humana rápida.
 
-- **Cerebro:** GPT-4o (Contexto Jerárquico).
-- **Oídos:** Whisper-1 (Con sistema de recuperación de fallos).
-- **Ojos:** GPT-4o Vision (Análisis de comprobantes).
-- **Memoria:** Supabase (Inyección directa anti-latencia).
+## ✅ RECOMENDACIONES DE USO
 
-## 📋 SIGUIENTES PASOS SUGERIDOS
-
-1.  **Monitoreo:** Mantén un ojo en la pestaña "Activity" para ver los logs de `[TRANSCRIPCIÓN AUDIO]`.
-2.  **Calibración:** Si notas que Sam es muy "seco", ajusta la **Identidad** en la pestaña "Cerebro Core".
-3.  **Ventas:** Revisa la pestaña "Pagos" para ver si el "Ojo de Halcón" está detectando correctamente los comprobantes.
+1.  **Mantén el "Media Manager" actualizado:** Sam solo puede enviar imágenes que existan allí con las instrucciones correctas (ej: "Trigger: Ciudad Monterrey").
+2.  **Bitácora #CIA:** Si Sam comete un error de tono, usa `#CIA [instrucción]` en el chat y valida la regla en el panel. Es su mecanismo de evolución.
+3.  **Monitor Live:** Úsalo para ver en tiempo real cómo Sam "piensa" y detecta datos.
 
 ---
-*Samurai está listo para el combate. ¡Éxito en las ventas!* 🥋
+*Sistema listo para escalar ventas.* 🚀

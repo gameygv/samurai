@@ -1,6 +1,6 @@
 import React, { useRef, useEffect } from 'react';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Loader2, Bot, Mic, Image as ImageIcon } from 'lucide-react';
+import { Loader2, Bot, Mic, Image as ImageIcon, Waves } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 
 interface MessageListProps {
@@ -16,14 +16,19 @@ export const MessageList = ({ messages, loading }: MessageListProps) => {
   }, [messages]);
 
   const renderMessageContent = (text: string) => {
-    // 1. Audio
-    if (text.includes('[TRANSCRIPCIÓN AUDIO]:')) {
+    // 1. Audio Transcrito (Mejorado visualmente)
+    if (text.includes('[TRANSCRIPCIÓN AUDIO]')) {
+      const cleanText = text.replace(/\[TRANSCRIPCIÓN AUDIO\]:?/, '').replace(/^ "/, '').replace(/"$/, '').trim();
       return (
-        <div className="space-y-2">
-          <div className="flex items-center gap-2 text-[10px] text-indigo-300 font-bold uppercase bg-indigo-900/30 p-1 rounded">
-            <Mic className="w-3 h-3" /> Audio Transcrito
+        <div className="space-y-2 min-w-[200px]">
+          <div className="flex items-center gap-2 text-[10px] text-indigo-300 font-bold uppercase bg-indigo-500/10 border border-indigo-500/20 p-2 rounded-lg">
+            <div className="p-1 bg-indigo-500 rounded-full text-white"><Mic className="w-3 h-3" /></div>
+            <span className="flex-1">Nota de Voz</span>
+            <Waves className="w-4 h-4 text-indigo-400 animate-pulse" />
           </div>
-          <p className="italic text-slate-300 text-xs">"{text.replace('[TRANSCRIPCIÓN AUDIO]:', '').trim().replace(/"/g, '')}"</p>
+          <p className="italic text-slate-300 text-sm leading-relaxed pl-1 border-l-2 border-indigo-500/30">
+            "{cleanText}"
+          </p>
         </div>
       );
     }
@@ -39,12 +44,14 @@ export const MessageList = ({ messages, loading }: MessageListProps) => {
     return (
       <div className="space-y-2">
         {url && (
-          <div className="relative rounded-lg border border-slate-700 overflow-hidden max-w-[200px] mb-2">
-             <img src={url} alt="Poster" className="w-full h-auto" />
-             <div className="absolute top-1 right-1 bg-black/60 p-1 rounded text-[8px] text-white">POSTER</div>
+          <div className="relative rounded-xl border border-slate-700/50 overflow-hidden max-w-[240px] mb-2 bg-black shadow-lg group">
+             <img src={url} alt="Poster" className="w-full h-auto object-cover opacity-90 group-hover:opacity-100 transition-opacity" />
+             <div className="absolute top-2 right-2 bg-black/70 backdrop-blur-md px-2 py-0.5 rounded text-[9px] font-bold text-white flex items-center gap-1 border border-white/10">
+                <ImageIcon className="w-3 h-3" /> POSTER
+             </div>
           </div>
         )}
-        {cleanText && <p className="whitespace-pre-wrap leading-relaxed text-xs">{cleanText}</p>}
+        {cleanText && <p className="whitespace-pre-wrap leading-relaxed text-sm">{cleanText}</p>}
       </div>
     );
   };
@@ -52,18 +59,26 @@ export const MessageList = ({ messages, loading }: MessageListProps) => {
   return (
     <ScrollArea className="flex-1 p-4 bg-slate-950">
       {loading ? (
-        <div className="flex h-full items-center justify-center text-slate-500 text-xs"><Loader2 className="w-4 h-4 animate-spin mr-2" /> Sincronizando...</div>
+        <div className="flex h-full items-center justify-center text-slate-500 text-xs gap-2">
+           <Loader2 className="w-4 h-4 animate-spin text-indigo-500" /> Sincronizando historial...
+        </div>
       ) : (
         <div className="space-y-6 pb-4">
           {messages.map((msg) => (
-              <div key={msg.id} className={`flex ${msg.emisor === 'CLIENTE' ? 'justify-start' : 'justify-end'}`}>
+              <div key={msg.id} className={`flex ${msg.emisor === 'CLIENTE' ? 'justify-start' : 'justify-end'} animate-in fade-in slide-in-from-bottom-2 duration-300`}>
                 <div className={`flex flex-col max-w-[85%] ${msg.emisor === 'CLIENTE' ? 'items-start' : 'items-end'}`}>
-                   <div className={`rounded-2xl p-3 text-sm shadow-md border ${msg.emisor === 'CLIENTE' ? 'bg-slate-900 border-slate-800 text-slate-200' : 'bg-indigo-600/10 border-indigo-500/20 text-indigo-100'}`}>
+                   <div className={`rounded-2xl p-3.5 text-sm shadow-sm border ${
+                      msg.emisor === 'CLIENTE' 
+                      ? 'bg-slate-900 border-slate-800 text-slate-200 rounded-bl-sm' 
+                      : 'bg-indigo-600/10 border-indigo-500/20 text-indigo-100 rounded-br-sm'
+                   }`}>
                     {renderMessageContent(msg.mensaje)}
                   </div>
-                  <div className="flex items-center gap-2 mt-1 px-1">
-                     <span className="text-[9px] text-slate-600 font-mono">{new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                     {msg.emisor === 'SAMURAI' && <span className="text-[8px] font-bold text-indigo-500 uppercase tracking-wider flex items-center gap-1"><Bot className="w-3 h-3" /> AI</span>}
+                  <div className="flex items-center gap-2 mt-1 px-1 opacity-60">
+                     {msg.emisor === 'SAMURAI' && <Bot className="w-3 h-3 text-indigo-400" />}
+                     <span className="text-[9px] text-slate-500 font-mono uppercase tracking-wider">
+                        {msg.emisor === 'SAMURAI' ? 'SAMURAI AI' : 'CLIENTE'} • {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                     </span>
                   </div>
                 </div>
               </div>
