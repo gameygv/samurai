@@ -35,26 +35,28 @@ export const MemoryPanel = ({
 
   const handleRunAnalysis = async () => {
      setAnalyzing(true);
-     const tid = toast.loading("GPT-4o escaneando chat en busca de datos...");
+     const tid = toast.loading("GPT-4o escaneando chat...");
      try {
         const { data, error } = await supabase.functions.invoke('analyze-leads', {
-           body: { lead_id: currentAnalysis.id, force: true }
+           body: { lead_id: currentAnalysis.id }
         });
         
         if (error) throw new Error(error.message);
         
-        if (data.success && data.lead) {
-           const { email, ciudad, nombre } = data.lead;
+        if (data && data.success) {
+           const lead = data.lead;
            
-           // Actualizamos el formulario local para que el cambio se vea YA
+           // ACTUALIZACIÓN FORZOSA DE LA UI
            setMemoryForm({
-              ...memoryForm,
-              nombre: nombre || memoryForm.nombre,
-              email: email || memoryForm.email,
-              ciudad: ciudad || memoryForm.ciudad,
-              summary: data.lead.summary || memoryForm.summary,
-              perfil_psicologico: data.lead.perfil_psicologico || memoryForm.perfil_psicologico,
-              buying_intent: data.lead.buying_intent || memoryForm.buying_intent
+              nombre: lead.nombre || '',
+              email: lead.email || '',
+              ciudad: lead.ciudad || '',
+              summary: lead.summary || '',
+              perfil_psicologico: lead.perfil_psicologico || '',
+              mood: lead.estado_emocional_actual || 'NEUTRO',
+              buying_intent: lead.buying_intent || 'BAJO',
+              followup_stage: lead.followup_stage || 0,
+              next_followup_at: lead.next_followup_at || null
            });
 
            const found = [];
@@ -62,40 +64,39 @@ export const MemoryPanel = ({
            if (data.extracted.ciudad) found.push("Ciudad");
 
            if (found.length > 0) {
-              toast.success(`¡Datos capturados: ${found.join(', ')}!`, { id: tid });
+              toast.success(`¡Capturado: ${found.join(', ')}!`, { id: tid });
            } else {
-              toast.info("Análisis completo (Sin datos nuevos detectados).", { id: tid });
+              toast.info("Análisis completo. No hay datos nuevos.", { id: tid });
            }
            
-           // Avisamos al padre para que refresque el objeto lead global
            if (onAnalysisComplete) onAnalysisComplete();
+        } else {
+           throw new Error(data?.error || "La función devolvió un error desconocido.");
         }
      } catch (err: any) {
-        console.error(err);
-        toast.error("Error en análisis: " + err.message, { id: tid });
+        console.error("Analysis Error:", err);
+        toast.error("Error: " + err.message, { id: tid });
      } finally {
         setAnalyzing(false);
      }
   };
 
-  // ... (resto de funciones handleSaveCorrection, handleSyncToCapi, handleFlushMemory se mantienen igual)
   const handleSaveCorrection = async () => {
     if (!correctionText.trim()) return;
     setIsReporting(true);
     try {
       const { error } = await supabase.from('errores_ia').insert({
         cliente_id: currentAnalysis.id,
-        mensaje_cliente: 'Corrección manual desde Panel',
+        mensaje_cliente: 'Corrección manual',
         respuesta_ia: 'N/A',
         correccion_sugerida: correctionText,
-        categoria: 'CONDUCTA',
-        estado_correccion: 'REPORTADA'
+        categoria: 'CONDUCTA'
       });
       if (error) throw error;
-      toast.success('Lección aprendida enviada a Bitácora');
+      toast.success('Regla enviada a bitácora');
       setCorrectionText('');
     } catch (err: any) {
-      toast.error('Error al guardar corrección');
+      toast.error('Error al guardar');
     } finally {
       setIsReporting(false);
     }
@@ -103,35 +104,28 @@ export const MemoryPanel = ({
 
   const handleSyncToCapi = async () => {
      if (!currentAnalysis.email || !currentAnalysis.nombre) {
-        toast.error("Faltan datos críticos (Email/Nombre) para el evento CAPI.");
+        toast.error("Falta Email/Nombre para Meta CAPI.");
         return;
      }
      setSyncingCapi(true);
      try {
-        const { data: configData } = await supabase.from('app_config').select('*').in('key', ['meta_pixel_id', 'meta_access_token', 'meta_test_mode', 'meta_test_event_code']);
+        const { data: configData } = await supabase.from('app_config').select('*').in('key', ['meta_pixel_id', 'meta_access_token']);
         const config: any = {};
         configData?.forEach(c => config[c.key.replace('meta_', '')] = c.value);
-        config.test_mode = config.test_mode === 'true';
 
         const { error } = await supabase.functions.invoke('meta-capi-sender', {
            body: {
               eventData: {
                  event_name: 'Lead',
                  lead_id: currentAnalysis.id,
-                 user_data: { 
-                    ph: currentAnalysis.telefono, 
-                    em: currentAnalysis.email,
-                    fn: currentAnalysis.nombre,
-                    ct: currentAnalysis.ciudad
-                 },
-                 custom_data: { intent: currentAnalysis.buying_intent }
+                 user_data: { ph: currentAnalysis.telefono, em: currentAnalysis.email, fn: currentAnalysis.nombre, ct: currentAnalysis.ciudad }
               },
               config
            }
         });
         if (error) throw error;
         await supabase.from('leads').update({ capi_lead_event_sent_at: new Date().toISOString() }).eq('id', currentAnalysis.id);
-        toast.success("Evento enviado a Meta Conversions API.");
+        toast.success("Enviado a Meta CAPI.");
         if (onAnalysisComplete) onAnalysisComplete();
      } catch (err: any) {
         toast.error("Error CAPI: " + err.message);
@@ -140,55 +134,27 @@ export const MemoryPanel = ({
      }
   };
 
-  const handleFlushMemory = async () => {
-    if (!confirm("¿Deseas borrar la memoria de este lead?")) return;
-    setFlushing(true);
-    try {
-      await supabase.from('leads').update({
-        summary: null,
-        estado_emocional_actual: 'NEUTRO',
-        buying_intent: 'BAJO',
-        perfil_psicologico: null,
-        ciudad: null,
-        email: null
-      }).eq('id', currentAnalysis.id);
-      toast.success('Memoria reseteada.');
-      if (onAnalysisComplete) onAnalysisComplete();
-    } finally {
-      setFlushing(false);
-    }
-  };
-
   return (
     <div className="w-[320px] bg-slate-900/30 flex flex-col overflow-y-auto border-l border-slate-800">
       <div className="p-4 space-y-6">
 
-        {/* 1. MEJORA #CORREGIRIA */}
         <div className="space-y-3">
-           <div className="flex items-center justify-between">
-              <h4 className="text-[10px] font-bold text-yellow-500 uppercase tracking-widest flex items-center gap-2">
-                 <ShieldAlert className="w-3 h-3" /> #CorregirIA
-              </h4>
-           </div>
-           <Textarea 
-             value={correctionText}
-             onChange={e => setCorrectionText(e.target.value)}
-             placeholder="Ej: No ofrezcas descuento todavía..."
-             className="bg-slate-950 border-slate-800 text-xs min-h-[60px]"
-           />
-           <Button onClick={handleSaveCorrection} disabled={isReporting || !correctionText.trim()} className="w-full h-8 text-[10px] bg-yellow-600 font-bold hover:bg-yellow-700">
+           <h4 className="text-[10px] font-bold text-yellow-500 uppercase tracking-widest flex items-center gap-2">
+              <ShieldAlert className="w-3 h-3" /> #CorregirIA
+           </h4>
+           <Textarea value={correctionText} onChange={e => setCorrectionText(e.target.value)} placeholder="Ej: No ofrezcas descuento todavía..." className="bg-slate-950 border-slate-800 text-xs min-h-[60px]" />
+           <Button onClick={handleSaveCorrection} disabled={isReporting || !correctionText.trim()} className="w-full h-8 text-[10px] bg-yellow-600 font-bold">
              {isReporting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Zap className="w-3 h-3 mr-2" />} Guardar Regla
            </Button>
         </div>
 
-        {/* 2. DATOS CAPI (CORE DATA) */}
         <div className="border-t border-slate-800 pt-6 space-y-4">
            <div className="flex items-center justify-between">
               <h4 className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest flex items-center gap-2">
                   <Fingerprint className="w-3 h-3" /> Datos Meta CAPI
               </h4>
               <div className="flex gap-1">
-                 <Button variant="ghost" size="icon" className="h-6 w-6 text-indigo-400 hover:bg-indigo-500/10" onClick={handleRunAnalysis} disabled={analyzing} title="Analizar Chat Ahora (GPT-4o)">
+                 <Button variant="ghost" size="icon" className="h-6 w-6 text-indigo-400 hover:bg-indigo-500/10" onClick={handleRunAnalysis} disabled={analyzing} title="Analizar Chat">
                     {analyzing ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
                  </Button>
                  {!isEditing && <Button variant="ghost" size="icon" className="h-6 w-6 text-slate-400 hover:text-white" onClick={() => setIsEditing(true)}><Edit2 className="w-3 h-3" /></Button>}
@@ -197,101 +163,46 @@ export const MemoryPanel = ({
            
            <div className="space-y-3 bg-slate-950/50 p-3 rounded-lg border border-slate-800">
               <div className="space-y-1">
-                 <Label className="text-[9px] text-slate-500 uppercase flex items-center gap-1"><User className="w-2.5 h-2.5"/> Nombre</Label>
-                 {isEditing ? (
-                    <Input 
-                        value={memoryForm.nombre || ''} 
-                        onChange={e => setMemoryForm({...memoryForm, nombre: e.target.value})} 
-                        className="h-7 text-xs bg-slate-900 border-slate-700 focus:border-indigo-500" 
-                        placeholder="Nombre completo"
-                    />
-                 ) : (
-                    <div className="text-xs text-white font-bold truncate">{currentAnalysis.nombre || 'Desconocido'}</div>
-                 )}
+                 <Label className="text-[9px] text-slate-500 uppercase">Nombre</Label>
+                 {isEditing ? <Input value={memoryForm.nombre} onChange={e => setMemoryForm({...memoryForm, nombre: e.target.value})} className="h-7 text-xs bg-slate-900 border-slate-700" /> : 
+                 <div className="text-xs text-white font-bold truncate">{currentAnalysis.nombre || 'Desconocido'}</div>}
               </div>
-              
               <div className="space-y-1">
-                 <Label className="text-[9px] text-slate-500 uppercase flex items-center gap-1"><Mail className="w-2.5 h-2.5"/> Email</Label>
-                 {isEditing ? (
-                    <Input 
-                        value={memoryForm.email || ''} 
-                        onChange={e => setMemoryForm({...memoryForm, email: e.target.value})} 
-                        className="h-7 text-xs bg-slate-900 border-slate-700 focus:border-indigo-500" 
-                        placeholder="cliente@email.com"
-                    />
-                 ) : (
-                    <div className={`text-xs truncate ${currentAnalysis.email ? 'text-emerald-400' : 'text-red-400 italic'}`}>
-                        {currentAnalysis.email || 'Falta Email'}
-                    </div>
-                 )}
+                 <Label className="text-[9px] text-slate-500 uppercase">Email</Label>
+                 {isEditing ? <Input value={memoryForm.email} onChange={e => setMemoryForm({...memoryForm, email: e.target.value})} className="h-7 text-xs bg-slate-900 border-slate-700" /> : 
+                 <div className={`text-xs truncate ${currentAnalysis.email ? 'text-emerald-400' : 'text-red-400 italic'}`}>{currentAnalysis.email || 'Falta Email'}</div>}
               </div>
-
               <div className="space-y-1">
-                 <Label className="text-[9px] text-slate-500 uppercase flex items-center gap-1"><MapPin className="w-2.5 h-2.5"/> Ciudad</Label>
-                 {isEditing ? (
-                    <Input 
-                        value={memoryForm.ciudad || ''} 
-                        onChange={e => setMemoryForm({...memoryForm, ciudad: e.target.value})} 
-                        className="h-7 text-xs bg-slate-900 border-slate-700 focus:border-indigo-500"
-                        placeholder="Ciudad"
-                    />
-                 ) : (
-                    <div className="text-xs text-slate-300">{currentAnalysis.ciudad || 'Pendiente'}</div>
-                 )}
+                 <Label className="text-[9px] text-slate-500 uppercase">Ciudad</Label>
+                 {isEditing ? <Input value={memoryForm.ciudad} onChange={e => setMemoryForm({...memoryForm, ciudad: e.target.value})} className="h-7 text-xs bg-slate-900 border-slate-700" /> : 
+                 <div className="text-xs text-slate-300">{currentAnalysis.ciudad || 'Pendiente'}</div>}
               </div>
            </div>
 
            {!isEditing && currentAnalysis.email && currentAnalysis.nombre && (
-              <Button 
-                onClick={handleSyncToCapi} 
-                disabled={syncingCapi || !!currentAnalysis.capi_lead_event_sent_at}
-                className={cn(
-                    "w-full h-8 text-[9px] font-bold uppercase",
-                    currentAnalysis.capi_lead_event_sent_at ? "bg-emerald-600/20 text-emerald-500 border border-emerald-500/30" : "bg-indigo-600 hover:bg-indigo-700"
-                )}
-              >
-                 {syncingCapi ? <Loader2 className="w-3 h-3 animate-spin mr-2"/> : <Send className="w-3 h-3 mr-2"/>}
-                 {currentAnalysis.capi_lead_event_sent_at ? '✓ Enviado a CAPI' : 'Sincronizar con CAPI'}
+              <Button onClick={handleSyncToCapi} disabled={syncingCapi || !!currentAnalysis.capi_lead_event_sent_at} className={cn("w-full h-8 text-[9px] font-bold uppercase", currentAnalysis.capi_lead_event_sent_at ? "bg-emerald-600/20 text-emerald-500" : "bg-indigo-600")}>
+                 {syncingCapi ? <Loader2 className="w-3 h-3 animate-spin mr-2"/> : <Send className="w-3 h-3 mr-2"/>} {currentAnalysis.capi_lead_event_sent_at ? '✓ Enviado CAPI' : 'Sincronizar CAPI'}
               </Button>
            )}
         </div>
 
-        {/* 3. PERFIL PSICOGRÁFICO */}
         <div className="border-t border-slate-800 pt-6 space-y-3">
            <h4 className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest flex items-center gap-2">
                <BrainCircuit className="w-3 h-3" /> Perfil Psicográfico
            </h4>
-           {isEditing ? (
-              <Textarea 
-                value={memoryForm.perfil_psicologico || ''}
-                onChange={e => setMemoryForm({...memoryForm, perfil_psicologico: e.target.value})}
-                className="bg-slate-950 border-slate-800 text-[10px] min-h-[80px] focus:border-emerald-500"
-                placeholder="Notas sobre el comportamiento del cliente..."
-              />
-           ) : (
-              <div className="bg-slate-950 p-3 rounded border border-slate-800 text-[10px] text-slate-400 italic leading-relaxed">
-                 {currentAnalysis.perfil_psicologico || "Samurai aún no ha definido un perfil psicográfico para este lead."}
-              </div>
-           )}
+           {isEditing ? <Textarea value={memoryForm.perfil_psicologico} onChange={e => setMemoryForm({...memoryForm, perfil_psicologico: e.target.value})} className="bg-slate-950 border-slate-800 text-[10px] min-h-[80px]" /> : 
+           <div className="bg-slate-950 p-3 rounded border border-slate-800 text-[10px] text-slate-400 italic leading-relaxed">{currentAnalysis.perfil_psicologico || "Sin perfil."}</div>}
         </div>
 
-        {/* 4. CONTROLES DE IA */}
         <div className="border-t border-slate-800 pt-6">
-           <Button 
-             variant="outline" 
-             className={`w-full h-8 text-[10px] ${currentAnalysis.ai_paused ? 'border-green-500 text-green-500' : 'border-red-500 text-red-500'}`}
-             onClick={onToggleFollowup}
-           >
+           <Button variant="outline" className={`w-full h-8 text-[10px] ${currentAnalysis.ai_paused ? 'border-green-500 text-green-500' : 'border-red-500 text-red-500'}`} onClick={onToggleFollowup}>
               {currentAnalysis.ai_paused ? <Play className="w-3 h-3 mr-1"/> : <Pause className="w-3 h-3 mr-1"/>}
-              {currentAnalysis.ai_paused ? 'Reactivar Samurai (#START)' : 'Pausar Samurai (#STOP)'}
-           </Button>
-           <Button variant="ghost" className="w-full mt-2 text-[9px] text-slate-600 hover:text-red-500" onClick={handleFlushMemory} disabled={flushing}>
-              <RotateCcw className="w-3 h-3 mr-1" /> Resetear Memoria
+              {currentAnalysis.ai_paused ? 'Reactivar Samurai' : 'Pausar Samurai'}
            </Button>
         </div>
 
         {isEditing && (
-           <Button onClick={onSave} disabled={saving} className="w-full bg-indigo-600 h-9 font-bold hover:bg-indigo-700">
+           <Button onClick={onSave} disabled={saving} className="w-full bg-indigo-600 h-9 font-bold">
               {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4 mr-2" />} Guardar Datos
            </Button>
         )}
