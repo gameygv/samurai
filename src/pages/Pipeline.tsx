@@ -5,7 +5,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { 
-  Trello, Loader2, Clock, TrendingUp, User, Smile, Meh, Frown, Fingerprint, Image, Target
+  Trello, Loader2, Clock, TrendingUp, User, Smile, Meh, Frown, Fingerprint, Image, Target, AlertCircle
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import ChatViewer from '@/components/ChatViewer';
@@ -26,7 +26,7 @@ const Pipeline = () => {
     fetchLeads();
     
     const channel = supabase
-      .channel('pipeline-live-v2')
+      .channel('pipeline-live-v3')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'leads' }, () => fetchLeads())
       .subscribe();
 
@@ -48,17 +48,15 @@ const Pipeline = () => {
     return leads.filter(l => (l.buying_intent || 'BAJO').toUpperCase() === intent);
   };
 
+  const isStale = (lastDate: string | null) => {
+    if (!lastDate) return false;
+    const diff = new Date().getTime() - new Date(lastDate).getTime();
+    return diff > (48 * 60 * 60 * 1000); // 48 horas
+  };
+
   const handleOpenChat = (lead: any) => {
     setSelectedLead(lead);
     setIsChatOpen(true);
-  };
-
-  const getMoodColor = (mood: string) => {
-    switch (mood?.toUpperCase()) {
-      case 'POSITIVO': return 'text-green-500';
-      case 'NEGATIVO': return 'text-red-500';
-      default: return 'text-slate-500';
-    }
   };
 
   return (
@@ -68,9 +66,9 @@ const Pipeline = () => {
           <div>
             <h1 className="text-3xl font-bold text-white flex items-center gap-3">
               <Trello className="w-8 h-8 text-indigo-500" />
-              Estrategia Samurai: Tablero de Fases
+              Tablero Táctico de Fases
             </h1>
-            <p className="text-slate-400">Visualización en tiempo real del flujo de conversión de The Elephant Bowl.</p>
+            <p className="text-slate-400">Detección de leads estancados y control de flujo de $1500.</p>
           </div>
           <Button variant="outline" className="border-slate-800 text-slate-400" onClick={fetchLeads}>
              <Clock className="w-4 h-4 mr-2" /> Sincronizar Radar
@@ -101,54 +99,63 @@ const Pipeline = () => {
                         <TrendingUp className="w-6 h-6 opacity-10" />
                         Sin prospectos en esta fase
                      </div>
-                  ) : leadsInCol.map((lead) => (
-                    <Card 
-                      key={lead.id} 
-                      className="bg-slate-900 border-slate-800 hover:border-indigo-500/50 transition-all cursor-pointer group relative overflow-hidden"
-                      onClick={() => handleOpenChat(lead)}
-                    >
-                      <div className={cn("absolute left-0 top-0 bottom-0 w-1", lead.ai_paused ? "bg-red-500" : "bg-indigo-600")} />
-                      
-                      <CardContent className="p-4 space-y-3 pl-5">
-                         <div className="flex justify-between items-start">
-                            <div className="flex items-center gap-2">
-                               <div className="w-8 h-8 rounded-lg bg-slate-950 flex items-center justify-center text-slate-500 border border-slate-800 group-hover:border-indigo-500/30">
-                                  <User className="w-4 h-4" />
-                               </div>
-                               <div>
-                                  <p className="text-xs font-bold text-white group-hover:text-indigo-400 transition-colors">
-                                     {lead.nombre || lead.telefono || 'Anónimo'}
-                                  </p>
-                                  <p className="text-[9px] text-slate-500 font-mono truncate max-w-[150px]">{lead.ciudad || 'Ubicación pendiente...'}</p>
-                               </div>
-                            </div>
-                            {lead.ai_paused && <Badge variant="destructive" className="h-4 px-1 text-[8px] bg-red-600">STOP</Badge>}
-                         </div>
+                  ) : leadsInCol.map((lead) => {
+                    const stale = isStale(lead.last_message_at);
+                    return (
+                      <Card 
+                        key={lead.id} 
+                        className={cn(
+                           "bg-slate-900 border-slate-800 hover:border-indigo-500/50 transition-all cursor-pointer group relative overflow-hidden",
+                           stale && col.id === 'ALTO' && "border-red-600/50 shadow-[0_0_15px_rgba(220,38,38,0.1)]"
+                        )}
+                        onClick={() => handleOpenChat(lead)}
+                      >
+                        <div className={cn("absolute left-0 top-0 bottom-0 w-1", lead.ai_paused ? "bg-red-500" : (stale ? "bg-orange-500" : "bg-indigo-600"))} />
+                        
+                        <CardContent className="p-4 space-y-3 pl-5">
+                           <div className="flex justify-between items-start">
+                              <div className="flex items-center gap-2">
+                                 <div className="w-8 h-8 rounded-lg bg-slate-950 flex items-center justify-center text-slate-500 border border-slate-800 group-hover:border-indigo-500/30">
+                                    <User className="w-4 h-4" />
+                                 </div>
+                                 <div>
+                                    <p className="text-xs font-bold text-white group-hover:text-indigo-400 transition-colors">
+                                       {lead.nombre || lead.telefono || 'Anónimo'}
+                                    </p>
+                                    <p className="text-[9px] text-slate-500 font-mono truncate max-w-[150px]">{lead.ciudad || 'Ubicación pendiente...'}</p>
+                                 </div>
+                              </div>
+                              <div className="flex flex-col items-end gap-1">
+                                 {lead.ai_paused && <Badge variant="destructive" className="h-4 px-1 text-[8px] bg-red-600">STOP</Badge>}
+                                 {stale && <Badge variant="outline" className="h-4 px-1 text-[8px] border-orange-500 text-orange-500 animate-pulse">ESTANCADO</Badge>}
+                              </div>
+                           </div>
 
-                         {lead.summary && (
-                            <p className="text-[10px] text-slate-400 italic line-clamp-2 leading-relaxed bg-slate-950 p-2 rounded border border-slate-800/50">
-                               "{lead.summary}"
-                            </p>
-                         )}
+                           {lead.summary && (
+                              <p className="text-[10px] text-slate-400 italic line-clamp-2 leading-relaxed bg-slate-950 p-2 rounded border border-slate-800/50">
+                                 "{lead.summary}"
+                              </p>
+                           )}
 
-                         <div className="flex items-center justify-between pt-2 border-t border-slate-800/50">
-                            <div className="flex items-center gap-2">
-                               <div className={cn("p-1 rounded bg-black/40", getMoodColor(lead.estado_emocional_actual))}>
-                                  {lead.estado_emocional_actual === 'POSITIVO' ? <Smile className="w-3 h-3" /> : 
-                                   lead.estado_emocional_actual === 'NEGATIVO' ? <Frown className="w-3 h-3" /> : 
-                                   <Meh className="w-3 h-3" />}
-                               </div>
-                               <span className="text-[8px] text-slate-600 font-bold uppercase">
-                                  {lead.estado_emocional_actual || 'NEUTRO'}
-                               </span>
-                            </div>
-                            <div className="text-[8px] text-slate-700 font-mono">
-                               ACTIVO: {lead.last_message_at ? new Date(lead.last_message_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '---'}
-                            </div>
-                         </div>
-                      </CardContent>
-                    </Card>
-                  ))}
+                           <div className="flex items-center justify-between pt-2 border-t border-slate-800/50">
+                              <div className="flex items-center gap-2">
+                                 <div className="text-[8px] text-slate-600 font-bold uppercase">
+                                    RECORDATORIOS:
+                                 </div>
+                                 <div className="flex gap-0.5">
+                                    {[1,2,3,4].map(n => (
+                                       <div key={n} className={cn("w-1.5 h-1.5 rounded-full", lead.followup_stage >= n ? "bg-indigo-500 shadow-[0_0_5px_rgba(99,102,241,0.5)]" : "bg-slate-800")} />
+                                    ))}
+                                 </div>
+                              </div>
+                              <div className="text-[8px] text-slate-700 font-mono">
+                                 ACTIVO: {lead.last_message_at ? new Date(lead.last_message_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '---'}
+                              </div>
+                           </div>
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
                 </div>
               </div>
             );

@@ -12,10 +12,9 @@ import { cn } from '@/lib/utils';
 import { 
   Database, Shield, Activity, Terminal, AlertTriangle, 
   CheckCircle2, MessageSquare, TrendingUp, Clock, Loader2,
-  Zap, Brain, RefreshCw, Send, ArrowRight, UserCheck, ShieldAlert, BarChart3, Users2, DollarSign, Globe, Eye, Image as ImageIcon, Settings as SettingsIcon, Fingerprint
+  Zap, Brain, RefreshCw, Send, ArrowRight, UserCheck, ShieldAlert, BarChart3, Users2, DollarSign, Globe, Eye, Image as ImageIcon, Settings as SettingsIcon, Fingerprint, Trello
 } from 'lucide-react';
 import { ResponsiveContainer, BarChart, Bar, Cell, XAxis, YAxis, Tooltip } from 'recharts';
-import { toast } from 'sonner';
 
 const Index = () => {
   const [stats, setStats] = useState({
@@ -82,21 +81,18 @@ const Index = () => {
 
       const leads = leadsRes.data || [];
       const identified = leads.filter(l => l.nombre && !l.nombre.includes('Nuevo Lead')).length;
-      
-      // Métrica Core: CAPI Health (Tiene nombre Y email)
       const capiReady = leads.filter(l => (l.nombre && !l.nombre.includes('Nuevo Lead')) && (l.email && l.email.length > 5)).length;
       
       const webPages = webRes.data || [];
       const healthyPages = webPages.filter(p => p.scrape_status === 'success').length;
       const webHealth = webPages.length > 0 ? Math.round((healthyPages / webPages.length) * 100) : 0;
 
-      const adnCoreStatus = adnPromptRes.data ? 'ok' : 'missing';
-      const ciaRules = validatedCiaRes.count || 0;
-      let overallStatus: 'Operational' | 'Degraded' | 'Sync Required' = 'Operational';
-      if (webHealth < 50 || adnCoreStatus === 'missing') overallStatus = 'Sync Required';
-      else if (webHealth < 80) overallStatus = 'Degraded';
-
-      setBrainHealth({ adnCoreStatus, ciaRules, webHealth, overallStatus });
+      setBrainHealth({ 
+        adnCoreStatus: adnPromptRes.data ? 'ok' : 'missing', 
+        ciaRules: validatedCiaRes.count || 0, 
+        webHealth, 
+        overallStatus: (webHealth < 50 || !adnPromptRes.data) ? 'Sync Required' : (webHealth < 80 ? 'Degraded' : 'Operational') 
+      });
 
       setFunnelData([
         { name: 'Prospectos', value: leads.length, color: '#6366f1' },
@@ -148,7 +144,6 @@ const Index = () => {
           </div>
         </div>
 
-        {/* TOP STATS */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           <StatCard title="Salud Meta CAPI" value={`${Math.round((stats.capiReadyLeads / (stats.totalLeads || 1)) * 100)}%`} icon={Fingerprint} color="text-indigo-400" bg="bg-indigo-500/10" footer={`${stats.capiReadyLeads} Leads con Datos Full`} />
           <StatCard title="Alertas #CIA" value={stats.totalErrors} icon={AlertTriangle} color="text-yellow-500" bg="bg-yellow-500/10" footer="Mejoras de Conducta" />
@@ -181,35 +176,33 @@ const Index = () => {
                   </CardContent>
                 </Card>
 
-                <Card className="bg-slate-900 border-slate-800 flex flex-col shadow-2xl">
-                  <CardHeader className="py-4 border-b border-slate-800">
+                <Card className="bg-slate-900 border-slate-800 flex flex-col shadow-2xl overflow-hidden">
+                  <CardHeader className="py-4 border-b border-slate-800 bg-slate-950/20">
                      <CardTitle className="text-white text-xs flex items-center gap-2 uppercase tracking-widest">
-                        <MessageSquare className="w-4 h-4 text-emerald-400" /> Actividad Reciente
+                        <Fingerprint className="w-4 h-4 text-indigo-400" /> Match Quality Estimate
                      </CardTitle>
                   </CardHeader>
-                  <CardContent className="p-0">
-                    <div className="divide-y divide-slate-800/50">
-                        {recentChats.length === 0 ? (
-                           <div className="p-6 text-center text-[10px] text-slate-500 italic">Sin chats en las últimas 24h</div>
-                        ) : recentChats.map((chat) => (
-                          <div key={chat.id} className="p-3 hover:bg-slate-800/20 transition-colors flex flex-col gap-1">
-                              <div className="flex justify-between items-center">
-                                  <span className="text-[10px] font-bold text-slate-300">{chat.leads?.nombre || 'Anónimo'}</span>
-                                  <span className="text-[9px] text-slate-600 font-mono">{new Date(chat.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                              </div>
-                              <p className="text-[11px] text-slate-500 truncate italic">"{chat.mensaje}"</p>
-                          </div>
-                        ))}
-                    </div>
+                  <CardContent className="p-6 flex flex-col items-center justify-center gap-4">
+                     <div className="relative w-32 h-32 flex items-center justify-center">
+                        <svg className="w-full h-full transform -rotate-90">
+                           <circle cx="64" cy="64" r="58" stroke="currentColor" strokeWidth="8" fill="transparent" className="text-slate-800" />
+                           <circle cx="64" cy="64" r="58" stroke="currentColor" strokeWidth="8" fill="transparent" strokeDasharray={364} strokeDashoffset={364 - (364 * (stats.capiReadyLeads / (stats.totalLeads || 1)))} className="text-indigo-500 transition-all duration-1000" />
+                        </svg>
+                        <span className="absolute text-2xl font-bold text-white">{Math.round((stats.capiReadyLeads / (stats.totalLeads || 1)) * 100)}%</span>
+                     </div>
+                     <div className="text-center space-y-1">
+                        <p className="text-[10px] text-slate-400 uppercase font-bold">Calidad de Datos</p>
+                        <p className="text-[9px] text-slate-600 italic leading-relaxed">Meta necesita Nombre + Email + Ciudad para optimizar el CPA.</p>
+                     </div>
                   </CardContent>
                 </Card>
              </div>
 
              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <QuickButton label="Probar IA" path="/brain?tab=simulador" icon={Zap} color="bg-indigo-600/10 text-indigo-500 border-indigo-500/20" />
-                <QuickButton label="Audit CAPI" path="/leads" icon={Fingerprint} color="bg-emerald-600/10 text-emerald-500 border-emerald-500/20" />
+                <QuickButton label="Radar Leads" path="/leads" icon={MessageSquare} color="bg-emerald-600/10 text-emerald-500 border-emerald-500/20" />
                 <QuickButton label="Media OCR" path="/media" icon={ImageIcon} color="bg-blue-600/10 text-blue-500 border-blue-500/20" />
-                <QuickButton label="Bitácora" path="/learning" icon={Brain} color="bg-purple-600/10 text-purple-500 border-purple-500/20" />
+                <QuickButton label="Pipeline" path="/pipeline" icon={Trello} color="bg-purple-600/10 text-purple-500 border-purple-500/20" />
              </div>
           </div>
 
