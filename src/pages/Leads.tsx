@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import {
   MessageSquare, Search, Loader2, Phone, Zap, BrainCircuit,
   Clock, MapPin, UserCheck, Brain, RefreshCw, Sparkles,
-  AlertCircle, TrendingUp, Smile, Meh, Frown, Target, Mail
+  AlertCircle, TrendingUp, Smile, Meh, Frown, Target, Mail, ShieldAlert
 } from 'lucide-react';
 import { toast } from 'sonner';
 import ChatViewer from '@/components/ChatViewer';
@@ -51,11 +51,7 @@ const Leads = () => {
       .order('last_message_at', { ascending: false });
 
     if (!error && data) {
-      const validLeads = data.filter(l => 
-        (l.nombre && l.nombre !== 'Nuevo Lead WhatsApp' && l.nombre !== '') || 
-        (l.telefono && l.telefono !== '')
-      );
-      setLeads(validLeads);
+      setLeads(data);
     }
     setLoading(false);
   };
@@ -210,7 +206,7 @@ const Leads = () => {
               <TableHeader>
                 <TableRow className="border-slate-800 hover:bg-slate-900">
                   <TableHead className="text-slate-400 text-[10px] uppercase">Cliente</TableHead>
-                  <TableHead className="text-slate-400 text-[10px] uppercase">Follow-up</TableHead>
+                  <TableHead className="text-slate-400 text-[10px] uppercase">Datos CAPI</TableHead>
                   <TableHead className="text-slate-400 text-[10px] uppercase text-center">IA Analysis</TableHead>
                   <TableHead className="text-slate-400 text-[10px] uppercase text-center">Ánimo</TableHead>
                   <TableHead className="text-slate-400 text-[10px] uppercase">Intención</TableHead>
@@ -234,11 +230,25 @@ const Leads = () => {
                          <span className="text-[10px] text-slate-500 mt-0.5 font-mono truncate max-w-[120px]" title={lead.telefono}>
                             {lead.telefono ? lead.telefono.substring(0, 15) + (lead.telefono.length > 15 ? '...' : '') : 'Sin número'}
                          </span>
-                         {lead.email && <span className="text-[9px] text-emerald-500 flex items-center gap-1"><Mail className="w-2.5 h-2.5"/> {lead.email}</span>}
                       </div>
                     </TableCell>
                     <TableCell>
-                       {getNextFollowup(lead)}
+                       {/* CAPI STATUS VISUALIZATION */}
+                       <div className="flex flex-col gap-1">
+                          {lead.email ? (
+                             <span className="text-[9px] text-emerald-500 flex items-center gap-1"><Mail className="w-2.5 h-2.5"/> {lead.email}</span>
+                          ) : (
+                             <span className="text-[9px] text-red-500 flex items-center gap-1 animate-pulse"><AlertCircle className="w-2.5 h-2.5"/> Falta Email</span>
+                          )}
+                          
+                          {lead.capi_lead_event_sent_at ? (
+                             <Badge variant="outline" className="text-[8px] h-3 px-1 border-emerald-500/30 text-emerald-500 bg-emerald-500/10 w-fit">ENVIADO A META</Badge>
+                          ) : (
+                             lead.buying_intent === 'ALTO' ? (
+                                <Badge variant="outline" className="text-[8px] h-3 px-1 border-yellow-500/30 text-yellow-500 bg-yellow-500/10 w-fit">PENDIENTE ENVÍO</Badge>
+                             ) : null
+                          )}
+                       </div>
                     </TableCell>
                     <TableCell className="text-center">
                        {lead.summary ? (

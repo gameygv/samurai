@@ -6,7 +6,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { BrainCircuit, Edit2, X, Save, Loader2, Bot, TrendingUp, AlertCircle, RotateCcw, Clock, Play, Pause, ShieldAlert, Zap, Calendar, Trash2, RefreshCcw, MapPin, User, FileText } from 'lucide-react';
+import { BrainCircuit, Edit2, X, Save, Loader2, Bot, TrendingUp, AlertCircle, RotateCcw, Clock, Play, Pause, ShieldAlert, Zap, Calendar, Trash2, RefreshCw, MapPin, User, FileText, Mail, Fingerprint } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
@@ -74,7 +74,7 @@ export const MemoryPanel = ({
   };
 
   return (
-    <div className="w-[300px] bg-slate-900/30 flex flex-col overflow-y-auto border-l border-slate-800">
+    <div className="w-[320px] bg-slate-900/30 flex flex-col overflow-y-auto border-l border-slate-800">
       <div className="p-4 space-y-6">
 
         {/* 1. SECCIÓN DE MEJORA #CORREGIRIA */}
@@ -95,38 +95,70 @@ export const MemoryPanel = ({
            </Button>
         </div>
 
-        {/* 2. IDENTIDAD & UBICACIÓN */}
+        {/* 2. DATOS CAPI (CORE DATA) */}
         <div className="border-t border-slate-800 pt-6 space-y-4">
            <div className="flex items-center justify-between">
               <h4 className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest flex items-center gap-2">
-                  <User className="w-3 h-3" /> Perfil de Prospecto
+                  <Fingerprint className="w-3 h-3" /> Datos Meta CAPI
               </h4>
               {!isEditing && <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setIsEditing(true)}><Edit2 className="w-3 h-3" /></Button>}
            </div>
-           <div className="space-y-3">
+           
+           <div className="space-y-3 bg-slate-950/50 p-3 rounded-lg border border-slate-800">
               <div className="space-y-1">
-                 <Label className="text-[9px] text-slate-500 uppercase">Intención de Compra</Label>
+                 <Label className="text-[9px] text-slate-500 uppercase flex items-center gap-1"><User className="w-2.5 h-2.5"/> Nombre</Label>
                  {isEditing ? (
-                    <Select value={memoryForm.buying_intent} onValueChange={v => setMemoryForm({...memoryForm, buying_intent: v})}>
-                       <SelectTrigger className="h-7 text-xs bg-slate-950 border-slate-800"><SelectValue /></SelectTrigger>
-                       <SelectContent className="bg-slate-900 text-white">
-                          <SelectItem value="BAJO">Bajo</SelectItem>
-                          <SelectItem value="MEDIO">Medio</SelectItem>
-                          <SelectItem value="ALTO">Alto 🔥</SelectItem>
-                       </SelectContent>
-                    </Select>
+                    <Input 
+                        value={memoryForm.nombre || ''} 
+                        onChange={e => setMemoryForm({...memoryForm, nombre: e.target.value})} 
+                        className="h-7 text-xs bg-slate-900 border-slate-700" 
+                        placeholder="Nombre completo"
+                    />
                  ) : (
-                    <Badge className={currentAnalysis.buying_intent === 'ALTO' ? 'bg-green-600' : 'bg-slate-800'}>{currentAnalysis.buying_intent || 'BAJO'}</Badge>
+                    <div className="text-xs text-white font-bold truncate">{currentAnalysis.nombre || 'Desconocido'}</div>
                  )}
               </div>
+              
               <div className="space-y-1">
-                 <Label className="text-[9px] text-slate-500 uppercase">Ubicación</Label>
+                 <Label className="text-[9px] text-slate-500 uppercase flex items-center gap-1"><Mail className="w-2.5 h-2.5"/> Email</Label>
                  {isEditing ? (
-                    <Input value={memoryForm.ciudad || ''} onChange={e => setMemoryForm({...memoryForm, ciudad: e.target.value})} className="h-7 text-xs bg-slate-950 border-slate-800" />
+                    <Input 
+                        value={memoryForm.email || ''} 
+                        onChange={e => setMemoryForm({...memoryForm, email: e.target.value})} 
+                        className="h-7 text-xs bg-slate-900 border-slate-700" 
+                        placeholder="cliente@email.com"
+                    />
                  ) : (
-                    <div className="text-xs text-slate-300 flex items-center gap-1"><MapPin className="w-3 h-3 text-red-500" /> {currentAnalysis.ciudad || 'Pendiente'}</div>
+                    <div className={`text-xs truncate ${currentAnalysis.email ? 'text-emerald-400' : 'text-red-400 italic'}`}>
+                        {currentAnalysis.email || 'Falta Email'}
+                    </div>
                  )}
               </div>
+
+              <div className="space-y-1">
+                 <Label className="text-[9px] text-slate-500 uppercase flex items-center gap-1"><MapPin className="w-2.5 h-2.5"/> Ciudad</Label>
+                 {isEditing ? (
+                    <Input value={memoryForm.ciudad || ''} onChange={e => setMemoryForm({...memoryForm, ciudad: e.target.value})} className="h-7 text-xs bg-slate-900 border-slate-700" />
+                 ) : (
+                    <div className="text-xs text-slate-300">{currentAnalysis.ciudad || 'Pendiente'}</div>
+                 )}
+              </div>
+           </div>
+
+           <div className="space-y-1">
+              <Label className="text-[9px] text-slate-500 uppercase">Intención de Compra</Label>
+              {isEditing ? (
+                 <Select value={memoryForm.buying_intent} onValueChange={v => setMemoryForm({...memoryForm, buying_intent: v})}>
+                    <SelectTrigger className="h-7 text-xs bg-slate-950 border-slate-800"><SelectValue /></SelectTrigger>
+                    <SelectContent className="bg-slate-900 text-white">
+                       <SelectItem value="BAJO">Bajo</SelectItem>
+                       <SelectItem value="MEDIO">Medio</SelectItem>
+                       <SelectItem value="ALTO">Alto 🔥</SelectItem>
+                    </SelectContent>
+                 </Select>
+              ) : (
+                 <Badge className={currentAnalysis.buying_intent === 'ALTO' ? 'bg-green-600' : 'bg-slate-800'}>{currentAnalysis.buying_intent || 'BAJO'}</Badge>
+              )}
            </div>
         </div>
 
@@ -139,7 +171,7 @@ export const MemoryPanel = ({
               <Textarea 
                 value={memoryForm.perfil_psicologico || ''}
                 onChange={e => setMemoryForm({...memoryForm, perfil_psicologico: e.target.value})}
-                className="bg-slate-950 border-slate-800 text-[10px] min-h-[100px]"
+                className="bg-slate-950 border-slate-800 text-[10px] min-h-[80px]"
                 placeholder="Notas sobre el comportamiento del cliente..."
               />
            ) : (
@@ -182,7 +214,7 @@ export const MemoryPanel = ({
 
         {isEditing && (
            <Button onClick={onSave} disabled={saving} className="w-full bg-indigo-600 h-9 font-bold">
-              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4 mr-2" />} Guardar Cambios
+              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4 mr-2" />} Guardar Datos
            </Button>
         )}
       </div>

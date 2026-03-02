@@ -28,6 +28,8 @@ const ChatViewer = ({ lead, open, onOpenChange }: ChatViewerProps) => {
   
   // Local Memory State
   const [memoryForm, setMemoryForm] = useState({
+    nombre: lead.nombre || '',
+    email: lead.email || '',
     summary: lead.summary || '',
     mood: lead.estado_emocional_actual || 'NEUTRO',
     buying_intent: lead.buying_intent || 'BAJO',
@@ -41,6 +43,8 @@ const ChatViewer = ({ lead, open, onOpenChange }: ChatViewerProps) => {
     if (open && lead) {
       fetchMessages();
       setMemoryForm({
+        nombre: lead.nombre || '',
+        email: lead.email || '',
         summary: lead.summary || '',
         mood: lead.estado_emocional_actual || 'NEUTRO',
         buying_intent: lead.buying_intent || 'BAJO',
@@ -127,6 +131,8 @@ const ChatViewer = ({ lead, open, onOpenChange }: ChatViewerProps) => {
         const { error } = await supabase
            .from('leads')
            .update({
+              nombre: memoryForm.nombre,
+              email: memoryForm.email,
               summary: memoryForm.summary,
               estado_emocional_actual: memoryForm.mood,
               buying_intent: memoryForm.buying_intent,
@@ -138,8 +144,9 @@ const ChatViewer = ({ lead, open, onOpenChange }: ChatViewerProps) => {
            .eq('id', lead.id);
         
         if (error) throw error;
-        toast.success('Cambios guardados');
+        toast.success('Datos actualizados');
         setIsEditingMemory(false);
+        // Opcional: Refrescar lead padre
      } catch (err: any) {
         toast.error(err.message);
      } finally {
@@ -187,7 +194,7 @@ const ChatViewer = ({ lead, open, onOpenChange }: ChatViewerProps) => {
         </div>
 
         <MemoryPanel 
-          currentAnalysis={lead}
+          currentAnalysis={{...lead, ...memoryForm}} // Pasar datos actualizados para preview live
           isEditing={isEditingMemory}
           setIsEditing={setIsEditingMemory}
           memoryForm={memoryForm}
