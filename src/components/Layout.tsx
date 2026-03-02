@@ -4,13 +4,14 @@ import {
   LayoutDashboard, Brain, Settings as SettingsIcon, Database, LogOut, 
   Users, FileText, UserCircle, MessageSquare, 
   GitBranch, Link as LinkIcon, Image, Sparkles, BookOpen, Clock,
-  Archive, Globe, CreditCard, BarChart3, Zap, Trello, Menu, Activity
+  Archive, Globe, CreditCard, BarChart3, Zap, Trello, Menu, Activity, Search
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
+import { Input } from '@/components/ui/input';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -25,6 +26,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
   const navigate = useNavigate();
   const { user, profile, signOut } = useAuth();
   const [isMobileOpen, setIsMobileOpen] = useState(false);
+  const [globalSearch, setGlobalSearch] = useState('');
 
   const handleLogout = async () => {
     await signOut();
@@ -128,8 +130,8 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
       </aside>
 
       <main className="flex-1 overflow-auto flex flex-col">
-        <header className="h-16 border-b border-slate-800 bg-slate-900/30 backdrop-blur-md flex items-center px-4 md:px-8 justify-between sticky top-0 z-10">
-          <div className="flex items-center gap-4">
+        <header className="h-16 border-b border-slate-800 bg-slate-900/30 backdrop-blur-md flex items-center px-4 md:px-8 justify-between sticky top-0 z-10 gap-8">
+          <div className="flex items-center gap-4 flex-1">
             <Sheet open={isMobileOpen} onOpenChange={setIsMobileOpen}>
               <SheetTrigger asChild>
                 <Button variant="ghost" size="icon" className="md:hidden text-slate-400">
@@ -140,7 +142,18 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
                 <NavContent />
               </SheetContent>
             </Sheet>
-            <h2 className="text-lg font-medium text-slate-200 truncate">Control Maestro</h2>
+            
+            {/* BUSCADOR GLOBAL */}
+            <div className="relative max-w-md w-full hidden sm:block">
+               <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-500" />
+               <Input 
+                  placeholder="Buscar Lead, Ciudad o Recurso..." 
+                  className="pl-10 bg-slate-950 border-slate-800 h-9 text-xs focus-visible:ring-red-600"
+                  value={globalSearch}
+                  onChange={(e) => setGlobalSearch(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && navigate(`/leads?search=${globalSearch}`)}
+               />
+            </div>
           </div>
           
           <div className="flex items-center gap-4">

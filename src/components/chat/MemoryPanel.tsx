@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
-import { BrainCircuit, Edit2, Save, Loader2, ShieldAlert, Zap, MapPin, User, Mail, Fingerprint, Send, Sparkles, RefreshCw, RotateCcw, Play, Pause } from 'lucide-react';
+import { BrainCircuit, Edit2, Save, Loader2, ShieldAlert, Zap, MapPin, User, Mail, Fingerprint, Send, Sparkles, RefreshCw, RotateCcw, Play, Pause, CheckCircle2, Circle } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -30,6 +30,12 @@ export const MemoryPanel = ({
   const [correctionText, setCorrectionText] = useState('');
   const [isReporting, setIsReporting] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
+
+  const hasName = currentAnalysis.nombre && !currentAnalysis.nombre.includes('Nuevo');
+  const hasCity = currentAnalysis.ciudad && currentAnalysis.ciudad.length > 2;
+  const hasEmail = currentAnalysis.email && currentAnalysis.email.includes('@');
+  
+  const healthPercent = (Number(!!hasName) + Number(!!hasCity) + Number(!!hasEmail)) * 33.3;
 
   const handleRunAnalysis = async () => {
      setAnalyzing(true);
@@ -89,8 +95,24 @@ export const MemoryPanel = ({
     <div className="w-[340px] min-w-[340px] flex-shrink-0 bg-slate-900/50 flex flex-col overflow-y-auto border-l border-slate-800">
       <div className="p-5 space-y-6">
 
-        {/* 1. MEJORA #CORREGIRIA */}
+        {/* 0. SALUD DEL LEAD (CAPI PROGRESS) */}
         <div className="space-y-3">
+           <div className="flex justify-between items-end">
+              <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Salud de Perfil (CAPI)</h4>
+              <span className="text-[10px] font-mono text-indigo-400 font-bold">{Math.round(healthPercent)}%</span>
+           </div>
+           <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden flex">
+              <div className={cn("h-full transition-all duration-1000", healthPercent > 60 ? 'bg-emerald-500' : 'bg-indigo-500')} style={{ width: `${healthPercent}%` }} />
+           </div>
+           <div className="flex justify-between text-[8px] font-bold uppercase tracking-tighter">
+              <span className={hasName ? 'text-emerald-500' : 'text-slate-600'}>Nombre</span>
+              <span className={hasCity ? 'text-emerald-500' : 'text-slate-600'}>Ciudad</span>
+              <span className={hasEmail ? 'text-emerald-500' : 'text-slate-600'}>Email</span>
+           </div>
+        </div>
+
+        {/* 1. MEJORA #CORREGIRIA */}
+        <div className="space-y-3 border-t border-slate-800 pt-6">
            <h4 className="text-[10px] font-bold text-yellow-500 uppercase tracking-widest flex items-center gap-2">
               <ShieldAlert className="w-3 h-3" /> #CorregirIA
            </h4>
