@@ -9,10 +9,11 @@ import { Input } from '@/components/ui/input';
 import {
   MessageSquare, Search, Loader2, Phone, Zap, BrainCircuit,
   Clock, MapPin, UserCheck, Brain, RefreshCw, Sparkles,
-  AlertCircle, TrendingUp, Smile, Meh, Frown, Target, Mail, ShieldAlert, CheckCircle2
+  AlertCircle, TrendingUp, Smile, Meh, Frown, Target, Mail, ShieldAlert, CheckCircle2, UserPlus
 } from 'lucide-react';
 import { toast } from 'sonner';
 import ChatViewer from '@/components/ChatViewer';
+import { CreateLeadDialog } from '@/components/leads/CreateLeadDialog';
 import { cn } from '@/lib/utils';
 
 const Leads = () => {
@@ -24,6 +25,7 @@ const Leads = () => {
   
   const [selectedLead, setSelectedLead] = useState<any>(null);
   const [isChatOpen, setIsChatOpen] = useState(false);
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
 
   useEffect(() => {
     fetchLeads();
@@ -122,15 +124,23 @@ const Leads = () => {
              </h1>
              <p className="text-slate-400">Monitoreo táctico de prospectos e intención de compra.</p>
           </div>
-          <div className="flex gap-3 items-center w-full md:w-auto">
+          <div className="flex flex-wrap gap-3 items-center w-full md:w-auto">
              <Button 
-               className="bg-indigo-600 hover:bg-indigo-700 shadow-lg shadow-indigo-900/20 text-white"
+                onClick={() => setIsCreateOpen(true)}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg shadow-emerald-900/20"
+             >
+                <UserPlus className="w-4 h-4 mr-2" /> Nuevo Lead
+             </Button>
+             
+             <Button 
+               variant="outline"
+               className="border-indigo-500/30 text-indigo-400 hover:bg-indigo-500/10"
                onClick={handleRunAnalysis}
                disabled={analyzing}
              >
-                {analyzing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Sparkles className="w-4 h-4 mr-2" />}
-                Forzar Análisis IA
+                {analyzing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
              </Button>
+             
              <div className="relative w-full md:w-64">
                <Search className="absolute left-2 top-2.5 h-4 w-4 text-slate-500" />
                <Input 
@@ -221,6 +231,10 @@ const Leads = () => {
             </Table>
           </CardContent>
         </Card>
+
+        {isCreateOpen && (
+           <CreateLeadDialog open={isCreateOpen} onOpenChange={setIsCreateOpen} onSuccess={fetchLeads} />
+        )}
       </div>
     </Layout>
   );

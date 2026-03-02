@@ -5,16 +5,18 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { 
-  Trello, Loader2, Clock, TrendingUp, User, Smile, Meh, Frown, Fingerprint, Image, Target, AlertCircle, DollarSign
+  Trello, Loader2, Clock, TrendingUp, User, Smile, Meh, Frown, Fingerprint, Image, Target, AlertCircle, DollarSign, UserPlus
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import ChatViewer from '@/components/ChatViewer';
+import { CreateLeadDialog } from '@/components/leads/CreateLeadDialog';
 
 const Pipeline = () => {
   const [leads, setLeads] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedLead, setSelectedLead] = useState<any>(null);
   const [isChatOpen, setIsChatOpen] = useState(false);
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
 
   const TICKET_PRICE = 1500;
 
@@ -77,14 +79,15 @@ const Pipeline = () => {
             <p className="text-slate-400">Gestión visual del flujo de ventas.</p>
           </div>
           <div className="flex items-center gap-4">
-             <div className="bg-emerald-500/10 border border-emerald-500/30 px-4 py-2 rounded-lg text-right">
+             <Button className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => setIsCreateOpen(true)}>
+                <UserPlus className="w-4 h-4 mr-2" /> Nuevo
+             </Button>
+             
+             <div className="bg-emerald-500/10 border border-emerald-500/30 px-4 py-2 rounded-lg text-right hidden md:block">
                 <p className="text-[10px] text-emerald-400 uppercase font-bold tracking-widest">En Cierre (Hot)</p>
                 <p className="text-xl font-bold text-white">${totalValue.toLocaleString()} MXN</p>
              </div>
-             <div className="bg-slate-900 border border-slate-800 px-4 py-2 rounded-lg text-right hidden md:block">
-                <p className="text-[10px] text-slate-500 uppercase font-bold tracking-widest">Pipeline Total</p>
-                <p className="text-xl font-bold text-slate-300">${potentialValue.toLocaleString()}</p>
-             </div>
+             
              <Button variant="outline" size="icon" className="border-slate-800 text-slate-400" onClick={fetchLeads}>
                 <Clock className="w-4 h-4" />
              </Button>
@@ -183,6 +186,7 @@ const Pipeline = () => {
         </div>
 
         {selectedLead && <ChatViewer lead={selectedLead} open={isChatOpen} onOpenChange={setIsChatOpen} />}
+        {isCreateOpen && <CreateLeadDialog open={isCreateOpen} onOpenChange={setIsCreateOpen} onSuccess={fetchLeads} />}
       </div>
     </Layout>
   );
