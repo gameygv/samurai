@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Webhook, Key, Save, Loader2, ShoppingCart, Clock, Zap, DollarSign, Target, Link as LinkIcon, Building2, Brain, Store, Hash, PlayCircle } from 'lucide-react';
+import { Webhook, Key, Save, Loader2, ShoppingCart, Clock, Zap, DollarSign, Target, Link as LinkIcon, Building2, Brain, Store, Hash, PlayCircle, MessageCircle } from 'lucide-react';
 import { toast } from 'sonner';
 
 const Settings = () => {
@@ -51,15 +51,17 @@ const Settings = () => {
 
   const handleRunFollowups = async () => {
      setRunningFollowup(true);
-     toast.info("Iniciando auditoría de pagos y recordatorios...");
+     toast.info("Ejecutando barrido de Follow-ups (Ventas + Reactivación)...");
      try {
         const { data, error } = await supabase.functions.invoke('process-followups');
         if (error) throw error;
         
-        if (data.processed && data.processed.length > 0) {
-           toast.success(`Proceso finalizado. ${data.processed.length} acciones ejecutadas.`);
+        const count = (data.processed?.length || 0) + (data.reactivated?.length || 0);
+        
+        if (count > 0) {
+           toast.success(`Proceso finalizado. ${count} mensajes enviados.`);
         } else {
-           toast.success("Proceso finalizado. Ningún lead requería acción en este momento.");
+           toast.success("Todo al día. No hay leads pendientes de seguimiento.");
         }
      } catch (err: any) {
         toast.error("Error al ejecutar follow-ups: " + err.message);
@@ -95,12 +97,41 @@ const Settings = () => {
           </TabsList>
 
           <TabsContent value="ventas" className="mt-6 space-y-6">
+             {/* REACTIVACIÓN (NUEVO) */}
+             <Card className="bg-slate-900 border-slate-800 border-l-4 border-l-blue-500">
+                <CardHeader>
+                   <CardTitle className="text-white flex items-center gap-2">
+                      <MessageCircle className="w-5 h-5 text-blue-500" /> Reactivación de Conversación
+                   </CardTitle>
+                   <CardDescription>Para clientes que preguntan y dejan de contestar (Intención Baja/Media).</CardDescription>
+                </CardHeader>
+                <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                   <div className="space-y-2">
+                      <Label className="text-xs text-slate-500 uppercase">Tiempo de espera (horas)</Label>
+                      <Input 
+                        type="number" 
+                        value={getValue('engagement_reminder_hours') || '24'} 
+                        onChange={e => handleInputChange('engagement_reminder_hours', e.target.value, 'SALES')} 
+                        className="bg-slate-950" 
+                        placeholder="Ej: 12 o 24"
+                      />
+                      <p className="text-[10px] text-slate-500">Tiempo de silencio antes de enviar el "¿sigues ahí?".</p>
+                   </div>
+                   <div className="flex items-center justify-center p-4 bg-slate-950 rounded border border-slate-800">
+                      <p className="text-xs text-slate-400 italic text-center">
+                         "Hola [Nombre], ¿pudiste revisar la información? Quedo pendiente por si tienes dudas..."
+                      </p>
+                   </div>
+                </CardContent>
+             </Card>
+
+             {/* CIERRE DE VENTAS (EXISTENTE) */}
              <Card className="bg-slate-900 border-slate-800 border-l-4 border-l-orange-500">
                 <CardHeader>
                    <div className="flex justify-between items-center">
                       <div>
-                         <CardTitle className="text-white flex items-center gap-2"><DollarSign className="w-5 h-5 text-orange-500" /> Secuencia de Recordatorio</CardTitle>
-                         <CardDescription>Tiempos de espera tras enviar el link de reserva.</CardDescription>
+                         <CardTitle className="text-white flex items-center gap-2"><DollarSign className="w-5 h-5 text-orange-500" /> Cierre de Ventas (Intención Alta)</CardTitle>
+                         <CardDescription>Secuencia agresiva para clientes que ya recibieron link de pago.</CardDescription>
                       </div>
                       <Button onClick={handleRunFollowups} disabled={runningFollowup} variant="outline" className="border-orange-500/50 text-orange-400 hover:bg-orange-500/10">
                          {runningFollowup ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <PlayCircle className="w-4 h-4 mr-2" />}
@@ -131,6 +162,7 @@ const Settings = () => {
              </Card>
           </TabsContent>
 
+          {/* ... resto de tabs ... */}
           <TabsContent value="woocommerce" className="mt-6">
              <Card className="bg-slate-900 border-slate-800 border-l-4 border-l-pink-600">
                 <CardHeader>
@@ -176,8 +208,7 @@ const Settings = () => {
              <Card className="bg-slate-900 border-slate-800 border-l-4 border-l-blue-500">
                 <CardHeader>
                    <CardTitle className="text-white flex items-center gap-2">
-                      <Building2 className="w-5 h-5 text-blue-400" /> Depósito Directo (Opción B)
-                   </CardTitle>
+                      <Building2 className="w-5 h-5 text-blue-400" /> Depósito Directo (Opción B)</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
