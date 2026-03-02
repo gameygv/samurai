@@ -34,6 +34,7 @@ serve(async (req) => {
     const body = await req.json();
     const eventName = (body.event || body.type || "").toLowerCase();
     
+    // Filtro estricto para mensajes nuevos
     if (eventName !== 'messages.upsert') {
         return new Response(JSON.stringify({ ignored: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
@@ -52,21 +53,32 @@ serve(async (req) => {
     const audioObj = findValue(messageData, 'audioMessage');
     
     if (audioObj) {
-        console.log(`[Audio] Detectado para ${phone}. Buscando datos...`);
+        console.log(`[Audio] Detectado para ${phone}. Iniciando recuperación...`);
         
-        // 1. Intentar encontrar Base64 en el payload actual
         let audioBase64 = findValue(body, 'base64');
+        let errorDetalle = "";
 
-        // 2. Si no está, pedirlo a Evolution API (Plan B)
+        // 2. Fallback: Pedir a Evolution API si no viene en el webhook
         if (!audioBase64 && evoUrl && evoKey) {
             try {
-                console.log("[Audio] Base64 no encontrado en payload. Solicitando a Evolution API...");
-                // Construir URL: de ".../message/sendText/instance" a ".../chat/getBase64FromMediaMessage/instance"
-                let getBase64Url = evoUrl.replace('message/sendText', 'chat/getBase64FromMediaMessage');
-                
-                // Payload específico para Evolution v2
+                // Transformación segura de URL
+                // De: http://.../message/sendText/instancia
+                // A:  http://.../chat/getBase64FromMediaMessage/instancia
+                let getBase64Url = evoUrl;
+                if (evoUrl.includes('/message/sendText')) {
+                    getBase64Url = evoUrl.replace('/message/sendText', '/chat/getBase64FromMediaMessage');
+                } else {
+                    // Si la URL no tiene el formato estándar, intentamos inferir o fallar
+                    console.warn("URL de Evolution no estándar, intentando reemplazo simple...");
+                    // Esto asume que el usuario puso la URL completa del endpoint de texto
+                }
+
+                console.log(`[Audio] Solicitando Base64 a: ${getBase64Url}`);
+
+                // Payload CRÍTICO: Debe ser el objeto 'message' completo que contiene 'key'
+                // body.data suele ser la estructura correcta en v2
                 const payload = {
-                    message: body.data?.message || messageData,
+                    message: body.data, 
                     convertToMp4: false
                 };
 
@@ -80,13 +92,18 @@ serve(async (req) => {
                     const data = await res.json();
                     if (data.base64) {
                         audioBase64 = data.base64;
-                        console.log("[Audio] ¡Base64 recuperado exitosamente de la API!");
+                        console.log("[Audio] ¡Recuperado vía API!");
+                    } else {
+                        errorDetalle = "API respondió OK pero sin base64";
                     }
                 } else {
-                    console.error("[Audio] Falló la recuperación de API:", await res.text());
+                    const errText = await res.text();
+                    console.error("[Audio] Fallo API Evolution:", errText);
+                    errorDetalle = `Error API: ${res.status}`;
                 }
             } catch (err) {
-                console.error("[Audio] Error contactando Evolution:", err);
+                console.error("[Audio] Error de Red:", err);
+                errorDetalle = `Error Red: ${err.message}`;
             }
         }
 
@@ -114,14 +131,14 @@ serve(async (req) => {
                     messageText = `[TRANSCRIPCIÓN AUDIO]: "${whisperData.text}"`;
                 } else {
                     console.error("Whisper Fail:", whisperData);
-                    messageText = "[AUDIO SIN INTELIGIBILIDAD - Whisper no pudo procesarlo]";
+                    messageText = "[AUDIO SIN INTELIGIBILIDAD]";
                 }
             } catch (e) {
-                console.error("Audio Error:", e);
-                messageText = `[ERROR PROCESANDO AUDIO: ${e.message}]`;
+                console.error("Audio Decode Error:", e);
+                messageText = `[ERROR PROCESANDO AUDIO]`;
             }
         } else {
-            messageText = "[AUDIO FALLIDO - No se pudo obtener el contenido]";
+            messageText = `[AUDIO FALLIDO - ${errorDetalle || 'No se pudo obtener datos'}]`;
         }
     } 
     // Texto Normal
