@@ -49,64 +49,79 @@ serve(async (req) => {
 
     // --- PROCESAMIENTO INTELIGENTE ---
     
-    // Detectar si es Audio
     const audioObj = findValue(messageData, 'audioMessage');
     
     if (audioObj) {
-        console.log(`[Audio] Procesando para ${phone}...`);
+        console.log(`[Audio] Detectado para ${phone}. Buscando datos...`);
         
-        // 1. Intentar Base64
+        // 1. Intentar encontrar Base64 en el payload actual
         let audioBase64 = findValue(body, 'base64');
-        // 2. Intentar URL
-        const audioUrl = findValue(audioObj, 'url');
 
-        try {
-            const formData = new FormData();
-            formData.append("model", "whisper-1");
-            let blob;
+        // 2. Si no está, pedirlo a Evolution API (Plan B)
+        if (!audioBase64 && evoUrl && evoKey) {
+            try {
+                console.log("[Audio] Base64 no encontrado en payload. Solicitando a Evolution API...");
+                // Construir URL: de ".../message/sendText/instance" a ".../chat/getBase64FromMediaMessage/instance"
+                let getBase64Url = evoUrl.replace('message/sendText', 'chat/getBase64FromMediaMessage');
+                
+                // Payload específico para Evolution v2
+                const payload = {
+                    message: body.data?.message || messageData,
+                    convertToMp4: false
+                };
 
-            if (audioBase64) {
-                console.log("[Audio] Usando Base64...");
+                const res = await fetch(getBase64Url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'apikey': evoKey },
+                    body: JSON.stringify(payload)
+                });
+
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.base64) {
+                        audioBase64 = data.base64;
+                        console.log("[Audio] ¡Base64 recuperado exitosamente de la API!");
+                    }
+                } else {
+                    console.error("[Audio] Falló la recuperación de API:", await res.text());
+                }
+            } catch (err) {
+                console.error("[Audio] Error contactando Evolution:", err);
+            }
+        }
+
+        if (audioBase64) {
+            try {
                 const cleanBase64 = audioBase64.replace(/^data:.*;base64,/, "");
                 const binaryString = atob(cleanBase64);
                 const bytes = new Uint8Array(binaryString.length);
                 for (let i = 0; i < binaryString.length; i++) bytes[i] = binaryString.charCodeAt(i);
-                blob = new Blob([bytes], { type: 'audio/ogg' });
-            } 
-            else if (audioUrl) {
-                console.log(`[Audio] Descargando desde URL: ${audioUrl}`);
-                const audioRes = await fetch(audioUrl, {
-                    headers: { 
-                        'User-Agent': 'Mozilla/5.0 (compatible; SamuraiBot/1.0)',
-                        'Accept': '*/*'
-                    }
-                });
+                const blob = new Blob([bytes], { type: 'audio/ogg' });
                 
-                if (!audioRes.ok) throw new Error(`Fallo descarga audio: ${audioRes.status}`);
-                blob = await audioRes.blob();
-            }
-
-            if (blob) {
+                const formData = new FormData();
+                formData.append("model", "whisper-1");
                 formData.append("file", blob, "audio.ogg");
+
                 const whisperRes = await fetch("https://api.openai.com/v1/audio/transcriptions", {
                     method: "POST",
                     headers: { "Authorization": `Bearer ${apiKey}` },
                     body: formData
                 });
+                
                 const whisperData = await whisperRes.json();
                 
                 if (whisperData.text) {
                     messageText = `[TRANSCRIPCIÓN AUDIO]: "${whisperData.text}"`;
                 } else {
                     console.error("Whisper Fail:", whisperData);
-                    messageText = "[AUDIO SIN INTELIGIBILIDAD]";
+                    messageText = "[AUDIO SIN INTELIGIBILIDAD - Whisper no pudo procesarlo]";
                 }
-            } else {
-                messageText = "[AUDIO SIN DATOS - Falló Base64 y URL]";
+            } catch (e) {
+                console.error("Audio Error:", e);
+                messageText = `[ERROR PROCESANDO AUDIO: ${e.message}]`;
             }
-        } catch (e) {
-            console.error("Audio Error:", e);
-            messageText = `[ERROR AUDIO: ${e.message}]`;
+        } else {
+            messageText = "[AUDIO FALLIDO - No se pudo obtener el contenido]";
         }
     } 
     // Texto Normal
@@ -166,7 +181,6 @@ serve(async (req) => {
     if (evoUrl && evoKey) {
         try {
             if (mediaUrl) {
-                // Intento enviar imagen
                 let sendMediaUrl = evoUrl;
                 if(evoUrl.includes('sendText')) sendMediaUrl = evoUrl.replace('sendText', 'sendMedia');
                 
@@ -182,7 +196,6 @@ serve(async (req) => {
                     })
                 });
             } else {
-                // Intento enviar texto
                 await fetch(evoUrl, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'apikey': evoKey },
