@@ -44,11 +44,11 @@ serve(async (req) => {
             .select('emisor, mensaje')
             .eq('lead_id', lead.id)
             .order('created_at', { ascending: true }) 
-            .limit(100);
+            .limit(50);
 
          if (!messages || messages.length === 0) continue;
 
-         const transcript = messages.map(m => `${m.emisor}: ${m.mensaje}`).join('\n');
+         const transcript = messages.map(m => `[${m.emisor}]: ${m.mensaje}`).join('\n');
 
          const prompt = `
             ACTÚA COMO UN MOTOR DE EXTRACCIÓN DE DATOS (DATA SCRAPER).
@@ -117,7 +117,6 @@ serve(async (req) => {
          await supabaseClient.from('leads').update(updateData).eq('id', lead.id);
 
          // --- AUTO TRIGGER META CAPI ---
-         // Si descubrimos un email y tenemos configuración de Meta, disparamos el evento automáticamente
          if (dataDiscovered && metaPixelId && metaToken) {
              console.log(`[analyze-leads] Email descubierto para ${lead.id}. Disparando CAPI...`);
              await supabaseClient.functions.invoke('meta-capi-sender', {
@@ -136,11 +135,11 @@ serve(async (req) => {
                      config: { pixel_id: metaPixelId, access_token: metaToken }
                  }
              });
-             // Marcamos que ya se envió
              await supabaseClient.from('leads').update({ capi_lead_event_sent_at: new Date().toISOString() }).eq('id', lead.id);
          }
 
-         results.push({ lead: lead.id, status: 'updated', discovered: dataDiscovered });
+         // FIX: Ahora devolvemos 'extracted' explícitamente
+         results.push({ lead: lead.id, status: 'updated', discovered: dataDiscovered, extracted: analysis });
 
        } catch (e) { console.error(`Error ${lead.id}:`, e); }
     }

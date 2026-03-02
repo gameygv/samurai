@@ -70,12 +70,14 @@ export const MemoryPanel = ({
         if (data.results && data.results.length > 0) {
            const res = data.results[0];
            if (res.status === 'updated') {
-              const extracted = res.extracted;
+              // Safety check: Aseguramos que extracted exista
+              const extracted = res.extracted || {};
               const details = [];
               if (extracted.email) details.push('Email');
               if (extracted.city) details.push('Ciudad');
               
-              toast.success(`¡Datos Capturados! ${details.join(', ')}`, { id: tid });
+              const msg = details.length > 0 ? `¡Datos Capturados! ${details.join(', ')}` : "Análisis completado (Sin datos nuevos)";
+              toast.success(msg, { id: tid });
               
               // Forzar recarga en el padre
               if (onAnalysisComplete) onAnalysisComplete();
