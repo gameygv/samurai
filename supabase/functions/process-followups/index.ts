@@ -8,7 +8,7 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders })
   }
 
-  console.log("[process-followups] Iniciando ciclo de cierre táctico con verificación WooCommerce...");
+  console.log("[process-followups] Iniciando ciclo de cierre táctico...");
 
   try {
     const supabaseClient = createClient(
@@ -36,6 +36,7 @@ serve(async (req) => {
 
     const wcKey = getConfig('wc_key');
     const wcSecret = getConfig('wc_secret');
+    const webhookUrl = getConfig('webhook_sale'); // URL para enviar a WA
 
     // 2. BUSCAR LEADS EN INTENCIÓN ALTA (PENDIENTES DE PAGO)
     const { data: hotLeads } = await supabaseClient
@@ -43,7 +44,7 @@ serve(async (req) => {
       .select('*')
       .eq('buying_intent', 'ALTO')
       .neq('ai_paused', true)
-      .neq('buying_intent', 'COMPRADO') // No procesar si ya compró
+      .neq('buying_intent', 'COMPRADO')
       .lt('followup_stage', 5);
 
     const results = [];
@@ -53,36 +54,29 @@ serve(async (req) => {
        let hasPaid = false;
        if (wcUrl && wcKey && wcSecret && lead.email) {
           try {
-             // Buscar ordenes por email
              const response = await fetch(`${wcUrl}/wp-json/wc/v3/orders?search=${lead.email}&consumer_key=${wcKey}&consumer_secret=${wcSecret}`);
              if (response.ok) {
                 const orders = await response.json();
-                // Verificar si hay alguna orden pagada o procesando recientemente
-                const paidOrder = orders.find((o: any) => 
-                   ['completed', 'processing'].includes(o.status)
-                );
+                const paidOrder = orders.find((o: any) => ['completed', 'processing'].includes(o.status));
                 
                 if (paidOrder) {
                    hasPaid = true;
                    console.log(`[WooCommerce] Pago detectado para ${lead.email}`);
                    
-                   // Actualizar Lead a CLIENTE
+                   // Marcar como COMPRADO
                    await supabaseClient.from('leads').update({
                       buying_intent: 'COMPRADO',
                       summary: `CLIENTE CONFIRMADO. Orden #${paidOrder.id} detectada en WooCommerce.`,
-                      followup_stage: 100 // Stage de éxito
+                      followup_stage: 100
                    }).eq('id', lead.id);
 
-                   // Enviar mensaje de agradecimiento
-                   await supabaseClient.from('conversaciones').insert({
-                      lead_id: lead.id,
-                      emisor: 'SAMURAI',
-                      mensaje: `¡Hola ${lead.nombre}! Confirmamos tu inscripción exitosamente (Orden #${paidOrder.id}). Gracias por unirte a la tribu. Te enviaremos los detalles finales por correo.`,
-                      platform: 'AUTO_CONFIRM'
-                   });
+                   const thanksMsg = `¡Hola ${lead.nombre}! Confirmamos tu inscripción exitosamente (Orden #${paidOrder.id}). Gracias por unirte a la tribu.`;
+                   
+                   // Guardar y ENVIAR mensaje
+                   await sendMessage(supabaseClient, webhookUrl, lead, thanksMsg, 'AUTO_CONFIRM');
                    
                    results.push({ lead: lead.nombre, status: 'PAID_DETECTED' });
-                   continue; // Saltar lógica de cobro
+                   continue;
                 }
              }
           } catch (wcErr) {
@@ -90,7 +84,7 @@ serve(async (req) => {
           }
        }
 
-       // --- LÓGICA DE RECORDATORIO (Solo si no pagó) ---
+       // --- LÓGICA DE RECORDATORIO ---
        const lastInteraction = new Date(lead.last_message_at || lead.created_at); 
        const diffHours = (now.getTime() - lastInteraction.getTime()) / (1000 * 60 * 60);
        const nextStage = (lead.followup_stage || 0) + 1;
@@ -115,12 +109,8 @@ serve(async (req) => {
           }
 
           if (message) {
-            await supabaseClient.from('conversaciones').insert({
-                lead_id: lead.id,
-                emisor: 'SAMURAI',
-                mensaje: message,
-                platform: 'AUTO_FOLLOWUP'
-            });
+            // Guardar y ENVIAR mensaje
+            await sendMessage(supabaseClient, webhookUrl, lead, message, 'AUTO_FOLLOWUP');
 
             await supabaseClient.from('leads').update({
                 followup_stage: nextStage,
@@ -138,3 +128,36 @@ serve(async (req) => {
     return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: corsHeaders });
   }
 })
+
+// Helper para enviar mensaje a DB y a Webhook (Garantía de entrega)
+async function sendMessage(supabase, webhookUrl, lead, text, platform) {
+    // 1. Guardar en Historial
+    await supabase.from('conversaciones').insert({
+        lead_id: lead.id,
+        emisor: 'SAMURAI',
+        mensaje: text,
+        platform: platform
+    });
+
+    // 2. Disparar Webhook (Si existe)
+    if (webhookUrl) {
+        try {
+            await fetch(webhookUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    type: 'outgoing_message',
+                    lead_id: lead.id,
+                    phone: lead.telefono,
+                    message: text,
+                    kommo_id: lead.kommo_id,
+                    source: 'samurai_auto'
+                })
+            });
+        } catch (e) {
+            console.error("Error enviando webhook:", e);
+        }
+    } else {
+        console.warn("No se configuró webhook_sale. El mensaje se guardó pero no se envió a WA.");
+    }
+}

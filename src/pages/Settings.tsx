@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Webhook, Key, Save, Loader2, ShoppingCart, Clock, Zap, DollarSign, Target, Link as LinkIcon, Building2, Brain, Store, Hash } from 'lucide-react';
+import { Webhook, Key, Save, Loader2, ShoppingCart, Clock, Zap, DollarSign, Target, Link as LinkIcon, Building2, Brain, Store, Hash, PlayCircle } from 'lucide-react';
 import { toast } from 'sonner';
 
 const Settings = () => {
@@ -17,6 +17,7 @@ const Settings = () => {
   const [configs, setConfigs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [runningFollowup, setRunningFollowup] = useState(false);
 
   useEffect(() => { fetchAllData(); }, []);
 
@@ -48,6 +49,25 @@ const Settings = () => {
     }
   };
 
+  const handleRunFollowups = async () => {
+     setRunningFollowup(true);
+     toast.info("Iniciando auditoría de pagos y recordatorios...");
+     try {
+        const { data, error } = await supabase.functions.invoke('process-followups');
+        if (error) throw error;
+        
+        if (data.processed && data.processed.length > 0) {
+           toast.success(`Proceso finalizado. ${data.processed.length} acciones ejecutadas.`);
+        } else {
+           toast.success("Proceso finalizado. Ningún lead requería acción en este momento.");
+        }
+     } catch (err: any) {
+        toast.error("Error al ejecutar follow-ups: " + err.message);
+     } finally {
+        setRunningFollowup(false);
+     }
+  };
+
   const getValue = (key: string) => configs.find(c => c.key === key)?.value || '';
 
   if (loading) return <Layout><div className="flex h-[80vh] items-center justify-center"><Loader2 className="animate-spin text-indigo-600 w-10 h-10" /></div></Layout>;
@@ -77,8 +97,16 @@ const Settings = () => {
           <TabsContent value="ventas" className="mt-6 space-y-6">
              <Card className="bg-slate-900 border-slate-800 border-l-4 border-l-orange-500">
                 <CardHeader>
-                   <CardTitle className="text-white flex items-center gap-2"><DollarSign className="w-5 h-5 text-orange-500" /> Secuencia de Recordatorio</CardTitle>
-                   <CardDescription>Tiempos de espera para re-contactar tras enviar el link de reserva.</CardDescription>
+                   <div className="flex justify-between items-center">
+                      <div>
+                         <CardTitle className="text-white flex items-center gap-2"><DollarSign className="w-5 h-5 text-orange-500" /> Secuencia de Recordatorio</CardTitle>
+                         <CardDescription>Tiempos de espera tras enviar el link de reserva.</CardDescription>
+                      </div>
+                      <Button onClick={handleRunFollowups} disabled={runningFollowup} variant="outline" className="border-orange-500/50 text-orange-400 hover:bg-orange-500/10">
+                         {runningFollowup ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <PlayCircle className="w-4 h-4 mr-2" />}
+                         Probar Follow-ups Ahora
+                      </Button>
+                   </div>
                 </CardHeader>
                 <CardContent className="space-y-6">
                    <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
