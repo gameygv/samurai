@@ -32,7 +32,10 @@ serve(async (req) => {
     const wcUrl = getConfig('wc_url') || "https://theelephantbowl.com";
     const productId = getConfig('wc_product_id') || "1483"; 
     const bookingLink = `${wcUrl}/checkout/?add-to-cart=${productId}`;
-    const webhookUrl = getConfig('webhook_sale');
+    
+    // Evolution API Config
+    const evolutionApiUrl = getConfig('evolution_api_url', null);
+    const evolutionApiKey = getConfig('evolution_api_key', null);
 
     const results = [];
     const reactivated = [];
@@ -48,23 +51,27 @@ serve(async (req) => {
                 platform: 'AUTO_FOLLOWUP'
             });
 
-            // 2. Enviar a Webhook (Make -> WhatsApp)
-            if (webhookUrl) {
-                const res = await fetch(webhookUrl, {
+            // 2. Enviar a Evolution API
+            if (evolutionApiUrl && evolutionApiKey) {
+                const res = await fetch(evolutionApiUrl, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'apikey': evolutionApiKey
+                    },
                     body: JSON.stringify({
-                        type: 'outgoing_message',
-                        lead_id: lead.id,
-                        phone: lead.telefono,
-                        message: text,
-                        kommo_id: lead.kommo_id,
-                        source: 'samurai_cron'
+                        number: lead.telefono,
+                        options: { delay: 1200, presence: 'composing' },
+                        textMessage: { text: text },
                     })
                 });
-                if (!res.ok) throw new Error(`Webhook status: ${res.status}`);
+                if (!res.ok) {
+                    const errorBody = await res.json();
+                    throw new Error(`Evolution API status: ${res.status} - ${errorBody.message}`);
+                }
             } else {
-                console.warn(`[process-followups] No webhook configured for lead ${lead.id}`);
+                console.warn(`[process-followups] Evolution API no configurada. Mensaje para ${lead.id} no enviado.`);
+                // No lanzamos error para no detener el proceso, solo advertimos.
             }
             return true;
         } catch (e) {

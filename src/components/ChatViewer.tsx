@@ -7,7 +7,7 @@ import { MessageInput } from './chat/MessageInput';
 import { MemoryPanel } from './chat/MemoryPanel';
 import { AiSuggestions } from './chat/AiSuggestions';
 import { toast } from 'sonner';
-import { triggerMakeWebhook } from '@/utils/makeService';
+import { sendEvolutionMessage } from '@/utils/messagingService';
 
 interface ChatViewerProps {
   lead: any;
@@ -123,10 +123,20 @@ const ChatViewer = ({ lead: initialLead, open, onOpenChange }: ChatViewerProps) 
   const handleSendMessage = async (text: string) => {
     setSending(true);
     try {
+      // Send message via Evolution API
+      const apiResponse = await sendEvolutionMessage(lead.telefono, text);
+      if (!apiResponse) {
+        // Error is already shown by toast in the service
+        setSending(false);
+        return;
+      }
+
+      // If successful, log it in our DB
       await supabase.from('conversaciones').insert({ lead_id: lead.id, mensaje: text, emisor: 'HUMANO', platform: 'PANEL' });
-      await triggerMakeWebhook('webhook_sale', { type: 'outgoing_message', lead_id: lead.id, phone: lead.telefono, message: text, kommo_id: lead.kommo_id });
+      
       fetchMessages();
       setDraftMessage('');
+      
       if (text.includes('#STOP') || text.includes('#START')) {
          const isPaused = text.includes('#STOP');
          await supabase.from('leads').update({ ai_paused: isPaused }).eq('id', lead.id);

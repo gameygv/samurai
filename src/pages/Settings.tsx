@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Webhook, Key, Save, Loader2, ShoppingCart, Clock, Zap, DollarSign, Target, Link as LinkIcon, Building2, Brain, Store, Hash, PlayCircle, MessageCircle } from 'lucide-react';
+import { Webhook, Key, Save, Loader2, ShoppingCart, Clock, Zap, DollarSign, Target, Link as LinkIcon, Building2, Brain, Store, Hash, PlayCircle, MessageCircle, Send } from 'lucide-react';
 import { toast } from 'sonner';
 
 const Settings = () => {
@@ -90,10 +90,10 @@ const Settings = () => {
         <Tabs value={activeTab} onValueChange={v => setSearchParams({ tab: v })}>
           <TabsList className="bg-slate-900 border border-slate-800 p-1 flex-wrap h-auto">
             <TabsTrigger value="ventas" className="gap-2"><Target className="w-4 h-4"/> Estrategia Venta</TabsTrigger>
+            <TabsTrigger value="mensajeria" className="gap-2"><Send className="w-4 h-4"/> Mensajería</TabsTrigger>
             <TabsTrigger value="woocommerce" className="gap-2"><Store className="w-4 h-4"/> WooCommerce</TabsTrigger>
             <TabsTrigger value="pago_directo" className="gap-2"><Building2 className="w-4 h-4"/> Depósito Directo</TabsTrigger>
             <TabsTrigger value="secrets" className="gap-2"><Key className="w-4 h-4"/> API Keys</TabsTrigger>
-            <TabsTrigger value="webhooks" className="gap-2"><Webhook className="w-4 h-4"/> Webhooks</TabsTrigger>
           </TabsList>
 
           <TabsContent value="ventas" className="mt-6 space-y-6">
@@ -162,7 +162,37 @@ const Settings = () => {
              </Card>
           </TabsContent>
 
-          {/* ... resto de tabs ... */}
+          <TabsContent value="mensajeria" className="mt-6 space-y-6">
+            <Card className="bg-slate-900 border-slate-800 border-l-4 border-l-green-500">
+              <CardHeader>
+                <CardTitle className="text-white flex items-center gap-2"><Send className="w-5 h-5 text-green-500" /> Evolution API (WhatsApp Directo)</CardTitle>
+                <CardDescription>Conexión directa para envío de mensajes. Esto reemplaza a Make.com.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label>URL de la API (incluyendo instancia)</Label>
+                  <Input value={getValue('evolution_api_url')} onChange={e => handleInputChange('evolution_api_url', e.target.value, 'EVOLUTION')} placeholder="http://tu_vps:8080/message/sendText/instance_name" className="bg-slate-950" />
+                </div>
+                <div className="space-y-2">
+                  <Label>API Key</Label>
+                  <Input type="password" value={getValue('evolution_api_key')} onChange={e => handleInputChange('evolution_api_key', e.target.value, 'EVOLUTION')} className="bg-slate-950" />
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="bg-slate-900 border-slate-800">
+              <CardHeader>
+                <CardTitle className="text-white flex items-center gap-2"><Webhook className="w-5 h-5" /> Webhooks (Opcional)</CardTitle>
+                <CardDescription>Para integraciones externas como Make.com (si aún se requiere).</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                 <div className="space-y-2">
+                    <Label>Webhook de Salida (Make.com)</Label>
+                    <Input value={getValue('webhook_sale')} onChange={e => handleInputChange('webhook_sale', e.target.value, 'WEBHOOK')} className="bg-slate-950" />
+                 </div>
+              </CardContent>
+           </Card>
+          </TabsContent>
+
           <TabsContent value="woocommerce" className="mt-6">
              <Card className="bg-slate-900 border-slate-800 border-l-4 border-l-pink-600">
                 <CardHeader>
@@ -264,18 +294,6 @@ const Settings = () => {
                         onChange={e => handleInputChange('gemini_api_key', e.target.value, 'SECRET')} 
                         className="bg-slate-950 border-slate-800"
                       />
-                   </div>
-                </CardContent>
-             </Card>
-          </TabsContent>
-
-          <TabsContent value="webhooks" className="mt-6">
-             <Card className="bg-slate-900 border-slate-800">
-                <CardHeader><CardTitle>Integraciones Externas</CardTitle></CardHeader>
-                <CardContent className="space-y-4">
-                   <div className="space-y-2">
-                      <Label>Webhook de Salida (Make.com)</Label>
-                      <Input value={getValue('webhook_sale')} onChange={e => handleInputChange('webhook_sale', e.target.value, 'WEBHOOK')} className="bg-slate-950" />
                    </div>
                 </CardContent>
              </Card>

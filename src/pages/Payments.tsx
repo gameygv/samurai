@@ -15,7 +15,6 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
-import { triggerMakeWebhook } from '@/utils/makeService';
 import { Input } from '@/components/ui/input';
 
 const Payments = () => {
@@ -78,14 +77,6 @@ const Payments = () => {
            resource: 'LEADS',
            description: `Venta CERRADA: ${lead.nombre} (Comprobante: ${selectedAsset.title})`,
            status: 'OK'
-        });
-
-        // 3. Notificar vía Webhook
-        await triggerMakeWebhook('webhook_sale', {
-           type: 'payment_confirmed',
-           lead_id: lead.id,
-           phone: lead.telefono,
-           asset_url: selectedAsset.url
         });
 
         toast.success("Venta vinculada y cerrada exitosamente.", { id: tid });
