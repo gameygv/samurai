@@ -64,17 +64,29 @@ export const MemoryPanel = ({
      }
      setSyncingCapi(true);
      try {
-        const { data: configData } = await supabase.from('app_config').select('*').in('key', ['meta_pixel_id', 'meta_access_token']);
+        const { data: configData } = await supabase.from('app_config').select('*').in('key', ['meta_pixel_id', 'meta_access_token', 'meta_test_mode', 'meta_test_event_code']);
         const config: any = {};
         configData?.forEach(c => config[c.key.replace('meta_', '')] = c.value);
+        
+        // Convertir string "true" a boolean real
+        config.test_mode = config.test_mode === 'true';
 
         const { error } = await supabase.functions.invoke('meta-capi-sender', {
            body: {
               eventData: {
                  event_name: 'Lead',
                  lead_id: currentAnalysis.id,
-                 user_data: { ph: currentAnalysis.telefono, em: currentAnalysis.email },
-                 custom_data: { city: currentAnalysis.ciudad, intent: currentAnalysis.buying_intent }
+                 // Mapeo Estricto para EMQ (Event Match Quality)
+                 user_data: { 
+                    ph: currentAnalysis.telefono, 
+                    em: currentAnalysis.email,
+                    fn: currentAnalysis.nombre, // Nombre para matching
+                    ct: currentAnalysis.ciudad  // Ciudad para matching
+                 },
+                 custom_data: { 
+                    intent: currentAnalysis.buying_intent,
+                    stage: 'prospect'
+                 }
               },
               config
            }
@@ -83,7 +95,7 @@ export const MemoryPanel = ({
         if (error) throw error;
         
         await supabase.from('leads').update({ capi_lead_event_sent_at: new Date().toISOString() }).eq('id', currentAnalysis.id);
-        toast.success("Evento enviado a Meta Conversions API.");
+        toast.success("Evento enviado a Meta Conversions API (Action: Chat).");
      } catch (err: any) {
         toast.error("Error CAPI: " + err.message);
      } finally {
