@@ -11,7 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { 
   BarChart3, Settings, BookOpen, CheckCircle2, AlertCircle, Loader2, 
-  Send, Eye, Save, Link, ArrowRight, XCircle, Map, GitMerge, RefreshCw
+  Send, Eye, Save, Link, ArrowRight, XCircle, Map, GitMerge, RefreshCw, Briefcase
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { SendEventDialog } from '@/components/meta/SendEventDialog';
@@ -47,6 +47,7 @@ const MetaCapi = () => {
         configData.forEach(item => {
           if (item.key === 'meta_pixel_id') newConfig.pixel_id = item.value;
           if (item.key === 'meta_access_token') newConfig.access_token = item.value;
+          if (item.key === 'meta_account_id') newConfig.account_id = item.value; // Added missing mapping
           if (item.key === 'meta_test_mode') newConfig.test_mode = item.value === 'true';
           if (item.key === 'meta_test_event_code') newConfig.test_event_code = item.value;
         });
@@ -64,11 +65,12 @@ const MetaCapi = () => {
       const configToSave = [
         { key: 'meta_pixel_id', value: config.pixel_id, category: 'META_CAPI' },
         { key: 'meta_access_token', value: config.access_token, category: 'META_CAPI' },
+        { key: 'meta_account_id', value: config.account_id, category: 'META_CAPI' }, // Added missing save
         { key: 'meta_test_mode', value: String(config.test_mode), category: 'META_CAPI' },
         { key: 'meta_test_event_code', value: config.test_event_code, category: 'META_CAPI' },
       ];
       await supabase.from('app_config').upsert(configToSave, { onConflict: 'key' });
-      toast.success("Configuración guardada.");
+      toast.success("Configuración guardada correctamente.");
     } finally {
       setSaving(false);
     }
@@ -148,12 +150,59 @@ const MetaCapi = () => {
           <TabsContent value="configuracion" className="mt-6">
              <Card className="bg-slate-900 border-slate-800 shadow-xl">
                 <CardHeader><CardTitle className="text-white text-lg">Credenciales API Meta</CardTitle></CardHeader>
-                <CardContent className="space-y-4">
-                   <div className="space-y-2"><Label>Pixel ID</Label><Input value={config.pixel_id} onChange={e => setConfig({...config, pixel_id: e.target.value})} className="bg-slate-950 border-slate-800" /></div>
-                   <div className="space-y-2"><Label>Access Token</Label><Input type="password" value={config.access_token} onChange={e => setConfig({...config, access_token: e.target.value})} className="bg-slate-950 border-slate-800" /></div>
+                <CardContent className="space-y-6">
+                   <div className="space-y-2">
+                      <Label>Pixel ID</Label>
+                      <Input 
+                        value={config.pixel_id} 
+                        onChange={e => setConfig({...config, pixel_id: e.target.value})} 
+                        className="bg-slate-950 border-slate-800 font-mono" 
+                        placeholder="Ej: 1234567890"
+                      />
+                   </div>
+                   
+                   <div className="space-y-2">
+                      <Label className="flex items-center gap-2">Ad Account ID <span className="text-[10px] text-slate-500 font-normal">(Opcional, para referencia administrativa)</span></Label>
+                      <div className="relative">
+                         <Briefcase className="absolute left-3 top-3 h-4 w-4 text-slate-500" />
+                         <Input 
+                           value={config.account_id} 
+                           onChange={e => setConfig({...config, account_id: e.target.value})} 
+                           className="pl-9 bg-slate-950 border-slate-800 font-mono" 
+                           placeholder="act_123456789"
+                         />
+                      </div>
+                   </div>
+
+                   <div className="space-y-2">
+                      <Label>Access Token (System User)</Label>
+                      <Input 
+                        type="password" 
+                        value={config.access_token} 
+                        onChange={e => setConfig({...config, access_token: e.target.value})} 
+                        className="bg-slate-950 border-slate-800 font-mono" 
+                        placeholder="EAA..."
+                      />
+                   </div>
+
                    <div className="flex items-center justify-between pt-4 p-4 bg-slate-950 rounded border border-slate-800">
-                      <div className="flex items-center space-x-3"><Switch checked={config.test_mode} onCheckedChange={c => setConfig({...config, test_mode: c})} /><Label>Modo Test (Sandbox)</Label></div>
-                      {config.test_mode && <Input value={config.test_event_code} onChange={e => setConfig({...config, test_event_code: e.target.value})} placeholder="TEST12345" className="bg-slate-900 w-48 text-xs font-mono" />}
+                      <div className="flex items-center space-x-3">
+                         <Switch checked={config.test_mode} onCheckedChange={c => setConfig({...config, test_mode: c})} />
+                         <div>
+                            <Label>Modo Test (Sandbox)</Label>
+                            <p className="text-[10px] text-slate-500">Activa esto para ver eventos en la herramienta "Test Events" de Meta.</p>
+                         </div>
+                      </div>
+                      {config.test_mode && (
+                         <div className="w-48">
+                            <Input 
+                              value={config.test_event_code} 
+                              onChange={e => setConfig({...config, test_event_code: e.target.value})} 
+                              placeholder="TEST12345" 
+                              className="bg-slate-900 text-xs font-mono text-center border-slate-700 focus:border-green-500 text-green-400" 
+                            />
+                         </div>
+                      )}
                    </div>
                 </CardContent>
              </Card>
