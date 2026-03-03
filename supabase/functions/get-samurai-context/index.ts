@@ -41,10 +41,13 @@ serve(async (req) => {
     const { data: webContent } = await supabaseClient.from('main_website_content').select('title, content').eq('scrape_status', 'success');
     const truthBlockWeb = webContent?.map((w: any) => `[FUENTE OFICIAL: ${w.title}]\n${w.content}`).join('\n\n') || "Sin información oficial indexada.";
 
-    // 4. Cargar Catálogo Visual (Media Manager)
-    const { data: mediaAssets } = await supabaseClient.from('media_assets').select('title, url, ai_instructions, category').eq('category', 'POSTER'); 
+    // 4. Cargar Catálogo Visual (Media Manager) Y LECTURA OCR
+    const { data: mediaAssets } = await supabaseClient.from('media_assets').select('title, url, ai_instructions, category, ocr_content').eq('category', 'POSTER'); 
     const mediaCatalog = mediaAssets?.map((m: any) => 
-        `POSTER DISPONIBLE: "${m.title}"\n- REGLA DE ENVÍO: ${m.ai_instructions}\n- CÓDIGO DE ENVÍO: <<MEDIA:${m.url}>>`
+        `POSTER DISPONIBLE: "${m.title}"
+- REGLA DE ENVÍO: ${m.ai_instructions}
+- TEXTO EXTRAÍDO DEL PÓSTER (PRECIOS/FECHAS): ${m.ocr_content || 'No hay texto extraído. Usa los precios generales.'}
+- CÓDIGO DE ENVÍO: <<MEDIA:${m.url}>>`
     ).join('\n\n') || "Sin posters disponibles.";
 
     // 5. Construir el Prompt Maestro Consolidado
@@ -59,10 +62,11 @@ ${estrategiaCierre}
 ---
 # ⚠️ REGLAS ABSOLUTAS DE COMPORTAMIENTO (DIRECTIVAS CORE) ⚠️
 1. RITMO Y EMPATÍA: Ve despacio. Sé excepcionalmente amable, cercano y cálido. Escucha al cliente y enamóralo de la experiencia antes de hablar de dinero. No vomites toda la información de golpe.
-2. RESTRICCIÓN DE PAGO: BAJO NINGUNA CIRCUNSTANCIA entregues el link de pago o los datos bancarios si el cliente aún no te ha dado su CORREO ELECTRÓNICO.
+2. PRECIOS Y ANTICIPOS (CRÍTICO): El monto de $1,500 MXN es EXCLUSIVAMENTE EL ANTICIPO para reservar el lugar, NO es el precio total del taller. El precio total (preventa y regular) debes leerlo del "TEXTO EXTRAÍDO DEL PÓSTER" correspondiente a la ciudad del cliente. Cuando des el link de pago o hables de dinero, SIEMPRE aclara: "Con este link realizas tu anticipo de $1,500 MXN para apartar tu lugar. El resto se liquida el día del evento...". NUNCA digas que el taller cuesta $1,500 en total.
+3. RESTRICCIÓN DE PAGO: BAJO NINGUNA CIRCUNSTANCIA entregues el link de pago o los datos bancarios si el cliente aún no te ha dado su CORREO ELECTRÓNICO.
    - ESTADO ACTUAL DE EMAIL: ${hasEmail ? '✅ RECIBIDO. Tienes autorización para dar precios y cerrar la venta.' : '❌ PENDIENTE. Debes pedir su correo electrónico sutilmente antes de poder avanzar al pago.'}
-3. OPCIONES DE CIERRE: Cuando el cliente ya esté listo para pagar (y ya tengas su email), SIEMPRE pregunta: "¿Prefieres que te comparta el enlace para pago con tarjeta, o te paso los datos para transferencia/depósito?".
-4. AUTORELLENADO: Usa ÚNICAMENTE el link dinámico que se proporciona en la sección de DATOS FINANCIEROS, ya que está programado para facilitarle el proceso al cliente.
+4. OPCIONES DE CIERRE: Cuando el cliente ya esté listo para pagar (y ya tengas su email), SIEMPRE pregunta: "¿Prefieres que te comparta el enlace para pago con tarjeta, o te paso los datos para transferencia/depósito?".
+5. AUTORELLENADO: Usa ÚNICAMENTE el link dinámico que se proporciona en la sección de DATOS FINANCIEROS, ya que está programado para facilitarle el proceso al cliente.
 
 ---
 # 🧠 MEMORIA Y APRENDIZAJE (#CIA)
@@ -71,8 +75,8 @@ ${relearningCia ? relearningCia : 'No hay reglas de corrección activas.'}
 ---
 # 💰 DATOS FINANCIEROS Y DE PAGO
 (Recuerda: Solo entrégalos si el Estado de Email dice RECIBIDO)
-- Link de Pago (Pre-rellenado con datos del cliente): ${paymentLink}
-- Datos Transferencia:
+- Link de Pago para Anticipo (Pre-rellenado): ${paymentLink}
+- Datos Transferencia (Para Anticipo de $1500 MXN):
 ${bankInfo}
 
 ---
