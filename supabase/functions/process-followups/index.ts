@@ -61,17 +61,16 @@ serve(async (req) => {
                     },
                     body: JSON.stringify({
                         number: lead.telefono,
-                        options: { delay: 1200, presence: 'composing' },
-                        textMessage: { text: text },
+                        text: text, // <-- CORRECCIÓN: Formato correcto para Evolution API
+                        delay: 1200
                     })
                 });
                 if (!res.ok) {
-                    const errorBody = await res.json();
-                    throw new Error(`Evolution API status: ${res.status} - ${errorBody.message}`);
+                    const errorBody = await res.json().catch(() => ({}));
+                    throw new Error(`Evolution API status: ${res.status} - ${errorBody.message || ''}`);
                 }
             } else {
                 console.warn(`[process-followups] Evolution API no configurada. Mensaje para ${lead.id} no enviado.`);
-                // No lanzamos error para no detener el proceso, solo advertimos.
             }
             return true;
         } catch (e) {
@@ -98,7 +97,6 @@ serve(async (req) => {
       .lt('followup_stage', 5);
 
     for (const lead of (hotLeads || [])) {
-       // Cálculo de tiempo: Usa last_message_at para detectar SILENCIO
        const lastInteraction = new Date(lead.last_message_at || lead.created_at); 
        const diffHours = (now.getTime() - lastInteraction.getTime()) / (1000 * 60 * 60);
        const nextStage = (lead.followup_stage || 0) + 1;
