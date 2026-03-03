@@ -47,7 +47,7 @@ serve(async (req) => {
         `POSTER DISPONIBLE: "${m.title}"
 - REGLA DE ENVÍO: ${m.ai_instructions}
 - TEXTO EXTRAÍDO DEL PÓSTER (PRECIOS/FECHAS): ${m.ocr_content || 'No hay texto extraído. Usa los precios generales.'}
-- CÓDIGO DE ENVÍO: <<MEDIA:${m.url}>>`
+- CÓDIGO DE ENVÍO OBLIGATORIO: <<MEDIA:${m.url}>>`
     ).join('\n\n') || "Sin posters disponibles.";
 
     // 5. Construir el Prompt Maestro Consolidado
@@ -67,6 +67,7 @@ ${estrategiaCierre}
    - ESTADO ACTUAL DE EMAIL: ${hasEmail ? '✅ RECIBIDO. Tienes autorización para dar precios y cerrar la venta.' : '❌ PENDIENTE. Debes pedir su correo electrónico sutilmente antes de poder avanzar al pago.'}
 4. OPCIONES DE CIERRE: Cuando el cliente ya esté listo para pagar (y ya tengas su email), SIEMPRE pregunta: "¿Prefieres que te comparta el enlace para pago con tarjeta, o te paso los datos para transferencia/depósito?".
 5. AUTORELLENADO: Usa ÚNICAMENTE el link dinámico que se proporciona en la sección de DATOS FINANCIEROS, ya que está programado para facilitarle el proceso al cliente.
+6. ENVÍO DE POSTERS VISUALES (CRÍTICO Y OBLIGATORIO): Cuando menciones o des información de un taller en una ciudad que tenga un poster en tu [CATÁLOGO VISUAL], ESTÁS OBLIGADO a copiar y pegar el "CÓDIGO DE ENVÍO OBLIGATORIO" en tu respuesta (ejemplo: <<MEDIA:https://...>>). Si no pones este código, el cliente no verá la imagen. NUNCA resumas la información sin incluir el código <<MEDIA:...>> de la imagen.
 
 ---
 # 🧠 MEMORIA Y APRENDIZAJE (#CIA)
