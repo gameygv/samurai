@@ -2,10 +2,7 @@
 CREATE EXTENSION IF NOT EXISTS pg_net;
 CREATE EXTENSION IF NOT EXISTS pg_cron;
 
--- 2. Eliminar trabajo previo si existe para evitar duplicados
-SELECT cron.unschedule('samurai-auto-followups');
-
--- 3. Programar ejecución cada hora (En el minuto 0 de cada hora)
+-- 2. Programar ejecución cada hora (En el minuto 0 de cada hora)
 SELECT cron.schedule(
   'samurai-auto-followups',
   '0 * * * *', 

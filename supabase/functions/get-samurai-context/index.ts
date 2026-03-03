@@ -9,57 +9,74 @@ serve(async (req) => {
   try {
     const supabaseClient = createClient(Deno.env.get('SUPABASE_URL'), Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'));
     
+    // Obtener los datos del Lead que invoca el contexto (para armar URLs dinámicas)
+    const body = await req.json().catch(() => ({}));
+    const lead = body.lead || {};
+
     // 1. Cargar Configuraciones Dinámicas de la BD
     const { data: configs } = await supabaseClient.from('app_config').select('key, value');
     const getConfig = (key: string) => configs?.find((c: any) => c.key === key)?.value || "";
 
-    // 2. Extraer Prompts del Panel (¡AQUÍ ESTABA EL ERROR, AHORA SÍ LOS LEE!)
     const adnCore = getConfig('prompt_adn_core') || "Eres Sam, asistente experto de The Elephant Bowl.";
-    const estrategiaCierre = getConfig('prompt_estrategia_cierre') || "Tu objetivo es cerrar ventas. Ofrece el link de pago o datos de transferencia.";
+    const estrategiaCierre = getConfig('prompt_estrategia_cierre') || "Tu objetivo es cerrar ventas.";
     const relearningCia = getConfig('prompt_relearning') || "";
 
-    // 3. Datos Financieros Dinámicos
+    // 2. Construcción Inteligente del Link de Pago (Auto-rellenado)
     const wcUrl = getConfig('wc_url') || "https://theelephantbowl.com";
     const productId = getConfig('wc_product_id') || "1483"; 
-    const paymentLink = `${wcUrl}/checkout/?add-to-cart=${productId}`;
+    let paymentLink = `${wcUrl}/checkout/?add-to-cart=${productId}`;
+    
+    if (lead.nombre && !lead.nombre.includes('Nuevo Lead')) {
+        paymentLink += `&billing_first_name=${encodeURIComponent(lead.nombre)}`;
+    }
+    if (lead.email) paymentLink += `&billing_email=${encodeURIComponent(lead.email)}`;
+    if (lead.telefono) paymentLink += `&billing_phone=${encodeURIComponent(lead.telefono)}`;
+
     const bankInfo = `Banco: ${getConfig('bank_name') || 'BBVA'}\nCuenta: ${getConfig('bank_account')}\nCLABE: ${getConfig('bank_clabe')}\nTitular: ${getConfig('bank_holder')}`;
 
-    // 4. Cargar Verdad Maestra (Sitio Web)
+    // Estado en tiempo real del correo
+    const hasEmail = lead.email && lead.email.includes('@');
+
+    // 3. Cargar Verdad Maestra (Sitio Web)
     const { data: webContent } = await supabaseClient.from('main_website_content').select('title, content').eq('scrape_status', 'success');
     const truthBlockWeb = webContent?.map((w: any) => `[FUENTE OFICIAL: ${w.title}]\n${w.content}`).join('\n\n') || "Sin información oficial indexada.";
 
-    // 5. Cargar Catálogo Visual (Media Manager)
+    // 4. Cargar Catálogo Visual (Media Manager)
     const { data: mediaAssets } = await supabaseClient.from('media_assets').select('title, url, ai_instructions, category').eq('category', 'POSTER'); 
     const mediaCatalog = mediaAssets?.map((m: any) => 
         `POSTER DISPONIBLE: "${m.title}"\n- REGLA DE ENVÍO: ${m.ai_instructions}\n- CÓDIGO DE ENVÍO: <<MEDIA:${m.url}>>`
     ).join('\n\n') || "Sin posters disponibles.";
 
-    // 6. Construir el Prompt Maestro Consolidado
+    // 5. Construir el Prompt Maestro Consolidado
     const systemPrompt = `
 ${adnCore}
 
 ---
-
 # 🛡️ ESTRATEGIA DE CIERRE Y PROTOCOLO DE VENTAS
+(Sigue estas instrucciones de venta, alergias y proceso al pie de la letra):
 ${estrategiaCierre}
 
 ---
+# ⚠️ REGLAS ABSOLUTAS DE COMPORTAMIENTO (DIRECTIVAS CORE) ⚠️
+1. RITMO Y EMPATÍA: Ve despacio. Sé excepcionalmente amable, cercano y cálido. Escucha al cliente y enamóralo de la experiencia antes de hablar de dinero. No vomites toda la información de golpe.
+2. RESTRICCIÓN DE PAGO: BAJO NINGUNA CIRCUNSTANCIA entregues el link de pago o los datos bancarios si el cliente aún no te ha dado su CORREO ELECTRÓNICO.
+   - ESTADO ACTUAL DE EMAIL: ${hasEmail ? '✅ RECIBIDO. Tienes autorización para dar precios y cerrar la venta.' : '❌ PENDIENTE. Debes pedir su correo electrónico sutilmente antes de poder avanzar al pago.'}
+3. OPCIONES DE CIERRE: Cuando el cliente ya esté listo para pagar (y ya tengas su email), SIEMPRE pregunta: "¿Prefieres que te comparta el enlace para pago con tarjeta, o te paso los datos para transferencia/depósito?".
+4. AUTORELLENADO: Usa ÚNICAMENTE el link dinámico que se proporciona en la sección de DATOS FINANCIEROS, ya que está programado para facilitarle el proceso al cliente.
 
+---
 # 🧠 MEMORIA Y APRENDIZAJE (#CIA)
-Estas son lecciones aprendidas de errores pasados. TIENEN PRIORIDAD TOTAL sobre el protocolo y la identidad:
 ${relearningCia ? relearningCia : 'No hay reglas de corrección activas.'}
 
 ---
-
-# 💰 DATOS FINANCIEROS Y DE PAGO (Úsalos SIEMPRE que ofrezcas inscripción)
-- Link de Pago (Tarjeta/Online): ${paymentLink}
+# 💰 DATOS FINANCIEROS Y DE PAGO
+(Recuerda: Solo entrégalos si el Estado de Email dice RECIBIDO)
+- Link de Pago (Pre-rellenado con datos del cliente): ${paymentLink}
 - Datos Transferencia:
 ${bankInfo}
 
 ---
-
-# 📚 BASES DE DATOS CONECTADAS (Úsalas para dar información veraz)
-
+# 📚 BASES DE DATOS CONECTADAS (Información de la web)
 [CATÁLOGO VISUAL (MEDIA MANAGER)]
 ${mediaCatalog}
 

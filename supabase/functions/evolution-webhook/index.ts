@@ -7,7 +7,6 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-// Helper: Búsqueda recursiva de valores simples
 function findValue(obj: any, keyToFind: string): any {
   if (!obj || typeof obj !== 'object') return null;
   if (keyToFind in obj) return obj[keyToFind];
@@ -130,8 +129,10 @@ serve(async (req) => {
 
     if (lead.ai_paused) return new Response('AI Paused');
 
-    // CEREBRO IA
-    const { data: kernelData } = await supabaseClient.functions.invoke('get-samurai-context');
+    // CEREBRO IA: Inyectamos el objeto Lead para que se genere el link autorellenado y chequee el correo
+    const { data: kernelData } = await supabaseClient.functions.invoke('get-samurai-context', {
+        body: { lead: lead }
+    });
     
     const { data: historyMsgsRaw } = await supabaseClient.from('conversaciones')
         .select('emisor, mensaje')
@@ -143,7 +144,6 @@ serve(async (req) => {
 
     await supabaseClient.from('conversaciones').insert({ lead_id: lead.id, emisor: 'CLIENTE', mensaje: messageText, platform: 'WHATSAPP' });
 
-    // REFUERZO DE IDENTIDAD ABSOLUTO PARA EVITAR REPREGUNTAR DATOS
     const validName = lead.nombre && !lead.nombre.includes('Nuevo Lead') ? lead.nombre : 'NO_PROPORCIONADO_AUN';
     const validCity = lead.ciudad ? lead.ciudad : 'NO_PROPORCIONADA_AUN';
     const validEmail = lead.email ? lead.email : 'NO_PROPORCIONADO_AUN';
@@ -151,12 +151,11 @@ serve(async (req) => {
     const dynamicSystemPrompt = `
 ${kernelData?.system_prompt}
 
---- EXTREMADAMENTE IMPORTANTE: ESTADO ACTUAL DE ESTE CLIENTE ---
-No le vuelvas a preguntar datos que ya tienes listados abajo. Si los tienes, avanza al siguiente paso de tu protocolo.
+--- EXTREMADAMENTE IMPORTANTE: MEMORIA A CORTO PLAZO ---
+No le vuelvas a preguntar datos que ya tienes listados abajo.
 - NOMBRE DEL CLIENTE: ${validName}
 - CIUDAD: ${validCity}
 - EMAIL: ${validEmail}
-- INTENCIÓN DE COMPRA: ${lead.buying_intent || 'BAJO'}
 ----------------------------------------------------------------`;
 
     const messages = [

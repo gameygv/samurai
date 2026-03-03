@@ -18,12 +18,16 @@ serve(async (req) => {
 
     const { question } = await req.json();
 
-    // 1. Obtener API Key de OpenAI (Misma que producción)
     const { data: config } = await supabaseClient.from('app_config').select('value').eq('key', 'openai_api_key').single();
     if (!config?.value) throw new Error("OpenAI API Key no configurada en Ajustes.");
 
-    // 2. Obtener el Contexto Consolidado (Kernel)
-    const { data: kernelData, error: kernelError } = await supabaseClient.functions.invoke('get-samurai-context');
+    // Enviamos un Lead ficticio para probar que el simulador respete las reglas del email
+    const mockLead = { nombre: "Usuario Simulado", email: "correo@simulador.com", telefono: "5551234567" };
+
+    const { data: kernelData, error: kernelError } = await supabaseClient.functions.invoke('get-samurai-context', {
+        body: { lead: mockLead }
+    });
+    
     if (kernelError) throw new Error("No se pudo obtener el contexto del Samurai.");
 
     const systemPrompt = kernelData.system_prompt;
@@ -73,14 +77,12 @@ serve(async (req) => {
     const aiData = await response.json();
     const rawText = aiData?.choices?.[0]?.message?.content || "No se recibió respuesta de la IA.";
     
-    // Separar respuesta de explicación
     const parts = rawText.split('--- EXPLICACIÓN TÉCNICA ---');
     const answer = parts[0].trim();
     let explanation = { layers_used: ["LAYER 3"], reasoning: "Respuesta estándar generada por GPT-4o." };
     
     if (parts[1]) {
        try {
-          // Limpieza básica por si la IA añade markdown al JSON
           const jsonStr = parts[1].trim().replace(/```json/g, '').replace(/```/g, '');
           explanation = JSON.parse(jsonStr);
        } catch (e) {
