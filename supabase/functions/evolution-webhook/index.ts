@@ -7,7 +7,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-// Helper: Búsqueda recursiva de valores simples (texto, ids)
+// Helper: Búsqueda recursiva de valores simples
 function findValue(obj: any, keyToFind: string): any {
   if (!obj || typeof obj !== 'object') return null;
   if (keyToFind in obj) return obj[keyToFind];
@@ -18,11 +18,9 @@ function findValue(obj: any, keyToFind: string): any {
   return null;
 }
 
-// Helper: Búsqueda del OBJETO COMPLETO del mensaje (para la API)
 function findMessageObject(obj: any): any {
     if (!obj || typeof obj !== 'object') return null;
-    if (obj.key && obj.message) return obj; // ¡Encontrado!
-    
+    if (obj.key && obj.message) return obj; 
     for (const key in obj) {
         const found = findMessageObject(obj[key]);
         if (found) return found;
@@ -57,11 +55,10 @@ serve(async (req) => {
     const phone = findValue(body, 'remoteJid')?.split('@')[0];
     let messageText = "";
 
-    // --- PROCESAMIENTO INTELIGENTE DE AUDIO ---
     const audioObj = findValue(messageData, 'audioMessage');
     
     if (audioObj) {
-        console.log(`[Audio] Detectado para ${phone}. Iniciando protocolo de recuperación...`);
+        console.log(`[Audio] Detectado para ${phone}.`);
         let audioBase64 = findValue(body, 'base64');
         let debugStatus = "INIT";
 
@@ -71,37 +68,22 @@ serve(async (req) => {
                     let getBase64Url = evoUrl.replace('message/sendText', 'chat/getBase64FromMediaMessage');
                     const msgObjectForApi = findMessageObject(body);
 
-                    if (!msgObjectForApi) {
-                        debugStatus = "MSG_OBJ_NOT_FOUND_IN_WEBHOOK";
-                    } else {
-                        const payload = { message: msgObjectForApi, convertToMp4: false };
+                    if (msgObjectForApi) {
                         const res = await fetch(getBase64Url, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json', 'apikey': evoKey },
-                            body: JSON.stringify(payload)
+                            body: JSON.stringify({ message: msgObjectForApi, convertToMp4: false })
                         });
-
                         if (res.ok) {
                             const data = await res.json();
-                            if (data.base64) {
-                                audioBase64 = data.base64;
-                                debugStatus = "RECOVERED_VIA_API";
-                            } else {
-                                debugStatus = "API_OK_BUT_NO_BASE64";
-                            }
+                            audioBase64 = data.base64;
+                            debugStatus = "RECOVERED_VIA_API";
                         } else {
-                            const errText = await res.text();
                             debugStatus = `API_ERROR_${res.status}`;
                         }
                     }
-                } catch (err) { 
-                    debugStatus = `NETWORK_ERROR_${err.message}`;
-                }
-            } else {
-                debugStatus = "NO_API_CONFIG";
+                } catch (err) { debugStatus = `NETWORK_ERROR`; }
             }
-        } else {
-            debugStatus = "BASE64_IN_WEBHOOK";
         }
 
         if (audioBase64) {
@@ -124,11 +106,8 @@ serve(async (req) => {
                 const whisperData = await whisperRes.json();
                 
                 if (whisperData.text) messageText = `[TRANSCRIPCIÓN AUDIO]: "${whisperData.text}"`;
-                else messageText = `[AUDIO SIN INTELIGIBILIDAD - Whisper: ${JSON.stringify(whisperData)}]`;
-                
-            } catch (e) { 
-                messageText = `[ERROR PROCESANDO AUDIO: ${e.message}]`; 
-            }
+                else messageText = `[AUDIO ININTELIGIBLE]`;
+            } catch (e) { messageText = `[ERROR PROCESANDO AUDIO]`; }
         } else {
             messageText = `[AUDIO FALLIDO - Diagnóstico: ${debugStatus}]`;
         }
@@ -138,7 +117,7 @@ serve(async (req) => {
 
     if (!messageText || messageText.includes('MULTIMEDIA')) return new Response('No valid content');
 
-    // --- LOGICA DB ---
+    // LOGICA DB
     let { data: lead } = await supabaseClient.from('leads').select('*').or(`telefono.ilike.%${phone}%`).maybeSingle();
     if (!lead) {
         const { data: newLead } = await supabaseClient.from('leads').insert({ 
@@ -151,10 +130,9 @@ serve(async (req) => {
 
     if (lead.ai_paused) return new Response('AI Paused');
 
-    // --- CEREBRO IA (MEMORIA CORREGIDA) ---
+    // CEREBRO IA
     const { data: kernelData } = await supabaseClient.functions.invoke('get-samurai-context');
     
-    // CORRECCIÓN: Leer los ÚLTIMOS 15 mensajes ordenando descendente y luego invirtiendo
     const { data: historyMsgsRaw } = await supabaseClient.from('conversaciones')
         .select('emisor, mensaje')
         .eq('lead_id', lead.id)
@@ -163,14 +141,24 @@ serve(async (req) => {
 
     const historyMsgs = historyMsgsRaw ? historyMsgsRaw.reverse() : [];
 
-    // 1. Guardar mensaje del cliente
     await supabaseClient.from('conversaciones').insert({ lead_id: lead.id, emisor: 'CLIENTE', mensaje: messageText, platform: 'WHATSAPP' });
 
-    // CORRECCIÓN: Inyectar datos del CRM como recordatorio forzoso a la IA
-    const validName = lead.nombre && !lead.nombre.includes('Nuevo Lead') ? lead.nombre : 'Aún no preguntado';
-    const dynamicSystemPrompt = `${kernelData?.system_prompt}\n\n--- DATOS ACTUALES DEL CLIENTE (ÚSALOS PARA PERSONALIZAR TU RESPUESTA) ---\n- Nombre: ${validName}\n- Ciudad: ${lead.ciudad || 'Aún no preguntada'}\n- Email: ${lead.email || 'Aún no preguntado'}`;
+    // REFUERZO DE IDENTIDAD ABSOLUTO PARA EVITAR REPREGUNTAR DATOS
+    const validName = lead.nombre && !lead.nombre.includes('Nuevo Lead') ? lead.nombre : 'NO_PROPORCIONADO_AUN';
+    const validCity = lead.ciudad ? lead.ciudad : 'NO_PROPORCIONADA_AUN';
+    const validEmail = lead.email ? lead.email : 'NO_PROPORCIONADO_AUN';
 
-    // 2. Inyectar manualmente el mensaje actual al contexto IA
+    const dynamicSystemPrompt = `
+${kernelData?.system_prompt}
+
+--- EXTREMADAMENTE IMPORTANTE: ESTADO ACTUAL DE ESTE CLIENTE ---
+No le vuelvas a preguntar datos que ya tienes listados abajo. Si los tienes, avanza al siguiente paso de tu protocolo.
+- NOMBRE DEL CLIENTE: ${validName}
+- CIUDAD: ${validCity}
+- EMAIL: ${validEmail}
+- INTENCIÓN DE COMPRA: ${lead.buying_intent || 'BAJO'}
+----------------------------------------------------------------`;
+
     const messages = [
         { role: "system", content: dynamicSystemPrompt },
         ...(historyMsgs || []).map(m => ({
@@ -193,7 +181,6 @@ serve(async (req) => {
     const aiData = await aiRes.json();
     const rawAnswer = aiData.choices?.[0]?.message?.content || "";
 
-    // --- ENVÍO ---
     const mediaRegex = /<<MEDIA:(.*?)>>/;
     const mediaMatch = rawAnswer.match(mediaRegex);
     let textToSend = rawAnswer.replace(mediaRegex, '').trim();
@@ -220,7 +207,6 @@ serve(async (req) => {
         } catch (sendErr) { console.error("Send Error:", sendErr); }
     }
 
-    // --- TRIGGER ANALYTICS ---
     fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/analyze-leads`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${Deno.env.get('SUPABASE_ANON_KEY')}` },

@@ -9,78 +9,56 @@ serve(async (req) => {
   try {
     const supabaseClient = createClient(Deno.env.get('SUPABASE_URL'), Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'));
     
-    // 1. Cargar Configuraciones Dinámicas
+    // 1. Cargar Configuraciones Dinámicas de la BD
     const { data: configs } = await supabaseClient.from('app_config').select('key, value');
     const getConfig = (key: string) => configs?.find((c: any) => c.key === key)?.value || "";
 
-    // Datos Financieros
+    // 2. Extraer Prompts del Panel (¡AQUÍ ESTABA EL ERROR, AHORA SÍ LOS LEE!)
+    const adnCore = getConfig('prompt_adn_core') || "Eres Sam, asistente experto de The Elephant Bowl.";
+    const estrategiaCierre = getConfig('prompt_estrategia_cierre') || "Tu objetivo es cerrar ventas. Ofrece el link de pago o datos de transferencia.";
+    const relearningCia = getConfig('prompt_relearning') || "";
+
+    // 3. Datos Financieros Dinámicos
     const wcUrl = getConfig('wc_url') || "https://theelephantbowl.com";
     const productId = getConfig('wc_product_id') || "1483"; 
     const paymentLink = `${wcUrl}/checkout/?add-to-cart=${productId}`;
     const bankInfo = `Banco: ${getConfig('bank_name') || 'BBVA'}\nCuenta: ${getConfig('bank_account')}\nCLABE: ${getConfig('bank_clabe')}\nTitular: ${getConfig('bank_holder')}`;
 
-    // 2. Cargar Verdad Maestra (Sitio Web)
+    // 4. Cargar Verdad Maestra (Sitio Web)
     const { data: webContent } = await supabaseClient.from('main_website_content').select('title, content').eq('scrape_status', 'success');
-    const truthBlockWeb = webContent?.map((w: any) => `[FUENTE OFICIAL: ${w.title}]\n${w.content}`).join('\n\n') || "";
+    const truthBlockWeb = webContent?.map((w: any) => `[FUENTE OFICIAL: ${w.title}]\n${w.content}`).join('\n\n') || "Sin información oficial indexada.";
 
-    // 3. Cargar Catálogo Visual (Media Manager)
+    // 5. Cargar Catálogo Visual (Media Manager)
     const { data: mediaAssets } = await supabaseClient.from('media_assets').select('title, url, ai_instructions, category').eq('category', 'POSTER'); 
     const mediaCatalog = mediaAssets?.map((m: any) => 
         `POSTER DISPONIBLE: "${m.title}"\n- REGLA DE ENVÍO: ${m.ai_instructions}\n- CÓDIGO DE ENVÍO: <<MEDIA:${m.url}>>`
-    ).join('\n\n');
+    ).join('\n\n') || "Sin posters disponibles.";
 
-    // 4. Construir el Prompt Maestro (El Alma del Samurai)
+    // 6. Construir el Prompt Maestro Consolidado
     const systemPrompt = `
-# IDENTIDAD Y FILOSOFÍA
-Eres **Sam**, el asistente experto de **The Elephant Bowl**.
-Tu misión no es solo informar, es **CERRAR LA INSCRIPCIÓN** al taller de Sonoterapia.
-Tu tono es: **Cálido, Profesional, Seguro y Directo.**
-Evita el lenguaje excesivamente místico ("ser de luz", "vibrar alto"). Habla de beneficios reales: relajación profunda, técnica, salud.
+${adnCore}
+
+---
+
+# 🛡️ ESTRATEGIA DE CIERRE Y PROTOCOLO DE VENTAS
+${estrategiaCierre}
 
 ---
 
 # 🧠 MEMORIA Y APRENDIZAJE (#CIA)
-Estas son lecciones aprendidas de errores pasados. TIENEN PRIORIDAD TOTAL:
-${getConfig('prompt_relearning')}
+Estas son lecciones aprendidas de errores pasados. TIENEN PRIORIDAD TOTAL sobre el protocolo y la identidad:
+${relearningCia ? relearningCia : 'No hay reglas de corrección activas.'}
 
 ---
 
-# 🛡️ PROTOCOLO DE VENTAS (SIGUE ESTE ORDEN)
-
-### FASE 1: CUALIFICACIÓN Y DATOS (META CAPI)
-Antes de soltar toda la información y precios, debes obtener los datos del cliente para verificar disponibilidad en su zona.
-**Tu primer objetivo es conseguir:** NOMBRE, CIUDAD y EMAIL.
-- Si te preguntan "Precio" o "Info", responde: *"¡Claro! Con gusto te paso los detalles. Para confirmarte fechas exactas en tu zona, ¿me regalas tu Nombre y de qué Ciudad me escribes?"*
-- Si ya tienes Nombre/Ciudad, pide el Email: *"Perfecto [Nombre], para enviarte el temario y asegurar tu registro, ¿cuál es tu correo? (Prometo no hacer spam)"*
-- **IMPORTANTE:** NO envíes la info POR correo. Pides el correo para el registro, pero la info se la das **AQUÍ EN EL CHAT** inmediatamente después.
-
-### FASE 2: SEDUCCIÓN VISUAL (MEDIA MANAGER)
-Una vez que sabes la CIUDAD:
-1. Busca en el [CATÁLOGO VISUAL] abajo si hay un Poster para esa ciudad.
-2. Si existe, **ENVÍA LA IMAGEN** usando el código \`<<MEDIA:url>>\`.
-3. Acompaña la imagen con el precio y fecha (sacados de la [FUENTE OFICIAL]).
-   *Ejemplo: "Aquí tienes los detalles para Monterrey. [Poster] Es el 15 de Marzo..."*
-
-### FASE 3: CIERRE FINANCIERO ($1500)
-Si el cliente muestra interés o ya vio la info, ¡PIDE EL ANTICIPO!
-El anticipo estándar es de **$1,500 MXN**.
-Ofrece SIEMPRE dos opciones:
-1. **Tarjeta/Online:** Envía este link: ${paymentLink}
-2. **Transferencia:** Envía estos datos:
-   ${bankInfo}
-
-Frase de cierre sugerida: *"El cupo es limitado. ¿Prefieres asegurar tu lugar con tarjeta o te paso la cuenta para transferencia?"*
+# 💰 DATOS FINANCIEROS Y DE PAGO (Úsalos SIEMPRE que ofrezcas inscripción)
+- Link de Pago (Tarjeta/Online): ${paymentLink}
+- Datos Transferencia:
+${bankInfo}
 
 ---
 
-# 🚫 REGLAS DE ORO (PROHIBICIONES)
-1. **NUNCA INVENTES FECHAS O PRECIOS:** Si no está en [FUENTE OFICIAL] ni en [CATÁLOGO VISUAL], di que consultarás con un humano.
-2. **NUNCA DIGAS "TE LO ENVIÉ AL CORREO":** La venta sucede en el chat. El correo es solo administrativo.
-3. **AUDIO:** Si recibes \`[TRANSCRIPCIÓN AUDIO]: "texto"\`, responde al texto entre comillas. NO digas "no puedo escuchar".
-
----
-
-# 📚 BASES DE DATOS CONECTADAS
+# 📚 BASES DE DATOS CONECTADAS (Úsalas para dar información veraz)
 
 [CATÁLOGO VISUAL (MEDIA MANAGER)]
 ${mediaCatalog}
