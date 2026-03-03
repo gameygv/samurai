@@ -19,7 +19,6 @@ function findValue(obj: any, keyToFind: string): any {
 }
 
 // Helper: Búsqueda del OBJETO COMPLETO del mensaje (para la API)
-// Busca un objeto que tenga las propiedades 'key' y 'message' juntas.
 function findMessageObject(obj: any): any {
     if (!obj || typeof obj !== 'object') return null;
     if (obj.key && obj.message) return obj; // ¡Encontrado!
@@ -66,25 +65,16 @@ serve(async (req) => {
         let audioBase64 = findValue(body, 'base64');
         let debugStatus = "INIT";
 
-        // Fallback API si no viene el base64 directo
         if (!audioBase64) {
             if (evoUrl && evoKey) {
                 try {
                     let getBase64Url = evoUrl.replace('message/sendText', 'chat/getBase64FromMediaMessage');
-                    
-                    // BUSQUEDA PROFUNDA del objeto mensaje correcto
                     const msgObjectForApi = findMessageObject(body);
 
                     if (!msgObjectForApi) {
                         debugStatus = "MSG_OBJ_NOT_FOUND_IN_WEBHOOK";
-                        console.error("[Audio] No se encontró el objeto {key, message} en el payload.");
                     } else {
-                        const payload = {
-                            message: msgObjectForApi, 
-                            convertToMp4: false
-                        };
-
-                        console.log(`[Audio] Solicitando a API: ${getBase64Url}`);
+                        const payload = { message: msgObjectForApi, convertToMp4: false };
                         const res = await fetch(getBase64Url, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json', 'apikey': evoKey },
@@ -101,12 +91,10 @@ serve(async (req) => {
                             }
                         } else {
                             const errText = await res.text();
-                            console.error("[Audio] API Error:", res.status, errText);
                             debugStatus = `API_ERROR_${res.status}`;
                         }
                     }
                 } catch (err) { 
-                    console.error("API Network Error:", err); 
                     debugStatus = `NETWORK_ERROR_${err.message}`;
                 }
             } else {
@@ -118,7 +106,6 @@ serve(async (req) => {
 
         if (audioBase64) {
             try {
-                // Limpieza del base64 (algunas veces trae prefijos)
                 const cleanBase64 = audioBase64.replace(/^data:.*;base64,/, "");
                 const binaryString = atob(cleanBase64);
                 const bytes = new Uint8Array(binaryString.length);
@@ -164,20 +151,28 @@ serve(async (req) => {
 
     if (lead.ai_paused) return new Response('AI Paused');
 
-    // --- CEREBRO IA ---
+    // --- CEREBRO IA (MEMORIA CORREGIDA) ---
     const { data: kernelData } = await supabaseClient.functions.invoke('get-samurai-context');
-    const { data: historyMsgs } = await supabaseClient.from('conversaciones')
+    
+    // CORRECCIÓN: Leer los ÚLTIMOS 15 mensajes ordenando descendente y luego invirtiendo
+    const { data: historyMsgsRaw } = await supabaseClient.from('conversaciones')
         .select('emisor, mensaje')
         .eq('lead_id', lead.id)
-        .order('created_at', { ascending: true })
+        .order('created_at', { ascending: false })
         .limit(15);
+
+    const historyMsgs = historyMsgsRaw ? historyMsgsRaw.reverse() : [];
 
     // 1. Guardar mensaje del cliente
     await supabaseClient.from('conversaciones').insert({ lead_id: lead.id, emisor: 'CLIENTE', mensaje: messageText, platform: 'WHATSAPP' });
 
+    // CORRECCIÓN: Inyectar datos del CRM como recordatorio forzoso a la IA
+    const validName = lead.nombre && !lead.nombre.includes('Nuevo Lead') ? lead.nombre : 'Aún no preguntado';
+    const dynamicSystemPrompt = `${kernelData?.system_prompt}\n\n--- DATOS ACTUALES DEL CLIENTE (ÚSALOS PARA PERSONALIZAR TU RESPUESTA) ---\n- Nombre: ${validName}\n- Ciudad: ${lead.ciudad || 'Aún no preguntada'}\n- Email: ${lead.email || 'Aún no preguntado'}`;
+
     // 2. Inyectar manualmente el mensaje actual al contexto IA
     const messages = [
-        { role: "system", content: kernelData?.system_prompt },
+        { role: "system", content: dynamicSystemPrompt },
         ...(historyMsgs || []).map(m => ({
             role: (m.emisor === 'CLIENTE' || m.emisor === 'HUMANO') ? 'user' : 'assistant',
             content: m.mensaje
