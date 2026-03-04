@@ -58,11 +58,10 @@ serve(async (req) => {
     
     await supabaseClient.from('leads').update({ last_message_at: new Date().toISOString() }).eq('id', lead.id);
 
-    // --- EL GATILLO AUTOMÁTICO ---
-    // Llamamos a la función de análisis en modo "background" para no retrasar la respuesta del webhook
-    console.log(`[process-response] Disparando análisis automático para lead: ${lead.id}`);
+    // --- EL GATILLO DE MEMORIA AUTOMÁTICO ---
+    // Forzamos el análisis del lead para que Sam "recuerde" lo que acaba de pasar
+    console.log(`[process-response] Actualizando memoria para lead: ${lead.id}`);
     
-    // Invocación asíncrona (Fire and forget)
     fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/analyze-leads`, {
         method: 'POST',
         headers: { 
