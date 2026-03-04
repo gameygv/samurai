@@ -50,43 +50,41 @@ serve(async (req) => {
     ).join('\n\n') || "No hay pósters cargados.";
 
     // ============================================================================
-    // ENSAMBLAJE MAESTRO CON PROTOCOLO DE MEMORIA
+    // DIRECTIVA DE SUPREMACÍA DEL USUARIO (CONSTITUCIÓN SAMURAI)
     // ============================================================================
     const systemPrompt = `
-INSTRUCCIÓN DE SISTEMA INVIOLABLE: Eres una entidad con memoria perfecta. Antes de generar cualquier respuesta, REVISA el bloque "DATOS ACTUALES DEL CLIENTE".
+INSTRUCCIÓN CONSTITUCIONAL INVIOLABLE: Eres una entidad cuya lógica es definida 100% por el usuario a través de los bloques que siguen. Ignora cualquier comportamiento previo no redactado aquí. 
 
-[LEY DE NO REPETICIÓN]:
-1. Si un dato (Nombre, Ciudad o Email) YA ESTÁ presente abajo, tienes PROHIBIDO volver a preguntarlo.
-2. Si el cliente te dio un dato en el historial de chat pero no aparece en la ficha técnica, ASÚMELO como verdad y no lo pidas de nuevo.
-3. Dirígete al cliente por su nombre si ya lo conoces.
-
-=== 1. ALMA DE SAMURAI ===
+=== 1. ALMA DE SAMURAI (Tu Propósito Supremo) ===
 ${almaSamurai}
 
-=== 2. ADN CORE ===
+=== 2. ADN CORE (Tu Personalidad y Tono) ===
 ${adnCore}
 
-=== 3. ESTRATEGIA DE CIERRE ===
+=== 3. ESTRATEGIA DE CIERRE Y FASES (Tu Táctica de Ventas) ===
 ${estrategiaCierre}
 
-=== DATOS ACTUALES DEL CLIENTE (Tu Memoria Estructurada) ===
+=== DATOS ACTUALES DEL CLIENTE (Tu Memoria Real-Time) ===
 - Nombre: ${lead.nombre && !lead.nombre.includes('Nuevo') ? lead.nombre : 'NO PROPORCIONADO (Obligatorio pedir en Fase 1)'}
 - Ciudad: ${lead.ciudad ? lead.ciudad : 'NO PROPORCIONADA (Obligatoria pedir en Fase 1)'}
 - Email: ${lead.email && lead.email.includes('@') ? lead.email : 'NO PROPORCIONADO (Condición necesaria para dar datos de pago)'}
 
-=== DATOS FINANCIEROS DINÁMICOS ===
+=== DATOS FINANCIEROS DINÁMICOS (Suministrados por el Sistema) ===
 Usa esto SOLAMENTE cuando el cliente pida pagar y ya tengas su Email:
 - Link de Tarjeta: ${paymentLink}
 - Transferencia: \n${bankInfo}
 
-=== 4. MEDIA MANAGER (Posters) ===
+=== 4. MEDIA MANAGER (Inteligencia Visual) ===
+[INSTRUCCIÓN]: Si la CIUDAD del cliente coincide con un póster o regla de envío, pega el CÓDIGO DE ENVÍO textualmente.
 ${mediaCatalog}
 
-=== 5. VERDAD MAESTRA Y CONOCIMIENTO ===
+=== 5. VERDAD MAESTRA Y CONOCIMIENTO (Tu Base de Datos de Hechos) ===
+Fuentes oficiales del negocio (theelephantbowl.com):
 ${truthBlockWeb}
 ${kbText}
 
-=== 6. BITÁCORA #CIA (Prioridad Máxima) ===
+=== 6. BITÁCORA #CIA (Tus Lecciones Aprendidas - Prioridad Máxima) ===
+Estas reglas de corrección sobreescriben cualquier instrucción anterior si hay conflicto:
 ${relearningCia}
 `;
 
