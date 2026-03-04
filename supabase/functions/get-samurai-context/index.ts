@@ -9,85 +9,90 @@ serve(async (req) => {
   try {
     const supabaseClient = createClient(Deno.env.get('SUPABASE_URL'), Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'));
     
-    // Obtener los datos del Lead que invoca el contexto (para armar URLs dinámicas)
     const body = await req.json().catch(() => ({}));
     const lead = body.lead || {};
 
-    // 1. Cargar Configuraciones Dinámicas de la BD
+    // 1. Cargar Configuraciones de Prompts
     const { data: configs } = await supabaseClient.from('app_config').select('key, value');
     const getConfig = (key: string) => configs?.find((c: any) => c.key === key)?.value || "";
 
-    const adnCore = getConfig('prompt_adn_core') || "Eres Sam, asistente experto de The Elephant Bowl.";
-    const estrategiaCierre = getConfig('prompt_estrategia_cierre') || "Tu objetivo es cerrar ventas.";
+    const almaSamurai = getConfig('prompt_alma_samurai') || "";
+    const adnCore = getConfig('prompt_adn_core') || "";
+    const estrategiaCierre = getConfig('prompt_estrategia_cierre') || "";
     const relearningCia = getConfig('prompt_relearning') || "";
 
-    // 2. Construcción Inteligente del Link de Pago (Auto-rellenado)
+    // 2. Construcción de Variables Dinámicas (Finanzas)
     const wcUrl = getConfig('wc_url') || "https://theelephantbowl.com";
     const productId = getConfig('wc_product_id') || "1483"; 
     let paymentLink = `${wcUrl}/checkout/?add-to-cart=${productId}`;
     
-    if (lead.nombre && !lead.nombre.includes('Nuevo Lead')) {
-        paymentLink += `&billing_first_name=${encodeURIComponent(lead.nombre)}`;
-    }
+    if (lead.nombre && !lead.nombre.includes('Nuevo Lead')) paymentLink += `&billing_first_name=${encodeURIComponent(lead.nombre)}`;
     if (lead.email) paymentLink += `&billing_email=${encodeURIComponent(lead.email)}`;
     if (lead.telefono) paymentLink += `&billing_phone=${encodeURIComponent(lead.telefono)}`;
 
-    const bankInfo = `Banco: ${getConfig('bank_name') || 'BBVA'}\nCuenta: ${getConfig('bank_account')}\nCLABE: ${getConfig('bank_clabe')}\nTitular: ${getConfig('bank_holder')}`;
-
-    // Estado en tiempo real del correo
-    const hasEmail = lead.email && lead.email.includes('@');
+    const bankInfo = `Banco: ${getConfig('bank_name')}\nCuenta: ${getConfig('bank_account')}\nCLABE: ${getConfig('bank_clabe')}\nTitular: ${getConfig('bank_holder')}`;
 
     // 3. Cargar Verdad Maestra (Sitio Web)
     const { data: webContent } = await supabaseClient.from('main_website_content').select('title, content').eq('scrape_status', 'success');
-    const truthBlockWeb = webContent?.map((w: any) => `[FUENTE OFICIAL: ${w.title}]\n${w.content}`).join('\n\n') || "Sin información oficial indexada.";
+    const truthBlockWeb = webContent?.map((w: any) => `[WEB - ${w.title}]\n${w.content}`).join('\n\n') || "Sin contenido web indexado.";
 
-    // 4. Cargar Catálogo Visual (Media Manager) Y LECTURA OCR
+    // 4. Cargar Base de Conocimiento (PDFs, Docs adicionales)
+    const { data: kbDocs } = await supabaseClient.from('knowledge_documents').select('title, content, category');
+    const kbText = kbDocs?.map((d: any) => `[DOC ADICIONAL: ${d.title} | Cat: ${d.category}]\n${d.content}`).join('\n\n') || "Sin documentos adicionales.";
+
+    // 5. Cargar Catálogo Visual (Posters y OCR)
     const { data: mediaAssets } = await supabaseClient.from('media_assets').select('title, url, ai_instructions, category, ocr_content').eq('category', 'POSTER'); 
     const mediaCatalog = mediaAssets?.map((m: any) => 
-        `POSTER DISPONIBLE: "${m.title}"
-- REGLA DE ENVÍO: ${m.ai_instructions}
-- TEXTO EXTRAÍDO DEL PÓSTER (PRECIOS/FECHAS): ${m.ocr_content || 'No hay texto extraído. Usa los precios generales.'}
-- CÓDIGO DE ENVÍO OBLIGATORIO: <<MEDIA:${m.url}>>`
-    ).join('\n\n') || "Sin posters disponibles.";
+        `PÓSTER DISPONIBLE: "${m.title}"
+- TRIGGER/REGLA DE ENVÍO: ${m.ai_instructions || 'Usar si lo piden'}
+- TEXTO LEÍDO DE LA IMAGEN (Fechas/Precios Reales): ${m.ocr_content || 'Sin texto detectado. Usa la web.'}
+- CÓDIGO DE ENVÍO (OBLIGATORIO): <<MEDIA:${m.url}>>`
+    ).join('\n\n') || "No hay pósters cargados.";
 
-    // 5. Construir el Prompt Maestro Consolidado
+    // ============================================================================
+    // ENSAMBLAJE MAESTRO - REGLA DE PRIORIDADES
+    // Ninguna regla oculta. Todo queda expuesto en este bloque literal.
+    // ============================================================================
     const systemPrompt = `
+=== 1. ALMA DE SAMURAI (Propósito y Presentación) ===
+${almaSamurai}
+
+=== 2. ADN CORE (Personalidad y Tono) ===
 ${adnCore}
 
----
-# 🛡️ ESTRATEGIA DE CIERRE Y PROTOCOLO DE VENTAS
-(Sigue estas instrucciones de venta, alergias y proceso al pie de la letra):
+=== 3. ESTRATEGIA DE CIERRE Y FASES ===
 ${estrategiaCierre}
 
----
-# ⚠️ REGLAS ABSOLUTAS DE COMPORTAMIENTO (DIRECTIVAS CORE) ⚠️
-1. RITMO Y EMPATÍA: Ve despacio. Sé excepcionalmente amable, cercano y cálido. Escucha al cliente y enamóralo de la experiencia antes de hablar de dinero. No vomites toda la información de golpe.
-2. PRECIOS Y ANTICIPOS (CRÍTICO): El monto de $1,500 MXN es EXCLUSIVAMENTE EL ANTICIPO para reservar el lugar, NO es el precio total del taller. El precio total (preventa y regular) debes leerlo del "TEXTO EXTRAÍDO DEL PÓSTER" correspondiente a la ciudad del cliente. Cuando des el link de pago o hables de dinero, SIEMPRE aclara: "Con este link realizas tu anticipo de $1,500 MXN para apartar tu lugar. El resto se liquida el día del evento...". NUNCA digas que el taller cuesta $1,500 en total.
-3. RESTRICCIÓN DE PAGO: BAJO NINGUNA CIRCUNSTANCIA entregues el link de pago o los datos bancarios si el cliente aún no te ha dado su CORREO ELECTRÓNICO.
-   - ESTADO ACTUAL DE EMAIL: ${hasEmail ? '✅ RECIBIDO. Tienes autorización para dar precios y cerrar la venta.' : '❌ PENDIENTE. Debes pedir su correo electrónico sutilmente antes de poder avanzar al pago.'}
-4. OPCIONES DE CIERRE: Cuando el cliente ya esté listo para pagar (y ya tengas su email), SIEMPRE pregunta: "¿Prefieres que te comparta el enlace para pago con tarjeta, o te paso los datos para transferencia/depósito?".
-5. AUTORELLENADO: Usa ÚNICAMENTE el link dinámico que se proporciona en la sección de DATOS FINANCIEROS, ya que está programado para facilitarle el proceso al cliente.
-6. ENVÍO DE POSTERS VISUALES (CRÍTICO Y OBLIGATORIO): Cuando menciones o des información de un taller en una ciudad que tenga un poster en tu [CATÁLOGO VISUAL], ESTÁS OBLIGADO a copiar y pegar el "CÓDIGO DE ENVÍO OBLIGATORIO" en tu respuesta (ejemplo: <<MEDIA:https://...>>). Si no pones este código, el cliente no verá la imagen. NUNCA resumas la información sin incluir el código <<MEDIA:...>> de la imagen.
+=== DATOS ACTUALES DEL CLIENTE (Contexto) ===
+- Nombre: ${lead.nombre && !lead.nombre.includes('Nuevo') ? lead.nombre : 'NO PROPORCIONADO (¡Pídelo!)'}
+- Ciudad: ${lead.ciudad ? lead.ciudad : 'NO PROPORCIONADA (¡Pídela!)'}
+- Email: ${lead.email && lead.email.includes('@') ? lead.email : 'NO PROPORCIONADO (Condición para dar datos de pago)'}
 
----
-# 🧠 MEMORIA Y APRENDIZAJE (#CIA)
-${relearningCia ? relearningCia : 'No hay reglas de corrección activas.'}
+=== DATOS FINANCIEROS DINÁMICOS ===
+Usa esto SOLAMENTE cuando el cliente pida pagar y ya tengas su Email:
+- Link de Tarjeta: ${paymentLink}
+- Transferencia: \n${bankInfo}
 
----
-# 💰 DATOS FINANCIEROS Y DE PAGO
-(Recuerda: Solo entrégalos si el Estado de Email dice RECIBIDO)
-- Link de Pago para Anticipo (Pre-rellenado): ${paymentLink}
-- Datos Transferencia (Para Anticipo de $1500 MXN):
-${bankInfo}
+=== 4. MEDIA MANAGER (Inteligencia de Pósters) ===
+INSTRUCCIONES ESTRICTAS PARA EL USO DE PÓSTERS:
+1. Compara la CIUDAD del cliente con los pósters disponibles. Si no hay uno en su ciudad exacta, sugiérele amablemente la sede más cercana disponible en el catálogo.
+2. Revisa las FECHAS leídas en el "TEXTO LEÍDO DE LA IMAGEN". Si la fecha ya pasó según el día de hoy, NO envíes el póster ni ofrezcas ese evento.
+3. Si el póster es válido y encaja con el cliente, DEBES pegar textualmente su "CÓDIGO DE ENVÍO" en tu respuesta para que el sistema lo envíe. (Ej: <<MEDIA:https://...>>)
 
----
-# 📚 BASES DE DATOS CONECTADAS (Información de la web)
-[CATÁLOGO VISUAL (MEDIA MANAGER)]
+[CATÁLOGO DE PÓSTERS]:
 ${mediaCatalog}
 
-[FUENTE OFICIAL (VERDAD MAESTRA)]
+=== 5. VERDAD MAESTRA Y BASE DE CONOCIMIENTO ===
+La siguiente información contiene precios generales, logística y metodologías oficiales. Usa esto para resolver dudas:
+
 ${truthBlockWeb}
-    `;
+
+${kbText}
+
+=== 6. BITÁCORA #CIA (Correcciones Absolutas) ===
+Estas son reglas de aprendizaje que tienen prioridad sobre cualquier instrucción anterior:
+${relearningCia}
+`;
 
     return new Response(JSON.stringify({ system_prompt: systemPrompt }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   } catch (error: any) {

@@ -9,19 +9,17 @@ import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
 import { 
-  Save, Bot, Eye, Zap, Loader2, Terminal, BrainCircuit, Target, 
-  GitBranch, User, RefreshCcw, Layers, ShieldCheck, Eye as EyeIcon, 
-  ArrowRight, Sparkles, AlertCircle, History, RotateCcw, Quote, Fingerprint, Image
+  Save, Bot, Eye as EyeIcon, Zap, Loader2, Terminal, BrainCircuit, Target, 
+  GitBranch, User, RefreshCcw, Layers, History, RotateCcw, Quote, Fingerprint, Image, Trash2, ShieldCheck, Database
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
 const AgentBrain = () => {
   const [searchParams, setSearchParams] = useSearchParams();
-  const initialTab = searchParams.get('tab') || 'identidad';
-  const { user, profile } = useAuth();
+  const initialTab = searchParams.get('tab') || 'alma';
+  const { profile } = useAuth();
   
   const [prompts, setPrompts] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
@@ -32,12 +30,9 @@ const AgentBrain = () => {
   const [masterPrompt, setMasterPrompt] = useState("");
   const [loadingMaster, setLoadingMaster] = useState(false);
 
-  // Simulation State
-  const [simQuestion, setSimQuestion] = useState("");
-  const [simSteps, setSimSteps] = useState<any[]>([]);
-  const [simulating, setSimulating] = useState(false);
-  const [simFinalResponse, setSimFinalResponse] = useState("");
-  const [simExplanation, setSimExplanation] = useState<any>(null);
+  // Defaults sugeridos si está vacío
+  const defaultAlma = "Eres el asistente digital del equipo de The Elephant Bowl, la inteligencia avanzada y guardián de la sabiduría de Geoffrey Torkington. Tu propósito no es solo responder dudas, sino guiar a los prospectos en un viaje de transformación a través del sonido.\n\nTe presentas amablemente como 'Sam'. La idea es llevar al cliente al link de compra, vendiendo una reservación de $1500 MXN.";
+  const defaultEstrategia = "FASE 1 (DATA HUNTING):\nNo sueltes precios sin pedir antes el Nombre y la Ciudad de la persona.\n\nFASE 2 (SEDUCCIÓN):\nUsa la ciudad para enviar el póster más cercano del Media Manager.\n\nFASE 3 (CIERRE):\nEl anticipo es de $1,500 MXN. Ofrece el link de pago o los datos bancarios. REGLA ABSOLUTA: Solo da el link o datos si ya tienes el EMAIL del cliente.\n\nREACTIVACIÓN:\nSi el cliente dejó de responder, pregúntale amablemente si pudo revisar la información y si tiene dudas.";
 
   useEffect(() => {
     fetchPrompts();
@@ -51,6 +46,12 @@ const AgentBrain = () => {
       if (data) {
         const p: any = {};
         data.forEach(item => p[item.key] = item.value);
+        
+        // Inyectar defaults si no existen
+        if (!p['prompt_alma_samurai']) p['prompt_alma_samurai'] = defaultAlma;
+        if (!p['prompt_estrategia_cierre']) p['prompt_estrategia_cierre'] = defaultEstrategia;
+        if (!p['prompt_vision_instrucciones']) p['prompt_vision_instrucciones'] = ""; // Limpio por defecto
+        
         setPrompts(p);
       }
       handleRefreshMaster();
@@ -61,7 +62,7 @@ const AgentBrain = () => {
 
   const fetchVersions = async () => {
     setLoadingVersions(true);
-    const { data } = await supabase.from('prompt_versions').select('*').order('created_at', { ascending: false }).limit(15);
+    const { data } = await supabase.from('prompt_versions').select('*').order('created_at', { ascending: false });
     if (data) setVersions(data);
     setLoadingVersions(false);
   };
@@ -86,13 +87,13 @@ const AgentBrain = () => {
       await supabase.from('app_config').upsert(promptsToSave, { onConflict: 'key' });
       
       await supabase.from('prompt_versions').insert({
-        version_name: `v${new Date().toISOString().split('T')[0]}-${Math.floor(Math.random()*100)}`,
+        version_name: `v${new Date().toISOString().split('T')[0]}-${Math.floor(Math.random()*1000)}`,
         prompts_snapshot: prompts,
         created_by_name: profile?.username || 'Admin',
-        notes: 'Snapshot Manual - Core Config'
+        notes: 'Snapshot Manual'
       });
 
-      toast.success('Jerarquía sincronizada.');
+      toast.success('Jerarquía guardada en Base de Datos y Kernel actualizado.');
       handleRefreshMaster();
       fetchVersions();
     } finally {
@@ -103,42 +104,29 @@ const AgentBrain = () => {
   const handleRestoreVersion = async (version: any) => {
     if (!confirm(`¿Restaurar la versión ${version.version_name}?`)) return;
     setPrompts(version.prompts_snapshot);
-    toast.info("Versión cargada. Dale a 'GUARDAR SNAPSHOT' para aplicar.");
+    toast.info("Versión cargada en los paneles. Dale a 'GUARDAR SNAPSHOT' para aplicarla al bot.");
   };
 
-  const runSimulation = async () => {
-     if (!simQuestion.trim()) return;
-     setSimulating(true);
-     setSimSteps([]);
-     setSimFinalResponse("");
-     setSimExplanation(null);
-     
+  const handleDeleteVersion = async (id: string) => {
+     if (!confirm("¿Eliminar este Snapshot del historial?")) return;
      try {
-        // Simulación visual de pasos tácticos
-        const visualSteps = [
-            { icon: Fingerprint, phase: "PHASE 1: DATA HUNTING", status: "Validando Nombre/Ciudad para Meta CAPI...", color: "text-indigo-400" },
-            { icon: Image, phase: "PHASE 2: SEDUCTION", status: "Buscando Posters relevantes en Media Manager...", color: "text-emerald-400" },
-            { icon: Target, phase: "PHASE 3: CLOSING", status: "Inyectando Protocolo de Reserva ($1500 MXN)...", color: "text-red-500" },
-            { icon: BrainCircuit, phase: "KERNEL AUDIT", status: "Filtrando por Capa 1 (#CIA) y Capa 3 (Web Content)...", color: "text-slate-400" }
-        ];
+        await supabase.from('prompt_versions').delete().eq('id', id);
+        toast.success("Snapshot eliminado");
+        fetchVersions();
+     } catch (err) { toast.error("Error al eliminar"); }
+  };
 
-        for (const step of visualSteps) {
-           setSimSteps(prev => [...prev, step]);
-           await new Promise(r => setTimeout(r, 700));
+  const handlePurgeHistory = async () => {
+     if (!confirm("⚠️ ADVERTENCIA: Esto borrará TODOS los snapshots de la base de datos. La configuración actual NO se perderá. ¿Continuar?")) return;
+     try {
+        // Obtenemos todos los IDs y los borramos
+        const ids = versions.map(v => v.id);
+        if(ids.length > 0) {
+            await supabase.from('prompt_versions').delete().in('id', ids);
         }
-
-        const { data, error } = await supabase.functions.invoke('simulate-samurai', { body: { question: simQuestion } });
-        if (error) throw error;
-
-        setSimFinalResponse(data.answer);
-        setSimExplanation(data.explanation);
-        toast.success("Simulación completada.");
-
-     } catch (err: any) {
-        toast.error("Error: " + err.message);
-     } finally {
-        setSimulating(false);
-     }
+        toast.success("Historial purgado desde cero.");
+        fetchVersions();
+     } catch (err) { toast.error("Error al limpiar historial"); }
   };
 
   return (
@@ -147,9 +135,9 @@ const AgentBrain = () => {
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <h1 className="text-3xl font-bold text-white flex items-center gap-3">
-               <BrainCircuit className="w-8 h-8 text-indigo-500" /> Jerarquía de Consciencia
+               <BrainCircuit className="w-8 h-8 text-indigo-500" /> Cerebro Core
             </h1>
-            <p className="text-slate-400 text-sm">Control maestro de las 5 Capas del Samurai.</p>
+            <p className="text-slate-400 text-sm">Control transparente de toda la lógica e identidad de Samurai.</p>
           </div>
           <Button onClick={handleSave} disabled={saving} className="bg-indigo-600 hover:bg-indigo-700 font-bold px-8 shadow-xl">
              {saving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />}
@@ -159,31 +147,72 @@ const AgentBrain = () => {
 
         <Tabs value={initialTab} onValueChange={v => setSearchParams({ tab: v })}>
           <TabsList className="bg-slate-900 border border-slate-800 p-1 mb-6 flex-wrap h-auto w-full justify-start">
-             <TabsTrigger value="identidad" className="gap-2"><User className="w-4 h-4"/> 1. ADN Identidad</TabsTrigger>
-             <TabsTrigger value="versiones" className="gap-2"><GitBranch className="w-4 h-4"/> 2. Historial Snapshots</TabsTrigger>
-             <TabsTrigger value="simulador" className="gap-2"><Zap className="w-4 h-4"/> 3. Simulador de 3 Fases</TabsTrigger>
+             <TabsTrigger value="alma" className="gap-2"><Target className="w-4 h-4"/> 1. Alma de Samurai</TabsTrigger>
+             <TabsTrigger value="identidad" className="gap-2"><User className="w-4 h-4"/> 2. ADN & Cierre</TabsTrigger>
+             <TabsTrigger value="versiones" className="gap-2"><GitBranch className="w-4 h-4"/> 3. Snapshots</TabsTrigger>
              <TabsTrigger value="ojo_halcon" className="gap-2"><EyeIcon className="w-4 h-4"/> 4. Ojo de Halcón</TabsTrigger>
              <TabsTrigger value="debug" className="gap-2"><Terminal className="w-4 h-4"/> 5. Kernel Debug</TabsTrigger>
           </TabsList>
 
+          <TabsContent value="alma" className="grid grid-cols-1 lg:grid-cols-2 gap-8 animate-in fade-in-50">
+             <PromptCard 
+                title="ALMA DE SAMURAI (PROPÓSITO BASE)" 
+                icon={Bot} 
+                value={prompts['prompt_alma_samurai']} 
+                onChange={(v:string) => setPrompts({...prompts, prompt_alma_samurai: v})} 
+                placeholder="Instrucciones iniciales, propósito y presentación base..." 
+             />
+             
+             <Card className="bg-slate-900 border-slate-800 shadow-xl h-full border-l-4 border-l-emerald-500">
+                <CardHeader>
+                   <CardTitle className="text-white flex items-center gap-2"><Layers className="w-5 h-5 text-emerald-400" /> Cómo lee Samurai tus Prompts</CardTitle>
+                   <CardDescription>El Kernel ensambla tu configuración exactamente en este orden para evitar confusiones.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                   <div className="space-y-4">
+                      <LogicStep num={1} title="Alma de Samurai" desc="El propósito general y su presentación (ej. Soy Sam, asistente digital)." color="text-indigo-400" />
+                      <LogicStep num={2} title="ADN Core" desc="Rasgos de personalidad, tono (calma, sabiduría, empatía)." color="text-blue-400" />
+                      <LogicStep num={3} title="Estrategia de Cierre" desc="Instrucciones tácticas para vender (Fases 1, 2, 3, 4 y Reactivación)." color="text-emerald-400" />
+                      <LogicStep num={4} title="Media Manager (Automático)" desc="El sistema inyecta reglas estrictas: Sugerir sedes cercanas, usar OCR, no ofrecer fechas pasadas." color="text-yellow-500" />
+                      <LogicStep num={5} title="Verdad Maestra & Base Conocimiento" desc="Inyecta los textos leídos de tu sitio web y PDFs." color="text-orange-400" />
+                      <LogicStep num={6} title="Bitácora #CIA" desc="Correcciones prioritarias reportadas desde el chat." color="text-red-500" />
+                   </div>
+                </CardContent>
+             </Card>
+          </TabsContent>
+
           <TabsContent value="identidad" className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-in fade-in-50">
-             <PromptCard title="ADN CORE (PERSONALIDAD)" icon={Bot} value={prompts['prompt_adn_core']} onChange={(v:string) => setPrompts({...prompts, prompt_adn_core: v})} placeholder="Identidad base..." />
-             <PromptCard title="ESTRATEGIA DE CIERRE" icon={Target} value={prompts['prompt_estrategia_cierre']} onChange={(v:string) => setPrompts({...prompts, prompt_estrategia_cierre: v})} placeholder="Lógica de venta..." />
+             <PromptCard title="ADN CORE (PERSONALIDAD)" icon={Fingerprint} value={prompts['prompt_adn_core']} onChange={(v:string) => setPrompts({...prompts, prompt_adn_core: v})} placeholder="Rasgos de personalidad, empatía, cómo manejar objeciones..." />
+             <PromptCard title="ESTRATEGIA DE CIERRE Y FASES" icon={Target} value={prompts['prompt_estrategia_cierre']} onChange={(v:string) => setPrompts({...prompts, prompt_estrategia_cierre: v})} placeholder="Detalla cómo actuar en Fase 1, Fase 2, Fase 3 y Reactivación..." />
           </TabsContent>
 
           <TabsContent value="versiones" className="animate-in fade-in-50">
              <Card className="bg-slate-900 border-slate-800">
-                <CardHeader><CardTitle className="text-white flex items-center gap-2"><History className="w-5 h-5 text-indigo-400" /> Puntos de Restauración</CardTitle></CardHeader>
-                <CardContent>
+                <CardHeader className="flex flex-row items-center justify-between border-b border-slate-800 pb-4">
+                   <div>
+                      <CardTitle className="text-white flex items-center gap-2"><History className="w-5 h-5 text-indigo-400" /> Puntos de Restauración</CardTitle>
+                      <CardDescription>Cada vez que guardas, se crea una copia exacta de todos los prompts.</CardDescription>
+                   </div>
+                   <Button variant="destructive" size="sm" onClick={handlePurgeHistory}>
+                      <Trash2 className="w-4 h-4 mr-2" /> Empezar de Cero (Purgar Historial)
+                   </Button>
+                </CardHeader>
+                <CardContent className="p-0">
                    <Table>
-                      <TableHeader><TableRow className="border-slate-800"><TableHead>Snapshot</TableHead><TableHead>Fecha</TableHead><TableHead className="text-right">Acción</TableHead></TableRow></TableHeader>
+                      <TableHeader><TableRow className="border-slate-800"><TableHead className="pl-6">Snapshot</TableHead><TableHead>Fecha</TableHead><TableHead className="text-right pr-6">Acción</TableHead></TableRow></TableHeader>
                       <TableBody>
                          {loadingVersions ? <TableRow><TableCell colSpan={3} className="text-center py-10"><Loader2 className="animate-spin mx-auto"/></TableCell></TableRow> : 
+                          versions.length === 0 ? <TableRow><TableCell colSpan={3} className="text-center py-10 text-slate-500 italic">No hay historial. Guarda un snapshot para empezar.</TableCell></TableRow> :
                           versions.map(v => (
                             <TableRow key={v.id} className="border-slate-800 hover:bg-slate-800/30 transition-colors">
-                               <TableCell className="font-mono text-indigo-400 text-xs">{v.version_name}</TableCell>
+                               <TableCell className="font-mono text-indigo-400 text-xs pl-6">{v.version_name}</TableCell>
                                <TableCell className="text-slate-500 text-xs">{new Date(v.created_at).toLocaleString()}</TableCell>
-                               <TableCell className="text-right"><Button variant="outline" size="sm" className="h-7 text-[10px] border-slate-700" onClick={() => handleRestoreVersion(v)}><RotateCcw className="w-3 h-3 mr-1" /> RESTAURAR</Button></TableCell>
+                               <TableCell className="text-right pr-6">
+                                  <div className="flex justify-end gap-2">
+                                     <Button variant="outline" size="sm" className="h-8 text-[10px] border-slate-700" onClick={() => handleRestoreVersion(v)}><RotateCcw className="w-3 h-3 mr-1" /> RESTAURAR</Button>
+                                     <Button variant="ghost" size="sm" className="h-8 text-red-500 hover:bg-red-500/10" onClick={() => handleDeleteVersion(v.id)}><Trash2 className="w-4 h-4" /></Button>
+                                  </div>
+                               </TableCell>
                             </TableRow>
                           ))}
                       </TableBody>
@@ -192,68 +221,11 @@ const AgentBrain = () => {
              </Card>
           </TabsContent>
 
-          <TabsContent value="simulador" className="grid grid-cols-1 lg:grid-cols-12 gap-8 animate-in fade-in-50">
-             <div className="lg:col-span-5 space-y-4">
-                <Card className="bg-slate-900 border-slate-800">
-                   <CardHeader><CardTitle className="text-sm text-white">Auditoría de Protocolo</CardTitle><CardDescription>Pon a prueba el flujo: Datos {"->"} Seducción {"->"} Cierre.</CardDescription></CardHeader>
-                   <CardContent className="space-y-4">
-                      <Textarea placeholder="Ej: Hola, me interesa el taller de cuencos." className="bg-slate-950 border-slate-800 h-32 focus:border-indigo-500" value={simQuestion} onChange={e => setSimQuestion(e.target.value)} />
-                      <Button className="w-full bg-indigo-600 hover:bg-indigo-700" onClick={runSimulation} disabled={simulating || !simQuestion}>
-                         {simulating ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Zap className="w-4 h-4 mr-2" />} PROCESAR EN PROTOCOLO
-                      </Button>
-                   </CardContent>
-                </Card>
-                <div className="bg-indigo-900/10 border border-indigo-500/20 p-4 rounded-xl flex items-start gap-3">
-                   <Sparkles className="w-5 h-5 text-indigo-400 shrink-0" />
-                   <p className="text-[10px] text-indigo-300 italic">El simulador usa el Kernel real. Si Samurai no pide el nombre al inicio, corrígelo en la Capa 0 o 1.</p>
-                </div>
-             </div>
-
-             <Card className="lg:col-span-7 bg-slate-950 border-slate-800 flex flex-col min-h-[500px]">
-                <CardHeader className="border-b border-slate-800 bg-slate-900/50 py-3"><CardTitle className="text-[10px] uppercase text-emerald-400 tracking-widest flex items-center gap-2"><Terminal className="w-3.5 h-3.5" /> Traza de Pensamiento Estratégico</CardTitle></CardHeader>
-                <CardContent className="flex-1 p-6 overflow-y-auto custom-scrollbar">
-                   {simSteps.length === 0 && !simulating ? (
-                      <div className="h-full flex flex-col items-center justify-center text-slate-700 gap-3 opacity-20"><BrainCircuit className="w-16 h-16" /><p className="text-sm font-bold uppercase tracking-widest">System Idle</p></div>
-                   ) : (
-                      <div className="space-y-6">
-                         {simSteps.map((step, i) => (
-                            <div key={i} className="flex gap-4 animate-in slide-in-from-left-2 duration-300">
-                               <div className="flex flex-col items-center mt-1">
-                                  <div className={cn("w-2 h-2 rounded-full shadow-[0_0_8px_rgba(16,185,129,0.5)] bg-emerald-500")} />
-                                  <div className="w-0.5 h-full bg-slate-800 mt-1 min-h-[20px]" />
-                               </div>
-                               <div>
-                                  <p className={cn("text-[9px] font-bold uppercase tracking-widest mb-0.5", step.color)}>{step.phase}</p>
-                                  <p className="text-xs text-slate-300 font-mono">{step.status}</p>
-                               </div>
-                            </div>
-                         ))}
-                         {simFinalResponse && (
-                            <div className="mt-8 animate-in zoom-in-95 duration-500 space-y-4">
-                               <div className="bg-indigo-600/10 border border-indigo-500/30 p-5 rounded-2xl text-sm text-slate-200 leading-relaxed shadow-2xl relative">
-                                  <Quote className="absolute -top-3 -left-2 w-8 h-8 text-indigo-500/20" />
-                                  {simFinalResponse}
-                               </div>
-                               {simExplanation && (
-                                  <div className="p-4 bg-slate-900 rounded-xl border border-slate-800 space-y-3">
-                                     <div className="flex flex-wrap gap-2">{simExplanation.layers_used.map((l:string) => (<Badge key={l} variant="outline" className="text-[9px] border-indigo-500/40 text-indigo-400 uppercase tracking-tighter">{l}</Badge>))}</div>
-                                     <p className="text-[10px] text-slate-500 italic font-mono leading-relaxed">"Reasoning: {simExplanation.reasoning}"</p>
-                                  </div>
-                               )}
-                            </div>
-                         )}
-                      </div>
-                   )}
-                </CardContent>
-             </Card>
-          </TabsContent>
-
           <TabsContent value="ojo_halcon" className="animate-in fade-in-50">
              <Card className="bg-slate-900 border-slate-800 border-l-4 border-l-red-600 shadow-2xl">
                 <CardHeader><CardTitle className="text-white flex items-center gap-2"><EyeIcon className="w-5 h-5 text-red-600" /> Capa 5: Ojo de Halcón (Visión AI)</CardTitle><CardDescription>Protocolos para auditar fotos de comprobantes bancarios.</CardDescription></CardHeader>
                 <CardContent className="space-y-4">
-                   <Label className="text-[10px] text-slate-500 uppercase font-bold tracking-widest">Reglas de Validación Visual</Label>
-                   <Textarea value={prompts['prompt_vision_instrucciones'] || ''} onChange={e => setPrompts({...prompts, prompt_vision_instrucciones: e.target.value})} className="min-h-[350px] bg-slate-950 border-slate-800 font-mono text-xs focus:border-red-600 leading-relaxed" placeholder="Instrucciones para validar tickets de OXXO, SPEI..." />
+                   <Textarea value={prompts['prompt_vision_instrucciones'] || ''} onChange={e => setPrompts({...prompts, prompt_vision_instrucciones: e.target.value})} className="min-h-[350px] bg-slate-950 border-slate-800 font-mono text-xs focus:border-red-600 leading-relaxed" placeholder="(Opcional) Puedes dejar esto en blanco. Si está en blanco, usará el prompt estándar de extracción financiera." />
                 </CardContent>
              </Card>
           </TabsContent>
@@ -261,7 +233,7 @@ const AgentBrain = () => {
           <TabsContent value="debug" className="animate-in fade-in-50">
              <Card className="bg-slate-900 border-slate-800 shadow-2xl relative">
                 <div className="absolute top-4 right-4 z-10"><Button onClick={handleRefreshMaster} variant="outline" className="h-8 border-indigo-500/50 text-indigo-400 hover:bg-indigo-500/20" disabled={loadingMaster}>{loadingMaster ? <Loader2 className="w-3 h-3 animate-spin mr-2"/> : <RefreshCcw className="w-3 h-3 mr-2"/>} RE-COMPILAR KERNEL</Button></div>
-                <CardHeader><CardTitle className="text-[10px] text-indigo-400 flex items-center gap-2 uppercase tracking-widest"><Layers className="w-4 h-4" /> Kernel Consolidado (Raw Prompt)</CardTitle></CardHeader>
+                <CardHeader><CardTitle className="text-[10px] text-indigo-400 flex items-center gap-2 uppercase tracking-widest"><Terminal className="w-4 h-4" /> Ensamblaje Final del Prompt</CardTitle></CardHeader>
                 <CardContent className="h-full">
                    {loadingMaster ? <div className="h-[400px] flex items-center justify-center"><Loader2 className="w-10 h-10 animate-spin text-indigo-600" /></div> : 
                     <ScrollArea className="h-[500px] rounded-xl border border-slate-800 p-6 bg-black shadow-inner">
@@ -283,6 +255,14 @@ const PromptCard = ({ title, icon: Icon, value, onChange, placeholder }: any) =>
   </Card>
 );
 
-const Label = ({ children, className }: { children: React.ReactNode, className?: string }) => (<label className={`block text-sm font-medium leading-none ${className}`}>{children}</label>);
+const LogicStep = ({ num, title, desc, color }: any) => (
+   <div className="flex gap-3">
+      <div className={`w-6 h-6 rounded-full flex items-center justify-center bg-slate-950 border border-slate-800 text-[10px] font-bold ${color} shrink-0 mt-0.5`}>{num}</div>
+      <div>
+         <p className={`text-xs font-bold ${color}`}>{title}</p>
+         <p className="text-[11px] text-slate-400 leading-relaxed mt-0.5">{desc}</p>
+      </div>
+   </div>
+);
 
 export default AgentBrain;
