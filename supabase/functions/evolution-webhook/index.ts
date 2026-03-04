@@ -59,14 +59,12 @@ serve(async (req) => {
     if (audioObj) {
         console.log(`[Audio] Detectado para ${phone}.`);
         let audioBase64 = findValue(body, 'base64');
-        let debugStatus = "INIT";
 
         if (!audioBase64) {
             if (evoUrl && evoKey) {
                 try {
                     let getBase64Url = evoUrl.replace('message/sendText', 'chat/getBase64FromMediaMessage');
                     const msgObjectForApi = findMessageObject(body);
-
                     if (msgObjectForApi) {
                         const res = await fetch(getBase64Url, {
                             method: 'POST',
@@ -76,12 +74,9 @@ serve(async (req) => {
                         if (res.ok) {
                             const data = await res.json();
                             audioBase64 = data.base64;
-                            debugStatus = "RECOVERED_VIA_API";
-                        } else {
-                            debugStatus = `API_ERROR_${res.status}`;
                         }
                     }
-                } catch (err) { debugStatus = `NETWORK_ERROR`; }
+                } catch (err) { console.error("Error recuperando audio"); }
             }
         }
 
@@ -103,20 +98,15 @@ serve(async (req) => {
                     body: formData
                 });
                 const whisperData = await whisperRes.json();
-                
                 if (whisperData.text) messageText = `[TRANSCRIPCIÓN AUDIO]: "${whisperData.text}"`;
-                else messageText = `[AUDIO ININTELIGIBLE]`;
             } catch (e) { messageText = `[ERROR PROCESANDO AUDIO]`; }
-        } else {
-            messageText = `[AUDIO FALLIDO - Diagnóstico: ${debugStatus}]`;
         }
     } else {
-        messageText = findValue(messageData, 'conversation') || findValue(messageData, 'text') || findValue(messageData, 'caption') || "[MULTIMEDIA]";
+        messageText = findValue(messageData, 'conversation') || findValue(messageData, 'text') || findValue(messageData, 'caption') || "";
     }
 
-    if (!messageText || messageText.includes('MULTIMEDIA')) return new Response('No valid content');
+    if (!messageText) return new Response('No valid content');
 
-    // LOGICA DB
     let { data: lead } = await supabaseClient.from('leads').select('*').or(`telefono.ilike.%${phone}%`).maybeSingle();
     if (!lead) {
         const { data: newLead } = await supabaseClient.from('leads').insert({ 
@@ -133,7 +123,6 @@ serve(async (req) => {
         body: { lead: lead }
     });
     
-    // INCREMENTAMOS LA MEMORIA A 40 MENSAJES PARA EVITAR AMNESIA
     const { data: historyMsgsRaw } = await supabaseClient.from('conversaciones')
         .select('emisor, mensaje')
         .eq('lead_id', lead.id)
@@ -141,41 +130,21 @@ serve(async (req) => {
         .limit(40);
 
     const historyMsgs = historyMsgsRaw ? historyMsgsRaw.reverse() : [];
-
     await supabaseClient.from('conversaciones').insert({ lead_id: lead.id, emisor: 'CLIENTE', mensaje: messageText, platform: 'WHATSAPP' });
-
-    const validName = lead.nombre && !lead.nombre.includes('Nuevo Lead') ? lead.nombre : 'NO_PROPORCIONADO_AUN';
-    const validCity = lead.ciudad ? lead.ciudad : 'NO_PROPORCIONADA_AUN';
-    const validEmail = lead.email ? lead.email : 'NO_PROPORCIONADO_AUN';
-
-    // REGLA ESTRICTA ANTI-AMNESIA Y ANTI-BOT INYECTADA EN EL CORE DEL WEBHOOK
-    const dynamicSystemPrompt = `
-${kernelData?.system_prompt}
-
---- EXTREMADAMENTE IMPORTANTE: MEMORIA Y CONCIENCIA ---
-1. Tienes acceso total al historial de esta conversación (los mensajes anteriores están justo abajo). NUNCA digas "no tengo registros", "no recuerdo" o "no tengo acceso a conversaciones previas". Lee el contexto y fluye de forma continua.
-2. ERES PARTE DEL EQUIPO. Nunca digas "soy un bot", "soy una inteligencia artificial" o "no soy humano". Eres Sam, el asistente digital oficial de The Elephant Bowl.
-3. Datos ya obtenidos (NO los vuelvas a pedir si ya tienen un valor real):
-- NOMBRE DEL CLIENTE: ${validName}
-- CIUDAD: ${validCity}
-- EMAIL: ${validEmail}
-----------------------------------------------------------------`;
-
-    const messages = [
-        { role: "system", content: dynamicSystemPrompt },
-        ...(historyMsgs || []).map(m => ({
-            role: (m.emisor === 'CLIENTE' || m.emisor === 'HUMANO') ? 'user' : 'assistant',
-            content: m.mensaje
-        })),
-        { role: "user", content: messageText } 
-    ];
 
     const aiRes = await fetch("https://api.openai.com/v1/chat/completions", {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
             model: "gpt-4o",
-            messages: messages,
+            messages: [
+                { role: "system", content: kernelData?.system_prompt },
+                ...(historyMsgs || []).map(m => ({
+                    role: (m.emisor === 'CLIENTE' || m.emisor === 'HUMANO') ? 'user' : 'assistant',
+                    content: m.mensaje
+                })),
+                { role: "user", content: messageText } 
+            ],
             temperature: 0.3
         })
     });
@@ -189,46 +158,31 @@ ${kernelData?.system_prompt}
     const mediaUrl = mediaMatch ? mediaMatch[1] : null;
 
     if (evoUrl && evoKey) {
-        try {
-            if (mediaUrl) {
-                // ESTRUCTURA CORREGIDA PARA EVOLUTION API V1/V2
-                let sendMediaUrl = evoUrl.replace('message/sendText', 'message/sendMedia');
-                if (sendMediaUrl === evoUrl) sendMediaUrl = evoUrl.replace('sendText', 'sendMedia'); // Fallback manual
-                
-                await fetch(sendMediaUrl, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'apikey': evoKey },
-                    body: JSON.stringify({ 
-                        number: phone, 
-                        options: { delay: 1500, presence: 'composing' },
-                        mediaMessage: {
-                            mediatype: "image", 
-                            media: mediaUrl, 
-                            caption: textToSend 
-                        }
-                    })
-                });
-            } else {
-                await fetch(evoUrl, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'apikey': evoKey },
-                    body: JSON.stringify({ 
-                        number: phone, 
-                        options: { delay: 1500, presence: 'composing' },
-                        textMessage: { text: textToSend } 
-                    })
-                });
-            }
-            const logMsg = mediaUrl ? `[IMG: ${mediaUrl}] ${rawAnswer}` : rawAnswer;
-            await supabaseClient.from('conversaciones').insert({ lead_id: lead.id, emisor: 'SAMURAI', mensaje: logMsg, platform: 'WHATSAPP_AUTO' });
-        } catch (sendErr) { console.error("Send Error:", sendErr); }
+        if (mediaUrl) {
+            let sendMediaUrl = evoUrl.replace('message/sendText', 'message/sendMedia');
+            await fetch(sendMediaUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'apikey': evoKey },
+                body: JSON.stringify({ 
+                    number: phone, 
+                    mediaMessage: { mediatype: "image", media: mediaUrl, caption: textToSend },
+                    delay: 1500
+                })
+            });
+        } else {
+            // FORMATO V2 CORREGIDO
+            await fetch(evoUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'apikey': evoKey },
+                body: JSON.stringify({ number: phone, text: textToSend, delay: 1500 })
+            });
+        }
+        await supabaseClient.from('conversaciones').insert({ 
+            lead_id: lead.id, emisor: 'SAMURAI', 
+            mensaje: mediaUrl ? `[IMG: ${mediaUrl}] ${rawAnswer}` : rawAnswer, 
+            platform: 'WHATSAPP_AUTO' 
+        });
     }
-
-    fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/analyze-leads`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${Deno.env.get('SUPABASE_ANON_KEY')}` },
-        body: JSON.stringify({ lead_id: lead.id })
-    }).catch(err => console.error("Analytics Trigger Error", err));
 
     return new Response(JSON.stringify({ success: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
