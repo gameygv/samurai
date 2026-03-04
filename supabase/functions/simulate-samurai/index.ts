@@ -36,10 +36,16 @@ serve(async (req) => {
       [VENTA]: ${customPrompts?.prompt_estrategia_cierre || getConfig('prompt_estrategia_cierre')}
 
       === GENERACIÓN DE LINK FUNNELKIT ===
-      Debes usar exactamente este formato para los parámetros:
-      ${basePaymentLink}&wffn_billing_first_name=NOMBRE&wffn_billing_email=CORREO&wffn_billing_city=CIUDAD
+      Para enviar el link de pago, usa esta URL base:
+      ${basePaymentLink}
+
+      Y agrégale dinámicamente los datos del cliente que sacaste de la conversación, REEMPLAZANDO los valores:
+      &wffn_billing_first_name=[REEMPLAZAR_POR_NOMBRE]
+      &wffn_billing_email=[REEMPLAZAR_POR_CORREO]
+      &wffn_billing_city=[REEMPLAZAR_POR_CIUDAD]
       
-      IMPORTANTE: Tu WordPress usa el prefijo "wffn_billing_". No lo cambies.
+      EJEMPLO: Si el cliente te dijo que se llama "Carlos", su correo es "carlos@test.com" y es de "Cancun", el link final que debes enviarle es:
+      ${basePaymentLink}&wffn_billing_first_name=Carlos&wffn_billing_email=carlos@test.com&wffn_billing_city=Cancun
     `;
 
     const messages = [
@@ -65,7 +71,7 @@ serve(async (req) => {
     
     return new Response(JSON.stringify({ 
         answer: parts[0].trim(), 
-        explanation: parts[1] ? JSON.parse(parts[1].trim()) : { layers_used: ["FUNNELKIT"], reasoning: "Link wffn_billing_ generado." }
+        explanation: parts[1] ? JSON.parse(parts[1].trim()) : { layers_used: ["FUNNELKIT"], reasoning: "Link wffn_billing_ generado correctamente con datos reemplazados." }
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
   } catch (error: any) {
