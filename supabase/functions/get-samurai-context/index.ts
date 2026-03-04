@@ -16,7 +16,7 @@ serve(async (req) => {
     const { data: configs } = await supabaseClient.from('app_config').select('key, value');
     const getConfig = (key: string, def = "") => configs?.find((c: any) => c.key === key)?.value || def;
 
-    // 2. Construcción de Link de Pago Robusto
+    // 2. Construcción de Link con Compatibilidad FunnelKit
     const wcUrl = getConfig('wc_url', "https://theelephantbowl.com");
     const checkoutPath = getConfig('wc_checkout_path', "/inscripciones/");
     const productId = getConfig('wc_product_id', "1483"); 
@@ -26,61 +26,55 @@ serve(async (req) => {
     
     let paymentLink = `${baseUrl}${path}?add-to-cart=${productId}`;
     
-    // Inyección de parámetros redundantes (Shotgun approach para formularios WP)
+    // Inyección Shotgun (Woo + FunnelKit)
     if (lead.nombre && !lead.nombre.includes('Nuevo Lead')) {
         const names = lead.nombre.trim().split(' ');
-        const firstName = names[0];
-        const lastName = names.slice(1).join(' ');
+        const fn = encodeURIComponent(names[0]);
+        const ln = names.length > 1 ? encodeURIComponent(names.slice(1).join(' ')) : "";
         
-        paymentLink += `&billing_first_name=${encodeURIComponent(firstName)}&first_name=${encodeURIComponent(firstName)}&nombre=${encodeURIComponent(firstName)}`;
-        if (lastName) {
-           paymentLink += `&billing_last_name=${encodeURIComponent(lastName)}&last_name=${encodeURIComponent(lastName)}&apellidos=${encodeURIComponent(lastName)}`;
-        }
+        // Estándar + FunnelKit
+        paymentLink += `&billing_first_name=${fn}&wffn_first_name=${fn}&first_name=${fn}`;
+        if (ln) paymentLink += `&billing_last_name=${ln}&wffn_last_name=${ln}&last_name=${ln}`;
     }
     
     if (lead.email) {
-       paymentLink += `&billing_email=${encodeURIComponent(lead.email)}&email=${encodeURIComponent(lead.email)}&correo=${encodeURIComponent(lead.email)}`;
+       const em = encodeURIComponent(lead.email);
+       paymentLink += `&billing_email=${em}&wffn_email=${em}&email=${em}`;
     }
     
     if (lead.telefono) {
-       paymentLink += `&billing_phone=${encodeURIComponent(lead.telefono)}&phone=${encodeURIComponent(lead.telefono)}&telefono=${encodeURIComponent(lead.telefono)}`;
+       const ph = encodeURIComponent(lead.telefono);
+       paymentLink += `&billing_phone=${ph}&wffn_billing_phone=${ph}&phone=${ph}`;
     }
     
     if (lead.ciudad) {
-       paymentLink += `&billing_city=${encodeURIComponent(lead.ciudad)}&city=${encodeURIComponent(lead.ciudad)}&ciudad=${encodeURIComponent(lead.ciudad)}`;
+       const ct = encodeURIComponent(lead.ciudad);
+       paymentLink += `&billing_city=${ct}&wffn_billing_city=${ct}&city=${ct}`;
     }
 
     const bankInfo = `Banco: ${getConfig('bank_name')}\nCuenta: ${getConfig('bank_account')}\nCLABE: ${getConfig('bank_clabe')}\nTitular: ${getConfig('bank_holder')}`;
 
-    // 3. Cargar el resto del contexto
     const pAlma = getConfig('prompt_alma_samurai');
     const pAdn = getConfig('prompt_adn_core');
     const pEstrategia = getConfig('prompt_estrategia_cierre');
-    const pRelearning = getConfig('prompt_relearning');
 
     const systemPrompt = `
-INSTRUCCIÓN CONSTITUCIONAL: Sigue estrictamente estos bloques.
-
-=== 1. ALMA DE SAMURAI ===
+=== ALMA & ESTRATEGIA ===
 ${pAlma}
-
-=== 2. ADN CORE (Personalidad) ===
 ${pAdn}
-
-=== 3. ESTRATEGIA DE CIERRE ===
 ${pEstrategia}
 
-=== DATOS DEL CLIENTE (PARA EL LINK) ===
+=== DATOS DEL CLIENTE ===
 - Nombre: ${lead.nombre || 'Desconocido'}
 - Ciudad: ${lead.ciudad || 'No proporcionada'}
 - Email: ${lead.email || 'No proporcionado'}
 
-=== DATOS FINANCIEROS (SISTEMA) ===
-Usa este link SOLAMENTE si el cliente ya te dio su Email y Ciudad:
-- Link de Inscripción (Auto-rellenable): ${paymentLink}
+=== DATOS FINANCIEROS (FUNNELKIT READY) ===
+Usa este link exacto (Ya incluye parámetros de auto-rellenado):
+- Link de Inscripción: ${paymentLink}
 - Datos Transferencia: \n${bankInfo}
 
-[REGLA CRÍTICA]: Nunca inventes un link. Usa el de arriba. Los parámetros añadidos al final (&first_name, etc) sirven para que el cliente no tenga que escribir sus datos de nuevo.
+[REGLA]: Entrega el link completo. No preguntes datos que ya tienes.
 `;
 
     return new Response(JSON.stringify({ system_prompt: systemPrompt }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
