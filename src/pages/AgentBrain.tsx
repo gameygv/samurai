@@ -51,40 +51,6 @@ const AgentBrain = () => {
   const [simProfile, setSimProfile] = useState('NORMAL');
   const simScrollRef = useRef<HTMLDivElement>(null);
 
-  // --- TEXTOS MAESTROS POR DEFECTO (RESCATADOS DEL SISTEMA ORIGINAL) ---
-  const defaultAlma = `Eres Sam, Asistente Digital del equipo de The Elephant Bowl, la inteligencia avanzada y guardián de la sabiduría de Geoffrey Torkington. 
-Tu propósito es guiar a los prospectos en un viaje de transformación a través del sonido y lograr que reserven su lugar en los próximos talleres.
-No eres un bot genérico: eres parte del equipo. Nunca uses frases como "soy un modelo de lenguaje".
-Tu objetivo central es informar, enamorar y convencer al cliente de comprar el anticipo del próximo taller cercano a su ciudad.`;
-
-  const defaultADN = `Cálido, profesional y con sabiduría: Eres seguro, nunca apresurado.
-Empatía adaptativa: Si el cliente está estresado -> baja el ritmo y sé comprensivo. Si es pragmático -> sé directo y claro.
-Venta consultiva: Asesoras, no informas. Cada respuesta siembra curiosidad por el curso o los instrumentos.
-Usa emojis con moderación para dar calidez (🧘‍♂️, ✨, 🐘).`;
-
-  const defaultCierre = `OBJETIVO PRINCIPAL: Cobrar un anticipo de $1,500 MXN para reservar su lugar.
-REGLA DE ORO: ¡Nunca sueltes información de pagos, fechas exactas o precios en tu primer mensaje!
-
-FASE 1 (DATA HUNTING):
-- Tu primer objetivo es SIEMPRE preguntar y obtener el NOMBRE y la CIUDAD DE ORIGEN del cliente de forma amable.
-
-FASE 2 (SEDUCCIÓN Y POSTER):
-- Una vez que tengas su ciudad, revisa el Media Manager. Si hay un taller en su ciudad, envíale el póster correspondiente usando el código de imagen.
-
-FASE 3 (CIERRE FINANCIERO):
-- Cuando el cliente pregunte cómo pagar o muestre interés sólido, PIDE SU EMAIL. Es indispensable antes de cobrar.
-- Una vez que tengas su Email, ofrécele pagar el anticipo de $1,500 MXN dándole dos opciones:
-  1) Link de Tarjeta/PayPal (Pre-rellenado de WooCommerce).
-  2) Depósito/Transferencia manual a los datos bancarios.
-
-REACTIVACIÓN:
-- Si el cliente deja de responder por horas, debes llevar un seguimiento sutil, preguntando si pudo revisar la información y si le gustaría asegurar su lugar antes de que se agote.`;
-
-  const defaultVision = `Analiza esta imagen con extremo detalle y precisión.
-Si es un POSTER PROMOCIONAL: Extrae el Título del evento, Fechas exactas, Ciudad, Precios y Ubicación.
-Si es un COMPROBANTE DE PAGO (Recibo, Transferencia, Screenshot bancario): Extrae el Banco origen/destino, Monto transferido, Fecha de la operación, Nombre del emisor y Número de Referencia o Clave de Rastreo.
-Responde estrictamente en texto plano estructurado.`;
-
   useEffect(() => { fetchPrompts(); fetchVersions(); }, []);
   useEffect(() => { if (tunerScrollRef.current) tunerScrollRef.current.scrollIntoView({ behavior: 'smooth' }); }, [tunerMessages, tuning]);
   useEffect(() => { if (simScrollRef.current) simScrollRef.current.scrollIntoView({ behavior: 'smooth' }); }, [simMessages, simulating]);
@@ -92,16 +58,11 @@ Responde estrictamente en texto plano estructurado.`;
   const fetchPrompts = async () => {
     setLoading(true);
     const { data } = await supabase.from('app_config').select('key, value').eq('category', 'PROMPT');
-    const p: any = {};
-    if (data) data.forEach(item => p[item.key] = item.value);
-    
-    // Auto-rellenar si están vacíos
-    if (!p['prompt_alma_samurai']) p['prompt_alma_samurai'] = defaultAlma;
-    if (!p['prompt_adn_core']) p['prompt_adn_core'] = defaultADN;
-    if (!p['prompt_estrategia_cierre']) p['prompt_estrategia_cierre'] = defaultCierre;
-    if (!p['prompt_vision_instrucciones']) p['prompt_vision_instrucciones'] = defaultVision;
-    
-    setPrompts(p);
+    if (data) {
+        const p: any = {};
+        data.forEach(item => p[item.key] = item.value);
+        setPrompts(p);
+    }
     handleRefreshMaster();
     setLoading(false);
   };
@@ -135,7 +96,7 @@ Responde estrictamente en texto plano estructurado.`;
         notes: 'Snapshot guardado desde el panel'
       });
 
-      toast.success('Cambios aplicados y snapshot creado exitosamente.');
+      toast.success('Cambios aplicados y snapshot creado.');
       setIsSaveDialogOpen(false);
       setSnapshotName('');
       handleRefreshMaster();
@@ -145,6 +106,7 @@ Responde estrictamente en texto plano estructurado.`;
     }
   };
 
+  // --- SIMULATOR ---
   const handleSimulateSubmit = async () => {
      if (!simInput.trim()) return;
      const userText = simInput;
@@ -162,16 +124,23 @@ Responde estrictamente en texto plano estructurado.`;
   const handleReportSimError = async (userMsg: string, aiRes: string) => {
      const instruction = prompt("¿Qué debería haber respondido o qué instrucción de #CIA quieres inyectar?");
      if (!instruction) return;
+
      const tid = toast.loading("Inyectando lección en Bitácora...");
      try {
         await supabase.from('errores_ia').insert({
-            mensaje_cliente: `SIMULACIÓN: ${userMsg}`, respuesta_ia: aiRes,
-            correccion_sugerida: instruction, categoria: 'CONDUCTA', estado_correccion: 'REPORTADA'
+            mensaje_cliente: `SIMULACIÓN: ${userMsg}`,
+            respuesta_ia: aiRes,
+            correccion_sugerida: instruction,
+            categoria: 'CONDUCTA',
+            estado_correccion: 'REPORTADA'
         });
         toast.success("Lección enviada a la Bitácora para validación.", { id: tid });
-     } catch (err) { toast.error("Error al reportar", { id: tid }); }
+     } catch (err) {
+        toast.error("Error al reportar", { id: tid });
+     }
   };
 
+  // --- LABORATORY ---
   const handlePasteImage = (e: React.ClipboardEvent) => {
     const item = Array.from(e.clipboardData.items).find(x => x.type.indexOf('image') !== -1);
     if (item) {
@@ -193,7 +162,7 @@ Responde estrictamente en texto plano estructurado.`;
           const result = data.result;
           setTunerMessages(prev => [...prev, { role: 'assistant', text: result.message }]);
           setPrompts({ ...prompts, ...result.prompts });
-          toast.success("¡Prompts regenerados! Revisa las pestañas y guarda el snapshot.");
+          toast.success("¡Prompts regenerados! Revisa las pestañas.");
       } finally {
           setTuning(false);
       }

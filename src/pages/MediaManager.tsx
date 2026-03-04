@@ -26,6 +26,7 @@ const MediaManager = () => {
   const [title, setTitle] = useState('');
   const [instructions, setInstructions] = useState('');
   const [category, setCategory] = useState('POSTER');
+  const [ocrContent, setOcrContent] = useState('');
 
   useEffect(() => {
     fetchAssets();
@@ -115,6 +116,7 @@ const MediaManager = () => {
      setTitle(asset.title || '');
      setInstructions(asset.ai_instructions || '');
      setCategory(asset.category || 'POSTER');
+     setOcrContent(asset.ocr_content || '');
      setIsEditOpen(true);
   };
 
@@ -127,7 +129,8 @@ const MediaManager = () => {
            .update({
               title,
               ai_instructions: instructions,
-              category
+              category,
+              ocr_content: ocrContent
            })
            .eq('id', selectedAsset.id);
         
@@ -297,9 +300,12 @@ const MediaManager = () => {
              </div>
              <div className="space-y-2">
                 <Label className="flex items-center gap-2">Contenido de la Imagen (OCR) <Info className="w-3 h-3 text-slate-500" /></Label>
-                <div className="bg-black/50 border border-slate-800 rounded p-4 text-[10px] text-slate-400 font-mono h-32 overflow-y-auto leading-relaxed">
-                   {selectedAsset?.ocr_content || "Usa el botón 'Analizar OCR' en la tarjeta para extraer texto automáticamente."}
-                </div>
+                <Textarea 
+                    value={ocrContent} 
+                    onChange={e => setOcrContent(e.target.value)} 
+                    placeholder="Contenido detectado..."
+                    className="bg-black/50 border border-slate-800 rounded p-4 text-[10px] text-slate-400 font-mono h-32 leading-relaxed" 
+                />
              </div>
           </div>
           <DialogFooter>

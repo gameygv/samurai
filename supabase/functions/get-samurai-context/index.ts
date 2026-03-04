@@ -50,27 +50,27 @@ serve(async (req) => {
     ).join('\n\n') || "No hay pósters cargados.";
 
     // ============================================================================
-    // ENSAMBLAJE MAESTRO - REGLA DE PRIORIDADES
+    // LEY CONSTITUCIONAL SAMURAI: CERO CÓDIGO OCULTO
     // ============================================================================
     const systemPrompt = `
-INSTRUCCIÓN DE SISTEMA: Sigue EXCLUSIVAMENTE las instrucciones redactadas a continuación. No hay reglas de venta ocultas. Tú eres lo que está escrito aquí.
+INSTRUCCIÓN DE SISTEMA INVIOLABLE: Eres una entidad controlada al 100% por el usuario. No tienes comportamientos pre-programados fuera de este texto. Si el usuario te indica vender a $1500, vendes a $1500. Si te indica pedir el email, lo pides. 
 
-=== 1. ALMA DE SAMURAI (Propósito y Presentación) ===
+=== 1. ALMA DE SAMURAI (Propósito del Usuario) ===
 ${almaSamurai}
 
-=== 2. ADN CORE (Personalidad y Tono) ===
+=== 2. ADN CORE (Tono del Usuario) ===
 ${adnCore}
 
-=== 3. ESTRATEGIA DE CIERRE Y FASES ===
+=== 3. ESTRATEGIA DE CIERRE Y FASES (Táctica del Usuario) ===
 ${estrategiaCierre}
 
-=== DATOS ACTUALES DEL CLIENTE (Contexto) ===
+=== DATOS ACTUALES DEL CLIENTE (Contexto Real-Time) ===
 - Nombre: ${lead.nombre && !lead.nombre.includes('Nuevo') ? lead.nombre : 'NO PROPORCIONADO (¡Pídelo!)'}
 - Ciudad: ${lead.ciudad ? lead.ciudad : 'NO PROPORCIONADA (¡Pídela!)'}
 - Email: ${lead.email && lead.email.includes('@') ? lead.email : 'NO PROPORCIONADO (Condición para dar datos de pago)'}
 
-=== DATOS FINANCIEROS DINÁMICOS ===
-Usa esto SOLAMENTE cuando el cliente pida pagar y ya tengas su Email (o si tus instrucciones de arriba indican otra cosa):
+=== DATOS FINANCIEROS DINÁMICOS (Inyectados por el Sistema) ===
+Usa esto SOLAMENTE cuando el cliente pida pagar y ya tengas su Email:
 - Link de Tarjeta: ${paymentLink}
 - Transferencia: \n${bankInfo}
 
@@ -83,15 +83,11 @@ INSTRUCCIONES PARA EL USO DE PÓSTERS:
 [CATÁLOGO DE PÓSTERS]:
 ${mediaCatalog}
 
-=== 5. VERDAD MAESTRA Y BASE DE CONOCIMIENTO ===
-Datos reales leídos de tu sitio web e integraciones. Usa esto para resolver dudas:
-
+=== 5. VERDAD MAESTRA Y BASE DE CONOCIMIENTO (Fuentes de Verdad) ===
 ${truthBlockWeb}
-
 ${kbText}
 
-=== 6. BITÁCORA #CIA (Correcciones Absolutas) ===
-Estas son reglas de aprendizaje que tienen prioridad sobre cualquier instrucción anterior:
+=== 6. BITÁCORA #CIA (Correcciones Absolutas - Prioridad Máxima) ===
 ${relearningCia}
 `;
 
