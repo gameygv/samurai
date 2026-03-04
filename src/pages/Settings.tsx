@@ -2,13 +2,14 @@ import React, { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import Layout from '@/components/Layout';
 import { supabase } from '@/integrations/supabase/client';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Webhook, Key, Save, Loader2, ShoppingCart, Clock, Zap, DollarSign, Target, Link as LinkIcon, Building2, Brain, Store, Hash, PlayCircle, MessageCircle, Send } from 'lucide-react';
+import { Webhook, Key, Save, Loader2, ShoppingCart, Clock, Zap, DollarSign, Target, Link as LinkIcon, Building2, Brain, Store, Hash, PlayCircle, MessageCircle, Send, CheckCircle2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { sendEvolutionMessage } from '@/utils/messagingService';
 
 const Settings = () => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -18,6 +19,10 @@ const Settings = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [runningFollowup, setRunningFollowup] = useState(false);
+  
+  // Test Evolution State
+  const [testPhone, setTestPhone] = useState('');
+  const [testingEvo, setTestingEvo] = useState(false);
 
   useEffect(() => { fetchAllData(); }, []);
 
@@ -70,6 +75,28 @@ const Settings = () => {
      }
   };
 
+  const handleTestEvolution = async () => {
+    if (!testPhone) {
+        toast.error("Ingresa un número de teléfono con código de país (ej: 521...).");
+        return;
+    }
+    setTestingEvo(true);
+    const tid = toast.loading("Conectando con Evolution API...");
+    try {
+        const apiResponse = await sendEvolutionMessage(testPhone, "🤖 *Prueba de Sistema Samurai*\n¡La conexión de salida con Evolution API está funcionando perfectamente!");
+        
+        if (apiResponse) {
+           toast.success("¡Mensaje entregado a la API! Revisa el WhatsApp de destino.", { id: tid });
+        } else {
+           toast.error("La API falló o rechazó la petición. Revisa tus credenciales.", { id: tid });
+        }
+    } catch (err: any) {
+        toast.error(`Error de conexión: ${err.message}`, { id: tid });
+    } finally {
+        setTestingEvo(false);
+    }
+  };
+
   const getValue = (key: string) => configs.find(c => c.key === key)?.value || '';
 
   if (loading) return <Layout><div className="flex h-[80vh] items-center justify-center"><Loader2 className="animate-spin text-indigo-600 w-10 h-10" /></div></Layout>;
@@ -97,7 +124,7 @@ const Settings = () => {
           </TabsList>
 
           <TabsContent value="ventas" className="mt-6 space-y-6">
-             {/* REACTIVACIÓN (NUEVO) */}
+             {/* REACTIVACIÓN */}
              <Card className="bg-slate-900 border-slate-800 border-l-4 border-l-blue-500">
                 <CardHeader>
                    <CardTitle className="text-white flex items-center gap-2">
@@ -125,7 +152,7 @@ const Settings = () => {
                 </CardContent>
              </Card>
 
-             {/* CIERRE DE VENTAS (EXISTENTE) */}
+             {/* CIERRE DE VENTAS */}
              <Card className="bg-slate-900 border-slate-800 border-l-4 border-l-orange-500">
                 <CardHeader>
                    <div className="flex justify-between items-center">
@@ -163,32 +190,60 @@ const Settings = () => {
           </TabsContent>
 
           <TabsContent value="mensajeria" className="mt-6 space-y-6">
-            <Card className="bg-slate-900 border-slate-800 border-l-4 border-l-green-500">
+            <Card className="bg-slate-900 border-slate-800 border-l-4 border-l-green-500 shadow-2xl">
               <CardHeader>
                 <CardTitle className="text-white flex items-center gap-2"><Send className="w-5 h-5 text-green-500" /> Evolution API (WhatsApp Directo)</CardTitle>
-                <CardDescription>Conexión directa para envío de mensajes. Esto reemplaza a Make.com.</CardDescription>
+                <CardDescription>Conexión directa para envío de mensajes.</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label>URL de la API (incluyendo instancia)</Label>
-                  <Input value={getValue('evolution_api_url')} onChange={e => handleInputChange('evolution_api_url', e.target.value, 'EVOLUTION')} placeholder="http://tu_vps:8080/message/sendText/instance_name" className="bg-slate-950" />
+              <CardContent className="space-y-6">
+                <div className="space-y-4 bg-slate-950/50 p-4 rounded-xl border border-slate-800">
+                   <div className="space-y-2">
+                     <Label className="text-indigo-400">URL de la API (incluyendo instancia)</Label>
+                     <Input value={getValue('evolution_api_url')} onChange={e => handleInputChange('evolution_api_url', e.target.value, 'EVOLUTION')} placeholder="http://tu_vps:8080/message/sendText/instance_name" className="bg-slate-950 border-slate-700" />
+                     <p className="text-[10px] text-slate-500">Ejemplo: <code className="text-slate-400">https://api.tu-dominio.com/message/sendText/samurai</code></p>
+                   </div>
+                   <div className="space-y-2">
+                     <Label className="text-indigo-400">Global API Key</Label>
+                     <Input type="password" value={getValue('evolution_api_key')} onChange={e => handleInputChange('evolution_api_key', e.target.value, 'EVOLUTION')} className="bg-slate-950 border-slate-700" />
+                   </div>
                 </div>
-                <div className="space-y-2">
-                  <Label>API Key</Label>
-                  <Input type="password" value={getValue('evolution_api_key')} onChange={e => handleInputChange('evolution_api_key', e.target.value, 'EVOLUTION')} className="bg-slate-950" />
+
+                <div className="bg-green-500/10 border border-green-500/20 p-4 rounded-xl space-y-4">
+                   <div className="flex items-center justify-between">
+                      <div>
+                         <h4 className="text-sm font-bold text-green-500 flex items-center gap-2">
+                            <CheckCircle2 className="w-4 h-4" /> Diagnóstico de Conexión
+                         </h4>
+                         <p className="text-[10px] text-slate-400">Envía un mensaje de prueba para validar que la URL y la Key son correctas.</p>
+                      </div>
+                   </div>
+                   <div className="flex gap-2">
+                      <Input 
+                         value={testPhone} 
+                         onChange={e => setTestPhone(e.target.value)} 
+                         placeholder="Teléfono con código de país (ej: 521...)" 
+                         className="bg-slate-950 border-green-500/30 text-white"
+                      />
+                      <Button onClick={handleTestEvolution} disabled={testingEvo} className="bg-green-600 hover:bg-green-700 w-32 shrink-0">
+                         {testingEvo ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Probar Envío'}
+                      </Button>
+                   </div>
                 </div>
               </CardContent>
             </Card>
+
             <Card className="bg-slate-900 border-slate-800">
               <CardHeader>
-                <CardTitle className="text-white flex items-center gap-2"><Webhook className="w-5 h-5" /> Webhooks (Opcional)</CardTitle>
-                <CardDescription>Para integraciones externas como Make.com (si aún se requiere).</CardDescription>
+                <CardTitle className="text-white flex items-center gap-2"><Webhook className="w-5 h-5" /> Webhook (Entrada de Mensajes)</CardTitle>
+                <CardDescription>Esta es la URL que debes pegar dentro de Evolution API para que Samurai escuche los mensajes.</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
-                 <div className="space-y-2">
-                    <Label>Webhook de Salida (Make.com)</Label>
-                    <Input value={getValue('webhook_sale')} onChange={e => handleInputChange('webhook_sale', e.target.value, 'WEBHOOK')} className="bg-slate-950" />
+              <CardContent>
+                 <div className="p-3 bg-black rounded border border-slate-800 flex items-center justify-between">
+                    <code className="text-xs text-emerald-400 select-all">
+                       https://giwoovmvwlddaizorizk.supabase.co/functions/v1/evolution-webhook
+                    </code>
                  </div>
+                 <p className="text-[10px] text-slate-500 mt-2">Asegúrate de que en Evolution API, el Webhook esté configurado para enviar el evento <strong className="text-slate-300">messages.upsert</strong>.</p>
               </CardContent>
            </Card>
           </TabsContent>
@@ -282,18 +337,6 @@ const Settings = () => {
                         className="bg-slate-950 border-slate-800"
                       />
                       <p className="text-[10px] text-slate-500">Motor de visión para Ojo de Halcón y Posters.</p>
-                   </div>
-                   
-                   <div className="space-y-2">
-                      <Label className="flex items-center gap-2 text-slate-400">
-                         <Brain className="w-4 h-4" /> Gemini API Key (Analítica Secundaria)
-                      </Label>
-                      <Input 
-                        type="password" 
-                        value={getValue('gemini_api_key')} 
-                        onChange={e => handleInputChange('gemini_api_key', e.target.value, 'SECRET')} 
-                        className="bg-slate-950 border-slate-800"
-                      />
                    </div>
                 </CardContent>
              </Card>
