@@ -129,16 +129,16 @@ serve(async (req) => {
 
     if (lead.ai_paused) return new Response('AI Paused');
 
-    // CEREBRO IA: Inyectamos el objeto Lead para que se genere el link autorellenado y chequee el correo
     const { data: kernelData } = await supabaseClient.functions.invoke('get-samurai-context', {
         body: { lead: lead }
     });
     
+    // INCREMENTAMOS LA MEMORIA A 40 MENSAJES PARA EVITAR AMNESIA
     const { data: historyMsgsRaw } = await supabaseClient.from('conversaciones')
         .select('emisor, mensaje')
         .eq('lead_id', lead.id)
         .order('created_at', { ascending: false })
-        .limit(15);
+        .limit(40);
 
     const historyMsgs = historyMsgsRaw ? historyMsgsRaw.reverse() : [];
 
@@ -148,11 +148,14 @@ serve(async (req) => {
     const validCity = lead.ciudad ? lead.ciudad : 'NO_PROPORCIONADA_AUN';
     const validEmail = lead.email ? lead.email : 'NO_PROPORCIONADO_AUN';
 
+    // REGLA ESTRICTA ANTI-AMNESIA Y ANTI-BOT INYECTADA EN EL CORE DEL WEBHOOK
     const dynamicSystemPrompt = `
 ${kernelData?.system_prompt}
 
---- EXTREMADAMENTE IMPORTANTE: MEMORIA A CORTO PLAZO ---
-No le vuelvas a preguntar datos que ya tienes listados abajo.
+--- EXTREMADAMENTE IMPORTANTE: MEMORIA Y CONCIENCIA ---
+1. Tienes acceso total al historial de esta conversación (los mensajes anteriores están justo abajo). NUNCA digas "no tengo registros", "no recuerdo" o "no tengo acceso a conversaciones previas". Lee el contexto y fluye de forma continua.
+2. ERES PARTE DEL EQUIPO. Nunca digas "soy un bot", "soy una inteligencia artificial" o "no soy humano". Eres Sam, el asistente digital oficial de The Elephant Bowl.
+3. Datos ya obtenidos (NO los vuelvas a pedir si ya tienen un valor real):
 - NOMBRE DEL CLIENTE: ${validName}
 - CIUDAD: ${validCity}
 - EMAIL: ${validEmail}
@@ -188,17 +191,32 @@ No le vuelvas a preguntar datos que ya tienes listados abajo.
     if (evoUrl && evoKey) {
         try {
             if (mediaUrl) {
-                let sendMediaUrl = evoUrl.replace('sendText', 'sendMedia');
+                // ESTRUCTURA CORREGIDA PARA EVOLUTION API V1/V2
+                let sendMediaUrl = evoUrl.replace('message/sendText', 'message/sendMedia');
+                if (sendMediaUrl === evoUrl) sendMediaUrl = evoUrl.replace('sendText', 'sendMedia'); // Fallback manual
+                
                 await fetch(sendMediaUrl, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'apikey': evoKey },
-                    body: JSON.stringify({ number: phone, mediatype: "image", media: mediaUrl, caption: textToSend, delay: 1000 })
+                    body: JSON.stringify({ 
+                        number: phone, 
+                        options: { delay: 1500, presence: 'composing' },
+                        mediaMessage: {
+                            mediatype: "image", 
+                            media: mediaUrl, 
+                            caption: textToSend 
+                        }
+                    })
                 });
             } else {
                 await fetch(evoUrl, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'apikey': evoKey },
-                    body: JSON.stringify({ number: phone, text: textToSend, delay: 1000 })
+                    body: JSON.stringify({ 
+                        number: phone, 
+                        options: { delay: 1500, presence: 'composing' },
+                        textMessage: { text: textToSend } 
+                    })
                 });
             }
             const logMsg = mediaUrl ? `[IMG: ${mediaUrl}] ${rawAnswer}` : rawAnswer;
