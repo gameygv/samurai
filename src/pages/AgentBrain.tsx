@@ -12,7 +12,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { 
   Save, Bot, Eye as EyeIcon, Zap, Loader2, Terminal, BrainCircuit, Target, 
-  GitBranch, User, RefreshCcw, Layers, History, RotateCcw, Trash2, Send, Image as ImageIcon, Sparkles, X, Fingerprint
+  GitBranch, User, RefreshCcw, Layers, History, RotateCcw, Trash2, Send, Image as ImageIcon, Sparkles, X, Fingerprint, MessageSquare
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -36,7 +36,13 @@ const AgentBrain = () => {
   const [tunerInput, setTunerInput] = useState('');
   const [tunerImage, setTunerImage] = useState<string | null>(null);
   const [tuning, setTuning] = useState(false);
-  const chatScrollRef = useRef<HTMLDivElement>(null);
+  const tunerScrollRef = useRef<HTMLDivElement>(null);
+
+  // Simulator State
+  const [simMessages, setSimMessages] = useState<{role: string, text: string, explanation?: any}[]>([]);
+  const [simInput, setSimInput] = useState('');
+  const [simulating, setSimulating] = useState(false);
+  const simScrollRef = useRef<HTMLDivElement>(null);
 
   const defaultAlma = "Eres el asistente digital del equipo de The Elephant Bowl, la inteligencia avanzada y guardián de la sabiduría de Geoffrey Torkington. Tu propósito no es solo responder dudas, sino guiar a los prospectos en un viaje de transformación a través del sonido.\n\nTe presentas amablemente como 'Sam'. La idea es llevar al cliente al link de compra, vendiendo una reservación de $1500 MXN.";
   const defaultEstrategia = "FASE 1 (DATA HUNTING):\nNo sueltes precios sin pedir antes el Nombre y la Ciudad de la persona.\n\nFASE 2 (SEDUCCIÓN):\nUsa la ciudad para enviar el póster más cercano del Media Manager.\n\nFASE 3 (CIERRE):\nEl anticipo es de $1,500 MXN. Ofrece el link de pago o los datos bancarios. REGLA ABSOLUTA: Solo da el link o datos si ya tienes el EMAIL del cliente.\n\nREACTIVACIÓN:\nSi el cliente dejó de responder, pregúntale amablemente si pudo revisar la información y si tiene dudas.";
@@ -47,10 +53,12 @@ const AgentBrain = () => {
   }, []);
 
   useEffect(() => {
-    if (chatScrollRef.current) {
-        chatScrollRef.current.scrollIntoView({ behavior: 'smooth' });
-    }
+    if (tunerScrollRef.current) tunerScrollRef.current.scrollIntoView({ behavior: 'smooth' });
   }, [tunerMessages, tuning]);
+
+  useEffect(() => {
+    if (simScrollRef.current) simScrollRef.current.scrollIntoView({ behavior: 'smooth' });
+  }, [simMessages, simulating]);
 
   const fetchPrompts = async () => {
     setLoading(true);
@@ -111,6 +119,30 @@ const AgentBrain = () => {
     }
   };
 
+  // --- SIMULATOR FUNCTIONS ---
+  const handleSimulateSubmit = async () => {
+     if (!simInput.trim()) return;
+     
+     const userText = simInput;
+     setSimMessages(prev => [...prev, { role: 'user', text: userText }]);
+     setSimInput('');
+     setSimulating(true);
+
+     try {
+        const { data, error } = await supabase.functions.invoke('simulate-samurai', {
+           body: { question: userText }
+        });
+        if (error) throw error;
+        
+        setSimMessages(prev => [...prev, { role: 'assistant', text: data.answer, explanation: data.explanation }]);
+     } catch (err: any) {
+        toast.error(err.message);
+        setSimMessages(prev => [...prev, { role: 'assistant', text: `Error: ${err.message}` }]);
+     } finally {
+        setSimulating(false);
+     }
+  };
+
   // --- META TUNER FUNCTIONS ---
   const handlePasteImage = (e: React.ClipboardEvent) => {
     const items = e.clipboardData.items;
@@ -151,21 +183,15 @@ const AgentBrain = () => {
 
       try {
           const { data, error } = await supabase.functions.invoke('tune-samurai-prompts', {
-              body: {
-                  messages: currentHistory,
-                  currentPrompts: prompts
-              }
+              body: { messages: currentHistory, currentPrompts: prompts }
           });
 
           if (error) throw new Error(error.message);
           if (data.error) throw new Error(data.error);
 
           const result = data.result;
-          
-          // Actualizar el historial del chat
           setTunerMessages(prev => [...prev, { role: 'assistant', text: result.message }]);
 
-          // Aplicar los nuevos prompts a las cajas de texto!
           setPrompts({
               ...prompts,
               prompt_alma_samurai: result.prompts.prompt_alma_samurai,
@@ -194,12 +220,8 @@ const AgentBrain = () => {
      if (!confirm("¿Eliminar este Snapshot del historial?")) return;
      setLoadingVersions(true);
      try {
-        const { error, data } = await supabase.functions.invoke('manage-prompt-versions', {
-           body: { action: 'DELETE', id }
-        });
+        const { error, data } = await supabase.functions.invoke('manage-prompt-versions', { body: { action: 'DELETE', id } });
         if (error) throw error;
-        if (data?.error) throw new Error(data.error);
-        
         toast.success("Snapshot eliminado exitosamente.");
         fetchVersions();
      } catch (err: any) { 
@@ -212,12 +234,8 @@ const AgentBrain = () => {
      if (!confirm("⚠️ ADVERTENCIA: Esto borrará TODOS los snapshots de la base de datos. La configuración actual NO se perderá. ¿Continuar?")) return;
      setLoadingVersions(true);
      try {
-        const { error, data } = await supabase.functions.invoke('manage-prompt-versions', {
-           body: { action: 'PURGE' }
-        });
+        const { error, data } = await supabase.functions.invoke('manage-prompt-versions', { body: { action: 'PURGE' } });
         if (error) throw error;
-        if (data?.error) throw new Error(data.error);
-
         toast.success("Historial purgado desde cero.");
         fetchVersions();
      } catch (err: any) { 
@@ -248,8 +266,9 @@ const AgentBrain = () => {
              <TabsTrigger value="identidad" className="gap-2"><User className="w-4 h-4"/> 2. ADN & Cierre</TabsTrigger>
              <TabsTrigger value="versiones" className="gap-2"><GitBranch className="w-4 h-4"/> 3. Snapshots</TabsTrigger>
              <TabsTrigger value="ojo_halcon" className="gap-2"><EyeIcon className="w-4 h-4"/> 4. Ojo de Halcón</TabsTrigger>
-             <TabsTrigger value="tuner" className="gap-2 bg-gradient-to-r data-[state=active]:from-indigo-600 data-[state=active]:to-purple-600 data-[state=active]:text-white transition-all"><Sparkles className="w-4 h-4 text-yellow-400"/> 5. Laboratorio IA</TabsTrigger>
-             <TabsTrigger value="debug" className="gap-2"><Terminal className="w-4 h-4"/> 6. Kernel Debug</TabsTrigger>
+             <TabsTrigger value="simulador" className="gap-2"><MessageSquare className="w-4 h-4"/> 5. Simulador</TabsTrigger>
+             <TabsTrigger value="tuner" className="gap-2 bg-gradient-to-r data-[state=active]:from-indigo-600 data-[state=active]:to-purple-600 data-[state=active]:text-white transition-all"><Sparkles className="w-4 h-4 text-yellow-400"/> 6. Laboratorio IA</TabsTrigger>
+             <TabsTrigger value="debug" className="gap-2"><Terminal className="w-4 h-4"/> 7. Kernel Debug</TabsTrigger>
           </TabsList>
 
           <TabsContent value="alma" className="grid grid-cols-1 lg:grid-cols-2 gap-8 animate-in fade-in-50">
@@ -283,14 +302,14 @@ const AgentBrain = () => {
                       <TableHeader><TableRow className="border-slate-800"><TableHead className="pl-6">Snapshot</TableHead><TableHead>Fecha</TableHead><TableHead className="text-right pr-6">Acción</TableHead></TableRow></TableHeader>
                       <TableBody>
                          {loadingVersions ? <TableRow><TableCell colSpan={3} className="text-center py-10"><Loader2 className="animate-spin mx-auto text-indigo-500"/></TableCell></TableRow> : 
-                          versions.length === 0 ? <TableRow><TableCell colSpan={3} className="text-center py-10 text-slate-500 italic">No hay historial. Guarda un snapshot para empezar.</TableCell></TableRow> :
+                          versions.length === 0 ? <TableRow><TableCell colSpan={3} className="text-center py-10 text-slate-500 italic">No hay historial.</TableCell></TableRow> :
                           versions.map(v => (
                             <TableRow key={v.id} className="border-slate-800 hover:bg-slate-800/30 transition-colors">
                                <TableCell className="font-mono text-indigo-400 text-xs pl-6">{v.version_name}</TableCell>
                                <TableCell className="text-slate-500 text-xs">{new Date(v.created_at).toLocaleString()}</TableCell>
                                <TableCell className="text-right pr-6">
                                   <div className="flex justify-end gap-2">
-                                     <Button variant="outline" size="sm" className="h-8 text-[10px] border-slate-700" onClick={() => handleRestoreVersion(v)}><RotateCcw className="w-3 h-3 mr-1" /> RESTAURAR</Button>
+                                     <Button variant="outline" size="sm" className="h-8 text-[10px] border-slate-700 hover:text-white" onClick={() => handleRestoreVersion(v)}><RotateCcw className="w-3 h-3 mr-1" /> RESTAURAR</Button>
                                      <Button variant="ghost" size="sm" className="h-8 text-red-500 hover:bg-red-500/10" onClick={() => handleDeleteVersion(v.id)}><Trash2 className="w-4 h-4" /></Button>
                                   </div>
                                </TableCell>
@@ -307,7 +326,67 @@ const AgentBrain = () => {
           </TabsContent>
 
           {/* ======================================================== */}
-          {/* NUEVO: LABORATORIO IA (CHAT CON EL INGENIERO DE PROMPTS) */}
+          {/* SIMULADOR (PRUEBA DE CHAT EN VIVO)                       */}
+          {/* ======================================================== */}
+          <TabsContent value="simulador" className="animate-in fade-in-50 h-[600px] flex flex-col">
+             <Card className="bg-slate-900 border-slate-800 shadow-2xl flex flex-col h-full border-t-4 border-t-blue-500">
+                <CardHeader className="border-b border-slate-800 bg-slate-950/30 py-4 shrink-0">
+                   <CardTitle className="text-white flex items-center gap-2">
+                      <MessageSquare className="w-5 h-5 text-blue-400" /> Simulador de Interacción
+                   </CardTitle>
+                   <CardDescription>Habla con Samurai para probar cómo reacciona con tus prompts actuales guardados.</CardDescription>
+                </CardHeader>
+                <ScrollArea className="flex-1 p-4 bg-black/20">
+                   <div className="space-y-6 max-w-4xl mx-auto">
+                      {simMessages.length === 0 && (
+                          <div className="text-center py-20 text-slate-500">
+                             <Bot className="w-12 h-12 text-slate-700 mx-auto mb-4" />
+                             <p>Escribe un mensaje para probar las respuestas de Sam.</p>
+                          </div>
+                      )}
+                      
+                      {simMessages.map((msg, i) => (
+                          <div key={i} className={cn("flex flex-col gap-2", msg.role === 'user' ? 'items-end' : 'items-start')}>
+                             <div className={cn("max-w-[85%] rounded-2xl p-4 shadow-xl", msg.role === 'user' ? 'bg-indigo-600/20 border border-indigo-500/30 text-indigo-100 rounded-br-sm' : 'bg-slate-950 border border-slate-800 text-slate-300 rounded-bl-sm')}>
+                                <p className="whitespace-pre-wrap text-sm leading-relaxed">{msg.text}</p>
+                             </div>
+                             {msg.explanation && (
+                                <div className="max-w-[80%] bg-slate-900/50 border border-slate-800/50 p-3 rounded-lg text-[10px] ml-4">
+                                   <span className="text-indigo-400 font-bold uppercase block mb-1">Razonamiento (Kernel):</span>
+                                   <span className="text-slate-400 italic">{msg.explanation.reasoning}</span>
+                                </div>
+                             )}
+                          </div>
+                      ))}
+                      {simulating && (
+                          <div className="flex justify-start">
+                             <div className="bg-slate-950 border border-slate-800 rounded-2xl rounded-tl-sm p-4 text-sm text-slate-400 flex items-center gap-3">
+                                <Loader2 className="w-4 h-4 animate-spin text-blue-500" /> Sam está pensando...
+                             </div>
+                          </div>
+                      )}
+                      <div ref={simScrollRef} />
+                   </div>
+                </ScrollArea>
+                <div className="p-4 bg-slate-900 border-t border-slate-800 shrink-0">
+                   <div className="flex gap-2 max-w-4xl mx-auto">
+                      <Input 
+                         value={simInput} 
+                         onChange={e => setSimInput(e.target.value)} 
+                         placeholder="Ej: Hola, quiero info del taller de CDMX..." 
+                         className="bg-slate-950 border-slate-700 h-12"
+                         onKeyDown={e => { if (e.key === 'Enter') handleSimulateSubmit(); }}
+                      />
+                      <Button onClick={handleSimulateSubmit} disabled={simulating || !simInput.trim()} className="h-12 w-12 bg-blue-600 hover:bg-blue-700 shrink-0 rounded-xl">
+                         <Send className="w-5 h-5" />
+                      </Button>
+                   </div>
+                </div>
+             </Card>
+          </TabsContent>
+
+          {/* ======================================================== */}
+          {/* LABORATORIO IA (CHAT CON EL INGENIERO DE PROMPTS)        */}
           {/* ======================================================== */}
           <TabsContent value="tuner" className="animate-in fade-in-50 h-[600px] flex flex-col">
              <Card className="bg-slate-900 border-slate-800 shadow-2xl flex flex-col h-full border-t-4 border-t-purple-500">
@@ -343,7 +422,7 @@ const AgentBrain = () => {
                              </div>
                           </div>
                       )}
-                      <div ref={chatScrollRef} />
+                      <div ref={tunerScrollRef} />
                    </div>
                 </ScrollArea>
                 
