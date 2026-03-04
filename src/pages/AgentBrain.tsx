@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import Layout from '@/components/Layout';
 import { supabase } from '@/integrations/supabase/client';
@@ -13,7 +13,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { 
   Bot, Eye as EyeIcon, Zap, Loader2, Terminal, BrainCircuit, Target, 
-  GitBranch, RefreshCcw, Layers, History, RotateCcw, Send, Sparkles, Fingerprint, MessageSquare, AlertTriangle, Database, ImageIcon, Save
+  GitBranch, RefreshCcw, Layers, History, Send, Fingerprint, MessageSquare, AlertTriangle, Database, ImageIcon, Save
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { PromptEditor } from '@/components/brain/PromptEditor';
@@ -76,7 +76,7 @@ const AgentBrain = () => {
       toast.success("Cerebro actualizado correctamente");
       fetchVersions();
     } catch (err: any) {
-      toast.error("Fallo al guardar: " + err.message);
+      toast.error("Error al guardar: " + err.message);
     } finally {
       setSaving(false);
     }
@@ -93,7 +93,7 @@ const AgentBrain = () => {
            prompts_snapshot: prompts
         });
         if (error) throw error;
-        toast.success("Punto de restauración creado.");
+        toast.success("Snapshot creado.");
         fetchVersions();
      } finally { setSaving(false); }
   };
@@ -135,7 +135,7 @@ const AgentBrain = () => {
     <Layout>
       <div className="max-w-[1600px] mx-auto flex flex-col h-[calc(100vh-140px)] gap-6 overflow-hidden">
         
-        {/* HEADER PRINCIPAL */}
+        {/* HEADER */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 shrink-0 bg-slate-900/50 p-5 rounded-xl border border-slate-800 shadow-xl">
           <div className="flex items-center gap-4">
             <div className="p-3 bg-indigo-600/10 rounded-xl border border-indigo-500/20">
@@ -166,11 +166,14 @@ const AgentBrain = () => {
              <TabsTrigger value="debug" className="gap-2 px-4 py-2"><Terminal className="w-4 h-4"/> 6. Kernel Debug</TabsTrigger>
           </TabsList>
 
-          <div className="flex-1 min-h-0 relative">
+          {/* CONTENEDOR DE CONTENIDO - FLEX-1 PARA LLENAR ESPACIO */}
+          <div className="flex-1 flex flex-col min-h-0 bg-slate-900/20 rounded-xl border border-slate-800/50 p-1">
             
-            <TabsContent value="alma" className="m-0 h-full flex flex-col gap-4">
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 flex-1 min-h-0">
-                  <PromptEditor title="Alma de Samurai" icon={Bot} value={prompts['prompt_alma_samurai']} onChange={v => handlePromptChange('prompt_alma_samurai', v)} />
+            <TabsContent value="alma" className="m-0 h-full flex flex-col data-[state=inactive]:hidden">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 flex-1 min-h-0">
+                  <div className="h-full min-h-0">
+                     <PromptEditor title="Alma de Samurai" icon={Bot} value={prompts['prompt_alma_samurai']} onChange={v => handlePromptChange('prompt_alma_samurai', v)} />
+                  </div>
                   <Card className="bg-slate-900 border-slate-800 border-l-4 border-l-emerald-500 flex flex-col h-full overflow-hidden shadow-2xl">
                     <CardHeader className="shrink-0 py-4 border-b border-slate-800 bg-slate-950/20"><CardTitle className="text-white text-xs uppercase tracking-widest flex items-center gap-2"><Layers className="w-4 h-4 text-emerald-400" /> Jerarquía Técnica</CardTitle></CardHeader>
                     <ScrollArea className="flex-1 p-6">
@@ -186,15 +189,19 @@ const AgentBrain = () => {
                 </div>
             </TabsContent>
 
-            <TabsContent value="identidad" className="m-0 h-full">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 h-full">
-                  <PromptEditor title="ADN Core (Personalidad)" icon={Fingerprint} value={prompts['prompt_adn_core']} onChange={v => handlePromptChange('prompt_adn_core', v)} />
-                  <PromptEditor title="Estrategia de Cierre" icon={Target} value={prompts['prompt_estrategia_cierre']} onChange={v => handlePromptChange('prompt_estrategia_cierre', v)} color="text-blue-400" />
+            <TabsContent value="identidad" className="m-0 h-full data-[state=inactive]:hidden">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 h-full min-h-0">
+                   <div className="h-full min-h-0">
+                      <PromptEditor title="ADN Core (Personalidad)" icon={Fingerprint} value={prompts['prompt_adn_core']} onChange={v => handlePromptChange('prompt_adn_core', v)} />
+                   </div>
+                   <div className="h-full min-h-0">
+                      <PromptEditor title="Estrategia de Cierre" icon={Target} value={prompts['prompt_estrategia_cierre']} onChange={v => handlePromptChange('prompt_estrategia_cierre', v)} color="text-blue-400" />
+                   </div>
                 </div>
             </TabsContent>
 
-            <TabsContent value="versiones" className="m-0 h-full">
-               <Card className="bg-slate-900 border-slate-800 h-full flex flex-col overflow-hidden shadow-2xl">
+            <TabsContent value="versiones" className="m-0 h-full data-[state=inactive]:hidden flex flex-col">
+               <Card className="bg-slate-900 border-slate-800 flex-1 flex flex-col overflow-hidden shadow-2xl">
                   <CardHeader className="shrink-0 border-b border-slate-800 p-6 bg-slate-950/20"><CardTitle className="text-white text-sm flex items-center gap-2 uppercase tracking-widest font-bold"><History className="w-5 h-5 text-indigo-400" /> Snapshots Guardados</CardTitle></CardHeader>
                   <ScrollArea className="flex-1">
                      <Table>
@@ -215,22 +222,22 @@ const AgentBrain = () => {
                </Card>
             </TabsContent>
 
-            <TabsContent value="vision" className="m-0 h-full">
+            <TabsContent value="vision" className="m-0 h-full data-[state=inactive]:hidden">
                 <PromptEditor title="Ojo de Halcón (Instrucciones OCR)" icon={EyeIcon} value={prompts['prompt_vision_instrucciones']} onChange={v => handlePromptChange('prompt_vision_instrucciones', v)} color="text-red-400" />
             </TabsContent>
 
-            <TabsContent value="simulador" className="m-0 flex flex-col h-full gap-4">
+            <TabsContent value="simulador" className="m-0 h-full flex flex-col data-[state=inactive]:hidden">
                 <Card className="bg-slate-950 border-slate-800 flex-1 flex flex-col overflow-hidden shadow-2xl rounded-xl">
                     <CardHeader className="border-b border-slate-800 bg-slate-900/50 py-3 flex items-center justify-between shrink-0 px-6">
                         <CardTitle className="text-white text-xs flex items-center gap-2 uppercase tracking-widest"><MessageSquare className="w-4 h-4 text-blue-400" /> Entorno de Pruebas</CardTitle>
-                        <Button variant="ghost" size="sm" onClick={() => setSimHistory([])} className="h-8 text-[10px] text-slate-500 hover:text-white"><RotateCcw className="w-3 h-3 mr-2"/> Limpiar</Button>
+                        <Button variant="ghost" size="sm" onClick={() => setSimHistory([])} className="h-8 text-[10px] text-slate-500 hover:text-white"><RefreshCcw className="w-3 h-3 mr-2"/> Limpiar</Button>
                     </CardHeader>
                     <ScrollArea className="flex-1 p-6 bg-slate-950">
                        <div className="max-w-4xl mx-auto space-y-6 pb-4">
                           {simHistory.length === 0 && (
                             <div className="text-center py-20">
                                <MessageSquare className="w-12 h-12 text-slate-800 mx-auto mb-4 opacity-20" />
-                               <p className="text-slate-600 italic text-sm">Escribe un mensaje para ver cómo responde Sam con las reglas actuales.</p>
+                               <p className="text-slate-600 italic text-sm">Escribe un mensaje para probar las reglas actuales.</p>
                             </div>
                           )}
                           {simHistory.map((m, i) => (
@@ -242,7 +249,7 @@ const AgentBrain = () => {
                                    <div className="bg-black/40 border border-slate-800 p-4 rounded-xl w-full mt-2 shadow-inner">
                                       <p className="text-[10px] text-emerald-500 font-bold uppercase mb-3 flex items-center gap-2"><Zap className="w-3.5 h-3.5"/> Razonamiento Técnico:</p>
                                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                         <div><p className="text-[9px] text-slate-600 uppercase font-bold mb-2">Capas del Cerebro Usadas</p><div className="flex flex-wrap gap-1.5">{m.explanation.layers_used.map((l:any, idx:number)=>(<Badge key={idx} variant="outline" className="text-[8px] border-slate-700 text-slate-400 bg-slate-900">{l}</Badge>))}</div></div>
+                                         <div><p className="text-[9px] text-slate-600 uppercase font-bold mb-2">Capas Usadas</p><div className="flex flex-wrap gap-1.5">{m.explanation.layers_used.map((l:any, idx:number)=>(<Badge key={idx} variant="outline" className="text-[8px] border-slate-700 text-slate-400 bg-slate-900">{l}</Badge>))}</div></div>
                                          <div><p className="text-[9px] text-slate-600 uppercase font-bold mb-2">Lógica Aplicada</p><p className="text-[10px] text-slate-400 leading-relaxed italic">"{m.explanation.reasoning}"</p></div>
                                       </div>
                                    </div>
@@ -255,19 +262,19 @@ const AgentBrain = () => {
                        <Input 
                          value={simQuestion} 
                          onChange={e => setSimQuestion(e.target.value)} 
-                         placeholder="Escribe como si fueras un cliente..." 
-                         className="bg-slate-950 border-slate-800 text-white h-12 focus-visible:ring-indigo-500" 
+                         placeholder="Escribe un mensaje de cliente..." 
+                         className="bg-slate-950 border-slate-800 text-white h-12" 
                          disabled={simulating} 
                        />
-                       <Button type="submit" disabled={simulating || !simQuestion.trim()} className="bg-indigo-600 hover:bg-indigo-700 shrink-0 h-12 px-6 shadow-lg shadow-indigo-900/40 transition-all">
+                       <Button type="submit" disabled={simulating || !simQuestion.trim()} className="bg-indigo-600 hover:bg-indigo-700 shrink-0 h-12 px-6">
                           {simulating ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
                        </Button>
                     </form>
                 </Card>
             </TabsContent>
 
-            <TabsContent value="debug" className="m-0 h-full">
-                <Card className="bg-slate-900 border-slate-800 shadow-2xl relative h-full flex flex-col overflow-hidden">
+            <TabsContent value="debug" className="m-0 h-full flex flex-col data-[state=inactive]:hidden">
+                <Card className="bg-slate-900 border-slate-800 shadow-2xl relative flex-1 flex flex-col overflow-hidden">
                     <div className="absolute top-4 right-6 z-10">
                        <Button onClick={handleRefreshMaster} variant="outline" className="h-9 text-[10px] border-indigo-500/50 text-indigo-400 bg-slate-950 hover:bg-indigo-500/20 font-bold" disabled={loadingMaster}>
                           {loadingMaster ? <Loader2 className="w-3 h-3 animate-spin mr-2"/> : <RefreshCcw className="w-3 h-3 mr-2"/>} RE-COMPILAR
