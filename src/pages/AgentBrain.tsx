@@ -47,10 +47,9 @@ const AgentBrain = () => {
         const p: any = {};
         data.forEach(item => p[item.key] = item.value);
         
-        // Inyectar defaults si no existen
         if (!p['prompt_alma_samurai']) p['prompt_alma_samurai'] = defaultAlma;
         if (!p['prompt_estrategia_cierre']) p['prompt_estrategia_cierre'] = defaultEstrategia;
-        if (!p['prompt_vision_instrucciones']) p['prompt_vision_instrucciones'] = ""; // Limpio por defecto
+        if (!p['prompt_vision_instrucciones']) p['prompt_vision_instrucciones'] = ""; 
         
         setPrompts(p);
       }
@@ -109,24 +108,38 @@ const AgentBrain = () => {
 
   const handleDeleteVersion = async (id: string) => {
      if (!confirm("¿Eliminar este Snapshot del historial?")) return;
+     setLoadingVersions(true);
      try {
-        await supabase.from('prompt_versions').delete().eq('id', id);
-        toast.success("Snapshot eliminado");
+        const { error, data } = await supabase.functions.invoke('manage-prompt-versions', {
+           body: { action: 'DELETE', id }
+        });
+        if (error) throw error;
+        if (data?.error) throw new Error(data.error);
+        
+        toast.success("Snapshot eliminado exitosamente.");
         fetchVersions();
-     } catch (err) { toast.error("Error al eliminar"); }
+     } catch (err: any) { 
+        toast.error(`Error al eliminar: ${err.message}`); 
+        setLoadingVersions(false);
+     }
   };
 
   const handlePurgeHistory = async () => {
      if (!confirm("⚠️ ADVERTENCIA: Esto borrará TODOS los snapshots de la base de datos. La configuración actual NO se perderá. ¿Continuar?")) return;
+     setLoadingVersions(true);
      try {
-        // Obtenemos todos los IDs y los borramos
-        const ids = versions.map(v => v.id);
-        if(ids.length > 0) {
-            await supabase.from('prompt_versions').delete().in('id', ids);
-        }
+        const { error, data } = await supabase.functions.invoke('manage-prompt-versions', {
+           body: { action: 'PURGE' }
+        });
+        if (error) throw error;
+        if (data?.error) throw new Error(data.error);
+
         toast.success("Historial purgado desde cero.");
         fetchVersions();
-     } catch (err) { toast.error("Error al limpiar historial"); }
+     } catch (err: any) { 
+        toast.error(`Error al limpiar historial: ${err.message}`); 
+        setLoadingVersions(false);
+     }
   };
 
   return (
@@ -193,15 +206,16 @@ const AgentBrain = () => {
                       <CardTitle className="text-white flex items-center gap-2"><History className="w-5 h-5 text-indigo-400" /> Puntos de Restauración</CardTitle>
                       <CardDescription>Cada vez que guardas, se crea una copia exacta de todos los prompts.</CardDescription>
                    </div>
-                   <Button variant="destructive" size="sm" onClick={handlePurgeHistory}>
-                      <Trash2 className="w-4 h-4 mr-2" /> Empezar de Cero (Purgar Historial)
+                   <Button variant="destructive" size="sm" onClick={handlePurgeHistory} disabled={loadingVersions}>
+                      {loadingVersions ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Trash2 className="w-4 h-4 mr-2" />}
+                      Empezar de Cero
                    </Button>
                 </CardHeader>
                 <CardContent className="p-0">
                    <Table>
                       <TableHeader><TableRow className="border-slate-800"><TableHead className="pl-6">Snapshot</TableHead><TableHead>Fecha</TableHead><TableHead className="text-right pr-6">Acción</TableHead></TableRow></TableHeader>
                       <TableBody>
-                         {loadingVersions ? <TableRow><TableCell colSpan={3} className="text-center py-10"><Loader2 className="animate-spin mx-auto"/></TableCell></TableRow> : 
+                         {loadingVersions ? <TableRow><TableCell colSpan={3} className="text-center py-10"><Loader2 className="animate-spin mx-auto text-indigo-500"/></TableCell></TableRow> : 
                           versions.length === 0 ? <TableRow><TableCell colSpan={3} className="text-center py-10 text-slate-500 italic">No hay historial. Guarda un snapshot para empezar.</TableCell></TableRow> :
                           versions.map(v => (
                             <TableRow key={v.id} className="border-slate-800 hover:bg-slate-800/30 transition-colors">
@@ -209,7 +223,7 @@ const AgentBrain = () => {
                                <TableCell className="text-slate-500 text-xs">{new Date(v.created_at).toLocaleString()}</TableCell>
                                <TableCell className="text-right pr-6">
                                   <div className="flex justify-end gap-2">
-                                     <Button variant="outline" size="sm" className="h-8 text-[10px] border-slate-700" onClick={() => handleRestoreVersion(v)}><RotateCcw className="w-3 h-3 mr-1" /> RESTAURAR</Button>
+                                     <Button variant="outline" size="sm" className="h-8 text-[10px] border-slate-700 hover:text-white" onClick={() => handleRestoreVersion(v)}><RotateCcw className="w-3 h-3 mr-1" /> RESTAURAR</Button>
                                      <Button variant="ghost" size="sm" className="h-8 text-red-500 hover:bg-red-500/10" onClick={() => handleDeleteVersion(v.id)}><Trash2 className="w-4 h-4" /></Button>
                                   </div>
                                </TableCell>
