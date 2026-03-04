@@ -32,18 +32,14 @@ serve(async (req) => {
     const basePaymentLink = `${baseUrl}${cleanPath}?add-to-cart=${productId}`;
 
     const systemPrompt = `
-      CONSTITUCIÓN SAMURAI (MODO FUNNELKIT):
-      
       [ADN]: ${customPrompts?.prompt_adn_core || getConfig('prompt_adn_core')}
       [VENTA]: ${customPrompts?.prompt_estrategia_cierre || getConfig('prompt_estrategia_cierre')}
 
       === GENERACIÓN DE LINK INTELIGENTE ===
-      Si ya tienes datos en el historial, el link DEBE verse así (ejemplo con FunnelKit):
+      Para auto-rellenar, añade estos parámetros al link:
       ${basePaymentLink}&wffn_first_name=NOMBRE&wffn_email=CORREO&wffn_billing_city=CIUDAD
       
-      IMPORTANTE: FunnelKit usa el prefijo "wffn_". Úsalo siempre junto a los billing_ estándar.
-      
-      DIRECTIVA: No preguntes datos que ya tengas en la conversación previa.
+      IMPORTANTE: FunnelKit exige el prefijo "wffn_". No lo olvides.
     `;
 
     const messages = [
@@ -69,7 +65,7 @@ serve(async (req) => {
     
     return new Response(JSON.stringify({ 
         answer: parts[0].trim(), 
-        explanation: parts[1] ? JSON.parse(parts[1].trim()) : { layers_used: ["FUNNELKIT"], reasoning: "Link wff_ inyectado." }
+        explanation: parts[1] ? JSON.parse(parts[1].trim()) : { layers_used: ["FUNNELKIT"], reasoning: "Link wffn_ generado." }
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
   } catch (error: any) {
