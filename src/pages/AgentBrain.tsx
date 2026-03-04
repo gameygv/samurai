@@ -122,7 +122,8 @@ const AgentBrain = () => {
   const handleRestoreSnapshot = (snapshot: any) => {
     if (!confirm(`¿Restaurar "${snapshot.version_name}"? Esto reemplazará los prompts actuales (debes presionar "Aplicar Cambios" después).`)) return;
     setPrompts(snapshot.prompts_snapshot);
-    toast.success("Snapshot cargado en el editor. No olvides Aplicar Cambios.");
+    toast.success("Snapshot cargado. Revisa las pestañas 1 y 2.");
+    setSearchParams({ tab: 'alma' }); // Redirigir para ver el cambio
   };
 
   // LAB LOGIC
@@ -141,13 +142,15 @@ const AgentBrain = () => {
 
     const userMsg = { role: 'user', text: labInput, image: labImage };
     setLabMessages(prev => [...prev, userMsg]);
+    const currentInput = labInput;
+    const currentImage = labImage;
     setLabInput("");
     setLabImage(null);
     setLabProcessing(true);
 
     try {
       const { data, error } = await supabase.functions.invoke('tune-samurai-prompts', {
-        body: { messages: [...labMessages, userMsg], currentPrompts: prompts }
+        body: { messages: [...labMessages, { role: 'user', text: currentInput, image: currentImage }], currentPrompts: prompts }
       });
       
       if (error) throw error;
@@ -166,7 +169,8 @@ const AgentBrain = () => {
      if (!proposedPrompts) return;
      setPrompts(proposedPrompts);
      setProposedPrompts(null);
-     toast.success("Propuesta aplicada al editor. ¡No olvides presionar 'Aplicar Cambios' arriba!");
+     toast.success("Propuesta aplicada. Pulsa 'Aplicar Cambios' para finalizar.");
+     setSearchParams({ tab: 'alma' });
   };
 
   const handleSimulate = async (e: React.FormEvent) => {
@@ -179,18 +183,17 @@ const AgentBrain = () => {
     setSimulating(true);
 
     try {
+      // ENVIAMOS LOS PROMPTS ACTUALES DEL EDITOR PARA PRUEBAS INSTANTÁNEAS
       const { data, error } = await supabase.functions.invoke('simulate-samurai', {
-        body: { question: currentQ }
+        body: { question: currentQ, customPrompts: prompts }
       });
       
-      if (error || data?.error) {
-         throw new Error(data?.error || "Error en el Kernel de Simulación");
-      }
+      if (error || data?.error) throw new Error(data?.error || "Error en el Kernel");
       
       setSimHistory(prev => [...prev, { role: 'bot', text: data.answer, explanation: data.explanation }]);
     } catch (err: any) {
       toast.error(err.message);
-      setSimHistory(prev => [...prev, { role: 'bot', text: "⚠ Fallo de conexión: " + err.message }]);
+      setSimHistory(prev => [...prev, { role: 'bot', text: "⚠ Fallo de conexión o API Key inválida." }]);
     } finally {
       setSimulating(false);
     }
@@ -210,7 +213,6 @@ const AgentBrain = () => {
     <Layout>
       <div className="max-w-[1600px] mx-auto flex flex-col h-[calc(100vh-140px)] gap-6 overflow-hidden">
         
-        {/* HEADER */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 shrink-0 bg-slate-900/50 p-5 rounded-xl border border-slate-800 shadow-xl">
           <div className="flex items-center gap-4">
             <div className="p-3 bg-indigo-600/10 rounded-xl border border-indigo-500/20">
@@ -251,7 +253,7 @@ const AgentBrain = () => {
                          <CardHeader className="border-b border-slate-800 bg-slate-900/50 py-3 flex items-center justify-between shrink-0 px-6">
                             <div>
                                <CardTitle className="text-white text-xs flex items-center gap-2 uppercase tracking-widest"><FlaskConical className="w-4 h-4 text-indigo-400" /> Arquitecto de Prompts</CardTitle>
-                               <CardDescription className="text-[10px]">Cuéntale qué quieres cambiar o sube una captura del error.</CardDescription>
+                               <CardDescription className="text-[10px]">Evolución asistida de la consciencia de Sam.</CardDescription>
                             </div>
                             <Button variant="ghost" size="sm" onClick={() => setLabMessages([])} className="h-8 text-[10px] text-slate-500 hover:text-white"><RefreshCcw className="w-3 h-3 mr-2"/> Reiniciar</Button>
                          </CardHeader>
@@ -293,7 +295,7 @@ const AgentBrain = () => {
                                <Input 
                                  value={labInput} 
                                  onChange={e => setLabInput(e.target.value)} 
-                                 placeholder="Ej: Sam está siendo muy seco, quiero que use más emojis y sea espiritual..." 
+                                 placeholder="Dime qué corregir o sube una captura..." 
                                  className="bg-slate-950 border-slate-800 text-white h-12" 
                                  disabled={labProcessing} 
                                />
@@ -310,11 +312,11 @@ const AgentBrain = () => {
                          <CardHeader><CardTitle className="text-xs uppercase tracking-widest text-yellow-500 flex items-center gap-2"><Sparkles className="w-4 h-4"/> Propuesta de Mejora</CardTitle></CardHeader>
                          <CardContent className="space-y-4">
                             {!proposedPrompts ? (
-                               <div className="py-10 text-center text-slate-600 text-[10px] italic">No hay cambios propuestos aún. Habla con el Arquitecto para generar una versión mejorada de Sam.</div>
+                               <div className="py-10 text-center text-slate-600 text-[10px] italic">No hay cambios propuestos aún.</div>
                             ) : (
                                <div className="space-y-4">
                                   <div className="p-3 bg-slate-950 rounded border border-slate-800">
-                                     <p className="text-[10px] text-slate-500 uppercase font-bold mb-2">Impacto en el Cerebro:</p>
+                                     <p className="text-[10px] text-slate-500 uppercase font-bold mb-2">Impacto:</p>
                                      <ul className="text-[10px] text-slate-300 space-y-2">
                                         <li className="flex items-center gap-2"><div className="w-1 h-1 rounded-full bg-indigo-500"/> Se ajustó la personalidad.</li>
                                         <li className="flex items-center gap-2"><div className="w-1 h-1 rounded-full bg-indigo-500"/> Se optimizó la estrategia de venta.</li>
@@ -327,13 +329,6 @@ const AgentBrain = () => {
                             )}
                          </CardContent>
                       </Card>
-
-                      <div className="p-4 bg-indigo-900/10 border border-indigo-500/20 rounded-xl space-y-2">
-                         <h4 className="text-[10px] font-bold text-indigo-400 uppercase">¿Cómo usar el Laboratorio?</h4>
-                         <p className="text-[10px] text-slate-400 leading-relaxed italic">
-                            "En lugar de editar los textos a mano, pídele al Arquitecto: 'Ajusta el ADN para que Sam no dé precios sin el email' o sube una foto de una mala respuesta y dile: 'Corrige este tono'."
-                         </p>
-                      </div>
                    </div>
                 </div>
             </TabsContent>
@@ -408,14 +403,17 @@ const AgentBrain = () => {
                 <Card className="bg-slate-950 border-slate-800 flex-1 flex flex-col overflow-hidden shadow-2xl rounded-xl">
                     <CardHeader className="border-b border-slate-800 bg-slate-900/50 py-3 flex items-center justify-between shrink-0 px-6">
                         <CardTitle className="text-white text-xs flex items-center gap-2 uppercase tracking-widest"><MessageSquare className="w-4 h-4 text-blue-400" /> Entorno de Pruebas</CardTitle>
-                        <Button variant="ghost" size="sm" onClick={() => setSimHistory([])} className="h-8 text-[10px] text-slate-500 hover:text-white"><RefreshCcw className="w-3 h-3 mr-2"/> Limpiar</Button>
+                        <div className="flex items-center gap-4">
+                           <Badge variant="outline" className="text-[8px] border-indigo-500/30 text-indigo-400 bg-indigo-500/5">MODO: TIEMPO REAL</Badge>
+                           <Button variant="ghost" size="sm" onClick={() => setSimHistory([])} className="h-8 text-[10px] text-slate-500 hover:text-white"><RefreshCcw className="w-3 h-3 mr-2"/> Limpiar</Button>
+                        </div>
                     </CardHeader>
                     <ScrollArea className="flex-1 p-6 bg-slate-950">
                        <div className="max-w-4xl mx-auto space-y-6 pb-4">
                           {simHistory.length === 0 && (
                             <div className="text-center py-20">
                                <MessageSquare className="w-12 h-12 text-slate-800 mx-auto mb-4 opacity-20" />
-                               <p className="text-slate-600 italic text-sm">Escribe un mensaje para probar las reglas actuales.</p>
+                               <p className="text-slate-600 italic text-sm">Prueba lo que acabas de escribir arriba antes de guardar.</p>
                             </div>
                           )}
                           {simHistory.map((m, i) => (
