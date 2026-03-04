@@ -93,7 +93,6 @@ const Index = () => {
         overallStatus: (webHealth < 50 || !adnPromptRes.data) ? 'Sync Required' : (webHealth < 80 ? 'Degraded' : 'Operational') 
       });
 
-      // Mapear Tareas del Radar
       const tasks = (followupsRes.data || []).map(f => ({
         id: f.id,
         type: 'FOLLOWUP',
@@ -129,7 +128,7 @@ const Index = () => {
     }
   };
 
-  if (loading) return <Layout><div className="flex h-[80vh] items-center justify-center"><Loader2 className="w-10 h-10 animate-spin text-indigo-500" /></div></Layout>;
+  if (loading) return <Layout><div className="flex h-[80vh] items-center justify-center"><Loader2 className="w-10 h-10 animate-spin text-indigo-600" /></div></Layout>;
 
   return (
     <Layout>
