@@ -1,18 +1,19 @@
 // @ts-nocheck
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0'
-import { createHash } from "https://deno.land/std@0.190.0/crypto/mod.ts";
 import { corsHeaders } from '../_shared/cors.ts'
 
-// NORMALIZACIÓN ESTRICTA (Meta Standard)
-function normalizeAndHash(value: string | undefined | null): string | null {
+// NORMALIZACIÓN ESTRICTA (Meta Standard) usando Web Crypto nativa
+async function normalizeAndHash(value: string | undefined | null): Promise<string | null> {
   if (!value) return null;
   let clean = value.toLowerCase().trim();
   clean = clean.replace(/\+/g, '').replace(/\s/g, ''); 
   
-  const hash = createHash("sha256");
-  hash.update(clean);
-  return hash.toString();
+  const encoder = new TextEncoder();
+  const data = encoder.encode(clean);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
 serve(async (req) => {
@@ -25,22 +26,23 @@ serve(async (req) => {
     const { pixel_id, access_token, test_event_code } = config;
 
     if (!pixel_id || !access_token) {
-      throw new Error("Pixel ID y Access Token son requeridos.");
+      throw new Error("Pixel ID y Access Token son requeridos en Configuración.");
     }
 
+    // Hashear todos los datos sensibles de forma asíncrona
     const userData: any = {};
-    if (eventData.user_data?.em) userData.em = [normalizeAndHash(eventData.user_data.em)];
-    if (eventData.user_data?.ph) userData.ph = [normalizeAndHash(eventData.user_data.ph)];
-    if (eventData.user_data?.fn) userData.fn = [normalizeAndHash(eventData.user_data.fn)];
-    if (eventData.user_data?.ct) userData.ct = [normalizeAndHash(eventData.user_data.ct)];
+    if (eventData.user_data?.em) userData.em = [await normalizeAndHash(eventData.user_data.em)];
+    if (eventData.user_data?.ph) userData.ph = [await normalizeAndHash(eventData.user_data.ph)];
+    if (eventData.user_data?.fn) userData.fn = [await normalizeAndHash(eventData.user_data.fn)];
+    if (eventData.user_data?.ct) userData.ct = [await normalizeAndHash(eventData.user_data.ct)];
     
-    userData.country = [normalizeAndHash('mx')]; 
+    userData.country = [await normalizeAndHash('mx')]; 
 
     const payload = {
       data: [{
         event_name: eventData.event_name,
         event_time: Math.floor(Date.now() / 1000),
-        event_id: eventData.event_id || `samurai_${eventData.lead_id}_${Date.now()}`,
+        event_id: eventData.event_id || `samurai_test_${Date.now()}`,
         user_data: userData,
         custom_data: {
            ...eventData.custom_data,
@@ -65,7 +67,7 @@ serve(async (req) => {
     // Guardar en bitácora de eventos Meta
     const supabaseClient = createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '');
     await supabaseClient.from('meta_capi_events').insert({
-      lead_id: eventData.lead_id,
+      lead_id: eventData.lead_id || null,
       whatsapp_id: eventData.user_data?.ph,
       event_name: eventData.event_name,
       value: eventData.value || 0,
