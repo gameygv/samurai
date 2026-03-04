@@ -18,7 +18,7 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
-    const { question, customPrompts } = await req.json();
+    const { question, history, customPrompts } = await req.json();
 
     // 1. Obtener la API Key
     const { data: config } = await supabaseClient.from('app_config').select('value').eq('key', 'openai_api_key').single();
@@ -44,26 +44,46 @@ serve(async (req) => {
     const truth = webContent?.map(w => `[WEB: ${w.title}]\n${w.content}`).join('\n\n') || "Sin datos web.";
 
     const systemPrompt = `
-      CONSTITUCIÓN SAMURAI ACTUAL (MODO SIMULACIÓN):
+      CONSTITUCIÓN SAMURAI (MODO SIMULACIÓN):
       
-      ALMA: ${pAlma}
-      ADN CORE: ${pAdn}
-      ESTRATEGIA: ${pEstrategia}
-      BITÁCORA #CIA: ${pRelearning}
+      [ALMA]: ${pAlma}
+      [ADN CORE]: ${pAdn}
+      [ESTRATEGIA]: ${pEstrategia}
+      [BITÁCORA #CIA]: ${pRelearning}
       
-      VERDAD MAESTRA (HECHOS):
+      [VERDAD MAESTRA]:
       ${truth}
+
+      ---
+      DIRECTIVA DE MEMORIA CRÍTICA:
+      - Tienes prohibido pedir datos (Nombre, Ciudad, Email) que el cliente ya te haya dado en mensajes anteriores del historial.
+      - Antes de preguntar "¿Cuál es tu nombre?", revisa el historial. Si ya te lo dio, úsalo.
+      - Si ya tienes todos los datos, procede directamente al cierre o a dar la información solicitada.
     `;
+
+    // 4. Formatear historial para OpenAI
+    const messages = [
+        { role: "system", content: "Eres Sam, el Samurai Sonoro. Responde manteniendo tu tono místico y disciplinado. Al final de tu respuesta, SIEMPRE añade la cadena '---JSON---' seguida de un objeto JSON con: layers_used (array de strings) y reasoning (string corto)." },
+        { role: "system", content: systemPrompt }
+    ];
+
+    if (history && history.length > 0) {
+        history.forEach(msg => {
+            messages.push({ 
+                role: msg.role === 'bot' ? 'assistant' : 'user', 
+                content: msg.text 
+            });
+        });
+    } else {
+        messages.push({ role: "user", content: question });
+    }
 
     const response = await fetch("https://api.openai.com/v1/chat/completions", {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${config.value}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ 
         model: "gpt-4o",
-        messages: [
-            { role: "system", content: "Eres Sam. Responde como el Samurai. Al final, añade '---JSON---' y un objeto JSON con: layers_used (array de strings) y reasoning (string)." },
-            { role: "user", content: `CONTEXTO SISTEMA:\n${systemPrompt}\n\nMENSAJE CLIENTE: ${question}` }
-        ],
+        messages: messages,
         temperature: 0.7
       })
     });
@@ -74,7 +94,7 @@ serve(async (req) => {
     const rawText = aiData.choices[0].message.content;
     const parts = rawText.split('---JSON---');
     const answer = parts[0].trim();
-    let explanation = { layers_used: ["CAPA 3"], reasoning: "Motor GPT-4o activo." };
+    let explanation = { layers_used: ["MEMORIA", "CAPA 3"], reasoning: "Historial analizado con éxito." };
 
     if (parts[1]) {
         try { explanation = JSON.parse(parts[1].trim()); } catch (e) {}

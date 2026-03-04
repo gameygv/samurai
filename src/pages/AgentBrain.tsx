@@ -178,14 +178,19 @@ const AgentBrain = () => {
     if (!simQuestion.trim() || simulating) return;
 
     const currentQ = simQuestion;
-    setSimHistory(prev => [...prev, { role: 'user', text: currentQ }]);
+    const newHistory = [...simHistory, { role: 'user', text: currentQ }];
+    setSimHistory(newHistory);
     setSimQuestion("");
     setSimulating(true);
 
     try {
-      // ENVIAMOS LOS PROMPTS ACTUALES DEL EDITOR PARA PRUEBAS INSTANTÁNEAS
+      // ENVIAMOS EL HISTORIAL COMPLETO PARA QUE TENGA MEMORIA
       const { data, error } = await supabase.functions.invoke('simulate-samurai', {
-        body: { question: currentQ, customPrompts: prompts }
+        body: { 
+            question: currentQ, 
+            history: newHistory.slice(-10), // Enviamos los últimos 10 mensajes
+            customPrompts: prompts 
+        }
       });
       
       if (error || data?.error) throw new Error(data?.error || "Error en el Kernel");
