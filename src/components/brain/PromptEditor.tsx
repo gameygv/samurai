@@ -22,12 +22,12 @@ export const PromptEditor = ({ title, icon: Icon, value, onChange, placeholder, 
         {title}
       </CardTitle>
     </CardHeader>
-    <CardContent className="p-0 flex-1 flex flex-col bg-slate-950">
+    <CardContent className="p-0 flex-1 flex flex-col bg-slate-950 min-h-0">
       <Textarea 
         value={value || ''} 
         onChange={e => onChange(e.target.value)} 
         placeholder={placeholder} 
-        className="flex-1 rounded-none border-0 bg-transparent font-mono text-xs focus-visible:ring-0 p-5 leading-relaxed custom-scrollbar resize-none text-slate-300 placeholder:text-slate-700" 
+        className="flex-1 rounded-none border-0 bg-transparent font-mono text-xs focus-visible:ring-0 p-5 leading-relaxed custom-scrollbar resize-none text-slate-300 placeholder:text-slate-700 overflow-y-auto" 
       />
     </CardContent>
     <div className="px-4 py-1 bg-slate-900 border-t border-slate-800/50 flex justify-between items-center shrink-0">
