@@ -123,8 +123,7 @@ const AgentBrain = () => {
     if (!simQuestion.trim() || simulating) return;
 
     const currentQ = simQuestion;
-    const userMsg = { role: 'user', text: currentQ };
-    setSimHistory(prev => [...prev, userMsg]);
+    setSimHistory(prev => [...prev, { role: 'user', text: currentQ }]);
     setSimQuestion("");
     setSimulating(true);
 
@@ -133,15 +132,14 @@ const AgentBrain = () => {
         body: { question: currentQ }
       });
       
-      if (error) {
-         const errorBody = await error.context.json();
-         throw new Error(errorBody.error || "Fallo en la respuesta de la IA");
+      if (error || data?.error) {
+         throw new Error(data?.error || "Error en el Kernel de Simulación");
       }
       
       setSimHistory(prev => [...prev, { role: 'bot', text: data.answer, explanation: data.explanation }]);
     } catch (err: any) {
-      toast.error("Fallo de Simulación: " + err.message);
-      setSimHistory(prev => [...prev, { role: 'bot', text: "⚠ Error de conexión con el Kernel IA. Revisa la OpenAI API Key en Ajustes." }]);
+      toast.error(err.message);
+      setSimHistory(prev => [...prev, { role: 'bot', text: "⚠ Fallo de conexión: " + err.message }]);
     } finally {
       setSimulating(false);
     }

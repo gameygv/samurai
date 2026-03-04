@@ -1,14 +1,18 @@
 // @ts-nocheck
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0'
-import { corsHeaders } from '../_shared/cors.ts'
 
-const OPENAI_URL = "https://api.openai.com/v1/chat/completions";
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+}
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders })
   }
+
+  console.log("[simulate-samurai] Iniciando simulación...");
 
   try {
     const supabaseClient = createClient(
@@ -18,42 +22,33 @@ serve(async (req) => {
 
     const { question } = await req.json();
 
+    // 1. Obtener la API Key
     const { data: config } = await supabaseClient.from('app_config').select('value').eq('key', 'openai_api_key').single();
-    if (!config?.value) throw new Error("OpenAI API Key no configurada en Ajustes.");
+    if (!config?.value) throw new Error("OpenAI API Key no encontrada en la tabla app_config.");
 
-    // Enviamos un Lead ficticio para probar que el simulador respete las reglas del email
-    const mockLead = { nombre: "Usuario Simulado", email: "correo@simulador.com", telefono: "5551234567" };
+    // 2. Obtener los bloques de prompt actuales
+    const { data: promptData } = await supabaseClient.from('app_config').select('key, value').eq('category', 'PROMPT');
+    const getP = (key: string) => promptData?.find(p => p.key === key)?.value || "";
 
-    const { data: kernelData, error: kernelError } = await supabaseClient.functions.invoke('get-samurai-context', {
-        body: { lead: mockLead }
-    });
-    
-    if (kernelError) throw new Error("No se pudo obtener el contexto del Samurai.");
+    // 3. Obtener Verdad Maestra (Sitio Web)
+    const { data: webContent } = await supabaseClient.from('main_website_content').select('title, content').eq('scrape_status', 'success');
+    const truth = webContent?.map(w => `[WEB: ${w.title}]\n${w.content}`).join('\n\n') || "Sin datos web.";
 
-    const systemPrompt = kernelData.system_prompt;
-
-    const prompt = `
-      ${systemPrompt}
-
-      ---
-      PREGUNTA DEL USUARIO (SIMULACIÓN):
-      "${question}"
-
-      INSTRUCCIÓN PARA LA IA:
-      Responde como el Samurai siguiendo estrictamente tu jerarquía. 
-      Al final de tu respuesta, añade un separador y un bloque JSON explicando tu razonamiento.
-
-      Formato de salida OBLIGATORIO:
-      [Tu respuesta como Samurai aquí]
+    // 4. Construir el System Prompt igual que lo hace el Kernel Real
+    const systemPrompt = `
+      CONSTITUCIÓN SAMURAI:
       
-      --- EXPLICACIÓN TÉCNICA ---
-      {
-        "layers_used": ["LAYER 2 (Web)", "LAYER 3 (ADN)"],
-        "reasoning": "Explica brevemente por qué elegiste esa respuesta basándote en tus reglas."
-      }
+      ALMA: ${getP('prompt_alma_samurai')}
+      ADN CORE: ${getP('prompt_adn_core')}
+      ESTRATEGIA: ${getP('prompt_estrategia_cierre')}
+      BITÁCORA #CIA: ${getP('prompt_relearning')}
+      
+      VERDAD MAESTRA (HECHOS):
+      ${truth}
     `;
 
-    const response = await fetch(OPENAI_URL, {
+    // 5. Llamada directa a OpenAI
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
       method: 'POST',
       headers: { 
         'Authorization': `Bearer ${config.value}`,
@@ -62,37 +57,42 @@ serve(async (req) => {
       body: JSON.stringify({ 
         model: "gpt-4o",
         messages: [
-            { role: "system", content: "Eres un simulador de entrenamiento de IA. Tu trabajo es ejecutar el prompt del usuario y luego explicar tu razonamiento." },
-            { role: "user", content: prompt }
+            { role: "system", content: "Responde como el Samurai. Al final, añade '---JSON---' y un objeto JSON con: layers_used (array de strings) y reasoning (string)." },
+            { role: "user", content: `CONTEXTO SISTEMA:\n${systemPrompt}\n\nMENSAJE CLIENTE: ${question}` }
         ],
-        temperature: 0.5
+        temperature: 0.7
       })
     });
 
     if (!response.ok) {
-        const errText = await response.text();
-        throw new Error(`OpenAI Error: ${errText}`);
+       const err = await response.text();
+       throw new Error(`OpenAI Error: ${err}`);
     }
 
     const aiData = await response.json();
-    const rawText = aiData?.choices?.[0]?.message?.content || "No se recibió respuesta de la IA.";
+    const rawText = aiData.choices[0].message.content;
     
-    const parts = rawText.split('--- EXPLICACIÓN TÉCNICA ---');
+    const parts = rawText.split('---JSON---');
     const answer = parts[0].trim();
-    let explanation = { layers_used: ["LAYER 3"], reasoning: "Respuesta estándar generada por GPT-4o." };
-    
+    let explanation = { layers_used: ["CAPA 3"], reasoning: "Respuesta generada por el motor GPT-4o." };
+
     if (parts[1]) {
-       try {
-          const jsonStr = parts[1].trim().replace(/```json/g, '').replace(/```/g, '');
-          explanation = JSON.parse(jsonStr);
-       } catch (e) {
-          console.error("Error parseando explicación JSON", e);
-       }
+        try {
+            explanation = JSON.parse(parts[1].trim());
+        } catch (e) {
+            console.error("Error parseando JSON de IA");
+        }
     }
-    
-    return new Response(JSON.stringify({ answer, explanation }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+
+    return new Response(JSON.stringify({ answer, explanation }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    });
 
   } catch (error: any) {
-    return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: corsHeaders })
+    console.error("[simulate-samurai] Error crítico:", error.message);
+    return new Response(JSON.stringify({ error: error.message }), { 
+        status: 200, // Respondemos 200 para que el front maneje el error suavemente
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+    });
   }
 })
