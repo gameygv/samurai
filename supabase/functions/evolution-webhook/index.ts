@@ -17,16 +17,6 @@ function findValue(obj: any, keyToFind: string): any {
   return null;
 }
 
-function findMessageObject(obj: any): any {
-    if (!obj || typeof obj !== 'object') return null;
-    if (obj.key && obj.message) return obj; 
-    for (const key in obj) {
-        const found = findMessageObject(obj[key]);
-        if (found) return found;
-    }
-    return null;
-}
-
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
@@ -38,74 +28,19 @@ serve(async (req) => {
     const evoUrl = configs.find(c => c.key === 'evolution_api_url')?.value;
     const evoKey = configs.find(c => c.key === 'evolution_api_key')?.value;
 
-    if (!apiKey) throw new Error("Falta OpenAI API Key");
-
     const body = await req.json();
     const eventName = (body.event || body.type || "").toLowerCase();
     
-    if (eventName !== 'messages.upsert') {
-        return new Response(JSON.stringify({ ignored: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-    }
+    if (eventName !== 'messages.upsert') return new Response(JSON.stringify({ ignored: true }), { headers: corsHeaders });
 
     const messageData = findValue(body, 'message'); 
     const fromMe = findValue(body, 'fromMe') || body.data?.key?.fromMe;
-    if (!messageData || fromMe) return new Response('Ignored (Self/NoData)');
+    if (!messageData || fromMe) return new Response('Ignored');
 
     const phone = findValue(body, 'remoteJid')?.split('@')[0];
-    let messageText = "";
+    const messageText = findValue(messageData, 'conversation') || findValue(messageData, 'text') || findValue(messageData, 'caption') || "";
 
-    const audioObj = findValue(messageData, 'audioMessage');
-    
-    if (audioObj) {
-        console.log(`[Audio] Detectado para ${phone}.`);
-        let audioBase64 = findValue(body, 'base64');
-
-        if (!audioBase64) {
-            if (evoUrl && evoKey) {
-                try {
-                    let getBase64Url = evoUrl.replace('message/sendText', 'chat/getBase64FromMediaMessage');
-                    const msgObjectForApi = findMessageObject(body);
-                    if (msgObjectForApi) {
-                        const res = await fetch(getBase64Url, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json', 'apikey': evoKey },
-                            body: JSON.stringify({ message: msgObjectForApi, convertToMp4: false })
-                        });
-                        if (res.ok) {
-                            const data = await res.json();
-                            audioBase64 = data.base64;
-                        }
-                    }
-                } catch (err) { console.error("Error recuperando audio"); }
-            }
-        }
-
-        if (audioBase64) {
-            try {
-                const cleanBase64 = audioBase64.replace(/^data:.*;base64,/, "");
-                const binaryString = atob(cleanBase64);
-                const bytes = new Uint8Array(binaryString.length);
-                for (let i = 0; i < binaryString.length; i++) bytes[i] = binaryString.charCodeAt(i);
-                const blob = new Blob([bytes], { type: 'audio/ogg' });
-                
-                const formData = new FormData();
-                formData.append("model", "whisper-1");
-                formData.append("file", blob, "audio.ogg");
-
-                const whisperRes = await fetch("https://api.openai.com/v1/audio/transcriptions", {
-                    method: "POST",
-                    headers: { "Authorization": `Bearer ${apiKey}` },
-                    body: formData
-                });
-                const whisperData = await whisperRes.json();
-                if (whisperData.text) messageText = `[TRANSCRIPCIÓN AUDIO]: "${whisperData.text}"`;
-            } catch (e) { messageText = `[ERROR PROCESANDO AUDIO]`; }
-        }
-    } else {
-        messageText = findValue(messageData, 'conversation') || findValue(messageData, 'text') || findValue(messageData, 'caption') || "";
-    }
-
-    if (!messageText) return new Response('No valid content');
+    if (!messageText) return new Response('No content');
 
     let { data: lead } = await supabaseClient.from('leads').select('*').or(`telefono.ilike.%${phone}%`).maybeSingle();
     if (!lead) {
@@ -117,19 +52,14 @@ serve(async (req) => {
         lead = newLead;
     }
 
-    if (lead.ai_paused) return new Response('AI Paused');
+    if (lead.ai_paused) return new Response('Paused');
 
-    const { data: kernelData } = await supabaseClient.functions.invoke('get-samurai-context', {
-        body: { lead: lead }
-    });
+    const { data: kernelData } = await supabaseClient.functions.invoke('get-samurai-context', { body: { lead } });
     
-    const { data: historyMsgsRaw } = await supabaseClient.from('conversaciones')
-        .select('emisor, mensaje')
-        .eq('lead_id', lead.id)
-        .order('created_at', { ascending: false })
-        .limit(40);
+    const { data: history } = await supabaseClient.from('conversaciones')
+        .select('emisor, mensaje').eq('lead_id', lead.id).order('created_at', { ascending: false }).limit(20);
 
-    const historyMsgs = historyMsgsRaw ? historyMsgsRaw.reverse() : [];
+    const historyMsgs = history ? history.reverse() : [];
     await supabaseClient.from('conversaciones').insert({ lead_id: lead.id, emisor: 'CLIENTE', mensaje: messageText, platform: 'WHATSAPP' });
 
     const aiRes = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -139,10 +69,7 @@ serve(async (req) => {
             model: "gpt-4o",
             messages: [
                 { role: "system", content: kernelData?.system_prompt },
-                ...(historyMsgs || []).map(m => ({
-                    role: (m.emisor === 'CLIENTE' || m.emisor === 'HUMANO') ? 'user' : 'assistant',
-                    content: m.mensaje
-                })),
+                ...historyMsgs.map(m => ({ role: (m.emisor === 'SAMURAI' ? 'assistant' : 'user'), content: m.mensaje })),
                 { role: "user", content: messageText } 
             ],
             temperature: 0.3
@@ -154,38 +81,31 @@ serve(async (req) => {
 
     const mediaRegex = /<<MEDIA:(.*?)>>/;
     const mediaMatch = rawAnswer.match(mediaRegex);
-    let textToSend = rawAnswer.replace(mediaRegex, '').trim();
     const mediaUrl = mediaMatch ? mediaMatch[1] : null;
+    let textToSend = rawAnswer.replace(mediaRegex, '').trim();
 
     if (evoUrl && evoKey) {
-        if (mediaUrl) {
-            let sendMediaUrl = evoUrl.replace('message/sendText', 'message/sendMedia');
-            await fetch(sendMediaUrl, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'apikey': evoKey },
-                body: JSON.stringify({ 
-                    number: phone, 
-                    mediaMessage: { mediatype: "image", media: mediaUrl, caption: textToSend },
-                    delay: 1500
-                })
-            });
-        } else {
-            // FORMATO V2 CORREGIDO
-            await fetch(evoUrl, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'apikey': evoKey },
-                body: JSON.stringify({ number: phone, text: textToSend, delay: 1500 })
-            });
-        }
+        const endpoint = mediaUrl ? evoUrl.replace('sendText', 'sendMedia') : evoUrl;
+        const payload = mediaUrl ? {
+            number: phone,
+            mediaMessage: { mediatype: "image", media: mediaUrl, caption: textToSend }
+        } : {
+            number: phone,
+            text: textToSend
+        };
+
+        await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'apikey': evoKey },
+            body: JSON.stringify(payload)
+        });
+
         await supabaseClient.from('conversaciones').insert({ 
-            lead_id: lead.id, emisor: 'SAMURAI', 
-            mensaje: mediaUrl ? `[IMG: ${mediaUrl}] ${rawAnswer}` : rawAnswer, 
-            platform: 'WHATSAPP_AUTO' 
+            lead_id: lead.id, emisor: 'SAMURAI', mensaje: mediaUrl ? `[IMG: ${mediaUrl}] ${rawAnswer}` : rawAnswer, platform: 'WHATSAPP_AUTO' 
         });
     }
 
     return new Response(JSON.stringify({ success: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-
   } catch (error: any) {
     return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: corsHeaders });
   }
