@@ -18,9 +18,6 @@ const Settings = () => {
   const [configs, setConfigs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  
-  const [testPhone, setTestPhone] = useState('');
-  const [testingEvo, setTestingEvo] = useState(false);
 
   useEffect(() => { fetchAllData(); }, []);
 
@@ -91,7 +88,6 @@ const Settings = () => {
                       <div className="space-y-2">
                          <Label>Ruta de Checkout (Slug)</Label>
                          <Input value={getValue('wc_checkout_path') || '/checkout/'} onChange={e => handleInputChange('wc_checkout_path', e.target.value, 'WOOCOMMERCE')} placeholder="Ej: /inscripciones/ o /pago/" className="bg-slate-950 border-indigo-500/30" />
-                         <p className="text-[10px] text-slate-500">En tu caso, cámbialo a <code className="text-indigo-400">/inscripciones/</code> si ahí está el formulario.</p>
                       </div>
                    </div>
 
@@ -99,15 +95,15 @@ const Settings = () => {
                       <Label className="text-xs text-green-500 uppercase font-bold flex items-center gap-2">
                          <Hash className="w-4 h-4" /> ID del Producto Principal
                       </Label>
-                      <div className="flex items-center gap-4">
+                      <div className="flex flex-col gap-2">
                          <Input 
                            value={getValue('wc_product_id')} 
                            onChange={e => handleInputChange('wc_product_id', e.target.value, 'SALES')} 
-                           placeholder="Ej: 1483"
-                           className="bg-slate-900 border-slate-700 text-white font-mono w-32 text-center" 
+                           placeholder="Déjalo en blanco si usas FunnelKit"
+                           className="bg-slate-900 border-slate-700 text-white font-mono w-64" 
                          />
-                         <p className="text-xs text-slate-500 italic">
-                            Samurai usará este ID para el parámetro <code className="text-indigo-400">add-to-cart</code>.
+                         <p className="text-[11px] text-slate-400 italic">
+                            <strong>Tip para FunnelKit:</strong> Si tu página de checkout (<code>/inscripciones/</code>) ya tiene el curso configurado por defecto, <strong>deja este campo vacío</strong>. Esto evita que WooCommerce recargue la página y borre los datos de auto-rellenado del cliente.
                          </p>
                       </div>
                    </div>
@@ -116,7 +112,6 @@ const Settings = () => {
           </TabsContent>
           
           <TabsContent value="ventas" className="mt-6">
-             {/* Mantener contenido existente de ventas */}
              <div className="p-10 text-center text-slate-600">Sección de Estrategia activa.</div>
           </TabsContent>
           <TabsContent value="mensajeria" className="mt-6">

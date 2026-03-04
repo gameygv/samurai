@@ -17,44 +17,45 @@ serve(async (req) => {
 
     const wcUrl = getConfig('wc_url', "https://theelephantbowl.com");
     const checkoutPath = getConfig('wc_checkout_path', "/inscripciones/");
-    const productId = getConfig('wc_product_id', "1483"); 
+    const productId = getConfig('wc_product_id', ""); 
     
     const baseUrl = wcUrl.endsWith('/') ? wcUrl.slice(0, -1) : wcUrl;
     const path = checkoutPath.startsWith('/') ? checkoutPath : `/${checkoutPath}`;
     
-    // Link Base: Dominio + Checkout + Añadir Producto
-    let paymentLink = `${baseUrl}${path}?add-to-cart=${productId}`;
+    let paymentLink = `${baseUrl}${path}`;
+    let isFirstParam = true;
+
+    // Si hay un producto configurado, lo añadimos. Si está vacío, lo omitimos para evitar redirecciones que borren los datos.
+    if (productId && productId.trim() !== '') {
+        paymentLink += `?add-to-cart=${productId}`;
+        isFirstParam = false;
+    }
     
-    // MAPEADO EXACTO SEGÚN CAPTURA FUNNELKIT
+    // Función auxiliar para agregar parámetros correctamente con ? o &
+    const addParam = (key, value) => {
+        paymentLink += `${isFirstParam ? '?' : '&'}${key}=${value}`;
+        isFirstParam = false;
+    };
+    
+    // MAPEADO EXACTO PARA FUNNELKIT
     if (lead.nombre && !lead.nombre.includes('Nuevo Lead')) {
         const names = lead.nombre.trim().split(' ');
-        const fn = encodeURIComponent(names[0]);
-        // Parámetro exacto: wffn_billing_first_name
-        paymentLink += `&wffn_billing_first_name=${fn}`;
-        
+        addParam('wffn_billing_first_name', encodeURIComponent(names[0]));
         if (names.length > 1) {
-           const ln = encodeURIComponent(names.slice(1).join(' '));
-           // Parámetro exacto: wffn_billing_last_name
-           paymentLink += `&wffn_billing_last_name=${ln}`;
+           addParam('wffn_billing_last_name', encodeURIComponent(names.slice(1).join(' ')));
         }
     }
     
     if (lead.email) {
-       const em = encodeURIComponent(lead.email);
-       // Parámetro exacto: wffn_billing_email
-       paymentLink += `&wffn_billing_email=${em}`;
+       addParam('wffn_billing_email', encodeURIComponent(lead.email));
     }
     
     if (lead.telefono) {
-       const ph = encodeURIComponent(lead.telefono);
-       // Parámetro exacto: wffn_billing_phone
-       paymentLink += `&wffn_billing_phone=${ph}`;
+       addParam('wffn_billing_phone', encodeURIComponent(lead.telefono));
     }
     
     if (lead.ciudad) {
-       const ct = encodeURIComponent(lead.ciudad);
-       // Parámetro exacto: wffn_billing_city
-       paymentLink += `&wffn_billing_city=${ct}`;
+       addParam('wffn_billing_city', encodeURIComponent(lead.ciudad));
     }
 
     const bankInfo = `Banco: ${getConfig('bank_name')}\nCuenta: ${getConfig('bank_account')}\nCLABE: ${getConfig('bank_clabe')}\nTitular: ${getConfig('bank_holder')}`;
@@ -69,7 +70,7 @@ ${pAdn}
 ${pEstrategia}
 
 === LINK DE PAGO (MAPEO FUNNELKIT OK) ===
-Usa este link exacto. Ya tiene los campos wffn_billing_ mapeados:
+Usa este link exacto. Ya tiene los campos wffn_billing_ mapeados dinámicamente:
 ${paymentLink}
 
 === DATOS PARA TRANSFERENCIA ===

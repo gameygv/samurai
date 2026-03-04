@@ -22,30 +22,32 @@ serve(async (req) => {
     const apiKey = getConfig('openai_api_key');
     if (!apiKey) throw new Error("OpenAI API Key no encontrada.");
 
-    // Construcción del Link (FunnelKit exact mapping)
     const wcUrl = getConfig('wc_url') || "https://theelephantbowl.com";
     const checkoutPath = getConfig('wc_checkout_path') || "/inscripciones/";
-    const productId = getConfig('wc_product_id') || "1483";
+    const productId = getConfig('wc_product_id') || "";
     
     const baseUrl = wcUrl.endsWith('/') ? wcUrl.slice(0, -1) : wcUrl;
     const cleanPath = checkoutPath.startsWith('/') ? checkoutPath : `/${checkoutPath}`;
-    const basePaymentLink = `${baseUrl}${cleanPath}?add-to-cart=${productId}`;
+    
+    let basePaymentLink = `${baseUrl}${cleanPath}`;
+    let isFirst = true;
+
+    if (productId && productId.trim() !== '') {
+        basePaymentLink += `?add-to-cart=${productId}`;
+        isFirst = false;
+    }
+    
+    const separator = isFirst ? '?' : '&';
 
     const systemPrompt = `
       [ADN]: ${customPrompts?.prompt_adn_core || getConfig('prompt_adn_core')}
       [VENTA]: ${customPrompts?.prompt_estrategia_cierre || getConfig('prompt_estrategia_cierre')}
 
       === GENERACIÓN DE LINK FUNNELKIT ===
-      Para enviar el link de pago, usa esta URL base:
-      ${basePaymentLink}
-
-      Y agrégale dinámicamente los datos del cliente que sacaste de la conversación, REEMPLAZANDO los valores:
-      &wffn_billing_first_name=[REEMPLAZAR_POR_NOMBRE]
-      &wffn_billing_email=[REEMPLAZAR_POR_CORREO]
-      &wffn_billing_city=[REEMPLAZAR_POR_CIUDAD]
+      Debes usar exactamente este formato para los parámetros dinámicos:
+      ${basePaymentLink}${separator}wffn_billing_first_name=NOMBRE&wffn_billing_email=CORREO&wffn_billing_city=CIUDAD
       
-      EJEMPLO: Si el cliente te dijo que se llama "Carlos", su correo es "carlos@test.com" y es de "Cancun", el link final que debes enviarle es:
-      ${basePaymentLink}&wffn_billing_first_name=Carlos&wffn_billing_email=carlos@test.com&wffn_billing_city=Cancun
+      IMPORTANTE: Tu WordPress usa el prefijo "wffn_billing_". No lo cambies.
     `;
 
     const messages = [
@@ -71,7 +73,7 @@ serve(async (req) => {
     
     return new Response(JSON.stringify({ 
         answer: parts[0].trim(), 
-        explanation: parts[1] ? JSON.parse(parts[1].trim()) : { layers_used: ["FUNNELKIT"], reasoning: "Link wffn_billing_ generado correctamente con datos reemplazados." }
+        explanation: parts[1] ? JSON.parse(parts[1].trim()) : { layers_used: ["FUNNELKIT"], reasoning: "Link wffn_billing_ generado correctamente." }
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
   } catch (error: any) {
