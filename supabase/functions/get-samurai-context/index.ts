@@ -12,11 +12,9 @@ serve(async (req) => {
     const body = await req.json().catch(() => ({}));
     const lead = body.lead || {};
 
-    // 1. Cargar Configuraciones
     const { data: configs } = await supabaseClient.from('app_config').select('key, value');
     const getConfig = (key: string, def = "") => configs?.find((c: any) => c.key === key)?.value || def;
 
-    // 2. Construcción de Link con Compatibilidad FunnelKit
     const wcUrl = getConfig('wc_url', "https://theelephantbowl.com");
     const checkoutPath = getConfig('wc_checkout_path', "/inscripciones/");
     const productId = getConfig('wc_product_id', "1483"); 
@@ -24,22 +22,19 @@ serve(async (req) => {
     const baseUrl = wcUrl.endsWith('/') ? wcUrl.slice(0, -1) : wcUrl;
     const path = checkoutPath.startsWith('/') ? checkoutPath : `/${checkoutPath}`;
     
+    // El orden importa: Primero añadimos al carrito, luego pasamos los datos
     let paymentLink = `${baseUrl}${path}?add-to-cart=${productId}`;
     
-    // Inyección Shotgun (Woo + FunnelKit)
     if (lead.nombre && !lead.nombre.includes('Nuevo Lead')) {
         const names = lead.nombre.trim().split(' ');
         const fn = encodeURIComponent(names[0]);
-        const ln = names.length > 1 ? encodeURIComponent(names.slice(1).join(' ')) : "";
-        
-        // Estándar + FunnelKit
-        paymentLink += `&billing_first_name=${fn}&wffn_first_name=${fn}&first_name=${fn}`;
-        if (ln) paymentLink += `&billing_last_name=${ln}&wffn_last_name=${ln}&last_name=${ln}`;
+        // FunnelKit prefiere billing_first_name o wffn_billing_first_name
+        paymentLink += `&billing_first_name=${fn}&wffn_billing_first_name=${fn}&first_name=${fn}`;
     }
     
     if (lead.email) {
        const em = encodeURIComponent(lead.email);
-       paymentLink += `&billing_email=${em}&wffn_email=${em}&email=${em}`;
+       paymentLink += `&billing_email=${em}&wffn_billing_email=${em}&email=${em}`;
     }
     
     if (lead.telefono) {
@@ -53,28 +48,24 @@ serve(async (req) => {
     }
 
     const bankInfo = `Banco: ${getConfig('bank_name')}\nCuenta: ${getConfig('bank_account')}\nCLABE: ${getConfig('bank_clabe')}\nTitular: ${getConfig('bank_holder')}`;
-
     const pAlma = getConfig('prompt_alma_samurai');
     const pAdn = getConfig('prompt_adn_core');
     const pEstrategia = getConfig('prompt_estrategia_cierre');
 
     const systemPrompt = `
-=== ALMA & ESTRATEGIA ===
+=== CONSTITUCIÓN TÁCTICA ===
 ${pAlma}
 ${pAdn}
 ${pEstrategia}
 
-=== DATOS DEL CLIENTE ===
-- Nombre: ${lead.nombre || 'Desconocido'}
-- Ciudad: ${lead.ciudad || 'No proporcionada'}
-- Email: ${lead.email || 'No proporcionado'}
+=== LINK DE PAGO (AUTO-RELLENABLE) ===
+Usa este link exacto. Contiene los parámetros billing_ y wffn_ para FunnelKit:
+${paymentLink}
 
-=== DATOS FINANCIEROS (FUNNELKIT READY) ===
-Usa este link exacto (Ya incluye parámetros de auto-rellenado):
-- Link de Inscripción: ${paymentLink}
-- Datos Transferencia: \n${bankInfo}
+=== DATOS TRANSFERENCIA ===
+${bankInfo}
 
-[REGLA]: Entrega el link completo. No preguntes datos que ya tienes.
+[REGLA]: Entrega el link solamente cuando el cliente esté listo para pagar.
 `;
 
     return new Response(JSON.stringify({ system_prompt: systemPrompt }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
