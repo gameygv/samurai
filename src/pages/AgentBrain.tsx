@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import Layout from '@/components/Layout';
 import { supabase } from '@/integrations/supabase/client';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -13,7 +13,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { 
   Bot, Eye as EyeIcon, Zap, Loader2, Terminal, BrainCircuit, Target, 
-  GitBranch, RefreshCcw, Layers, History, Send, Fingerprint, MessageSquare, AlertTriangle, Database, ImageIcon, Save, Trash2
+  GitBranch, RefreshCcw, Layers, History, Send, Fingerprint, MessageSquare, AlertTriangle, Database, ImageIcon, Save, Trash2, FlaskConical, Sparkles, Upload, CheckCircle2
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { PromptEditor } from '@/components/brain/PromptEditor';
@@ -30,6 +30,13 @@ const AgentBrain = () => {
   const [masterPrompt, setMasterPrompt] = useState("");
   const [loadingMaster, setLoadingMaster] = useState(false);
   const [versions, setVersions] = useState<any[]>([]);
+
+  // Lab State
+  const [labMessages, setLabMessages] = useState<any[]>([]);
+  const [labInput, setLabInput] = useState("");
+  const [labImage, setLabImage] = useState<string | null>(null);
+  const [labProcessing, setLabProcessing] = useState(false);
+  const [proposedPrompts, setProposedPrompts] = useState<any>(null);
 
   // Simulation State
   const [simQuestion, setSimQuestion] = useState("");
@@ -118,6 +125,50 @@ const AgentBrain = () => {
     toast.success("Snapshot cargado en el editor. No olvides Aplicar Cambios.");
   };
 
+  // LAB LOGIC
+  const handleLabImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => setLabImage(reader.result as string);
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleLabSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if ((!labInput.trim() && !labImage) || labProcessing) return;
+
+    const userMsg = { role: 'user', text: labInput, image: labImage };
+    setLabMessages(prev => [...prev, userMsg]);
+    setLabInput("");
+    setLabImage(null);
+    setLabProcessing(true);
+
+    try {
+      const { data, error } = await supabase.functions.invoke('tune-samurai-prompts', {
+        body: { messages: [...labMessages, userMsg], currentPrompts: prompts }
+      });
+      
+      if (error) throw error;
+      
+      setLabMessages(prev => [...prev, { role: 'assistant', text: data.result.message }]);
+      setProposedPrompts(data.result.prompts);
+      toast.info("El Arquitecto ha propuesto mejoras.");
+    } catch (err: any) {
+      toast.error("Error en Laboratorio: " + err.message);
+    } finally {
+      setLabProcessing(false);
+    }
+  };
+
+  const applyProposedPrompts = () => {
+     if (!proposedPrompts) return;
+     setPrompts(proposedPrompts);
+     setProposedPrompts(null);
+     toast.success("Propuesta aplicada al editor. ¡No olvides presionar 'Aplicar Cambios' arriba!");
+  };
+
   const handleSimulate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!simQuestion.trim() || simulating) return;
@@ -188,10 +239,105 @@ const AgentBrain = () => {
              <TabsTrigger value="vision" className="gap-2 px-4 py-2"><EyeIcon className="w-4 h-4"/> 4. Ojo Halcón</TabsTrigger>
              <TabsTrigger value="simulador" className="gap-2 px-4 py-2"><MessageSquare className="w-4 h-4"/> 5. Simulador</TabsTrigger>
              <TabsTrigger value="debug" className="gap-2 px-4 py-2"><Terminal className="w-4 h-4"/> 6. Kernel Debug</TabsTrigger>
+             <TabsTrigger value="lab" className="gap-2 px-4 py-2 bg-indigo-600/10 text-indigo-400 data-[state=active]:bg-indigo-600 data-[state=active]:text-white"><FlaskConical className="w-4 h-4"/> 7. Laboratorio IA</TabsTrigger>
           </TabsList>
 
           <div className="flex-1 flex flex-col min-h-0 bg-slate-900/20 rounded-xl border border-slate-800/50 p-1">
             
+            <TabsContent value="lab" className="m-0 h-full flex flex-col data-[state=inactive]:hidden">
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 h-full">
+                   <div className="lg:col-span-8 flex flex-col gap-4">
+                      <Card className="bg-slate-950 border-slate-800 flex-1 flex flex-col overflow-hidden shadow-2xl rounded-xl">
+                         <CardHeader className="border-b border-slate-800 bg-slate-900/50 py-3 flex items-center justify-between shrink-0 px-6">
+                            <div>
+                               <CardTitle className="text-white text-xs flex items-center gap-2 uppercase tracking-widest"><FlaskConical className="w-4 h-4 text-indigo-400" /> Arquitecto de Prompts</CardTitle>
+                               <CardDescription className="text-[10px]">Cuéntale qué quieres cambiar o sube una captura del error.</CardDescription>
+                            </div>
+                            <Button variant="ghost" size="sm" onClick={() => setLabMessages([])} className="h-8 text-[10px] text-slate-500 hover:text-white"><RefreshCcw className="w-3 h-3 mr-2"/> Reiniciar</Button>
+                         </CardHeader>
+                         <ScrollArea className="flex-1 p-6">
+                            <div className="space-y-6">
+                               {labMessages.length === 0 && (
+                                  <div className="text-center py-20">
+                                     <Bot className="w-12 h-12 text-slate-800 mx-auto mb-4 opacity-20" />
+                                     <p className="text-slate-500 italic text-sm">"Hola, soy el Arquitecto. ¿Qué quieres que aprenda Sam hoy?"</p>
+                                  </div>
+                               )}
+                               {labMessages.map((m, i) => (
+                                  <div key={i} className={cn("flex flex-col gap-2", m.role === 'user' ? 'items-end' : 'items-start')}>
+                                     <div className={cn("p-4 rounded-2xl text-sm max-w-[85%] border shadow-lg", m.role === 'user' ? 'bg-indigo-600/10 border-indigo-500/20 text-indigo-100' : 'bg-slate-900 border-slate-800 text-slate-200')}>
+                                        {m.image && <img src={m.image} className="w-full max-w-[300px] rounded-lg mb-3 border border-white/10" />}
+                                        {m.text}
+                                     </div>
+                                  </div>
+                               ))}
+                               {labProcessing && <div className="flex gap-2 items-center text-indigo-400 text-xs animate-pulse"><Loader2 className="w-4 h-4 animate-spin"/> El Arquitecto está redactando los nuevos prompts...</div>}
+                            </div>
+                         </ScrollArea>
+                         
+                         <form onSubmit={handleLabSubmit} className="p-4 bg-slate-900 border-t border-slate-800 shrink-0 space-y-4">
+                            {labImage && (
+                               <div className="flex items-center gap-4 bg-slate-950 p-2 rounded-lg border border-indigo-500/30">
+                                  <img src={labImage} className="w-12 h-12 rounded object-cover" />
+                                  <span className="text-[10px] text-indigo-400 flex-1">Captura lista para analizar</span>
+                                  <Button size="sm" variant="ghost" onClick={() => setLabImage(null)} className="text-red-500">Eliminar</Button>
+                               </div>
+                            )}
+                            <div className="flex gap-4">
+                               <div className="relative shrink-0">
+                                  <input type="file" id="lab-upload" className="hidden" accept="image/*" onChange={handleLabImageUpload} />
+                                  <label htmlFor="lab-upload" className="flex items-center justify-center w-12 h-12 rounded-xl bg-slate-800 border border-slate-700 cursor-pointer hover:bg-slate-700 transition-colors">
+                                     <ImageIcon className="w-5 h-5 text-slate-400" />
+                                  </label>
+                               </div>
+                               <Input 
+                                 value={labInput} 
+                                 onChange={e => setLabInput(e.target.value)} 
+                                 placeholder="Ej: Sam está siendo muy seco, quiero que use más emojis y sea espiritual..." 
+                                 className="bg-slate-950 border-slate-800 text-white h-12" 
+                                 disabled={labProcessing} 
+                               />
+                               <Button type="submit" disabled={labProcessing || (!labInput.trim() && !labImage)} className="bg-indigo-600 h-12 px-6">
+                                  <Send className="w-5 h-5" />
+                               </Button>
+                            </div>
+                         </form>
+                      </Card>
+                   </div>
+
+                   <div className="lg:col-span-4 flex flex-col gap-6">
+                      <Card className="bg-slate-900 border-slate-800 border-l-4 border-l-yellow-500 shadow-xl">
+                         <CardHeader><CardTitle className="text-xs uppercase tracking-widest text-yellow-500 flex items-center gap-2"><Sparkles className="w-4 h-4"/> Propuesta de Mejora</CardTitle></CardHeader>
+                         <CardContent className="space-y-4">
+                            {!proposedPrompts ? (
+                               <div className="py-10 text-center text-slate-600 text-[10px] italic">No hay cambios propuestos aún. Habla con el Arquitecto para generar una versión mejorada de Sam.</div>
+                            ) : (
+                               <div className="space-y-4">
+                                  <div className="p-3 bg-slate-950 rounded border border-slate-800">
+                                     <p className="text-[10px] text-slate-500 uppercase font-bold mb-2">Impacto en el Cerebro:</p>
+                                     <ul className="text-[10px] text-slate-300 space-y-2">
+                                        <li className="flex items-center gap-2"><div className="w-1 h-1 rounded-full bg-indigo-500"/> Se ajustó la personalidad.</li>
+                                        <li className="flex items-center gap-2"><div className="w-1 h-1 rounded-full bg-indigo-500"/> Se optimizó la estrategia de venta.</li>
+                                     </ul>
+                                  </div>
+                                  <Button onClick={applyProposedPrompts} className="w-full bg-yellow-600 hover:bg-yellow-700 h-12 font-bold shadow-lg shadow-yellow-900/20">
+                                     <CheckCircle2 className="w-4 h-4 mr-2" /> APLICAR PROPUESTA
+                                  </Button>
+                               </div>
+                            )}
+                         </CardContent>
+                      </Card>
+
+                      <div className="p-4 bg-indigo-900/10 border border-indigo-500/20 rounded-xl space-y-2">
+                         <h4 className="text-[10px] font-bold text-indigo-400 uppercase">¿Cómo usar el Laboratorio?</h4>
+                         <p className="text-[10px] text-slate-400 leading-relaxed italic">
+                            "En lugar de editar los textos a mano, pídele al Arquitecto: 'Ajusta el ADN para que Sam no dé precios sin el email' o sube una foto de una mala respuesta y dile: 'Corrige este tono'."
+                         </p>
+                      </div>
+                   </div>
+                </div>
+            </TabsContent>
+
             <TabsContent value="alma" className="m-0 h-full flex flex-col data-[state=inactive]:hidden">
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 flex-1 min-h-0">
                   <div className="h-full min-h-0">
