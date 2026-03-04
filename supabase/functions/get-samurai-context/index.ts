@@ -22,29 +22,35 @@ serve(async (req) => {
     const baseUrl = wcUrl.endsWith('/') ? wcUrl.slice(0, -1) : wcUrl;
     const path = checkoutPath.startsWith('/') ? checkoutPath : `/${checkoutPath}`;
     
-    // El orden importa: Primero añadimos al carrito, luego pasamos los datos
+    // Base del link con el producto
     let paymentLink = `${baseUrl}${path}?add-to-cart=${productId}`;
     
+    // Mapeo estricto para FunnelKit (wffn_)
     if (lead.nombre && !lead.nombre.includes('Nuevo Lead')) {
         const names = lead.nombre.trim().split(' ');
         const fn = encodeURIComponent(names[0]);
-        // FunnelKit prefiere billing_first_name o wffn_billing_first_name
-        paymentLink += `&billing_first_name=${fn}&wffn_billing_first_name=${fn}&first_name=${fn}`;
+        // Usamos tanto el ID del campo como el prefijo wffn_
+        paymentLink += `&wffn_billing_first_name=${fn}&billing_first_name=${fn}&first_name=${fn}`;
+        
+        if (names.length > 1) {
+           const ln = encodeURIComponent(names.slice(1).join(' '));
+           paymentLink += `&wffn_billing_last_name=${ln}&billing_last_name=${ln}&last_name=${ln}`;
+        }
     }
     
     if (lead.email) {
        const em = encodeURIComponent(lead.email);
-       paymentLink += `&billing_email=${em}&wffn_billing_email=${em}&email=${em}`;
+       paymentLink += `&wffn_billing_email=${em}&billing_email=${em}&email=${em}`;
     }
     
     if (lead.telefono) {
        const ph = encodeURIComponent(lead.telefono);
-       paymentLink += `&billing_phone=${ph}&wffn_billing_phone=${ph}&phone=${ph}`;
+       paymentLink += `&wffn_billing_phone=${ph}&billing_phone=${ph}&phone=${ph}`;
     }
     
     if (lead.ciudad) {
        const ct = encodeURIComponent(lead.ciudad);
-       paymentLink += `&billing_city=${ct}&wffn_billing_city=${ct}&city=${ct}`;
+       paymentLink += `&wffn_billing_city=${ct}&billing_city=${ct}&city=${ct}`;
     }
 
     const bankInfo = `Banco: ${getConfig('bank_name')}\nCuenta: ${getConfig('bank_account')}\nCLABE: ${getConfig('bank_clabe')}\nTitular: ${getConfig('bank_holder')}`;
@@ -58,8 +64,8 @@ ${pAlma}
 ${pAdn}
 ${pEstrategia}
 
-=== LINK DE PAGO (AUTO-RELLENABLE) ===
-Usa este link exacto. Contiene los parámetros billing_ y wffn_ para FunnelKit:
+=== LINK DE PAGO (FUNNELKIT) ===
+Usa este link exacto. Está diseñado para saltar el formulario de FunnelKit:
 ${paymentLink}
 
 === DATOS TRANSFERENCIA ===
