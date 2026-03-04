@@ -18,18 +18,22 @@ serve(async (req) => {
 
     // MODO VISIÓN (Ojo de Halcón - Comprobantes / Posters)
     if (mode === 'VISION') {
-       console.log(`[scrape-website] Modo Visión activado para: ${url}`);
+       console.log(`[scrape-website] Modo Visión activado para URL: ${url}`);
        
+       if (!url) throw new Error("No se proporcionó una URL de imagen válida.");
+
        const { data: configs } = await supabaseClient.from('app_config').select('key, value');
        const apiKey = configs?.find(c => c.key === 'openai_api_key')?.value;
        
-       // Toma las instrucciones de la Pestaña 4 del Panel. Si está en blanco, usa el texto por defecto.
+       // Toma las instrucciones de la Base de datos (Pestaña 4 de Cerebro Core)
        let customVisionPrompt = configs?.find(c => c.key === 'prompt_vision_instrucciones')?.value;
+       
+       // Fallback de seguridad estricto
        if (!customVisionPrompt || customVisionPrompt.trim() === '') {
-          customVisionPrompt = "Analiza esta imagen. Si es un POSTER, extrae Título, Fechas, Ciudad y Precios. Si es un COMPROBANTE, extrae Banco, Monto, Referencia y Fecha. Responde en texto plano.";
+          customVisionPrompt = "Analiza esta imagen con extremo detalle y precisión. Si es un POSTER PROMOCIONAL: Extrae Título, Fechas, Ciudad y Precios. Si es un COMPROBANTE DE PAGO: Extrae Banco, Monto transferido, Fecha y Referencia. Responde en texto plano.";
        }
           
-       if (!apiKey) throw new Error("OpenAI API Key no encontrada.");
+       if (!apiKey) throw new Error("OpenAI API Key no encontrada en Ajustes.");
 
        const response = await fetch("https://api.openai.com/v1/chat/completions", {
           method: 'POST',
@@ -48,13 +52,15 @@ serve(async (req) => {
                 ]
               }
             ],
-            max_tokens: 500
+            max_tokens: 800,
+            temperature: 0.1 // Baja temperatura para análisis de datos preciso
           })
        });
 
        if (!response.ok) {
          const errorText = await response.text();
-         throw new Error(`OpenAI API Error: ${errorText}`);
+         console.error("[scrape-website] Error OpenAI:", errorText);
+         throw new Error(`OpenAI rechazó la imagen. Asegúrate de que el formato sea soportado (JPG/PNG).`);
        }
 
        const aiData = await response.json();
@@ -99,7 +105,7 @@ serve(async (req) => {
        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
     });
 
-  } catch (error) {
+  } catch (error: any) {
     console.error("[scrape-website] Error:", error.message);
     return new Response(JSON.stringify({ success: false, error: error.message }), { 
         status: 200, 

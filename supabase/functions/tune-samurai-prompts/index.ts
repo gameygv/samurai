@@ -25,21 +25,28 @@ Tu misión es reescribir la configuración de Samurai basándote en el feedback 
 VERDAD MAESTRA (Datos reales del negocio):
 ${masterTruth}
 
-CONFIGURACIÓN ACTUAL:
-1. Alma: ${currentPrompts.prompt_alma_samurai || 'Vacio'}
-2. ADN: ${currentPrompts.prompt_adn_core || 'Vacio'}
-3. Cierre: ${currentPrompts.prompt_estrategia_cierre || 'Vacio'}
-4. Visión: ${currentPrompts.prompt_vision_instrucciones || 'Vacio'}
+CONFIGURACIÓN ACTUAL DE LOS PROMPTS QUE DEBES EDITAR:
+1. prompt_alma_samurai: ${currentPrompts.prompt_alma_samurai || 'Vacio'}
+2. prompt_adn_core: ${currentPrompts.prompt_adn_core || 'Vacio'}
+3. prompt_estrategia_cierre: ${currentPrompts.prompt_estrategia_cierre || 'Vacio'}
+4. prompt_vision_instrucciones: ${currentPrompts.prompt_vision_instrucciones || 'Vacio'} (ESTE CONTROLA EL 'OJO DE HALCÓN', ÚSALO SI EL USUARIO PIDE MEJORAR LA LECTURA DE IMÁGENES O COMPROBANTES DE PAGO).
 
 TU TAREA:
-1. Identifica el error en la captura o instrucción.
-2. Compara con la VERDAD MAESTRA (si el error es de un precio o fecha, usa los datos de arriba para corregirlo).
-3. Devuelve el JSON con los prompts mejorados.
+1. Identifica qué quiere corregir el usuario.
+2. Si el usuario habla de OCR, lectura de imágenes, o revisión de comprobantes, DEBES modificar 'prompt_vision_instrucciones'.
+3. Si habla de tono o personalidad, modifica 'prompt_adn_core'.
+4. Si habla de precios, procesos o ventas, modifica 'prompt_estrategia_cierre'.
+5. Devuelve TODO el JSON con los prompts mejorados. Los que no cambien, déjalos igual.
 
-RESPONDE SOLO JSON:
+RESPONDE SOLO JSON, CON LA ESTRUCTURA EXACTA:
 {
-  "message": "Explicación del ajuste.",
-  "prompts": { "prompt_alma_samurai": "...", "prompt_adn_core": "...", "prompt_estrategia_cierre": "...", "prompt_vision_instrucciones": "..." }
+  "message": "Explicación del ajuste realizado.",
+  "prompts": { 
+    "prompt_alma_samurai": "...", 
+    "prompt_adn_core": "...", 
+    "prompt_estrategia_cierre": "...", 
+    "prompt_vision_instrucciones": "..." 
+  }
 }
 `;
 

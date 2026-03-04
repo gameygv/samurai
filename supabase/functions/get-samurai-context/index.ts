@@ -16,9 +16,9 @@ serve(async (req) => {
     const { data: configs } = await supabaseClient.from('app_config').select('key, value');
     const getConfig = (key: string) => configs?.find((c: any) => c.key === key)?.value || "";
 
-    const almaSamurai = getConfig('prompt_alma_samurai') || "";
-    const adnCore = getConfig('prompt_adn_core') || "";
-    const estrategiaCierre = getConfig('prompt_estrategia_cierre') || "";
+    const almaSamurai = getConfig('prompt_alma_samurai') || "Actúa como un asistente amable.";
+    const adnCore = getConfig('prompt_adn_core') || "Sé profesional.";
+    const estrategiaCierre = getConfig('prompt_estrategia_cierre') || "Vende los cursos.";
     const relearningCia = getConfig('prompt_relearning') || "";
 
     // 2. Construcción de Variables Dinámicas (Finanzas)
@@ -51,9 +51,10 @@ serve(async (req) => {
 
     // ============================================================================
     // ENSAMBLAJE MAESTRO - REGLA DE PRIORIDADES
-    // Ninguna regla oculta. Todo queda expuesto en este bloque literal.
     // ============================================================================
     const systemPrompt = `
+INSTRUCCIÓN DE SISTEMA: Sigue EXCLUSIVAMENTE las instrucciones redactadas a continuación. No hay reglas de venta ocultas. Tú eres lo que está escrito aquí.
+
 === 1. ALMA DE SAMURAI (Propósito y Presentación) ===
 ${almaSamurai}
 
@@ -69,21 +70,21 @@ ${estrategiaCierre}
 - Email: ${lead.email && lead.email.includes('@') ? lead.email : 'NO PROPORCIONADO (Condición para dar datos de pago)'}
 
 === DATOS FINANCIEROS DINÁMICOS ===
-Usa esto SOLAMENTE cuando el cliente pida pagar y ya tengas su Email:
+Usa esto SOLAMENTE cuando el cliente pida pagar y ya tengas su Email (o si tus instrucciones de arriba indican otra cosa):
 - Link de Tarjeta: ${paymentLink}
 - Transferencia: \n${bankInfo}
 
 === 4. MEDIA MANAGER (Inteligencia de Pósters) ===
-INSTRUCCIONES ESTRICTAS PARA EL USO DE PÓSTERS:
-1. Compara la CIUDAD del cliente con los pósters disponibles. Si no hay uno en su ciudad exacta, sugiérele amablemente la sede más cercana disponible en el catálogo.
-2. Revisa las FECHAS leídas en el "TEXTO LEÍDO DE LA IMAGEN". Si la fecha ya pasó según el día de hoy, NO envíes el póster ni ofrezcas ese evento.
-3. Si el póster es válido y encaja con el cliente, DEBES pegar textualmente su "CÓDIGO DE ENVÍO" en tu respuesta para que el sistema lo envíe. (Ej: <<MEDIA:https://...>>)
+INSTRUCCIONES PARA EL USO DE PÓSTERS:
+1. Compara la CIUDAD del cliente con los pósters disponibles.
+2. Revisa las FECHAS leídas en el "TEXTO LEÍDO DE LA IMAGEN".
+3. Si el póster es válido, DEBES pegar textualmente su "CÓDIGO DE ENVÍO" en tu respuesta. (Ej: <<MEDIA:https://...>>)
 
 [CATÁLOGO DE PÓSTERS]:
 ${mediaCatalog}
 
 === 5. VERDAD MAESTRA Y BASE DE CONOCIMIENTO ===
-La siguiente información contiene precios generales, logística y metodologías oficiales. Usa esto para resolver dudas:
+Datos reales leídos de tu sitio web e integraciones. Usa esto para resolver dudas:
 
 ${truthBlockWeb}
 
