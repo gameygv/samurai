@@ -22,35 +22,39 @@ serve(async (req) => {
     const baseUrl = wcUrl.endsWith('/') ? wcUrl.slice(0, -1) : wcUrl;
     const path = checkoutPath.startsWith('/') ? checkoutPath : `/${checkoutPath}`;
     
-    // Base del link con el producto
+    // Link Base: Dominio + Checkout + Añadir Producto
     let paymentLink = `${baseUrl}${path}?add-to-cart=${productId}`;
     
-    // MAPEADO AGRESIVO PARA FUNNELKIT (wffn_)
+    // MAPEADO EXACTO SEGÚN CAPTURA FUNNELKIT
     if (lead.nombre && !lead.nombre.includes('Nuevo Lead')) {
         const names = lead.nombre.trim().split(' ');
         const fn = encodeURIComponent(names[0]);
-        // Parámetros redundantes: FunnelKit suele usar wffn_first_name o wffn_billing_first_name
-        paymentLink += `&wffn_first_name=${fn}&wffn_billing_first_name=${fn}&billing_first_name=${fn}&first_name=${fn}`;
+        // Parámetro exacto: wffn_billing_first_name
+        paymentLink += `&wffn_billing_first_name=${fn}`;
         
         if (names.length > 1) {
            const ln = encodeURIComponent(names.slice(1).join(' '));
-           paymentLink += `&wffn_last_name=${ln}&wffn_billing_last_name=${ln}&billing_last_name=${ln}&last_name=${ln}`;
+           // Parámetro exacto: wffn_billing_last_name
+           paymentLink += `&wffn_billing_last_name=${ln}`;
         }
     }
     
     if (lead.email) {
        const em = encodeURIComponent(lead.email);
-       paymentLink += `&wffn_email=${em}&wffn_billing_email=${em}&billing_email=${em}&email=${em}`;
+       // Parámetro exacto: wffn_billing_email
+       paymentLink += `&wffn_billing_email=${em}`;
     }
     
     if (lead.telefono) {
        const ph = encodeURIComponent(lead.telefono);
-       paymentLink += `&wffn_phone=${ph}&wffn_billing_phone=${ph}&billing_phone=${ph}&phone=${ph}`;
+       // Parámetro exacto: wffn_billing_phone
+       paymentLink += `&wffn_billing_phone=${ph}`;
     }
     
     if (lead.ciudad) {
        const ct = encodeURIComponent(lead.ciudad);
-       paymentLink += `&wffn_city=${ct}&wffn_billing_city=${ct}&billing_city=${ct}&city=${ct}`;
+       // Parámetro exacto: wffn_billing_city
+       paymentLink += `&wffn_billing_city=${ct}`;
     }
 
     const bankInfo = `Banco: ${getConfig('bank_name')}\nCuenta: ${getConfig('bank_account')}\nCLABE: ${getConfig('bank_clabe')}\nTitular: ${getConfig('bank_holder')}`;
@@ -64,14 +68,14 @@ ${pAlma}
 ${pAdn}
 ${pEstrategia}
 
-=== LINK DE PAGO (FUNNELKIT OPTIMIZED) ===
-Usa este link exacto. Contiene las llaves "wffn_" para que el cliente vea sus datos ya llenos:
+=== LINK DE PAGO (MAPEO FUNNELKIT OK) ===
+Usa este link exacto. Ya tiene los campos wffn_billing_ mapeados:
 ${paymentLink}
 
-=== DATOS TRANSFERENCIA ===
+=== DATOS PARA TRANSFERENCIA ===
 ${bankInfo}
 
-[REGLA]: Entrega el link SOLAMENTE cuando el cliente acepte inscribirse. No lo des antes de tiempo.
+[REGLA]: Entrega el link solamente si el cliente ya te dio su Ciudad y Email.
 `;
 
     return new Response(JSON.stringify({ system_prompt: systemPrompt }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });

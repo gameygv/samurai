@@ -22,7 +22,7 @@ serve(async (req) => {
     const apiKey = getConfig('openai_api_key');
     if (!apiKey) throw new Error("OpenAI API Key no encontrada.");
 
-    // Construcción del Link (FunnelKit wffn_ prefix)
+    // Construcción del Link (FunnelKit exact mapping)
     const wcUrl = getConfig('wc_url') || "https://theelephantbowl.com";
     const checkoutPath = getConfig('wc_checkout_path') || "/inscripciones/";
     const productId = getConfig('wc_product_id') || "1483";
@@ -35,11 +35,11 @@ serve(async (req) => {
       [ADN]: ${customPrompts?.prompt_adn_core || getConfig('prompt_adn_core')}
       [VENTA]: ${customPrompts?.prompt_estrategia_cierre || getConfig('prompt_estrategia_cierre')}
 
-      === GENERACIÓN DE LINK INTELIGENTE ===
-      Para auto-rellenar, añade estos parámetros al link:
-      ${basePaymentLink}&wffn_first_name=NOMBRE&wffn_email=CORREO&wffn_billing_city=CIUDAD
+      === GENERACIÓN DE LINK FUNNELKIT ===
+      Debes usar exactamente este formato para los parámetros:
+      ${basePaymentLink}&wffn_billing_first_name=NOMBRE&wffn_billing_email=CORREO&wffn_billing_city=CIUDAD
       
-      IMPORTANTE: FunnelKit exige el prefijo "wffn_". No lo olvides.
+      IMPORTANTE: Tu WordPress usa el prefijo "wffn_billing_". No lo cambies.
     `;
 
     const messages = [
@@ -65,7 +65,7 @@ serve(async (req) => {
     
     return new Response(JSON.stringify({ 
         answer: parts[0].trim(), 
-        explanation: parts[1] ? JSON.parse(parts[1].trim()) : { layers_used: ["FUNNELKIT"], reasoning: "Link wffn_ generado." }
+        explanation: parts[1] ? JSON.parse(parts[1].trim()) : { layers_used: ["FUNNELKIT"], reasoning: "Link wffn_billing_ generado." }
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
   } catch (error: any) {
