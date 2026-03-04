@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import Layout from '@/components/Layout';
 import { supabase } from '@/integrations/supabase/client';
@@ -13,7 +13,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { 
   Bot, Eye as EyeIcon, Zap, Loader2, Terminal, BrainCircuit, Target, 
-  GitBranch, RefreshCcw, Layers, History, Send, Fingerprint, MessageSquare, AlertTriangle, Database, ImageIcon, Save
+  GitBranch, RefreshCcw, Layers, History, Send, Fingerprint, MessageSquare, AlertTriangle, Database, ImageIcon, Save, Trash2
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { PromptEditor } from '@/components/brain/PromptEditor';
@@ -98,13 +98,33 @@ const AgentBrain = () => {
      } finally { setSaving(false); }
   };
 
+  const handleDeleteSnapshot = async (id: string) => {
+    if (!confirm("¿Seguro que quieres borrar este snapshot?")) return;
+    try {
+      const { error } = await supabase.functions.invoke('manage-prompt-versions', {
+        body: { action: 'DELETE', id }
+      });
+      if (error) throw error;
+      toast.success("Snapshot eliminado");
+      fetchVersions();
+    } catch (err: any) {
+      toast.error("Error al eliminar");
+    }
+  };
+
+  const handleRestoreSnapshot = (snapshot: any) => {
+    if (!confirm(`¿Restaurar "${snapshot.version_name}"? Esto reemplazará los prompts actuales (debes presionar "Aplicar Cambios" después).`)) return;
+    setPrompts(snapshot.prompts_snapshot);
+    toast.success("Snapshot cargado en el editor. No olvides Aplicar Cambios.");
+  };
+
   const handleSimulate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!simQuestion.trim() || simulating) return;
 
-    const userMsg = { role: 'user', text: simQuestion };
-    setSimHistory(prev => [...prev, userMsg]);
     const currentQ = simQuestion;
+    const userMsg = { role: 'user', text: currentQ };
+    setSimHistory(prev => [...prev, userMsg]);
     setSimQuestion("");
     setSimulating(true);
 
@@ -112,10 +132,16 @@ const AgentBrain = () => {
       const { data, error } = await supabase.functions.invoke('simulate-samurai', {
         body: { question: currentQ }
       });
-      if (error) throw error;
+      
+      if (error) {
+         const errorBody = await error.context.json();
+         throw new Error(errorBody.error || "Fallo en la respuesta de la IA");
+      }
+      
       setSimHistory(prev => [...prev, { role: 'bot', text: data.answer, explanation: data.explanation }]);
     } catch (err: any) {
-      toast.error("Error: " + err.message);
+      toast.error("Fallo de Simulación: " + err.message);
+      setSimHistory(prev => [...prev, { role: 'bot', text: "⚠ Error de conexión con el Kernel IA. Revisa la OpenAI API Key en Ajustes." }]);
     } finally {
       setSimulating(false);
     }
@@ -166,7 +192,6 @@ const AgentBrain = () => {
              <TabsTrigger value="debug" className="gap-2 px-4 py-2"><Terminal className="w-4 h-4"/> 6. Kernel Debug</TabsTrigger>
           </TabsList>
 
-          {/* CONTENEDOR DE CONTENIDO - FLEX-1 PARA LLENAR ESPACIO */}
           <div className="flex-1 flex flex-col min-h-0 bg-slate-900/20 rounded-xl border border-slate-800/50 p-1">
             
             <TabsContent value="alma" className="m-0 h-full flex flex-col data-[state=inactive]:hidden">
@@ -210,10 +235,19 @@ const AgentBrain = () => {
                            {versions.length === 0 ? (
                               <TableRow><TableCell colSpan={3} className="text-center py-20 text-slate-600 italic">No hay snapshots creados.</TableCell></TableRow>
                            ) : versions.map(v => (
-                              <TableRow key={v.id} className="border-slate-800 hover:bg-slate-800/30 transition-colors">
+                              <TableRow key={v.id} className="border-slate-800 hover:bg-slate-800/30 transition-colors group">
                                  <TableCell className="font-mono text-indigo-400 text-xs pl-6">{v.version_name}</TableCell>
                                  <TableCell className="text-slate-400 text-[10px]">{new Date(v.created_at).toLocaleString()}</TableCell>
-                                 <TableCell className="text-right pr-6"><Button variant="ghost" size="sm" className="h-8 text-[10px] text-slate-500 hover:text-white hover:bg-slate-800">RESTAURAR</Button></TableCell>
+                                 <TableCell className="text-right pr-6">
+                                    <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                       <Button variant="ghost" size="sm" className="h-8 text-[10px] text-red-500 hover:bg-red-500/10" onClick={() => handleDeleteSnapshot(v.id)}>
+                                          <Trash2 className="w-3.5 h-3.5 mr-1" /> BORRAR
+                                       </Button>
+                                       <Button variant="secondary" size="sm" className="h-8 text-[10px] font-bold" onClick={() => handleRestoreSnapshot(v)}>
+                                          RESTAURAR
+                                       </Button>
+                                    </div>
+                                 </TableCell>
                               </TableRow>
                            ))}
                         </TableBody>
