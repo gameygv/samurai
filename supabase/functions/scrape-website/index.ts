@@ -20,18 +20,21 @@ serve(async (req) => {
     if (mode === 'VISION') {
        console.log(`[scrape-website] Modo Visión activado para: ${url}`);
        
-       const { data: config } = await supabaseClient
-          .from('app_config')
-          .select('value')
-          .eq('key', 'openai_api_key')
-          .maybeSingle();
+       const { data: configs } = await supabaseClient.from('app_config').select('key, value');
+       const apiKey = configs?.find(c => c.key === 'openai_api_key')?.value;
+       
+       // Toma las instrucciones de la Pestaña 4 del Panel. Si está en blanco, usa el texto por defecto.
+       let customVisionPrompt = configs?.find(c => c.key === 'prompt_vision_instrucciones')?.value;
+       if (!customVisionPrompt || customVisionPrompt.trim() === '') {
+          customVisionPrompt = "Analiza esta imagen. Si es un POSTER, extrae Título, Fechas, Ciudad y Precios. Si es un COMPROBANTE, extrae Banco, Monto, Referencia y Fecha. Responde en texto plano.";
+       }
           
-       if (!config?.value) throw new Error("OpenAI API Key no encontrada.");
+       if (!apiKey) throw new Error("OpenAI API Key no encontrada.");
 
        const response = await fetch("https://api.openai.com/v1/chat/completions", {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${config.value}`,
+            'Authorization': `Bearer ${apiKey}`,
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({
@@ -40,10 +43,7 @@ serve(async (req) => {
               {
                 role: "user",
                 content: [
-                  { 
-                    type: "text", 
-                    text: "Analiza esta imagen. Si es un POSTER, extrae Título, Fechas, Ciudad y Precios. Si es un COMPROBANTE, extrae Banco, Monto, Referencia y Fecha. Responde en texto plano." 
-                  },
+                  { type: "text", text: customVisionPrompt },
                   { type: "image_url", image_url: { url: url } }
                 ]
               }
@@ -68,7 +68,6 @@ serve(async (req) => {
     // MODO TEXTO (Estándar - Base de Conocimiento / Sitio Web)
     console.log(`[scrape-website] Modo Texto activado para: ${url}`);
     
-    // 1. Fetch HTML con headers de navegador real para evitar bloqueos
     const response = await fetch(url, {
         headers: { 
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -81,10 +80,8 @@ serve(async (req) => {
     const html = await response.text();
     const $ = cheerio.load(html);
 
-    // 2. Limpieza agresiva del HTML
     $('script, style, noscript, iframe, svg, nav, footer, header, form').remove();
     
-    // 3. Extracción de imágenes relevantes (para la galería)
     const images: string[] = [];
     $('img').each((_, el) => {
         const src = $(el).attr('src');
@@ -93,10 +90,7 @@ serve(async (req) => {
         }
     });
 
-    // 4. Extracción de texto
     let content = $('body').text().replace(/\s\s+/g, ' ').trim();
-    
-    // Limite de seguridad para no saturar el prompt (15,000 caracteres)
     content = content.substring(0, 15000);
 
     if (!content) throw new Error("No se pudo extraer texto legible de la página.");

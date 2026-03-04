@@ -6,7 +6,7 @@ import { corsHeaders } from '../_shared/cors.ts'
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders })
 
-  console.log("[process-followups] Iniciando ciclo...");
+  console.log("[process-followups] Iniciando ciclo AI-Driven...");
 
   try {
     const supabaseClient = createClient(
@@ -15,8 +15,6 @@ serve(async (req) => {
     )
 
     const now = new Date();
-
-    // 1. OBTENER CONFIGURACIÓN
     const { data: configs } = await supabaseClient.from('app_config').select('key, value');
     const getConfig = (key, defaultVal) => configs?.find(c => c.key === key)?.value || defaultVal;
 
@@ -28,63 +26,78 @@ serve(async (req) => {
     };
     const engagementDelayHours = parseInt(getConfig('engagement_reminder_hours', 24));
     
-    // WooCommerce Links
-    const wcUrl = getConfig('wc_url') || "https://theelephantbowl.com";
-    const productId = getConfig('wc_product_id') || "1483"; 
-    
-    // Evolution API Config
     const evolutionApiUrl = getConfig('evolution_api_url', null);
     const evolutionApiKey = getConfig('evolution_api_key', null);
+    const openAiKey = getConfig('openai_api_key', null);
+
+    if (!openAiKey) throw new Error("Falta OpenAI API Key para generar los mensajes.");
 
     const results = [];
     const reactivated = [];
 
-    // --- HELPER PARA ENVÍO SEGURO A EVOLUTION API ---
-    const sendSafeMessage = async (lead, text, type) => {
+    // Helper para generar mensaje con IA y enviarlo
+    const generateAndSend = async (lead, triggerInstruction, type) => {
         try {
-            // 1. Guardar en DB para el historial del chat
-            await supabaseClient.from('conversaciones').insert({
-                lead_id: lead.id,
-                emisor: 'SAMURAI',
-                mensaje: text,
-                platform: 'AUTO_FOLLOWUP'
+            // 1. Obtener Contexto Completo (Tus Prompts del Panel)
+            const { data: kernelData } = await supabaseClient.functions.invoke('get-samurai-context', { body: { lead } });
+            
+            // 2. Obtener Historial de Chat
+            const { data: history } = await supabaseClient.from('conversaciones').select('emisor, mensaje').eq('lead_id', lead.id).order('created_at', { ascending: false }).limit(10);
+            const historyMsgs = history ? history.reverse() : [];
+
+            // 3. IA Genera el mensaje basado en TUS REGLAS
+            const aiRes = await fetch("https://api.openai.com/v1/chat/completions", {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${openAiKey}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    model: "gpt-4o",
+                    messages: [
+                        { role: "system", content: kernelData?.system_prompt },
+                        ...historyMsgs.map(m => ({ role: (m.emisor === 'CLIENTE' || m.emisor === 'HUMANO') ? 'user' : 'assistant', content: m.mensaje })),
+                        { role: "system", content: triggerInstruction }
+                    ],
+                    temperature: 0.4
+                })
             });
 
-            // 2. Enviar a Evolution API con la estructura correcta
+            if (!aiRes.ok) throw new Error("Fallo en OpenAI");
+            const aiData = await aiRes.json();
+            const rawAnswer = aiData.choices?.[0]?.message?.content || "";
+            
+            const mediaRegex = /<<MEDIA:(.*?)>>/;
+            const mediaMatch = rawAnswer.match(mediaRegex);
+            const mediaUrl = mediaMatch ? mediaMatch[1] : null;
+            let textToSend = rawAnswer.replace(mediaRegex, '').trim();
+
+            if (!textToSend) return false;
+
+            // 4. Enviar por Evolution API v2
             if (evolutionApiUrl && evolutionApiKey) {
-                const res = await fetch(evolutionApiUrl, {
-                    method: 'POST',
-                    headers: { 
-                        'Content-Type': 'application/json',
-                        'apikey': evolutionApiKey
-                    },
-                    body: JSON.stringify({
-                        number: lead.telefono,
-                        options: { 
-                            delay: 2000, 
-                            presence: 'composing' 
-                        },
-                        textMessage: {
-                            text: text
-                        }
-                    })
-                });
-                if (!res.ok) {
-                    const errorBody = await res.json().catch(() => ({}));
-                    throw new Error(`Evolution API status: ${res.status} - ${errorBody.message || ''}`);
+                if (mediaUrl) {
+                    await fetch(evolutionApiUrl.replace('message/sendText', 'message/sendMedia'), {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'apikey': evolutionApiKey },
+                        body: JSON.stringify({ number: lead.telefono, mediaMessage: { mediatype: "image", media: mediaUrl, caption: textToSend }, delay: 1500 })
+                    });
+                } else {
+                    await fetch(evolutionApiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'apikey': evolutionApiKey },
+                        body: JSON.stringify({ number: lead.telefono, text: textToSend, delay: 1500, linkPreview: true })
+                    });
                 }
-            } else {
-                console.warn(`[process-followups] Evolution API no configurada. Mensaje para ${lead.id} no enviado.`);
             }
+
+            // 5. Guardar en Base de Datos
+            await supabaseClient.from('conversaciones').insert({ 
+                lead_id: lead.id, emisor: 'SAMURAI', 
+                mensaje: mediaUrl ? `[IMG: ${mediaUrl}] ${rawAnswer}` : rawAnswer, 
+                platform: 'AUTO_FOLLOWUP' 
+            });
+
             return true;
         } catch (e) {
-            console.error(`[process-followups] Error enviando a ${lead.id}:`, e);
-            await supabaseClient.from('activity_logs').insert({
-                action: 'ERROR',
-                resource: 'SYSTEM',
-                description: `Fallo follow-up para ${lead.nombre}: ${e.message}`,
-                status: 'ERROR'
-            });
+            console.error(`[process-followups] Error en ${lead.id}:`, e);
             return false;
         }
     };
@@ -93,12 +106,7 @@ serve(async (req) => {
     // FLUJO 1: CIERRE DE VENTAS (HIGH INTENT)
     // ==========================================
     const { data: hotLeads } = await supabaseClient
-      .from('leads')
-      .select('*')
-      .eq('buying_intent', 'ALTO')
-      .neq('ai_paused', true)
-      .neq('buying_intent', 'COMPRADO')
-      .lt('followup_stage', 5);
+      .from('leads').select('*').eq('buying_intent', 'ALTO').neq('ai_paused', true).neq('buying_intent', 'COMPRADO').lt('followup_stage', 5).limit(5); // Lote para no saturar memoria
 
     for (const lead of (hotLeads || [])) {
        const lastInteraction = new Date(lead.last_message_at || lead.created_at); 
@@ -106,28 +114,13 @@ serve(async (req) => {
        const nextStage = (lead.followup_stage || 0) + 1;
 
        if (delays[nextStage] && diffHours >= delays[nextStage]) {
-          let message = "";
-          const citySuffix = lead.ciudad ? ` para el taller en ${lead.ciudad}` : " para el taller";
+          // El Trigger inyecta la instrucción invisible para que la IA actúe
+          const triggerInstruction = `[INSTRUCCIÓN DE SISTEMA]: El cliente lleva ${Math.round(diffHours)} horas sin responder y tiene una intención de compra ALTA. Ejecuta estrictamente el protocolo correspondiente a la FASE ${nextStage} de tu [ESTRATEGIA DE CIERRE Y FASES]. Escribe solo el mensaje final que le enviarás, manteniendo tu personalidad de Sam. Ofrécele siempre el Link de Tarjeta o Transferencia de tus Datos Financieros.`;
           
-          // Generar link dinámico por cada lead
-          let leadBookingLink = `${wcUrl}/checkout/?add-to-cart=${productId}`;
-          if (lead.nombre && !lead.nombre.includes('Nuevo Lead')) leadBookingLink += `&billing_first_name=${encodeURIComponent(lead.nombre)}`;
-          if (lead.email) leadBookingLink += `&billing_email=${encodeURIComponent(lead.email)}`;
-          if (lead.telefono) leadBookingLink += `&billing_phone=${encodeURIComponent(lead.telefono)}`;
-
-          switch (nextStage) {
-            case 1: message = `Hola ${lead.nombre}, solo quería confirmar que recibieras bien el link de reserva${citySuffix}. ¿Tuviste oportunidad de verlo? Aquí te lo dejo para tu anticipo: ${leadBookingLink}`; break;
-            case 2: message = `Qué tal ${lead.nombre}, sigo guardando tu lugar${citySuffix}. ¿Hubo algún problema técnico con el pago? Si prefieres transferencia directa, avísame.`; break;
-            case 3: message = `Hola ${lead.nombre}, te escribo porque el cupo${citySuffix} se está agotando. ¿Aún te interesa asegurar tu lugar con tu anticipo o lo libero?`; break;
-            case 4: message = `Atención ${lead.nombre}: El sistema me indica que no se completó tu reserva. Liberaré tu lugar hoy. Si deseas conservarlo, usa este link: ${leadBookingLink}`; break;
-          }
-
-          if (message) {
-            const sent = await sendSafeMessage(lead, message, 'SALE_FOLLOWUP');
-            if (sent) {
-                await supabaseClient.from('leads').update({ followup_stage: nextStage, last_message_at: now.toISOString() }).eq('id', lead.id);
-                results.push({ lead: lead.nombre, stage: nextStage });
-            }
+          const sent = await generateAndSend(lead, triggerInstruction, 'SALE_FOLLOWUP');
+          if (sent) {
+              await supabaseClient.from('leads').update({ followup_stage: nextStage, last_message_at: now.toISOString() }).eq('id', lead.id);
+              results.push({ lead: lead.nombre, stage: nextStage });
           }
        }
     }
@@ -136,28 +129,19 @@ serve(async (req) => {
     // FLUJO 2: REACTIVACIÓN (LOW/MED INTENT)
     // ==========================================
     const { data: coldLeads } = await supabaseClient
-      .from('leads')
-      .select('*')
-      .neq('buying_intent', 'ALTO')
-      .neq('buying_intent', 'COMPRADO')
-      .neq('ai_paused', true)
-      .eq('followup_stage', 0); // Solo stage 0
+      .from('leads').select('*').neq('buying_intent', 'ALTO').neq('buying_intent', 'COMPRADO').neq('ai_paused', true).eq('followup_stage', 0).limit(5);
 
     for (const lead of (coldLeads || [])) {
         const lastInteraction = new Date(lead.last_message_at || lead.created_at); 
         const diffHours = (now.getTime() - lastInteraction.getTime()) / (1000 * 60 * 60);
 
         if (diffHours >= engagementDelayHours) {
-            const namePart = lead.nombre && !lead.nombre.includes('Nuevo') ? ` ${lead.nombre}` : '';
-            const msg = `Hola${namePart}, ¿pudiste revisar la información? Sigo pendiente por si tienes dudas o quieres saber fechas para tu ciudad.`;
+            // El Trigger inyecta la instrucción invisible para Reactivación
+            const triggerInstruction = `[INSTRUCCIÓN DE SISTEMA]: El cliente dejó de responder la conversación hace ${Math.round(diffHours)} horas. Ejecuta estrictamente el protocolo de REACTIVACIÓN definido en tu [ESTRATEGIA DE CIERRE Y FASES]. Escribe solo el mensaje final que le enviarás de forma natural, amigable y sin parecer un robot automático. Si le enviamos un póster, pregúntale si le quedó alguna duda sobre ese evento.`;
             
-            const sent = await sendSafeMessage(lead, msg, 'ENGAGEMENT');
+            const sent = await generateAndSend(lead, triggerInstruction, 'ENGAGEMENT');
             if (sent) {
-                // Stage 1 marca que ya hicimos el intento de reactivación
-                await supabaseClient.from('leads').update({ 
-                    followup_stage: 1, 
-                    last_message_at: now.toISOString() 
-                }).eq('id', lead.id);
+                await supabaseClient.from('leads').update({ followup_stage: 1, last_message_at: now.toISOString() }).eq('id', lead.id);
                 reactivated.push({ lead: lead.id });
             }
         }
