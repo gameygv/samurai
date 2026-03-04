@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { SystemStatus } from '@/components/SystemStatus';
 import { BrainHealthCard } from '@/components/dashboard/BrainHealthCard';
+import { TaskRadar } from '@/components/dashboard/TaskRadar';
 import { cn } from '@/lib/utils';
 import { 
   Database, Shield, Activity, Terminal, AlertTriangle, 
@@ -35,6 +36,7 @@ const Index = () => {
     overallStatus: 'Sync Required' as 'Operational' | 'Degraded' | 'Sync Required'
   });
 
+  const [upcomingTasks, setUpcomingTasks] = useState<any[]>([]);
   const [funnelData, setFunnelData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [latency, setLatency] = useState<number | null>(null);
@@ -90,6 +92,16 @@ const Index = () => {
         webHealth, 
         overallStatus: (webHealth < 50 || !adnPromptRes.data) ? 'Sync Required' : (webHealth < 80 ? 'Degraded' : 'Operational') 
       });
+
+      // Mapear Tareas del Radar
+      const tasks = (followupsRes.data || []).map(f => ({
+        id: f.id,
+        type: 'FOLLOWUP',
+        target: f.nombre || 'Lead Desconocido',
+        time: new Date(f.next_followup_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        status: 'scheduled'
+      }));
+      setUpcomingTasks(tasks);
 
       setFunnelData([
         { name: 'Prospectos', value: leads.length, color: '#6366f1' },
@@ -170,26 +182,7 @@ const Index = () => {
                   </CardContent>
                 </Card>
 
-                <Card className="bg-slate-900 border-slate-800 flex flex-col shadow-2xl overflow-hidden">
-                  <CardHeader className="py-4 border-b border-slate-800 bg-slate-950/20">
-                     <CardTitle className="text-white text-xs flex items-center gap-2 uppercase tracking-widest">
-                        <Fingerprint className="w-4 h-4 text-indigo-400" /> Match Quality Estimate
-                     </CardTitle>
-                  </CardHeader>
-                  <CardContent className="p-6 flex flex-col items-center justify-center gap-4">
-                     <div className="relative w-32 h-32 flex items-center justify-center">
-                        <svg className="w-full h-full transform -rotate-90">
-                           <circle cx="64" cy="64" r="58" stroke="currentColor" strokeWidth="8" fill="transparent" className="text-slate-800" />
-                           <circle cx="64" cy="64" r="58" stroke="currentColor" strokeWidth="8" fill="transparent" strokeDasharray={364} strokeDashoffset={364 - (364 * (stats.totalLeads > 0 ? (stats.capiReadyLeads / stats.totalLeads) : 0))} className="text-indigo-500 transition-all duration-1000" />
-                        </svg>
-                        <span className="absolute text-2xl font-bold text-white">{Math.round((stats.totalLeads > 0 ? (stats.capiReadyLeads / stats.totalLeads) : 0) * 100)}%</span>
-                     </div>
-                     <div className="text-center space-y-1">
-                        <p className="text-[10px] text-slate-400 uppercase font-bold">Calidad de Datos</p>
-                        <p className="text-[9px] text-slate-600 italic leading-relaxed">Meta necesita Nombre + Email + Ciudad para optimizar el CPA.</p>
-                     </div>
-                  </CardContent>
-                </Card>
+                <TaskRadar tasks={upcomingTasks} />
              </div>
 
              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

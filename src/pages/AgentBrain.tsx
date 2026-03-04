@@ -121,6 +121,25 @@ const AgentBrain = () => {
      }
   };
 
+  const handleReportSimError = async (userMsg: string, aiRes: string) => {
+     const instruction = prompt("¿Qué debería haber respondido o qué instrucción de #CIA quieres inyectar?");
+     if (!instruction) return;
+
+     const tid = toast.loading("Inyectando lección en Bitácora...");
+     try {
+        await supabase.from('errores_ia').insert({
+            mensaje_cliente: `SIMULACIÓN: ${userMsg}`,
+            respuesta_ia: aiRes,
+            correccion_sugerida: instruction,
+            categoria: 'CONDUCTA',
+            estado_correccion: 'REPORTADA'
+        });
+        toast.success("Lección enviada a la Bitácora para validación.", { id: tid });
+     } catch (err) {
+        toast.error("Error al reportar", { id: tid });
+     }
+  };
+
   // --- LABORATORY ---
   const handlePasteImage = (e: React.ClipboardEvent) => {
     const item = Array.from(e.clipboardData.items).find(x => x.type.indexOf('image') !== -1);
@@ -242,8 +261,17 @@ const AgentBrain = () => {
                    <div className="space-y-4 max-w-4xl mx-auto">
                       {simMessages.map((msg, i) => (
                           <div key={i} className={cn("flex flex-col gap-2", msg.role === 'user' ? 'items-end' : 'items-start')}>
-                             <div className={cn("max-w-[85%] rounded-2xl p-4 text-sm", msg.role === 'user' ? 'bg-indigo-600/20 border border-indigo-500/30' : 'bg-slate-950 border border-slate-800')}>
+                             <div className={cn("max-w-[85%] rounded-2xl p-4 text-sm group relative", msg.role === 'user' ? 'bg-indigo-600/20 border border-indigo-500/30' : 'bg-slate-950 border border-slate-800')}>
                                 {msg.text}
+                                {msg.role === 'assistant' && (
+                                   <button 
+                                      onClick={() => handleReportSimError(simMessages[i-1]?.text, msg.text)}
+                                      className="absolute -right-12 top-0 p-2 opacity-0 group-hover:opacity-100 transition-opacity text-red-500 hover:text-red-400"
+                                      title="Reportar error a #CIA"
+                                   >
+                                      <AlertTriangle className="w-4 h-4" />
+                                   </button>
+                                )}
                              </div>
                              {msg.explanation && <div className="text-[9px] text-slate-500 italic ml-4">Raíz: {msg.explanation.reasoning}</div>}
                           </div>
