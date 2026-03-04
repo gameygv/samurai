@@ -20,29 +20,29 @@ serve(async (req) => {
 
     const { question, history, customPrompts } = await req.json();
 
-    // 1. Obtener la API Key
-    const { data: config } = await supabaseClient.from('app_config').select('value').eq('key', 'openai_api_key').single();
-    if (!config?.value) throw new Error("OpenAI API Key no encontrada.");
+    // 1. Obtener Configuraciones Globales (IA + Finanzas)
+    const { data: configs } = await supabaseClient.from('app_config').select('key, value');
+    const getConfig = (key: string) => configs?.find(c => c.key === key)?.value || "";
+    
+    const apiKey = getConfig('openai_api_key');
+    if (!apiKey) throw new Error("OpenAI API Key no encontrada.");
 
-    // 2. Usar prompts enviados por el usuario o caer en los de la DB
-    let pAlma = customPrompts?.prompt_alma_samurai;
-    let pAdn = customPrompts?.prompt_adn_core;
-    let pEstrategia = customPrompts?.prompt_estrategia_cierre;
-    let pRelearning = customPrompts?.prompt_relearning;
+    // 2. Construcción del Link de Pago Dinámico (Igual que en producción)
+    const wcUrl = getConfig('wc_url') || "https://theelephantbowl.com";
+    const productId = getConfig('wc_product_id') || "1483";
+    const bankInfo = `Banco: ${getConfig('bank_name')}\nCuenta: ${getConfig('bank_account')}\nCLABE: ${getConfig('bank_clabe')}\nTitular: ${getConfig('bank_holder')}`;
 
-    if (!pAlma) {
-        const { data: promptData } = await supabaseClient.from('app_config').select('key, value').eq('category', 'PROMPT');
-        const getP = (key: string) => promptData?.find(p => p.key === key)?.value || "";
-        pAlma = getP('prompt_alma_samurai');
-        pAdn = getP('prompt_adn_core');
-        pEstrategia = getP('prompt_estrategia_cierre');
-        pRelearning = getP('prompt_relearning');
-    }
+    // 3. Usar prompts enviados por el usuario o caer en los de la DB
+    const pAlma = customPrompts?.prompt_alma_samurai || getConfig('prompt_alma_samurai');
+    const pAdn = customPrompts?.prompt_adn_core || getConfig('prompt_adn_core');
+    const pEstrategia = customPrompts?.prompt_estrategia_cierre || getConfig('prompt_estrategia_cierre');
+    const pRelearning = customPrompts?.prompt_relearning || getConfig('prompt_relearning');
 
-    // 3. Obtener Verdad Maestra
+    // 4. Obtener Verdad Maestra
     const { data: webContent } = await supabaseClient.from('main_website_content').select('title, content').eq('scrape_status', 'success');
     const truth = webContent?.map(w => `[WEB: ${w.title}]\n${w.content}`).join('\n\n') || "Sin datos web.";
 
+    // 5. System Prompt con Inyección Financiera
     const systemPrompt = `
       CONSTITUCIÓN SAMURAI (MODO SIMULACIÓN):
       
@@ -54,25 +54,31 @@ serve(async (req) => {
       [VERDAD MAESTRA]:
       ${truth}
 
+      === DATOS FINANCIEROS DINÁMICOS ===
+      Instrucción: Si el cliente pide pagar y ya identificaste su nombre/email en el historial, genera el link de WooCommerce usando este formato base:
+      ${wcUrl}/checkout/?add-to-cart=${productId}
+      
+      IMPORTANTE (AUTO-RELLENADO): 
+      Si ya conoces el nombre del cliente (ej: Gamey) y su email (ej: gameygv@gmail.com), DEBES añadir los parámetros al link así:
+      &billing_first_name=NOMBRE&billing_email=EMAIL
+      
+      DATOS PARA TRANSFERENCIA:
+      ${bankInfo}
+
       ---
-      DIRECTIVA DE MEMORIA CRÍTICA:
-      - Tienes prohibido pedir datos (Nombre, Ciudad, Email) que el cliente ya te haya dado en mensajes anteriores del historial.
-      - Antes de preguntar "¿Cuál es tu nombre?", revisa el historial. Si ya te lo dio, úsalo.
-      - Si ya tienes todos los datos, procede directamente al cierre o a dar la información solicitada.
+      DIRECTIVA DE MEMORIA:
+      - Revisa el historial de mensajes. Si el cliente ya te dio su Nombre, Ciudad o Email, NO los vuelvas a pedir. 
+      - Si ya tienes el Email, procede al cierre y entrega el link de pago con los parámetros de auto-rellenado.
     `;
 
-    // 4. Formatear historial para OpenAI
     const messages = [
-        { role: "system", content: "Eres Sam, el Samurai Sonoro. Responde manteniendo tu tono místico y disciplinado. Al final de tu respuesta, SIEMPRE añade la cadena '---JSON---' seguida de un objeto JSON con: layers_used (array de strings) y reasoning (string corto)." },
+        { role: "system", content: "Eres Sam. Responde manteniendo tu tono místico. Al final añade '---JSON---' con layers_used y reasoning." },
         { role: "system", content: systemPrompt }
     ];
 
     if (history && history.length > 0) {
         history.forEach(msg => {
-            messages.push({ 
-                role: msg.role === 'bot' ? 'assistant' : 'user', 
-                content: msg.text 
-            });
+            messages.push({ role: msg.role === 'bot' ? 'assistant' : 'user', content: msg.text });
         });
     } else {
         messages.push({ role: "user", content: question });
@@ -80,27 +86,18 @@ serve(async (req) => {
 
     const response = await fetch("https://api.openai.com/v1/chat/completions", {
       method: 'POST',
-      headers: { 'Authorization': `Bearer ${config.value}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ 
-        model: "gpt-4o",
-        messages: messages,
-        temperature: 0.7
-      })
+      headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: "gpt-4o", messages: messages, temperature: 0.5 })
     });
 
     const aiData = await response.json();
-    if (aiData.error) throw new Error(aiData.error.message);
-
     const rawText = aiData.choices[0].message.content;
     const parts = rawText.split('---JSON---');
-    const answer = parts[0].trim();
-    let explanation = { layers_used: ["MEMORIA", "CAPA 3"], reasoning: "Historial analizado con éxito." };
-
-    if (parts[1]) {
-        try { explanation = JSON.parse(parts[1].trim()); } catch (e) {}
-    }
-
-    return new Response(JSON.stringify({ answer, explanation }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    
+    return new Response(JSON.stringify({ 
+        answer: parts[0].trim(), 
+        explanation: parts[1] ? JSON.parse(parts[1].trim()) : { layers_used: ["FINANZAS"], reasoning: "Link generado." }
+    }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
   } catch (error: any) {
     return new Response(JSON.stringify({ error: error.message }), { status: 200, headers: corsHeaders });
