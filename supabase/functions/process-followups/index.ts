@@ -31,7 +31,6 @@ serve(async (req) => {
     // WooCommerce Links
     const wcUrl = getConfig('wc_url') || "https://theelephantbowl.com";
     const productId = getConfig('wc_product_id') || "1483"; 
-    const bookingLink = `${wcUrl}/checkout/?add-to-cart=${productId}`;
     
     // Evolution API Config
     const evolutionApiUrl = getConfig('evolution_api_url', null);
@@ -40,10 +39,10 @@ serve(async (req) => {
     const results = [];
     const reactivated = [];
 
-    // --- HELPER PARA ENVÍO SEGURO ---
+    // --- HELPER PARA ENVÍO SEGURO A EVOLUTION API ---
     const sendSafeMessage = async (lead, text, type) => {
         try {
-            // 1. Guardar en DB
+            // 1. Guardar en DB para el historial del chat
             await supabaseClient.from('conversaciones').insert({
                 lead_id: lead.id,
                 emisor: 'SAMURAI',
@@ -51,7 +50,7 @@ serve(async (req) => {
                 platform: 'AUTO_FOLLOWUP'
             });
 
-            // 2. Enviar a Evolution API
+            // 2. Enviar a Evolution API con la estructura correcta
             if (evolutionApiUrl && evolutionApiKey) {
                 const res = await fetch(evolutionApiUrl, {
                     method: 'POST',
@@ -61,8 +60,13 @@ serve(async (req) => {
                     },
                     body: JSON.stringify({
                         number: lead.telefono,
-                        text: text, // <-- CORRECCIÓN: Formato correcto para Evolution API
-                        delay: 1200
+                        options: { 
+                            delay: 2000, 
+                            presence: 'composing' 
+                        },
+                        textMessage: {
+                            text: text
+                        }
                     })
                 });
                 if (!res.ok) {
@@ -104,12 +108,18 @@ serve(async (req) => {
        if (delays[nextStage] && diffHours >= delays[nextStage]) {
           let message = "";
           const citySuffix = lead.ciudad ? ` para el taller en ${lead.ciudad}` : " para el taller";
+          
+          // Generar link dinámico por cada lead
+          let leadBookingLink = `${wcUrl}/checkout/?add-to-cart=${productId}`;
+          if (lead.nombre && !lead.nombre.includes('Nuevo Lead')) leadBookingLink += `&billing_first_name=${encodeURIComponent(lead.nombre)}`;
+          if (lead.email) leadBookingLink += `&billing_email=${encodeURIComponent(lead.email)}`;
+          if (lead.telefono) leadBookingLink += `&billing_phone=${encodeURIComponent(lead.telefono)}`;
 
           switch (nextStage) {
-            case 1: message = `Hola ${lead.nombre}, solo quería confirmar que recibieras bien el link de reserva${citySuffix}. ¿Tuviste oportunidad de verlo? Aquí te lo dejo: ${bookingLink}`; break;
+            case 1: message = `Hola ${lead.nombre}, solo quería confirmar que recibieras bien el link de reserva${citySuffix}. ¿Tuviste oportunidad de verlo? Aquí te lo dejo para tu anticipo: ${leadBookingLink}`; break;
             case 2: message = `Qué tal ${lead.nombre}, sigo guardando tu lugar${citySuffix}. ¿Hubo algún problema técnico con el pago? Si prefieres transferencia directa, avísame.`; break;
-            case 3: message = `Hola ${lead.nombre}, te escribo porque el cupo${citySuffix} se está agotando. ¿Aún te interesa asegurar tu lugar o lo libero?`; break;
-            case 4: message = `Atención ${lead.nombre}: El sistema me indica que no se completó tu reserva. Liberaré tu lugar hoy. Si deseas conservarlo, usa este link: ${bookingLink}`; break;
+            case 3: message = `Hola ${lead.nombre}, te escribo porque el cupo${citySuffix} se está agotando. ¿Aún te interesa asegurar tu lugar con tu anticipo o lo libero?`; break;
+            case 4: message = `Atención ${lead.nombre}: El sistema me indica que no se completó tu reserva. Liberaré tu lugar hoy. Si deseas conservarlo, usa este link: ${leadBookingLink}`; break;
           }
 
           if (message) {
