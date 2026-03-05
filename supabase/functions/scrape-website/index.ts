@@ -94,20 +94,12 @@ serve(async (req) => {
 
     $('script, style, noscript, iframe, svg, nav, footer, header, form').remove();
     
-    const images: string[] = [];
-    $('img').each((_, el) => {
-        const src = $(el).attr('src');
-        if (src && !src.includes('logo') && !src.includes('icon') && src.startsWith('http')) {
-            images.push(src);
-        }
-    });
-
     let content = $('body').text().replace(/\s\s+/g, ' ').trim();
     content = content.substring(0, 15000);
 
     if (!content) throw new Error("No se pudo extraer texto legible de la página.");
 
-    return new Response(JSON.stringify({ success: true, content, images, mode: 'TEXT' }), { 
+    return new Response(JSON.stringify({ success: true, content, mode: 'TEXT' }), { 
        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
     });
 

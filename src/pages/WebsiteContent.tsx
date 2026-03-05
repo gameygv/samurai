@@ -6,10 +6,9 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { 
   Globe, Loader2, RefreshCw, CheckCircle2, AlertCircle, Search, 
-  FileText, Eye, Scan, ExternalLink, Plus, Edit2, Trash2, Settings, ImagePlus, ImageIcon
+  FileText, ExternalLink, Plus, Edit2, Trash2, Settings
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { EditPageDialog } from '@/components/website/EditPageDialog';
@@ -27,9 +26,6 @@ const WebsiteContent = () => {
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [pageToEdit, setPageToEdit] = useState<any | null>(null);
-
-  const [detectedImages, setDetectedImages] = useState<string[]>([]);
-  const [importingImage, setImportingImage] = useState<string | null>(null);
 
   useEffect(() => {
     fetchPages();
@@ -57,7 +53,6 @@ const WebsiteContent = () => {
 
   const handleSyncSingle = async (pageId: string, url: string) => {
     setSyncingId(pageId);
-    setDetectedImages([]);
     const tid = toast.loading(`Actualizando Verdad Maestra: ${url}...`);
     
     try {
@@ -77,8 +72,6 @@ const WebsiteContent = () => {
         error_message: null,
         last_scraped_at: new Date().toISOString()
       }).eq('id', pageId);
-
-      if (data.images && Array.isArray(data.images)) setDetectedImages(data.images);
       
       toast.success(`¡Sincronizado! ${content.length} caracteres indexados.`, { id: tid });
       fetchPages();
@@ -107,23 +100,6 @@ const WebsiteContent = () => {
     } catch (err: any) {
       toast.error(err.message);
     }
-  };
-
-  const handleImportToMedia = async (imageUrl: string) => {
-     setImportingImage(imageUrl);
-     try {
-        await supabase.from('media_assets').insert({
-           title: `Importado de ${selectedPage?.title || 'Web'}`,
-           url: imageUrl,
-           type: 'IMAGE',
-           ai_instructions: `VINCULADO A: ${selectedPage?.title}\nURL ORIGEN: ${selectedPage?.url}`
-        });
-        toast.success("Imagen enviada al Media Manager.");
-     } catch (err: any) {
-        toast.error("Error al importar imagen.");
-     } finally {
-        setImportingImage(null);
-     }
   };
 
   const handleSyncAll = async () => {
@@ -257,78 +233,26 @@ const WebsiteContent = () => {
                      </div>
                   </CardHeader>
                   
-                  <Tabs defaultValue="texto" className="flex-1 flex flex-col min-h-0">
-                     <div className="px-6 border-b border-slate-800">
-                        <TabsList className="bg-transparent h-12 p-0 gap-8">
-                           <TabsTrigger value="texto" className="rounded-none border-b-2 border-transparent data-[state=active]:border-indigo-500 data-[state=active]:bg-transparent text-slate-500 data-[state=active]:text-white h-full px-0">
-                              <FileText className="w-4 h-4 mr-2" /> Contenido de Verdad
-                           </TabsTrigger>
-                           <TabsTrigger value="visual" className="rounded-none border-b-2 border-transparent data-[state=active]:border-indigo-500 data-[state=active]:bg-transparent text-slate-500 data-[state=active]:text-white h-full px-0">
-                              <ImageIcon className="w-4 h-4 mr-2" /> Imágenes Detectadas
-                           </TabsTrigger>
-                        </TabsList>
-                     </div>
-
-                     <TabsContent value="texto" className="flex-1 p-6 min-h-0 m-0">
-                        <ScrollArea className="h-full bg-black rounded-xl border border-slate-800 p-6 shadow-inner">
-                           {selectedPage.scrape_status === 'error' && (
-                              <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded text-red-500 text-xs flex items-center gap-2">
-                                 <AlertCircle className="w-4 h-4" /> 
-                                 Error detectado: {selectedPage.error_message || 'Fallo de conexión'}.
-                              </div>
-                           )}
-                           {selectedPage.content ? (
-                              <p className="text-sm text-slate-300 font-mono whitespace-pre-wrap leading-relaxed">
-                                 {selectedPage.content}
-                              </p>
-                           ) : (
-                              <div className="h-full flex flex-col items-center justify-center text-slate-600 italic text-center gap-4">
-                                 <RefreshCw className="w-8 h-8 opacity-20" />
-                                 <p>Página sin contenido indexado.<br/>Pulsa el botón de refrescar en el menú lateral.</p>
-                              </div>
-                           )}
-                        </ScrollArea>
-                     </TabsContent>
-
-                     <TabsContent value="visual" className="flex-1 p-6 min-h-0 m-0">
-                        <div className="h-full flex flex-col gap-4">
-                           <div className="bg-indigo-500/5 p-4 rounded-lg border border-indigo-500/20 flex items-start gap-3">
-                              <Scan className="w-5 h-5 text-indigo-400 shrink-0 mt-0.5" />
-                              <p className="text-xs text-slate-400 leading-relaxed">
-                                 Imágenes detectadas en tiempo real.
-                              </p>
+                  <div className="flex-1 p-6 min-h-0 m-0">
+                     <ScrollArea className="h-full bg-black rounded-xl border border-slate-800 p-6 shadow-inner">
+                        {selectedPage.scrape_status === 'error' && (
+                           <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded text-red-500 text-xs flex items-center gap-2">
+                              <AlertCircle className="w-4 h-4" /> 
+                              Error detectado: {selectedPage.error_message || 'Fallo de conexión'}.
                            </div>
-                           
-                           <ScrollArea className="flex-1">
-                              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                                 {(detectedImages || []).length === 0 ? (
-                                    <div className="col-span-full py-20 text-center border-2 border-dashed border-slate-800 rounded-xl">
-                                       <ImageIcon className="w-12 h-12 text-slate-800 mx-auto mb-4" />
-                                       <p className="text-slate-500 text-sm italic">Sin fotos detectadas.</p>
-                                    </div>
-                                 ) : detectedImages.map((img, i) => (
-                                    <Card key={i} className="bg-slate-950 border-slate-800 overflow-hidden group">
-                                       <div className="aspect-square bg-black relative">
-                                          <img src={img} className="w-full h-full object-cover opacity-60 group-hover:opacity-100 transition-opacity" alt="Scraped item" />
-                                          <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center p-4">
-                                             <Button 
-                                               size="sm" 
-                                               className="w-full bg-indigo-600 text-[10px]" 
-                                               onClick={() => handleImportToMedia(img)}
-                                               disabled={importingImage === img}
-                                             >
-                                                {importingImage === img ? <Loader2 className="w-3 h-3 animate-spin" /> : <ImagePlus className="w-3 h-3 mr-1" />}
-                                                IMPORTAR
-                                             </Button>
-                                          </div>
-                                       </div>
-                                    </Card>
-                                 ))}
-                              </div>
-                           </ScrollArea>
-                        </div>
-                     </TabsContent>
-                  </Tabs>
+                        )}
+                        {selectedPage.content ? (
+                           <p className="text-sm text-slate-300 font-mono whitespace-pre-wrap leading-relaxed">
+                              {selectedPage.content}
+                           </p>
+                        ) : (
+                           <div className="h-full flex flex-col items-center justify-center text-slate-600 italic text-center gap-4">
+                              <RefreshCw className="w-8 h-8 opacity-20" />
+                              <p>Página sin contenido indexado.<br/>Pulsa el botón de refrescar en el menú lateral.</p>
+                           </div>
+                        )}
+                     </ScrollArea>
+                  </div>
                 </>
              ) : (
                 <div className="flex-1 flex flex-col items-center justify-center text-slate-600">
