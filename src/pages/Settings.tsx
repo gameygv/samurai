@@ -86,9 +86,20 @@ const Settings = () => {
   const handleSaveAll = async () => {
     setSaving(true);
     try {
-      // Guardar App Configs Generales y de Ventas
+      // 1. Limpiamos la configuración base de las llaves de ventas para evitar duplicados
+      const salesKeys = [
+          'sales_followup_enabled', 'sales_stage_1_delay', 'sales_stage_2_delay', 
+          'sales_stage_3_delay', 'sales_stage_1_message', 'sales_stage_2_message', 
+          'sales_stage_3_message'
+      ];
+      
+      const cleanConfigs = configs
+          .filter(c => !salesKeys.includes(c.key))
+          .map(c => ({ key: c.key, value: c.value, category: c.category || 'SYSTEM' }));
+
+      // 2. Agregamos las llaves de ventas de forma única
       const newConfigs = [
-        ...configs,
+        ...cleanConfigs,
         { key: 'sales_followup_enabled', value: String(salesConfig.enabled), category: 'FOLLOWUP' },
         { key: 'sales_stage_1_delay', value: String(salesConfig.stage_1_delay), category: 'FOLLOWUP' },
         { key: 'sales_stage_2_delay', value: String(salesConfig.stage_2_delay), category: 'FOLLOWUP' },
@@ -98,6 +109,7 @@ const Settings = () => {
         { key: 'sales_stage_3_message', value: salesConfig.stage_3_message, category: 'FOLLOWUP' },
       ];
       
+      // Guardar App Configs
       const { error } = await supabase.from('app_config').upsert(newConfigs, { onConflict: 'key' });
       if (error) throw error;
 
@@ -110,7 +122,7 @@ const Settings = () => {
           if (fError) throw fError;
       }
 
-      toast.success('Configuración actualizada correctamente');
+      toast.success('Configuración guardada correctamente.');
       fetchAllData();
     } catch (err: any) {
       toast.error(err.message);
