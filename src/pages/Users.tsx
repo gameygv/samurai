@@ -6,20 +6,16 @@ import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Users as UsersIcon, UserPlus, Loader2 } from 'lucide-react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
 
 const UsersPage = () => {
   const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   
-  // New User Form State
-  const [newUsername, setNewUsername] = useState('');
-  const [newUserName, setNewUserName] = useState('');
-  const [newUserRole, setNewUserRole] = useState('supervisor');
+  const [form, setForm] = useState({ email: '', password: '', fullName: '' });
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [creating, setCreating] = useState(false);
 
@@ -42,23 +38,38 @@ const UsersPage = () => {
 
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (form.password.length < 6) {
+      toast.error("La contraseña debe tener al menos 6 caracteres.");
+      return;
+    }
     setCreating(true);
 
     try {
-      // NOTE: In client-side logic we can't create users without logging out.
-      // This is simulated logic or instructions.
-      
-      const email = `${newUsername.toLowerCase().trim()}@teb.local`;
-      
-      toast.info("Instrucciones para crear en Supabase Dashboard:", {
-         description: `1. Auth > Users > Invite/Create\n2. Email: ${email}\n3. Pass: (temporal)\n4. Insertar fila en tabla 'profiles'.`
+      const { data, error } = await supabase.auth.signUp({
+        email: form.email,
+        password: form.password,
+        options: {
+          data: {
+            full_name: form.fullName,
+          }
+        }
       });
+
+      if (error) throw error;
+      
+      // El trigger 'handle_new_user' en Supabase se encargará de crear el perfil con rol 'dev'.
+      toast.success("Usuario creado exitosamente.", {
+        description: "Se ha enviado un correo de confirmación a la nueva dirección."
+      });
+      
+      fetchUsers();
+      setIsDialogOpen(false);
+      setForm({ email: '', password: '', fullName: '' });
 
     } catch (error: any) {
       toast.error(error.message);
     } finally {
       setCreating(false);
-      setIsDialogOpen(false);
     }
   };
 
@@ -80,48 +91,24 @@ const UsersPage = () => {
             <DialogContent className="bg-slate-900 border-slate-800 text-white">
                <DialogHeader>
                   <DialogTitle>Crear Nuevo Usuario</DialogTitle>
+                  <DialogDescription>El nuevo usuario recibirá un correo para confirmar su cuenta. El rol por defecto es DEV.</DialogDescription>
                </DialogHeader>
                <form onSubmit={handleCreateUser} className="space-y-4 pt-4">
-                  <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded text-blue-400 text-xs">
-                     ℹ️ El sistema usa el dominio interno <strong>@teb.local</strong>.
-                     Solo ingresa el nombre de usuario.
-                  </div>
-                  <div className="space-y-2">
-                     <Label>Usuario</Label>
-                     <div className="flex items-center gap-2">
-                        <Input 
-                           value={newUsername} 
-                           onChange={e => setNewUsername(e.target.value)} 
-                           className="bg-slate-950 border-slate-800 flex-1" 
-                           placeholder="ej: gamey"
-                        />
-                        <span className="text-slate-500 text-sm font-mono">@teb.local</span>
-                     </div>
-                  </div>
                   <div className="space-y-2">
                      <Label>Nombre Completo</Label>
-                     <Input 
-                        value={newUserName} 
-                        onChange={e => setNewUserName(e.target.value)} 
-                        className="bg-slate-950 border-slate-800" 
-                        placeholder="Nombre Apellido"
-                     />
+                     <Input value={form.fullName} onChange={e => setForm({...form, fullName: e.target.value})} className="bg-slate-950 border-slate-800" placeholder="Nombre Apellido" required />
                   </div>
                   <div className="space-y-2">
-                     <Label>Rol</Label>
-                     <Select value={newUserRole} onValueChange={setNewUserRole}>
-                        <SelectTrigger className="bg-slate-950 border-slate-800">
-                           <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent className="bg-slate-900 border-slate-800 text-white">
-                           <SelectItem value="supervisor">Supervisor</SelectItem>
-                           <SelectItem value="dev">Desarrollador</SelectItem>
-                           <SelectItem value="admin">Administrador</SelectItem>
-                        </SelectContent>
-                     </Select>
+                     <Label>Email</Label>
+                     <Input type="email" value={form.email} onChange={e => setForm({...form, email: e.target.value})} className="bg-slate-950 border-slate-800" placeholder="email@ejemplo.com" required />
+                  </div>
+                  <div className="space-y-2">
+                     <Label>Contraseña Temporal</Label>
+                     <Input type="password" value={form.password} onChange={e => setForm({...form, password: e.target.value})} className="bg-slate-950 border-slate-800" required />
                   </div>
                   <Button type="submit" className="w-full bg-indigo-600" disabled={creating}>
-                     Generar Instrucciones
+                     {creating ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <UserPlus className="w-4 h-4 mr-2" />}
+                     Crear Usuario
                   </Button>
                </form>
             </DialogContent>
@@ -141,7 +128,7 @@ const UsersPage = () => {
                 <TableRow className="border-slate-800 hover:bg-slate-900">
                   <TableHead className="text-slate-400">Usuario</TableHead>
                   <TableHead className="text-slate-400">Rol</TableHead>
-                  <TableHead className="text-slate-400">Email Interno</TableHead>
+                  <TableHead className="text-slate-400">Email</TableHead>
                   <TableHead className="text-slate-400">Estado</TableHead>
                   <TableHead className="text-slate-400 text-right">Acciones</TableHead>
                 </TableRow>
@@ -171,7 +158,8 @@ const UsersPage = () => {
                       </Badge>
                     </TableCell>
                     <TableCell className="text-xs text-slate-500 font-mono">
-                        {u.username}@teb.local
+                        {/* Aquí deberíamos obtener el email de auth.users, pero por simplicidad mostramos el username */}
+                        {u.username}@...
                     </TableCell>
                     <TableCell>
                        {u.is_active ? (

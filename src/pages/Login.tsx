@@ -5,11 +5,11 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
-import { Loader2, ShieldCheck, AlertCircle, User, Wifi, WifiOff, RefreshCw } from 'lucide-react';
+import { Loader2, ShieldCheck, AlertCircle, Mail, Wifi, WifiOff, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 
 const Login = () => {
-  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [dbStatus, setDbStatus] = useState<'checking' | 'ok' | 'error'>('checking');
@@ -37,24 +37,22 @@ const Login = () => {
     e.preventDefault();
     setLoading(true);
 
-    const internalEmail = username.includes('@') ? username : `${username.toLowerCase().trim()}@teb.local`;
-
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
-        email: internalEmail,
+        email: email,
         password,
       });
 
       if (error) throw error;
 
       if (data.user) {
-        toast.success(`Acceso concedido: ${username}`);
+        toast.success(`Acceso concedido: ${email}`);
         navigate('/');
       }
     } catch (error: any) {
       console.error("Login Error:", error);
       let msg = error.message;
-      if (msg.includes("Invalid login credentials")) msg = "Usuario o contraseña incorrectos";
+      if (msg.includes("Invalid login credentials")) msg = "Email o contraseña incorrectos";
       toast.error(msg);
     } finally {
       setLoading(false);
@@ -64,7 +62,6 @@ const Login = () => {
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-950 p-4">
       <Card className="w-full max-w-md bg-slate-900 border-slate-800 shadow-2xl relative overflow-hidden rounded-2xl">
-        {/* Detalle premium en el borde superior en lugar de colores brillantes */}
         <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-amber-600/50 via-indigo-900 to-slate-800"></div>
 
         <CardHeader className="text-center space-y-3 mt-6">
@@ -93,15 +90,15 @@ const Login = () => {
 
           <form onSubmit={handleLogin} className="space-y-5">
             <div className="space-y-2">
-              <Label htmlFor="username" className="text-slate-300 font-medium">Credencial de Usuario</Label>
+              <Label htmlFor="email" className="text-slate-300 font-medium">Email</Label>
               <div className="relative group">
-                <User className="absolute left-3 top-3.5 h-4 w-4 text-slate-500 group-focus-within:text-amber-500 transition-colors" />
+                <Mail className="absolute left-3 top-3.5 h-4 w-4 text-slate-500 group-focus-within:text-amber-500 transition-colors" />
                 <Input
-                  id="username"
-                  type="text"
-                  placeholder="Ej: admin"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
+                  id="email"
+                  type="email"
+                  placeholder="email@ejemplo.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
                   className="pl-10 bg-slate-950/50 border-slate-800 text-slate-50 placeholder:text-slate-600 focus:border-amber-500 h-12 transition-all rounded-xl"
                   required
                   autoFocus

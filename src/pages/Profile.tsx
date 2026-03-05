@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Layout from '@/components/Layout';
 import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -6,15 +6,64 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { UserCircle, Key, Loader2 } from 'lucide-react';
+import { UserCircle, Key, Loader2, Edit, Save, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { logActivity } from '@/utils/logger';
 
 const Profile = () => {
-  const { profile, user } = useAuth();
+  const { profile, user, fetchProfile } = useAuth();
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [loadingPassword, setLoadingPassword] = useState(false);
+  const [loadingProfile, setLoadingProfile] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+
+  const [form, setForm] = useState({ fullName: '', email: '' });
+
+  useEffect(() => {
+    if (profile && user) {
+      setForm({
+        fullName: profile.full_name || '',
+        email: user.email || ''
+      });
+    }
+  }, [profile, user]);
+
+  const handleProfileUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoadingProfile(true);
+    try {
+      // Actualizar email en Supabase Auth
+      if (form.email !== user?.email) {
+        const { error: authError } = await supabase.auth.updateUser({ email: form.email });
+        if (authError) throw authError;
+        toast.info("Revisa tu nuevo email para confirmar el cambio.");
+      }
+
+      // Actualizar nombre en la tabla de perfiles
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .update({ full_name: form.fullName })
+        .eq('id', user?.id);
+      
+      if (profileError) throw profileError;
+
+      await logActivity({
+        action: 'UPDATE',
+        resource: 'USERS',
+        description: 'Usuario actualizó su perfil',
+        status: 'OK'
+      });
+
+      toast.success('Perfil actualizado correctamente');
+      setIsEditing(false);
+      if (fetchProfile && user) fetchProfile(user.id); // Refrescar datos del perfil
+    } catch (error: any) {
+      toast.error(error.message);
+    } finally {
+      setLoadingProfile(false);
+    }
+  };
 
   const handlePasswordChange = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -27,10 +76,9 @@ const Profile = () => {
       return;
     }
 
-    setLoading(true);
+    setLoadingPassword(true);
     try {
       const { error } = await supabase.auth.updateUser({ password });
-
       if (error) throw error;
 
       await logActivity({
@@ -45,15 +93,8 @@ const Profile = () => {
       setConfirmPassword('');
     } catch (error: any) {
       toast.error(error.message);
-      await logActivity({
-        action: 'ERROR',
-        resource: 'AUTH',
-        description: 'Fallo al cambiar contraseña',
-        status: 'ERROR',
-        metadata: { error: error.message }
-      });
     } finally {
-      setLoading(false);
+      setLoadingPassword(false);
     }
   };
 
@@ -63,37 +104,57 @@ const Profile = () => {
         <h1 className="text-3xl font-bold text-white mb-2">Mi Perfil</h1>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-           {/* Info Card */}
            <Card className="bg-slate-900 border-slate-800">
-             <CardHeader>
+             <CardHeader className="flex flex-row items-center justify-between">
                <CardTitle className="text-white flex items-center gap-2">
                  <UserCircle className="w-5 h-5 text-indigo-400" />
                  Información Personal
                </CardTitle>
+               {!isEditing ? (
+                  <Button variant="ghost" size="sm" onClick={() => setIsEditing(true)}><Edit className="w-3 h-3 mr-2" /> Editar</Button>
+               ) : (
+                  <Button variant="ghost" size="sm" onClick={() => setIsEditing(false)}><X className="w-3 h-3 mr-2" /> Cancelar</Button>
+               )}
              </CardHeader>
-             <CardContent className="space-y-4">
-               <div className="space-y-1">
-                 <Label className="text-slate-400">Nombre Completo</Label>
-                 <div className="p-2 bg-slate-950 rounded border border-slate-800 text-white">
-                   {profile?.full_name || 'No definido'}
+             <form onSubmit={handleProfileUpdate}>
+               <CardContent className="space-y-4">
+                 <div className="space-y-2">
+                   <Label className="text-slate-400">Nombre Completo</Label>
+                   <Input 
+                     value={form.fullName}
+                     onChange={(e) => setForm({...form, fullName: e.target.value})}
+                     disabled={!isEditing}
+                     className="bg-slate-950 border-slate-800 text-white disabled:opacity-70"
+                   />
                  </div>
-               </div>
-               <div className="space-y-1">
-                 <Label className="text-slate-400">Email</Label>
-                 <div className="p-2 bg-slate-950 rounded border border-slate-800 text-white">
-                   {user?.email}
+                 <div className="space-y-2">
+                   <Label className="text-slate-400">Email</Label>
+                   <Input 
+                     type="email"
+                     value={form.email}
+                     onChange={(e) => setForm({...form, email: e.target.value})}
+                     disabled={!isEditing}
+                     className="bg-slate-950 border-slate-800 text-white disabled:opacity-70"
+                   />
                  </div>
-               </div>
-               <div className="space-y-1">
-                 <Label className="text-slate-400">Rol</Label>
-                 <div className="p-2 bg-slate-950 rounded border border-slate-800 text-white uppercase font-mono text-sm">
-                   {profile?.role || 'User'}
+                 <div className="space-y-1">
+                   <Label className="text-slate-400">Rol</Label>
+                   <div className="p-2 h-10 flex items-center bg-slate-950 rounded border border-slate-800 text-white uppercase font-mono text-sm">
+                     {profile?.role || 'User'}
+                   </div>
                  </div>
-               </div>
-             </CardContent>
+               </CardContent>
+               {isEditing && (
+                 <CardFooter>
+                   <Button type="submit" className="w-full bg-indigo-600" disabled={loadingProfile}>
+                     {loadingProfile ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+                     Guardar Cambios
+                   </Button>
+                 </CardFooter>
+               )}
+             </form>
            </Card>
 
-           {/* Password Card */}
            <Card className="bg-slate-900 border-slate-800">
              <CardHeader>
                <CardTitle className="text-white flex items-center gap-2">
@@ -102,8 +163,8 @@ const Profile = () => {
                </CardTitle>
                <CardDescription>Asegúrate de usar una contraseña segura.</CardDescription>
              </CardHeader>
-             <CardContent>
-               <form onSubmit={handlePasswordChange} className="space-y-4">
+             <form onSubmit={handlePasswordChange}>
+               <CardContent className="space-y-4">
                  <div className="space-y-2">
                    <Label className="text-slate-300">Nueva Contraseña</Label>
                    <Input 
@@ -122,15 +183,17 @@ const Profile = () => {
                      onChange={(e) => setConfirmPassword(e.target.value)}
                    />
                  </div>
+               </CardContent>
+               <CardFooter>
                  <Button 
                     type="submit" 
                     className="w-full bg-red-600 hover:bg-red-700" 
-                    disabled={loading || !password}
+                    disabled={loadingPassword || !password}
                   >
-                    {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Actualizar Contraseña'}
+                    {loadingPassword ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Actualizar Contraseña'}
                  </Button>
-               </form>
-             </CardContent>
+               </CardFooter>
+             </form>
            </Card>
         </div>
       </div>
