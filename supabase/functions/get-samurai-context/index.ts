@@ -31,6 +31,7 @@ serve(async (req) => {
     }
     
     const addParam = (key, value) => {
+        if (!value || value === 'null') return;
         paymentLink += `${isFirstParam ? '?' : '&'}${key}=${value}`;
         isFirstParam = false;
     };
@@ -67,13 +68,13 @@ CATÁLOGO DISPONIBLE:\n`;
         mediaContext += "No hay posters cargados actualmente.\n";
     }
 
-    // CARGAR VERDAD MAESTRA (SITIO WEB)
+    // CARGAR VERDAD MAESTRA (SITIO WEB) - CON LÍMITE DE TOKENS DE SEGURIDAD
     const { data: webPages } = await supabaseClient.from('main_website_content').select('title, content').eq('scrape_status', 'success');
     let masterTruth = "\n=== VERDAD MAESTRA (SITIO WEB OFICIAL) ===\n";
     if (webPages && webPages.length > 0) {
         masterTruth += "Esta es la información OFICIAL e innegable de la academia. Usa esto para responder sobre fechas, profesores, precios y detalles. NUNCA inventes nombres ni datos que no estén aquí.\n";
         webPages.forEach(p => {
-            if(p.content) masterTruth += `\n[PÁGINA: ${p.title}]\n${p.content.substring(0, 3000)}\n`; // Limitado para no exceder tokens
+            if(p.content) masterTruth += `\n[PÁGINA: ${p.title}]\n${p.content.substring(0, 2000)}\n`; // Reducido a 2000 caracteres por página para foco
         });
     }
 
@@ -82,7 +83,7 @@ CATÁLOGO DISPONIBLE:\n`;
     let kbContext = "\n=== BASE DE CONOCIMIENTO TÉCNICO ===\n";
     if (kbDocs && kbDocs.length > 0) {
         kbDocs.forEach(d => {
-            if(d.content) kbContext += `\n[RECURSO: ${d.title} | CAT: ${d.category}]\nInstrucción: ${d.description || 'N/A'}\nContenido: ${d.content.substring(0, 2000)}\n`;
+            if(d.content) kbContext += `\n[RECURSO: ${d.title} | CAT: ${d.category}]\nInstrucción: ${d.description || 'N/A'}\nContenido: ${d.content.substring(0, 1500)}\n`; // Reducido a 1500 caracteres
         });
     }
 

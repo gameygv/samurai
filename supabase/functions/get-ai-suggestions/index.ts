@@ -19,7 +19,7 @@ serve(async (req) => {
     const { lead_id, transcript } = await req.json();
 
     // 1. Obtener Datos del Lead para saber qué falta
-    const { data: lead } = await supabaseClient.from('leads').select('nombre, ciudad, email').eq('id', lead_id).single();
+    const { data: lead } = await supabaseClient.from('leads').select('*').eq('id', lead_id).single();
     
     const missingData = [];
     if (!lead?.email) missingData.push("EMAIL");
@@ -27,7 +27,10 @@ serve(async (req) => {
     if (!lead?.nombre || lead.nombre.includes('Nuevo')) missingData.push("NOMBRE");
 
     // 2. Obtener Contexto Maestro (Sam Persona)
-    const { data: kernelData } = await supabaseClient.functions.invoke('get-samurai-context');
+    // AHORA PASAMOS EL LEAD PARA QUE EL LINK DE PAGO VENGA PERSONALIZADO EN LAS SUGERENCIAS
+    const { data: kernelData } = await supabaseClient.functions.invoke('get-samurai-context', {
+       body: { lead: lead }
+    });
 
     const { data: configs } = await supabaseClient.from('app_config').select('key, value');
     const apiKey = configs?.find(c => c.key === 'openai_api_key')?.value;
@@ -46,12 +49,12 @@ serve(async (req) => {
       ${transcript}
 
       TU TAREA:
-      Eres el Co-piloto de Sam. Genera 3 opciones de respuesta CORTAS (max 20 palabras) para que el humano las use.
-      Deben sonar exactamente como Sam.
+      Eres el Co-piloto de Sam. Genera 3 opciones de respuesta CORTAS (max 30 palabras) para que el humano las use.
+      Deben sonar exactamente como Sam. NUNCA uses la etiqueta <<MEDIA:URL>> en las sugerencias.
       
       ESTRATEGIA:
-      - Si faltan datos, la opción [VENTA] DEBE pedirlos.
-      - Si ya tenemos todo, la opción [VENTA] debe dar el link de pago.
+      - Si faltan datos, la opción [VENTA] DEBE pedirlos estratégicamente.
+      - Si ya tenemos todo, la opción [VENTA] debe dar el link de pago que tienes en tu contexto.
       - La opción [EMPATIA] debe conectar con el sentimiento del cliente.
 
       RESPONDE SOLO EN JSON:
