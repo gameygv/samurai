@@ -28,10 +28,21 @@ const MetaCapi = () => {
   const [selectedEvent, setSelectedEvent] = useState<any>(null);
 
   const [mapping, setMapping] = useState([
-    { samuraiField: 'buying_intent', metaField: 'custom_data.intention', enabled: true, description: 'Intención de compra del lead.' },
-    { samuraiField: 'perfil_psicologico', metaField: 'custom_data.psych_profile', enabled: true, description: 'Personalidad del lead.' },
-    { samuraiField: 'ciudad', metaField: 'user_data.ct', enabled: true, description: 'Ciudad (hasheado).' },
-    { samuraiField: 'telefono', metaField: 'user_data.ph', enabled: true, description: 'WhatsApp (hasheado).' },
+    { samuraiField: 'email', metaField: 'user_data.em (SHA-256)', enabled: true, description: 'Email del prospecto' },
+    { samuraiField: 'nombre', metaField: 'user_data.fn (SHA-256)', enabled: true, description: 'Nombre' },
+    { samuraiField: 'apellido', metaField: 'user_data.ln (SHA-256)', enabled: true, description: 'Apellido' },
+    { samuraiField: 'telefono', metaField: 'user_data.ph (SHA-256)', enabled: true, description: 'WhatsApp' },
+    { samuraiField: 'ciudad', metaField: 'user_data.ct (SHA-256)', enabled: true, description: 'Ciudad extraída' },
+    { samuraiField: 'estado', metaField: 'user_data.st (SHA-256)', enabled: true, description: 'Estado (Inferido)' },
+    { samuraiField: 'cp', metaField: 'user_data.zp (SHA-256)', enabled: true, description: 'Código Postal (Inferido)' },
+    { samuraiField: 'pais', metaField: 'user_data.country (SHA-256)', enabled: true, description: 'País (Por defecto MX)' },
+    { samuraiField: 'id (Supabase)', metaField: 'user_data.external_id', enabled: true, description: 'ID Único del CRM' },
+    { samuraiField: 'buying_intent', metaField: 'custom_data.intention', enabled: true, description: 'ALTO / MEDIO / BAJO' },
+    { samuraiField: 'servicio_interes', metaField: 'custom_data.content_name', enabled: true, description: 'Taller/Servicio' },
+    { samuraiField: 'origen_contacto', metaField: 'custom_data.lead_source', enabled: true, description: 'fb_ads, ig_organico...' },
+    { samuraiField: 'main_pain', metaField: 'custom_data.main_pain', enabled: true, description: 'Dolor principal a sanar' },
+    { samuraiField: 'tiempo_compra', metaField: 'custom_data.time_to_buy', enabled: true, description: 'Urgencia temporal' },
+    { samuraiField: 'lead_score', metaField: 'custom_data.lead_score', enabled: true, description: 'Calidad 1-100' },
   ]);
 
   useEffect(() => { fetchData(); }, []);
@@ -47,7 +58,7 @@ const MetaCapi = () => {
         configData.forEach(item => {
           if (item.key === 'meta_pixel_id') newConfig.pixel_id = item.value;
           if (item.key === 'meta_access_token') newConfig.access_token = item.value;
-          if (item.key === 'meta_account_id') newConfig.account_id = item.value; // Added missing mapping
+          if (item.key === 'meta_account_id') newConfig.account_id = item.value;
           if (item.key === 'meta_test_mode') newConfig.test_mode = item.value === 'true';
           if (item.key === 'meta_test_event_code') newConfig.test_event_code = item.value;
         });
@@ -65,7 +76,7 @@ const MetaCapi = () => {
       const configToSave = [
         { key: 'meta_pixel_id', value: config.pixel_id, category: 'META_CAPI' },
         { key: 'meta_access_token', value: config.access_token, category: 'META_CAPI' },
-        { key: 'meta_account_id', value: config.account_id, category: 'META_CAPI' }, // Added missing save
+        { key: 'meta_account_id', value: config.account_id, category: 'META_CAPI' }, 
         { key: 'meta_test_mode', value: String(config.test_mode), category: 'META_CAPI' },
         { key: 'meta_test_event_code', value: config.test_event_code, category: 'META_CAPI' },
       ];
@@ -96,7 +107,7 @@ const MetaCapi = () => {
           <TabsList className="bg-slate-900 border border-slate-800">
             <TabsTrigger value="bitacora"><BookOpen className="w-4 h-4 mr-2" /> Bitácora de Eventos</TabsTrigger>
             <TabsTrigger value="configuracion"><Settings className="w-4 h-4 mr-2" /> Configuración</TabsTrigger>
-            <TabsTrigger value="mapper"><GitMerge className="w-4 h-4 mr-2" /> Mapper</TabsTrigger>
+            <TabsTrigger value="mapper"><GitMerge className="w-4 h-4 mr-2" /> Data Mapper</TabsTrigger>
           </TabsList>
 
           <TabsContent value="bitacora" className="mt-6">
@@ -210,12 +221,26 @@ const MetaCapi = () => {
 
           <TabsContent value="mapper" className="mt-6">
              <Card className="bg-slate-900 border-slate-800">
-                <CardContent className="pt-6">
+                <CardHeader>
+                   <CardTitle className="text-sm">Advanced Matching Activo</CardTitle>
+                   <CardDescription>Estos datos se extraen automáticamente de la conversación por el "Analista CAPI" y se envían a Meta.</CardDescription>
+                </CardHeader>
+                <CardContent className="pt-2">
                    <Table>
-                      <TableHeader><TableRow><TableHead>Samurai Data</TableHead><TableHead>Meta Field</TableHead><TableHead className="text-right">Enabled</TableHead></TableRow></TableHeader>
+                      <TableHeader>
+                         <TableRow className="border-slate-800 bg-slate-950/50">
+                            <TableHead className="text-slate-500 text-[10px] uppercase font-bold">Columna Local</TableHead>
+                            <TableHead className="text-slate-500 text-[10px] uppercase font-bold">Propiedad Meta</TableHead>
+                            <TableHead className="text-slate-500 text-[10px] uppercase font-bold">Descripción</TableHead>
+                         </TableRow>
+                      </TableHeader>
                       <TableBody>
                          {mapping.map((m, i) => (
-                            <TableRow key={i} className="border-slate-800"><TableCell className="font-mono text-indigo-400 text-xs">{m.samuraiField}</TableCell><TableCell className="font-mono text-slate-400 text-xs">{m.metaField}</TableCell><TableCell className="text-right"><Switch checked={m.enabled} /></TableCell></TableRow>
+                            <TableRow key={i} className="border-slate-800">
+                               <TableCell className="font-mono text-amber-500 text-[10px] font-bold">{m.samuraiField}</TableCell>
+                               <TableCell className="font-mono text-indigo-400 text-[10px]">{m.metaField}</TableCell>
+                               <TableCell className="text-slate-400 text-xs italic">{m.description}</TableCell>
+                            </TableRow>
                          ))}
                       </TableBody>
                    </Table>

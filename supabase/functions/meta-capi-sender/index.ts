@@ -5,8 +5,8 @@ import { corsHeaders } from '../_shared/cors.ts'
 
 // NORMALIZACIÓN ESTRICTA (Meta Standard) usando Web Crypto nativa
 async function normalizeAndHash(value: string | undefined | null): Promise<string | null> {
-  if (!value) return null;
-  let clean = value.toLowerCase().trim();
+  if (!value || value === 'null') return null;
+  let clean = String(value).toLowerCase().trim();
   clean = clean.replace(/\+/g, '').replace(/\s/g, ''); 
   
   const encoder = new TextEncoder();
@@ -29,26 +29,33 @@ serve(async (req) => {
       throw new Error("Pixel ID y Access Token son requeridos en Configuración.");
     }
 
-    // Hashear todos los datos sensibles de forma asíncrona
+    // Hashear TODOS los datos de identificación según el estándar Meta
     const userData: any = {};
     if (eventData.user_data?.em) userData.em = [await normalizeAndHash(eventData.user_data.em)];
     if (eventData.user_data?.ph) userData.ph = [await normalizeAndHash(eventData.user_data.ph)];
     if (eventData.user_data?.fn) userData.fn = [await normalizeAndHash(eventData.user_data.fn)];
+    if (eventData.user_data?.ln) userData.ln = [await normalizeAndHash(eventData.user_data.ln)];
     if (eventData.user_data?.ct) userData.ct = [await normalizeAndHash(eventData.user_data.ct)];
+    if (eventData.user_data?.st) userData.st = [await normalizeAndHash(eventData.user_data.st)];
+    if (eventData.user_data?.zp) userData.zp = [await normalizeAndHash(eventData.user_data.zp)];
     
-    userData.country = [await normalizeAndHash('mx')]; 
+    // El país siempre debe enviarse hasheado, usamos MX por defecto si no viene
+    userData.country = [await normalizeAndHash(eventData.user_data?.country || 'mx')]; 
+    
+    // External ID (Identificador único de tu CRM)
+    if (eventData.user_data?.external_id) userData.external_id = [await normalizeAndHash(eventData.user_data.external_id)];
 
     const payload = {
       data: [{
         event_name: eventData.event_name,
         event_time: Math.floor(Date.now() / 1000),
-        event_id: eventData.event_id || `samurai_test_${Date.now()}`,
+        event_id: eventData.event_id || `samurai_ev_${Date.now()}`,
         user_data: userData,
         custom_data: {
            ...eventData.custom_data,
            currency: eventData.currency || 'MXN',
            value: eventData.value || 0,
-           source: 'samurai_panel_v1'
+           source: 'samurai_crm_v2'
         },
         action_source: 'chat',
       }],
@@ -64,7 +71,7 @@ serve(async (req) => {
 
     const responseData = await response.json();
 
-    // Guardar en bitácora de eventos Meta
+    // Guardar en bitácora
     const supabaseClient = createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '');
     await supabaseClient.from('meta_capi_events').insert({
       lead_id: eventData.lead_id || null,

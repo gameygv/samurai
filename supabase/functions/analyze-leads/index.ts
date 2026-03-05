@@ -22,6 +22,7 @@ serve(async (req) => {
     
     const configMap = configs?.reduce((acc, item) => ({...acc, [item.key]: item.value}), {});
     const apiKey = configMap['openai_api_key'];
+    const extractionPrompt = configMap['prompt_analista_datos'] || 'Extrae datos en JSON: {"nombre": "null", "ciudad": "null", "email": "null", "intent": "BAJO"}';
 
     if (!apiKey) throw new Error("OpenAI API Key faltante.");
 
@@ -34,31 +35,18 @@ serve(async (req) => {
 
     const transcript = messages?.map(m => `[${m.emisor}]: ${m.mensaje}`).join('\n') || '';
 
-    // IA EXTRAE DATOS TÁCTICOS PROFUNDOS
+    // IA EXTRAE DATOS USANDO EL PROMPT DINÁMICO DEL PANEL
     const response = await fetch(OPENAI_URL, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
             model: "gpt-4o",
             messages: [
-                { 
-                  role: "system", 
-                  content: `Analista de Ventas de Samurai. Tu misión es extraer datos críticos en JSON: 
-                  {
-                    "email": "string/null",
-                    "ciudad": "string/null",
-                    "nombre": "string/null",
-                    "intent": "ALTO/MEDIO/BAJO",
-                    "summary": "Resumen corto",
-                    "motivation": "Qué busca el cliente realmente (paz, técnica, etc)",
-                    "main_objection": "Qué le impide comprar hoy",
-                    "psych_profile": "Perfil de personalidad (Directo, emocional, analítico)"
-                  }` 
-                },
-                { role: "user", content: `Analiza este chat:\n${transcript}` }
+                { role: "system", content: extractionPrompt },
+                { role: "user", content: `Analiza este chat y devuelve el JSON:\n\n${transcript}` }
             ],
             response_format: { type: "json_object" },
-            temperature: 0
+            temperature: 0.1 // Baja temperatura para JSON predecible
         })
     });
 
@@ -67,14 +55,24 @@ serve(async (req) => {
 
     const updates: any = { 
         last_ai_analysis: new Date().toISOString(),
-        perfil_psicologico: `MOTIVACIÓN: ${result.motivation || 'N/A'}. OBJECIÓN: ${result.main_objection || 'N/A'}. PERFIL: ${result.psych_profile || 'N/A'}`
+        perfil_psicologico: `MOTIVACIÓN: ${result.main_pain || 'N/A'}. PERFIL: ${result.psych_profile || 'N/A'}`
     };
     
-    if (result.nombre && result.nombre !== 'Desconocido') updates.nombre = result.nombre;
+    // Mapeo seguro de datos extraídos a la BD
+    if (result.nombre && result.nombre !== 'null') updates.nombre = result.nombre;
+    if (result.apellido && result.apellido !== 'null') updates.apellido = result.apellido;
     if (result.email && result.email.includes('@')) updates.email = result.email;
-    if (result.ciudad) updates.ciudad = result.ciudad;
-    if (result.intent) updates.buying_intent = result.intent;
-    if (result.summary) updates.summary = result.summary;
+    if (result.ciudad && result.ciudad !== 'null') updates.ciudad = result.ciudad;
+    if (result.estado && result.estado !== 'null') updates.estado = result.estado;
+    if (result.cp && result.cp !== 'null') updates.cp = result.cp;
+    if (result.pais && result.pais !== 'null') updates.pais = result.pais;
+    if (result.intent && result.intent !== 'null') updates.buying_intent = result.intent;
+    if (result.summary && result.summary !== 'null') updates.summary = result.summary;
+    if (result.origen_contacto && result.origen_contacto !== 'null') updates.origen_contacto = result.origen_contacto;
+    if (result.servicio_interes && result.servicio_interes !== 'null') updates.servicio_interes = result.servicio_interes;
+    if (result.tiempo_compra && result.tiempo_compra !== 'null') updates.tiempo_compra = result.tiempo_compra;
+    if (result.main_pain && result.main_pain !== 'null') updates.main_pain = result.main_pain;
+    if (result.lead_score) updates.lead_score = parseInt(result.lead_score) || 0;
 
     const { data: updatedLead } = await supabaseClient.from('leads').update(updates).eq('id', lead_id).select().single();
 

@@ -13,7 +13,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { 
   Bot, Eye as EyeIcon, Zap, Loader2, Terminal, BrainCircuit, Target, 
-  GitBranch, RefreshCcw, Layers, History, Send, Fingerprint, MessageSquare, AlertTriangle, Database, ImageIcon, Save, Trash2, FlaskConical, Sparkles, Upload, CheckCircle2
+  GitBranch, RefreshCcw, Layers, History, Send, Fingerprint, MessageSquare, AlertTriangle, Database, ImageIcon, Save, Trash2, FlaskConical, Sparkles, Upload, CheckCircle2,
+  BarChart3
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { PromptEditor } from '@/components/brain/PromptEditor';
@@ -122,7 +123,7 @@ const AgentBrain = () => {
   const handleRestoreSnapshot = (snapshot: any) => {
     if (!confirm(`¿Restaurar "${snapshot.version_name}"? Esto reemplazará los prompts actuales (debes presionar "Aplicar Cambios" después).`)) return;
     setPrompts(snapshot.prompts_snapshot);
-    toast.success("Snapshot cargado. Revisa las pestañas 1 y 2.");
+    toast.success("Snapshot cargado. Revisa las pestañas.");
     setSearchParams({ tab: 'alma' }); 
   };
 
@@ -241,11 +242,11 @@ const AgentBrain = () => {
           <TabsList className="bg-slate-900 border border-slate-800 p-1 mb-4 shrink-0 h-auto flex-wrap justify-start gap-1 rounded-xl">
              <TabsTrigger value="alma" className="gap-2 px-4 py-2 data-[state=active]:bg-indigo-900/50 data-[state=active]:text-amber-500"><Bot className="w-4 h-4"/> 1. Alma</TabsTrigger>
              <TabsTrigger value="identidad" className="gap-2 px-4 py-2 data-[state=active]:bg-indigo-900/50 data-[state=active]:text-amber-500"><Fingerprint className="w-4 h-4"/> 2. ADN & Venta</TabsTrigger>
-             <TabsTrigger value="versiones" className="gap-2 px-4 py-2 data-[state=active]:bg-indigo-900/50 data-[state=active]:text-amber-500"><GitBranch className="w-4 h-4"/> 3. Snapshots</TabsTrigger>
-             <TabsTrigger value="vision" className="gap-2 px-4 py-2 data-[state=active]:bg-indigo-900/50 data-[state=active]:text-amber-500"><EyeIcon className="w-4 h-4"/> 4. Ojo Halcón</TabsTrigger>
-             <TabsTrigger value="simulador" className="gap-2 px-4 py-2 data-[state=active]:bg-indigo-900/50 data-[state=active]:text-amber-500"><MessageSquare className="w-4 h-4"/> 5. Simulador</TabsTrigger>
-             <TabsTrigger value="debug" className="gap-2 px-4 py-2 data-[state=active]:bg-indigo-900/50 data-[state=active]:text-amber-500"><Terminal className="w-4 h-4"/> 6. Kernel Debug</TabsTrigger>
-             <TabsTrigger value="lab" className="gap-2 px-4 py-2 bg-indigo-900/20 text-slate-400 data-[state=active]:bg-amber-600 data-[state=active]:text-slate-950"><FlaskConical className="w-4 h-4"/> 7. Laboratorio IA</TabsTrigger>
+             <TabsTrigger value="vision" className="gap-2 px-4 py-2 data-[state=active]:bg-indigo-900/50 data-[state=active]:text-amber-500"><EyeIcon className="w-4 h-4"/> 3. Ojo Halcón</TabsTrigger>
+             <TabsTrigger value="analista" className="gap-2 px-4 py-2 data-[state=active]:bg-indigo-900/50 data-[state=active]:text-amber-500"><BarChart3 className="w-4 h-4"/> 4. Analista CAPI</TabsTrigger>
+             <TabsTrigger value="versiones" className="gap-2 px-4 py-2 data-[state=active]:bg-indigo-900/50 data-[state=active]:text-amber-500"><GitBranch className="w-4 h-4"/> Snapshots</TabsTrigger>
+             <TabsTrigger value="simulador" className="gap-2 px-4 py-2 data-[state=active]:bg-indigo-900/50 data-[state=active]:text-amber-500"><MessageSquare className="w-4 h-4"/> Simulador</TabsTrigger>
+             <TabsTrigger value="lab" className="gap-2 px-4 py-2 bg-indigo-900/20 text-slate-400 data-[state=active]:bg-amber-600 data-[state=active]:text-slate-950 ml-auto"><FlaskConical className="w-4 h-4"/> Laboratorio IA</TabsTrigger>
           </TabsList>
 
           <div className="flex-1 flex flex-col min-h-0 bg-transparent rounded-xl p-1">
@@ -367,6 +368,21 @@ const AgentBrain = () => {
                    </div>
                 </div>
             </TabsContent>
+            
+            <TabsContent value="vision" className="m-0 h-full data-[state=inactive]:hidden">
+                <PromptEditor title="Ojo de Halcón (Instrucciones OCR)" icon={EyeIcon} value={prompts['prompt_vision_instrucciones']} onChange={v => handlePromptChange('prompt_vision_instrucciones', v)} color="text-amber-500" />
+            </TabsContent>
+
+            <TabsContent value="analista" className="m-0 h-full data-[state=inactive]:hidden">
+                <PromptEditor 
+                  title="Analista Silencioso (Extracción JSON para Meta CAPI)" 
+                  icon={BarChart3} 
+                  value={prompts['prompt_analista_datos']} 
+                  onChange={v => handlePromptChange('prompt_analista_datos', v)} 
+                  color="text-emerald-500" 
+                  placeholder="Aquí va la estructura JSON que debe devolver el analista..."
+                />
+            </TabsContent>
 
             <TabsContent value="versiones" className="m-0 h-full data-[state=inactive]:hidden flex flex-col">
                <Card className="bg-slate-900 border-slate-800 flex-1 flex flex-col overflow-hidden shadow-2xl rounded-2xl">
@@ -397,10 +413,6 @@ const AgentBrain = () => {
                      </Table>
                   </ScrollArea>
                </Card>
-            </TabsContent>
-
-            <TabsContent value="vision" className="m-0 h-full data-[state=inactive]:hidden">
-                <PromptEditor title="Ojo de Halcón (Instrucciones OCR)" icon={EyeIcon} value={prompts['prompt_vision_instrucciones']} onChange={v => handlePromptChange('prompt_vision_instrucciones', v)} color="text-amber-500" />
             </TabsContent>
 
             <TabsContent value="simulador" className="m-0 h-full flex flex-col data-[state=inactive]:hidden">
