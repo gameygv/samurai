@@ -33,58 +33,49 @@
     --ring: 222.2 84% 4.9%;
 
     --radius: 0.5rem;
-
-    --sidebar-background: 0 0% 98%;
-    --sidebar-foreground: 240 5.3% 26.1%;
-    --sidebar-primary: 240 5.9% 10%;
-    --sidebar-primary-foreground: 0 0% 98%;
-    --sidebar-accent: 240 4.8% 95.9%;
-    --sidebar-accent-foreground: 240 5.9% 10%;
-    --sidebar-border: 220 13% 91%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
   }
 
   .dark {
-    /* Fondo más oscuro (casi negro) para mejor contraste */
-    --background: 224 71% 4%; 
-    --foreground: 210 40% 98%;
+    /* Fondo principal: #946f51 convertido a HSL */
+    --background: 28 29% 45%; 
+    --foreground: 30 30% 95%;
 
-    /* Tarjetas un poco más claras que el fondo */
-    --card: 222 47% 11%;
-    --card-foreground: 210 40% 98%;
+    /* Tarjetas: #825e41 (más oscuras para profundidad y contraste) */
+    --card: 27 33% 38%;
+    --card-foreground: 30 30% 95%;
 
-    --popover: 222 47% 11%;
-    --popover-foreground: 210 40% 98%;
+    --popover: 27 33% 38%;
+    --popover-foreground: 30 30% 95%;
 
-    /* Botones primarios (Azul/Indigo vibrante) */
-    --primary: 262 83% 58%;
-    --primary-foreground: 210 40% 98%;
+    /* Botones primarios (Esmeralda) */
+    --primary: 161 94% 30%;
+    --primary-foreground: 0 0% 100%;
 
     /* Secundarios */
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
+    --secondary: 27 37% 31%;
+    --secondary-foreground: 30 30% 95%;
 
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
+    --muted: 27 37% 31%;
+    --muted-foreground: 28 30% 80%;
 
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
+    --accent: 27 37% 31%;
+    --accent-foreground: 30 30% 95%;
 
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 210 40% 98%;
 
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 262 83% 58%;
+    --border: 27 37% 31%;
+    --input: 27 37% 31%;
+    --ring: 161 94% 30%;
     
-    --sidebar-background: 224 71% 4%;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 262 83% 58%;
+    --sidebar-background: 28 29% 45%;
+    --sidebar-foreground: 30 30% 95%;
+    --sidebar-primary: 161 94% 30%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 262 83% 58%;
+    --sidebar-accent: 27 37% 31%;
+    --sidebar-accent-foreground: 30 30% 95%;
+    --sidebar-border: 27 37% 31%;
+    --sidebar-ring: 161 94% 30%;
   }
 }
 
@@ -97,7 +88,6 @@
     @apply bg-background text-foreground;
   }
   
-  /* Asegurar que texto en botones hover siempre sea legible */
   button:hover {
      opacity: 0.95;
   }

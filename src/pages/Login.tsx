@@ -37,7 +37,6 @@ const Login = () => {
     e.preventDefault();
     setLoading(true);
 
-    // Transformación transparente de Usuario a Email Interno
     const internalEmail = username.includes('@') ? username : `${username.toLowerCase().trim()}@samurai.local`;
 
     try {
@@ -65,13 +64,13 @@ const Login = () => {
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-950 p-4">
       <Card className="w-full max-w-md bg-slate-900 border-slate-800 shadow-2xl relative overflow-hidden">
-        <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-red-600 to-indigo-600"></div>
+        <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-indigo-600 to-slate-600"></div>
 
-        <CardHeader className="text-center space-y-2">
-          <div className="mx-auto w-16 h-16 rounded-full bg-red-600 flex items-center justify-center mb-4 shadow-lg shadow-red-900/50 ring-4 ring-slate-800 animate-in zoom-in duration-500">
-            <span className="text-white font-bold text-4xl pb-1">侍</span>
+        <CardHeader className="text-center space-y-2 mt-4">
+          <div className="mx-auto w-24 h-24 flex items-center justify-center mb-2 animate-in zoom-in duration-500">
+            <img src="/logo.png" alt="Elephant Bowl Logo" className="w-full h-full object-contain drop-shadow-2xl" />
           </div>
-          <CardTitle className="text-3xl font-bold text-white tracking-tight">SAMURAI v1.6</CardTitle>
+          <CardTitle className="text-3xl font-bold text-white tracking-tight">Elephant Bowl CRM</CardTitle>
           <CardDescription className="text-slate-400">
             Sistema Operativo de Ventas & Inteligencia Artificial
           </CardDescription>
@@ -80,11 +79,11 @@ const Login = () => {
         <CardContent>
           {dbStatus === 'error' && (
             <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-md flex items-start gap-3">
-              <WifiOff className="w-5 h-5 text-red-500 mt-0.5" />
-              <div className="text-xs text-red-400">
+              <WifiOff className="w-5 h-5 text-red-400 mt-0.5" />
+              <div className="text-xs text-red-300">
                 <p className="font-bold">Error de Conexión</p>
                 <p>No se puede alcanzar la base de datos Supabase.</p>
-                <Button variant="link" className="p-0 h-auto text-red-300 text-[10px]" onClick={checkDbConnection}>
+                <Button variant="link" className="p-0 h-auto text-red-200 text-[10px]" onClick={checkDbConnection}>
                    <RefreshCw className="w-3 h-3 mr-1" /> Reintentar conexión
                 </Button>
               </div>
@@ -99,7 +98,7 @@ const Login = () => {
                 <Input
                   id="username"
                   type="text"
-                  placeholder="Ej: gamey"
+                  placeholder="Ej: admin"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                   className="pl-10 bg-slate-950 border-slate-800 text-white placeholder:text-slate-600 focus:border-indigo-500 h-11 transition-all"
@@ -138,7 +137,7 @@ const Login = () => {
           </p>
           <div className="flex items-center gap-2">
              {dbStatus === 'ok' && (
-                <span className="text-[9px] text-green-500 font-bold tracking-widest uppercase flex items-center gap-1 animate-pulse">
+                <span className="text-[9px] text-green-400 font-bold tracking-widest uppercase flex items-center gap-1 animate-pulse">
                    <Wifi className="w-3 h-3"/> System Online
                 </span>
              )}

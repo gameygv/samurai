@@ -42,7 +42,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
       ]
     },
     {
-      title: "SAMURAI AI",
+      title: "ELEPHANT BOWL AI",
       items: [
         { icon: Brain, label: 'Cerebro Core', path: '/brain' },
         { icon: Zap, label: 'Bitácora #CIA', path: '/learning' },
@@ -80,10 +80,10 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
   const NavContent = () => (
     <div className="flex flex-col h-full">
       <div className="p-6 flex items-center gap-3">
-        <div className="w-8 h-8 rounded-full bg-red-600 flex items-center justify-center text-white font-bold shadow-lg shadow-red-900/50">
-          侍
+        <div className="w-10 h-10 flex items-center justify-center shrink-0">
+          <img src="/logo.png" alt="Elephant Bowl Logo" className="w-full h-full object-contain drop-shadow-md" />
         </div>
-        <span className="font-bold text-xl tracking-tight uppercase text-white">Samurai</span>
+        <span className="font-bold text-lg tracking-tight uppercase text-white leading-tight">Elephant Bowl</span>
       </div>
 
       <ScrollArea className="flex-1 px-4">
@@ -106,7 +106,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
                       className={cn(
                         "flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-all duration-200",
                         isActive 
-                          ? "bg-red-600/10 text-red-500 font-medium border-l-2 border-red-600" 
+                          ? "bg-indigo-600/20 text-indigo-400 font-medium border-l-2 border-indigo-600" 
                           : "text-slate-400 hover:bg-slate-800 hover:text-white"
                       )}
                     >
@@ -143,12 +143,11 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
               </SheetContent>
             </Sheet>
             
-            {/* BUSCADOR GLOBAL */}
             <div className="relative max-w-md w-full hidden sm:block">
                <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-500" />
                <Input 
                   placeholder="Buscar Lead, Ciudad o Recurso..." 
-                  className="pl-10 bg-slate-950 border-slate-800 h-9 text-xs focus-visible:ring-red-600"
+                  className="pl-10 bg-slate-950 border-slate-800 h-9 text-xs focus-visible:ring-indigo-600"
                   value={globalSearch}
                   onChange={(e) => setGlobalSearch(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && navigate(`/leads?search=${globalSearch}`)}
@@ -160,7 +159,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="relative h-10 w-10 rounded-full hover:bg-slate-800">
-                  <div className="h-9 w-9 rounded-full border border-slate-700 bg-slate-800 flex items-center justify-center text-red-500 font-bold overflow-hidden">
+                  <div className="h-9 w-9 rounded-full border border-slate-700 bg-slate-800 flex items-center justify-center text-indigo-400 font-bold overflow-hidden">
                     {userInitials}
                   </div>
                 </Button>
@@ -168,7 +167,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
               <DropdownMenuContent className="w-56 bg-slate-900 border-slate-800 text-slate-200" align="end">
                 <DropdownMenuItem onClick={() => navigate('/profile')}>Mi Perfil</DropdownMenuItem>
                 <DropdownMenuSeparator className="bg-slate-800" />
-                <DropdownMenuItem className="text-red-500" onClick={handleLogout}>Cerrar Sesión</DropdownMenuItem>
+                <DropdownMenuItem className="text-red-400" onClick={handleLogout}>Cerrar Sesión</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>

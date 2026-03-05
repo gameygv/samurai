@@ -123,7 +123,7 @@ const AgentBrain = () => {
     if (!confirm(`¿Restaurar "${snapshot.version_name}"? Esto reemplazará los prompts actuales (debes presionar "Aplicar Cambios" después).`)) return;
     setPrompts(snapshot.prompts_snapshot);
     toast.success("Snapshot cargado. Revisa las pestañas 1 y 2.");
-    setSearchParams({ tab: 'alma' }); // Redirigir para ver el cambio
+    setSearchParams({ tab: 'alma' }); 
   };
 
   // LAB LOGIC
@@ -184,11 +184,10 @@ const AgentBrain = () => {
     setSimulating(true);
 
     try {
-      // ENVIAMOS EL HISTORIAL COMPLETO PARA QUE TENGA MEMORIA
       const { data, error } = await supabase.functions.invoke('simulate-samurai', {
         body: { 
             question: currentQ, 
-            history: newHistory.slice(-10), // Enviamos los últimos 10 mensajes
+            history: newHistory.slice(-10), 
             customPrompts: prompts 
         }
       });
@@ -221,11 +220,11 @@ const AgentBrain = () => {
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 shrink-0 bg-slate-900/50 p-5 rounded-xl border border-slate-800 shadow-xl">
           <div className="flex items-center gap-4">
             <div className="p-3 bg-indigo-600/10 rounded-xl border border-indigo-500/20">
-               <BrainCircuit className="w-8 h-8 text-indigo-500" />
+               <BrainCircuit className="w-8 h-8 text-indigo-400" />
             </div>
             <div>
               <h1 className="text-3xl font-bold text-white tracking-tight">Cerebro Core</h1>
-              <p className="text-slate-400 text-sm">Control central de la consciencia y lógica del Samurai.</p>
+              <p className="text-slate-400 text-sm">Control central de la consciencia y lógica de Elephant Bowl.</p>
             </div>
           </div>
           <div className="flex gap-3">
@@ -258,7 +257,7 @@ const AgentBrain = () => {
                          <CardHeader className="border-b border-slate-800 bg-slate-900/50 py-3 flex items-center justify-between shrink-0 px-6">
                             <div>
                                <CardTitle className="text-white text-xs flex items-center gap-2 uppercase tracking-widest"><FlaskConical className="w-4 h-4 text-indigo-400" /> Arquitecto de Prompts</CardTitle>
-                               <CardDescription className="text-[10px]">Evolución asistida de la consciencia de Sam.</CardDescription>
+                               <CardDescription className="text-[10px]">Evolución asistida de la consciencia de la IA.</CardDescription>
                             </div>
                             <Button variant="ghost" size="sm" onClick={() => setLabMessages([])} className="h-8 text-[10px] text-slate-500 hover:text-white"><RefreshCcw className="w-3 h-3 mr-2"/> Reiniciar</Button>
                          </CardHeader>
@@ -267,7 +266,7 @@ const AgentBrain = () => {
                                {labMessages.length === 0 && (
                                   <div className="text-center py-20">
                                      <Bot className="w-12 h-12 text-slate-800 mx-auto mb-4 opacity-20" />
-                                     <p className="text-slate-500 italic text-sm">"Hola, soy el Arquitecto. ¿Qué quieres que aprenda Sam hoy?"</p>
+                                     <p className="text-slate-500 italic text-sm">"Hola, soy el Arquitecto. ¿Qué quieres que aprenda la IA hoy?"</p>
                                   </div>
                                )}
                                {labMessages.map((m, i) => (
@@ -287,7 +286,7 @@ const AgentBrain = () => {
                                <div className="flex items-center gap-4 bg-slate-950 p-2 rounded-lg border border-indigo-500/30">
                                   <img src={labImage} className="w-12 h-12 rounded object-cover" />
                                   <span className="text-[10px] text-indigo-400 flex-1">Captura lista para analizar</span>
-                                  <Button size="sm" variant="ghost" onClick={() => setLabImage(null)} className="text-red-500">Eliminar</Button>
+                                  <Button size="sm" variant="ghost" onClick={() => setLabImage(null)} className="text-red-400">Eliminar</Button>
                                </div>
                             )}
                             <div className="flex gap-4">
@@ -313,7 +312,7 @@ const AgentBrain = () => {
                    </div>
 
                    <div className="lg:col-span-4 flex flex-col gap-6">
-                      <Card className="bg-slate-900 border-slate-800 border-l-4 border-l-yellow-500 shadow-xl">
+                      <Card className="bg-slate-900 border-slate-800 border-l-4 border-l-yellow-600 shadow-xl">
                          <CardHeader><CardTitle className="text-xs uppercase tracking-widest text-yellow-500 flex items-center gap-2"><Sparkles className="w-4 h-4"/> Propuesta de Mejora</CardTitle></CardHeader>
                          <CardContent className="space-y-4">
                             {!proposedPrompts ? (
@@ -341,7 +340,7 @@ const AgentBrain = () => {
             <TabsContent value="alma" className="m-0 h-full flex flex-col data-[state=inactive]:hidden">
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 flex-1 min-h-0">
                   <div className="h-full min-h-0">
-                     <PromptEditor title="Alma de Samurai" icon={Bot} value={prompts['prompt_alma_samurai']} onChange={v => handlePromptChange('prompt_alma_samurai', v)} />
+                     <PromptEditor title="Alma de Elephant Bowl" icon={Bot} value={prompts['prompt_alma_samurai']} onChange={v => handlePromptChange('prompt_alma_samurai', v)} />
                   </div>
                   <Card className="bg-slate-900 border-slate-800 border-l-4 border-l-emerald-500 flex flex-col h-full overflow-hidden shadow-2xl">
                     <CardHeader className="shrink-0 py-4 border-b border-slate-800 bg-slate-950/20"><CardTitle className="text-white text-xs uppercase tracking-widest flex items-center gap-2"><Layers className="w-4 h-4 text-emerald-400" /> Jerarquía Técnica</CardTitle></CardHeader>
@@ -349,9 +348,9 @@ const AgentBrain = () => {
                       <div className="space-y-4">
                           <KernelStep num={1} title="Alma & ADN Core" desc="Define quién eres y cómo hablas." color="text-indigo-400" icon={Bot}/>
                           <KernelStep num={2} title="Estrategia de Cierre" desc="Protocolo táctico de ventas." color="text-blue-400" icon={Target}/>
-                          <KernelStep num={3} title="Media Manager" desc="Envío inteligente de posters." color="text-yellow-500" icon={ImageIcon}/>
+                          <KernelStep num={3} title="Media Manager" desc="Envío inteligente de posters." color="text-yellow-600" icon={ImageIcon}/>
                           <KernelStep num={4} title="Verdad Maestra" desc="Datos oficiales del negocio." color="text-emerald-400" icon={Database}/>
-                          <KernelStep num={5} title="Bitácora #CIA" desc="Correcciones críticas prioritarias." color="text-red-500" icon={AlertTriangle}/>
+                          <KernelStep num={5} title="Bitácora #CIA" desc="Correcciones críticas prioritarias." color="text-red-400" icon={AlertTriangle}/>
                       </div>
                     </ScrollArea>
                   </Card>
@@ -384,7 +383,7 @@ const AgentBrain = () => {
                                  <TableCell className="text-slate-400 text-[10px]">{new Date(v.created_at).toLocaleString()}</TableCell>
                                  <TableCell className="text-right pr-6">
                                     <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                       <Button variant="ghost" size="sm" className="h-8 text-[10px] text-red-500 hover:bg-red-500/10" onClick={() => handleDeleteSnapshot(v.id)}>
+                                       <Button variant="ghost" size="sm" className="h-8 text-[10px] text-red-400 hover:bg-red-500/10" onClick={() => handleDeleteSnapshot(v.id)}>
                                           <Trash2 className="w-3.5 h-3.5 mr-1" /> BORRAR
                                        </Button>
                                        <Button variant="secondary" size="sm" className="h-8 text-[10px] font-bold" onClick={() => handleRestoreSnapshot(v)}>
@@ -418,7 +417,7 @@ const AgentBrain = () => {
                           {simHistory.length === 0 && (
                             <div className="text-center py-20">
                                <MessageSquare className="w-12 h-12 text-slate-800 mx-auto mb-4 opacity-20" />
-                               <p className="text-slate-600 italic text-sm">Prueba lo que acabas de escribir arriba antes de guardar.</p>
+                               <p className="text-slate-500 italic text-sm">Prueba lo que acabas de escribir arriba antes de guardar.</p>
                             </div>
                           )}
                           {simHistory.map((m, i) => (

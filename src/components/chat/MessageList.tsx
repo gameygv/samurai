@@ -16,7 +16,6 @@ export const MessageList = ({ messages, loading }: MessageListProps) => {
   }, [messages]);
 
   const renderMessageContent = (text: string) => {
-    // 1. Audio Transcrito (Mejorado visualmente)
     if (text.includes('[TRANSCRIPCIÓN AUDIO]')) {
       const cleanText = text.replace(/\[TRANSCRIPCIÓN AUDIO\]:?/, '').replace(/^ "/, '').replace(/"$/, '').trim();
       return (
@@ -33,7 +32,6 @@ export const MessageList = ({ messages, loading }: MessageListProps) => {
       );
     }
 
-    // 2. Imagen (Lógica limpia)
     const mediaRegex = /<<MEDIA:(.*?)>>/;
     const imgInLog = text.match(/\[IMG: (.*?)\]/);
     const mediaInAi = text.match(mediaRegex);
@@ -77,7 +75,7 @@ export const MessageList = ({ messages, loading }: MessageListProps) => {
                   <div className="flex items-center gap-2 mt-1 px-1 opacity-60">
                      {msg.emisor === 'SAMURAI' && <Bot className="w-3 h-3 text-indigo-400" />}
                      <span className="text-[9px] text-slate-500 font-mono uppercase tracking-wider">
-                        {msg.emisor === 'SAMURAI' ? 'SAMURAI AI' : 'CLIENTE'} • {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        {msg.emisor === 'SAMURAI' ? 'ELEPHANT BOWL AI' : 'CLIENTE'} • {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                      </span>
                   </div>
                 </div>

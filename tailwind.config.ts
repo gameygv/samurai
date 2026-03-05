@@ -19,6 +19,34 @@ export default {
     },
     extend: {
       colors: {
+        // Redefinimos 'slate' con tonos tierra basados en #946f51
+        slate: {
+          50: '#ffffff',
+          100: '#fcf9f7',
+          200: '#f9f3ef',
+          300: '#f2e7df',
+          400: '#eadad0',
+          500: '#e0cec0',
+          600: '#412916',
+          700: '#573b24', // Hover states
+          800: '#6c4c32', // Borders
+          900: '#825e41', // Cards (Un poco más oscuro para dar profundidad)
+          950: '#946f51', // Fondo principal exacto del logo
+        },
+        // Redefinimos 'indigo' con un Esmeralda vibrante para contraste estético
+        indigo: {
+          50: '#ecfdf5',
+          100: '#d1fae5',
+          200: '#a7f3d0',
+          300: '#6ee7b7',
+          400: '#34d399',
+          500: '#10b981',
+          600: '#059669', // Color principal de botones
+          700: '#047857',
+          800: '#065f46',
+          900: '#064e3b',
+          950: '#022c22',
+        },
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",
@@ -70,20 +98,12 @@ export default {
       },
       keyframes: {
         "accordion-down": {
-          from: {
-            height: "0",
-          },
-          to: {
-            height: "var(--radix-accordion-content-height)",
-          },
+          from: { height: "0" },
+          to: { height: "var(--radix-accordion-content-height)" },
         },
         "accordion-up": {
-          from: {
-            height: "var(--radix-accordion-content-height)",
-          },
-          to: {
-            height: "0",
-          },
+          from: { height: "var(--radix-accordion-content-height)" },
+          to: { height: "0" },
         },
       },
       animation: {

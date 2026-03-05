@@ -21,7 +21,7 @@ const Manual = () => {
             Manual de Operaciones v1.6
           </h1>
           <p className="text-slate-400 text-lg">
-            Guía táctica del Protocolo Samurai.
+            Guía táctica del Protocolo Elephant Bowl.
           </p>
         </div>
 
@@ -37,7 +37,7 @@ const Manual = () => {
              <Card className="bg-slate-900 border-slate-800 border-t-4 border-t-emerald-500">
                 <CardHeader>
                    <CardTitle className="text-white text-lg">La Coreografía de 3 Fases</CardTitle>
-                   <CardDescription>Samurai no improvisa. Sigue este orden estricto para maximizar conversión y datos.</CardDescription>
+                   <CardDescription>La IA no improvisa. Sigue este orden estricto para maximizar conversión y datos.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
                    <div className="flex gap-4 items-start">
@@ -45,17 +45,17 @@ const Manual = () => {
                       <div>
                          <h4 className="text-sm font-bold text-indigo-400 uppercase tracking-widest flex items-center gap-2"><Fingerprint className="w-4 h-4"/> Fase 1: Data Hunting (CAPI)</h4>
                          <p className="text-xs text-slate-400 mt-1 leading-relaxed">
-                            Sam no soltará precios ni fechas exactas hasta obtener <strong>NOMBRE y CIUDAD</strong>. 
+                            No se soltarán precios ni fechas exactas hasta obtener <strong>NOMBRE y CIUDAD</strong>. 
                             <br/><em>¿Por qué?</em> Porque Meta necesita esos datos para optimizar tus anuncios. Si regalamos la info, perdemos el Lead.
                          </p>
                       </div>
                    </div>
                    <div className="flex gap-4 items-start">
-                      <div className="p-3 bg-pink-500/10 rounded-xl text-pink-400 font-bold border border-pink-500/20 shrink-0">2</div>
+                      <div className="p-3 bg-yellow-500/10 rounded-xl text-yellow-500 font-bold border border-yellow-500/20 shrink-0">2</div>
                       <div>
-                         <h4 className="text-sm font-bold text-pink-400 uppercase tracking-widest flex items-center gap-2"><Image className="w-4 h-4"/> Fase 2: Seducción Visual</h4>
+                         <h4 className="text-sm font-bold text-yellow-500 uppercase tracking-widest flex items-center gap-2"><Image className="w-4 h-4"/> Fase 2: Seducción Visual</h4>
                          <p className="text-xs text-slate-400 mt-1 leading-relaxed">
-                            Una vez que tenemos la CIUDAD, Sam busca en el <strong>Media Manager</strong> si hay un Poster específico para esa zona.
+                            Una vez que tenemos la CIUDAD, la IA busca en el <strong>Media Manager</strong> si hay un Poster específico para esa zona.
                             <br/>Si existe, envía la imagen. Si no, usa la información genérica de la Verdad Maestra.
                          </p>
                       </div>
@@ -66,7 +66,7 @@ const Manual = () => {
                          <h4 className="text-sm font-bold text-emerald-400 uppercase tracking-widest flex items-center gap-2"><DollarSign className="w-4 h-4"/> Fase 3: Cierre Financiero</h4>
                          <p className="text-xs text-slate-400 mt-1 leading-relaxed">
                             El objetivo final es el anticipo de <strong>$1,500 MXN</strong>.
-                            <br/>Sam ofrecerá dos caminos: Link de Tarjeta (WooCommerce) o Datos para Transferencia (BBVA/Santander).
+                            <br/>La IA ofrecerá dos caminos: Link de Tarjeta (WooCommerce) o Datos para Transferencia (BBVA/Santander).
                          </p>
                       </div>
                    </div>
@@ -82,9 +82,9 @@ const Manual = () => {
                    </CardHeader>
                    <CardContent className="space-y-4">
                       {[
-                        { l: "Nivel 1: Bitácora #CIA", d: "Instrucciones correctivas aprendidas. Tienen prioridad absoluta sobre todo lo demás.", c: "text-red-500 font-bold" },
-                        { l: "Nivel 2: Verdad Maestra", d: "Datos duros (precios, fechas) leídos del sitio web oficial.", c: "text-green-400 font-bold" },
-                        { l: "Nivel 3: ADN Core", d: "Personalidad, tono y el Protocolo de 3 Fases.", c: "text-purple-400 font-bold" }
+                        { l: "Nivel 1: Bitácora #CIA", d: "Instrucciones correctivas aprendidas. Tienen prioridad absoluta sobre todo lo demás.", c: "text-red-400 font-bold" },
+                        { l: "Nivel 2: Verdad Maestra", d: "Datos duros (precios, fechas) leídos del sitio web oficial.", c: "text-emerald-400 font-bold" },
+                        { l: "Nivel 3: ADN Core", d: "Personalidad, tono y el Protocolo de 3 Fases.", c: "text-indigo-400 font-bold" }
                       ].map((item, i) => (
                         <div key={i} className="bg-slate-950 p-3 rounded border border-slate-800">
                            <p className={`text-xs ${item.c}`}>{item.l}</p>
@@ -97,14 +97,14 @@ const Manual = () => {
           </TabsContent>
 
           <TabsContent value="vision" className="mt-6">
-             <Card className="bg-slate-900 border-slate-800 border-l-4 border-l-red-600">
+             <Card className="bg-slate-900 border-slate-800 border-l-4 border-l-red-500">
                 <CardHeader>
-                   <CardTitle className="text-white flex items-center gap-2"><Eye className="w-5 h-5 text-red-600" /> Ojo de Halcón (Visión Financiera)</CardTitle>
+                   <CardTitle className="text-white flex items-center gap-2"><Eye className="w-5 h-5 text-red-500" /> Ojo de Halcón (Visión Financiera)</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                   <p className="text-sm text-slate-400">Si un cliente envía una foto, Sam activa su módulo de visión GPT-4o.</p>
+                   <p className="text-sm text-slate-400">Si un cliente envía una foto, la IA activa su módulo de visión GPT-4o.</p>
                    <div className="bg-slate-950 p-4 rounded-lg border border-slate-800 space-y-3">
-                      <h4 className="text-xs font-bold text-red-500 uppercase">Capacidades:</h4>
+                      <h4 className="text-xs font-bold text-red-400 uppercase">Capacidades:</h4>
                       <ul className="text-xs text-slate-300 space-y-2 list-disc pl-4">
                          <li>Detecta si es un Comprobante de Pago o un Poster/Screenshot.</li>
                          <li>Si es Comprobante: Extrae Banco, Monto, Fecha y Referencia.</li>
@@ -122,7 +122,7 @@ const Manual = () => {
                 </CardHeader>
                 <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-6">
                    <div className="bg-red-900/10 border border-red-900/50 p-4 rounded-xl">
-                      <div className="flex items-center gap-2 mb-2 text-red-500 font-bold">
+                      <div className="flex items-center gap-2 mb-2 text-red-400 font-bold">
                          <Pause className="w-5 h-5" /> #STOP
                       </div>
                       <p className="text-xs text-slate-400">Pausa total de la IA en ese chat. Úsalo si quieres tomar el control manual.</p>
@@ -131,7 +131,7 @@ const Manual = () => {
                       <div className="flex items-center gap-2 mb-2 text-green-500 font-bold">
                          <Play className="w-5 h-5" /> #START
                       </div>
-                      <p className="text-xs text-slate-400">Reactiva a Sam. Retomará el protocolo donde se quedó.</p>
+                      <p className="text-xs text-slate-400">Reactiva la IA. Retomará el protocolo donde se quedó.</p>
                    </div>
                    <div className="bg-yellow-900/10 border border-yellow-900/50 p-4 rounded-xl">
                       <div className="flex items-center gap-2 mb-2 text-yellow-500 font-bold">

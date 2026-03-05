@@ -103,10 +103,10 @@ const Index = () => {
       setUpcomingTasks(tasks);
 
       setFunnelData([
-        { name: 'Prospectos', value: leads.length, color: '#6366f1' },
-        { name: 'Identificados', value: identified, color: '#818cf8' },
-        { name: 'Listos CAPI', value: capiReady, color: '#c084fc' },
-        { name: 'Cierre Hot', value: leads.filter(l => l.buying_intent === 'ALTO').length, color: '#f43f5e' }
+        { name: 'Prospectos', value: leads.length, color: '#34d399' },
+        { name: 'Identificados', value: identified, color: '#10b981' },
+        { name: 'Listos CAPI', value: capiReady, color: '#059669' },
+        { name: 'Cierre Hot', value: leads.filter(l => l.buying_intent === 'ALTO').length, color: '#047857' }
       ]);
 
       setStats({
@@ -136,13 +136,15 @@ const Index = () => {
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <h1 className="text-3xl font-bold text-white tracking-tight flex items-center gap-3">
-               <div className="w-8 h-8 rounded bg-red-600 flex items-center justify-center text-xs shadow-lg shadow-red-900/50">侍</div>
-               Samurai Command Center
+               <div className="w-10 h-10 flex items-center justify-center shadow-lg shrink-0">
+                  <img src="/logo.png" alt="Logo" className="w-full h-full object-contain drop-shadow-md" />
+               </div>
+               Elephant Bowl Hub
             </h1>
             <p className="text-slate-400 text-sm">Operaciones Tácticas & Inteligencia de Datos</p>
           </div>
           <div className="flex items-center gap-3 bg-slate-900/50 p-2 px-4 rounded-full border border-slate-800 h-10 shadow-lg">
-             <div className={`w-2 h-2 rounded-full animate-pulse ${latency !== null ? 'bg-green-500' : 'bg-red-500'}`}></div>
+             <div className={`w-2 h-2 rounded-full animate-pulse ${latency !== null ? 'bg-green-500' : 'bg-red-400'}`}></div>
              <span className="text-[10px] font-mono text-slate-300 uppercase tracking-widest">
                 {latency !== null ? `KERNEL: ONLINE | LATENCY: ${latency}ms` : 'KERNEL: RECONNECTING...'}
              </span>
@@ -152,7 +154,7 @@ const Index = () => {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           <StatCard title="Salud Meta CAPI" value={`${stats.totalLeads > 0 ? Math.round((stats.capiReadyLeads / stats.totalLeads) * 100) : 0}%`} icon={Fingerprint} color="text-indigo-400" bg="bg-indigo-500/10" footer={`${stats.capiReadyLeads} Leads con Datos Full`} />
           <StatCard title="Alertas #CIA" value={stats.totalErrors} icon={AlertTriangle} color="text-yellow-500" bg="bg-yellow-500/10" footer="Mejoras de Conducta" />
-          <StatCard title="Ventas Validadas" value={stats.validatedSales} icon={DollarSign} color="text-emerald-500" bg="bg-emerald-500/10" footer="Reservas Confirmadas" />
+          <StatCard title="Ventas Validadas" value={stats.validatedSales} icon={DollarSign} color="text-emerald-400" bg="bg-emerald-500/10" footer="Reservas Confirmadas" />
           <StatCard title="Total Prospectos" value={stats.totalLeads} icon={Users2} color="text-slate-400" bg="bg-slate-500/10" footer="Tráfico Acumulado" />
         </div>
 
@@ -169,8 +171,8 @@ const Index = () => {
                      <ResponsiveContainer width="100%" height="100%">
                         <BarChart data={funnelData} layout="vertical" margin={{ left: 20 }}>
                            <XAxis type="number" hide />
-                           <YAxis dataKey="name" type="category" stroke="#94a3b8" fontSize={10} width={100} />
-                           <Tooltip cursor={{ fill: 'rgba(255,255,255,0.05)' }} contentStyle={{ backgroundColor: '#0f172a', border: 'none', borderRadius: '8px', fontSize: '10px' }} />
+                           <YAxis dataKey="name" type="category" stroke="#eadad0" fontSize={10} width={100} />
+                           <Tooltip cursor={{ fill: 'rgba(255,255,255,0.05)' }} contentStyle={{ backgroundColor: '#5d412b', border: 'none', borderRadius: '8px', fontSize: '10px', color: '#fff' }} />
                            <Bar dataKey="value" radius={[0, 4, 4, 0]} barSize={25}>
                               {funnelData.map((entry, index) => (
                                  <Cell key={`cell-${index}`} fill={entry.color} />
@@ -185,10 +187,10 @@ const Index = () => {
              </div>
 
              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <QuickButton label="Probar IA" path="/brain?tab=simulador" icon={Zap} color="bg-indigo-600/10 text-indigo-500 border-indigo-500/20" />
-                <QuickButton label="Radar Leads" path="/leads" icon={MessageSquare} color="bg-emerald-600/10 text-emerald-500 border-emerald-500/20" />
-                <QuickButton label="Media Manager" path="/media" icon={ImageIcon} color="bg-blue-600/10 text-blue-500 border-blue-500/20" />
-                <QuickButton label="Monitor Live" path="/activity" icon={Activity} color="bg-red-600/10 text-red-500 border-red-500/20" />
+                <QuickButton label="Probar IA" path="/brain?tab=simulador" icon={Zap} color="bg-indigo-600/10 text-indigo-400 border-indigo-500/20" />
+                <QuickButton label="Radar Leads" path="/leads" icon={MessageSquare} color="bg-emerald-600/10 text-emerald-400 border-emerald-500/20" />
+                <QuickButton label="Media Manager" path="/media" icon={ImageIcon} color="bg-blue-600/10 text-blue-400 border-blue-500/20" />
+                <QuickButton label="Monitor Live" path="/activity" icon={Activity} color="bg-orange-600/10 text-orange-400 border-orange-500/20" />
              </div>
           </div>
 
@@ -204,14 +206,14 @@ const Index = () => {
                  <div className="space-y-1.5">
                     {stats.recentLogs.map((log, i) => (
                         <div key={i} className="flex items-start gap-2 border-l border-slate-800 pl-2 group">
-                          <span className="text-slate-600 shrink-0">[{new Date(log.created_at).toLocaleTimeString([], { hour12: false })}]</span> 
+                          <span className="text-slate-500 shrink-0">[{new Date(log.created_at).toLocaleTimeString([], { hour12: false })}]</span> 
                           <span className={cn(
                               "shrink-0 px-1 rounded uppercase font-bold",
-                              log.action === 'ERROR' ? 'bg-red-500/20 text-red-500' : 
-                              log.action === 'CREATE' ? 'bg-green-500/20 text-green-500' :
+                              log.action === 'ERROR' ? 'bg-red-500/20 text-red-400' : 
+                              log.action === 'CREATE' ? 'bg-green-500/20 text-green-400' :
                               'bg-indigo-500/20 text-indigo-400'
                           )}>{log.action}</span> 
-                          <span className="text-slate-400 truncate max-w-[200px] group-hover:text-white transition-colors">{log.description}</span>
+                          <span className="text-slate-300 truncate max-w-[200px] group-hover:text-white transition-colors">{log.description}</span>
                         </div>
                     ))}
                  </div>
@@ -244,7 +246,7 @@ const StatCard = ({ title, value, icon: Icon, color, bg, footer }: any) => (
       <div><p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{title}</p><h3 className="text-3xl font-bold text-white mt-2">{value}</h3></div>
       <div className={cn("p-3 rounded-xl shadow-inner", bg, color, "group-hover:rotate-12 transition-transform")}><Icon className="w-6 h-6" /></div>
     </div>
-    <p className="mt-4 text-[9px] text-slate-600 font-mono uppercase tracking-widest">{footer}</p>
+    <p className="mt-4 text-[9px] text-slate-500 font-mono uppercase tracking-widest">{footer}</p>
   </Card>
 );
 
