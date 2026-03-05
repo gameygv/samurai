@@ -30,8 +30,16 @@ serve(async (req) => {
     // Verificar Horario Comercial
     const now = new Date();
     const mxHour = (now.getUTCHours() - 6 + 24) % 24; 
-    if (mxHour < (fConfig.start_hour || 9) || mxHour >= (fConfig.end_hour || 20)) {
-        return new Response(JSON.stringify({ success: true, message: `Fuera de horario laboral. Hora actual: ${mxHour}h` }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    
+    // Forzamos explícitamente a que sean números para evitar fallos de comparación de texto
+    const startHour = Number(fConfig.start_hour ?? 9);
+    const endHour = Number(fConfig.end_hour ?? 20);
+
+    if (mxHour < startHour || mxHour >= endHour) {
+        return new Response(JSON.stringify({ 
+            success: true, 
+            message: `Fuera de horario laboral. Hora actual: ${mxHour}h (Configurado de: ${startHour}h a ${endHour}h)` 
+        }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     const evolutionApiUrl = getConfig('evolution_api_url');
