@@ -19,33 +19,34 @@ export default {
     },
     extend: {
       colors: {
-        // Terracota Elegante (Basado exactamente en #946f51)
+        // Escala Base (Espresso/Mocha) para fondos y textos legibles
         slate: {
-          50: '#FDFBF7',  // Crema muy suave para textos
-          100: '#F6F3ED',
-          200: '#E8E1D5',
-          300: '#D5C9B8',
-          400: '#BCAB94',
-          500: '#A48E75',
-          600: '#8C7459',
-          700: '#6E553E',
-          800: '#564230', // Bordes
-          900: '#423122', // Cards y Paneles (Más profundo para mejor contraste)
-          950: '#946f51', // Fondo base (El color de tu logo)
+          50: '#fcfafa',  // Crema brillante para textos principales
+          100: '#f2ebe8',
+          200: '#dfd0c9',
+          300: '#c7b1a5',
+          400: '#a38779',  // Textos secundarios
+          500: '#8c7061',  // Textos muteados
+          600: '#6b5347',
+          700: '#4a3830',
+          800: '#2e221d',  // Bordes y separadores
+          900: '#1a1310',  // Fondo de Tarjetas (Dark Espresso)
+          950: '#0d0a08',  // Fondo Base de la App (Ultra Dark)
         },
-        // Onyx Profundo (Reemplaza los verdes/azules por un carbón cálido muy elegante)
+        // Escala Primaria (Basada en el #946f51 de The Elephant Bowl)
+        // Mapeamos 'indigo' a tu color de marca para no tener que cambiar las clases de los componentes
         indigo: {
-          50: '#F8F7F5',
-          100: '#EBE8E3',
-          200: '#D1CAC1',
-          300: '#B3A99D',
-          400: '#94887A',
-          500: '#756A5E',
-          600: '#544C43', 
-          700: '#3D3730', 
-          800: '#292520', // Hover de botones
-          900: '#1A1714', // Botones principales
-          950: '#0D0B0A', // Fondos ultra oscuros
+          50: '#f6f3f0',
+          100: '#e8ded7',
+          200: '#d5c0b1',
+          300: '#be9e87',
+          400: '#a88162',  // Acentos claros
+          500: '#946f51',  // <--- Color exacto del Logo (Botones base)
+          600: '#7a5a41',  // Hover de botones
+          700: '#614634',
+          800: '#4a3629',
+          900: '#3d2d23',  // Fondos tenues de acento
+          950: '#211812',
         },
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
