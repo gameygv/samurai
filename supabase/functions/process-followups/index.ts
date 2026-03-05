@@ -66,32 +66,52 @@ serve(async (req) => {
             
             const mediaRegex = /<<MEDIA:(.*?)>>/;
             const mediaMatch = rawAnswer.match(mediaRegex);
-            const mediaUrl = mediaMatch ? mediaMatch[1] : null;
+            const mediaUrl = mediaMatch ? mediaMatch[1].trim() : null; // Trim por seguridad
             let textToSend = rawAnswer.replace(mediaRegex, '').trim();
 
-            if (!textToSend) return false;
+            if (!textToSend && !mediaUrl) return false;
 
-            // 4. Enviar por Evolution API v2
+            // 4. Enviar por Evolution API Universal (v1 + v2)
             if (evolutionApiUrl && evolutionApiKey) {
-                if (mediaUrl) {
-                    await fetch(evolutionApiUrl.replace('message/sendText', 'message/sendMedia'), {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json', 'apikey': evolutionApiKey },
-                        body: JSON.stringify({ number: lead.telefono, mediaMessage: { mediatype: "image", media: mediaUrl, caption: textToSend }, delay: 1500 })
+                const endpoint = mediaUrl ? evolutionApiUrl.replace('sendText', 'sendMedia') : evolutionApiUrl;
+                
+                const payload = mediaUrl ? {
+                    number: lead.telefono,
+                    mediatype: "image",
+                    media: mediaUrl,
+                    caption: textToSend || "",
+                    mediaMessage: { mediatype: "image", media: mediaUrl, caption: textToSend || "" },
+                    delay: 1500
+                } : {
+                    number: lead.telefono,
+                    text: textToSend,
+                    delay: 1500,
+                    linkPreview: true
+                };
+
+                const response = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'apikey': evolutionApiKey },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!response.ok) {
+                    const errText = await response.text();
+                    console.error("[process-followups] Evolution Error:", errText);
+                    await supabaseClient.from('activity_logs').insert({
+                        action: 'ERROR',
+                        resource: 'SYSTEM',
+                        description: `Fallo Auto-Followup en Evolution API: ${errText.substring(0,100)}`,
+                        status: 'ERROR'
                     });
-                } else {
-                    await fetch(evolutionApiUrl, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json', 'apikey': evolutionApiKey },
-                        body: JSON.stringify({ number: lead.telefono, text: textToSend, delay: 1500, linkPreview: true })
-                    });
+                    return false; // Cortamos el flujo
                 }
             }
 
-            // 5. Guardar en Base de Datos
+            // 5. Guardar en Base de Datos solo si fue exitoso
             await supabaseClient.from('conversaciones').insert({ 
                 lead_id: lead.id, emisor: 'SAMURAI', 
-                mensaje: mediaUrl ? `[IMG: ${mediaUrl}] ${rawAnswer}` : rawAnswer, 
+                mensaje: mediaUrl ? `[IMG: ${mediaUrl}] ${textToSend}` : textToSend, 
                 platform: 'AUTO_FOLLOWUP' 
             });
 

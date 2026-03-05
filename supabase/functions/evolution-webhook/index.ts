@@ -214,31 +214,57 @@ serve(async (req) => {
     // RESPUESTA Y MEDIOS AL CLIENTE
     const mediaRegex = /<<MEDIA:(.*?)>>/;
     const mediaMatch = rawAnswer.match(mediaRegex);
-    const mediaUrl = mediaMatch ? mediaMatch[1] : null;
+    const mediaUrl = mediaMatch ? mediaMatch[1].trim() : null; // Trim para limpiar espacios accidentales
     let textToSend = rawAnswer.replace(mediaRegex, '').trim();
 
-    if (evoUrl && evoKey && textToSend) {
+    if (evoUrl && evoKey && (textToSend || mediaUrl)) {
         const endpoint = mediaUrl ? evoUrl.replace('sendText', 'sendMedia') : evoUrl;
+        
+        // Estructura Universal: Fusiona campos v1 y v2 de Evolution API para que no falle nunca
         const payload = mediaUrl ? {
             number: phone,
-            mediaMessage: { mediatype: "image", media: mediaUrl, caption: textToSend }
+            mediatype: "image",
+            media: mediaUrl,
+            caption: textToSend || "",
+            mediaMessage: { mediatype: "image", media: mediaUrl, caption: textToSend || "" }
         } : {
             number: phone,
             text: textToSend
         };
 
-        await fetch(endpoint, {
+        const response = await fetch(endpoint, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'apikey': evoKey },
             body: JSON.stringify(payload)
         });
 
-        await supabaseClient.from('conversaciones').insert({ 
-            lead_id: lead.id, 
-            emisor: 'SAMURAI', 
-            mensaje: mediaUrl ? `[IMG: ${mediaUrl}] ${textToSend}` : textToSend, 
-            platform: 'WHATSAPP_AUTO' 
-        });
+        if (!response.ok) {
+            const errText = await response.text();
+            console.error("[Webhook] Evolution API Rechazó el mensaje:", errText);
+            
+            await supabaseClient.from('activity_logs').insert({
+                action: 'ERROR',
+                resource: 'SYSTEM',
+                description: `Evolution API falló enviando a ${phone}: ${errText.substring(0, 150)}`,
+                status: 'ERROR'
+            });
+
+            // Guardar en el chat con etiqueta de error para que sepas que NO le llegó
+            await supabaseClient.from('conversaciones').insert({ 
+                lead_id: lead.id, 
+                emisor: 'SAMURAI', 
+                mensaje: `[ERROR WA] ` + (mediaUrl ? `[IMG: ${mediaUrl}] ${textToSend}` : textToSend), 
+                platform: 'ERROR' 
+            });
+        } else {
+            // Guardado Exitoso
+            await supabaseClient.from('conversaciones').insert({ 
+                lead_id: lead.id, 
+                emisor: 'SAMURAI', 
+                mensaje: mediaUrl ? `[IMG: ${mediaUrl}] ${textToSend}` : textToSend, 
+                platform: 'WHATSAPP_AUTO' 
+            });
+        }
     }
 
     return new Response(JSON.stringify({ success: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
