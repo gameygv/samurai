@@ -59,7 +59,6 @@ serve(async (req) => {
             await supabaseClient.from('activity_logs').insert({ action: 'UPDATE', resource: 'LEADS', description: `IA ACTIVADA manualmente para ${lead.nombre}`, status: 'OK' });
         }
         
-        // Detener el flujo aquí para que la IA no responda a los agentes
         return new Response('Agent message processed');
     }
 
@@ -120,6 +119,12 @@ serve(async (req) => {
 
     if (lead.ai_paused) return new Response('Paused');
 
+    // AL RECIBIR MENSAJE DEL CLIENTE: RESETEAR EL RELOJ Y LA FASE DE FOLLOWUP A CERO
+    await supabaseClient.from('leads').update({ 
+        last_message_at: new Date().toISOString(),
+        followup_stage: 0 
+    }).eq('id', lead.id);
+
     const { data: kernelData } = await supabaseClient.functions.invoke('get-samurai-context', { body: { lead } });
     const { data: history } = await supabaseClient.from('conversaciones').select('emisor, mensaje').eq('lead_id', lead.id).order('created_at', { ascending: false }).limit(20);
     const historyMsgs = history ? history.reverse() : [];
@@ -142,7 +147,6 @@ serve(async (req) => {
             model: "gpt-4o",
             messages: [
                 { role: "system", content: finalSystemPrompt },
-                // Asegurarnos de que mapea tanto 'IA' como 'SAMURAI' al rol 'assistant' para que recuerde sus mensajes
                 ...historyMsgs.map(m => ({ role: (m.emisor === 'IA' || m.emisor === 'SAMURAI' ? 'assistant' : 'user'), content: m.mensaje })),
                 { role: "user", content: userMessageContent } 
             ],
@@ -199,7 +203,6 @@ serve(async (req) => {
             method: 'POST', headers: { 'Content-Type': 'application/json', 'apikey': evoKey }, body: JSON.stringify(payload)
         });
 
-        // Aquí es donde se guarda [IMG: url] en la base de datos
         const messageToLog = mediaUrl ? `[IMG: ${mediaUrl}] ${textToSend}` : textToSend;
         
         if (!response.ok) {
