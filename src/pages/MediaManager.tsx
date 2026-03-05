@@ -48,11 +48,11 @@ const MediaManager = () => {
 
   const handleScanOcr = async (asset: any) => {
      setScanningId(asset.id);
-     const tid = toast.loading("Ojo de Halcón analizando imagen...");
+     const tid = toast.loading(`Analizando con IA (${asset.category === 'POSTER' ? 'Modo Póster' : 'Ojo de Halcón'})...`);
      
      try {
         const { data, error } = await supabase.functions.invoke('scrape-website', {
-           body: { url: asset.url, mode: 'VISION' }
+           body: { url: asset.url, mode: 'VISION', assetCategory: asset.category } // SE ENVÍA LA CATEGORÍA AQUÍ
         });
 
         if (error) throw new Error(error.message);

@@ -39,10 +39,10 @@ serve(async (req) => {
     
     const separator = isFirst ? '?' : '&';
 
-    // CARGAR POSTERS DESDE MEDIA MANAGER PARA EL SIMULADOR
+    // CARGAR POSTERS DESDE MEDIA MANAGER PARA EL SIMULADOR (CON OCR)
     const { data: mediaAssets } = await supabaseClient
         .from('media_assets')
-        .select('title, url, ai_instructions')
+        .select('title, url, ai_instructions, ocr_content, category')
         .eq('category', 'POSTER');
 
     let mediaContext = "\n=== BÓVEDA DE POSTERS (MEDIA MANAGER) ===\n";
@@ -54,7 +54,7 @@ NUNCA uses markdown como ![imagen](url). Para enviar una imagen, SIMPLEMENTE PEG
 
 CATÁLOGO DISPONIBLE:\n`;
         mediaAssets.forEach(m => {
-            mediaContext += `- TÍTULO: ${m.title}\n  CUÁNDO USAR: ${m.ai_instructions}\n  ETIQUETA EXACTA A PEGAR: <<MEDIA:${m.url}>>\n\n`;
+            mediaContext += `- TÍTULO: ${m.title}\n  INFORMACIÓN EXTRAÍDA DEL POSTER: ${m.ocr_content || 'Sin información extraída'}\n  CUÁNDO USAR: ${m.ai_instructions}\n  ETIQUETA EXACTA A PEGAR: <<MEDIA:${m.url}>>\n\n`;
         });
     } else {
         mediaContext += "No hay posters cargados actualmente.\n";

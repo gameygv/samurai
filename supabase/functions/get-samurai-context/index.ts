@@ -46,10 +46,10 @@ serve(async (req) => {
     if (lead.telefono) addParam('wffn_billing_phone', encodeURIComponent(lead.telefono));
     if (lead.ciudad) addParam('wffn_billing_city', encodeURIComponent(lead.ciudad));
 
-    // CARGAR POSTERS DESDE MEDIA MANAGER
+    // CARGAR POSTERS DESDE MEDIA MANAGER (AHORA INCLUYE EL TEXTO EXTRAIDO OCR)
     const { data: mediaAssets } = await supabaseClient
         .from('media_assets')
-        .select('title, url, ai_instructions')
+        .select('title, url, ai_instructions, ocr_content, category')
         .eq('category', 'POSTER');
 
     let mediaContext = "\n=== BÓVEDA DE POSTERS (MEDIA MANAGER) ===\n";
@@ -61,7 +61,7 @@ REGLA DE ORO: NUNCA uses enlaces markdown como ![imagen](url). Para enviar una i
 
 CATÁLOGO DISPONIBLE:\n`;
         mediaAssets.forEach(m => {
-            mediaContext += `- TÍTULO: ${m.title}\n  CUÁNDO USAR: ${m.ai_instructions}\n  ETIQUETA EXACTA A PEGAR EN EL CHAT: <<MEDIA:${m.url}>>\n\n`;
+            mediaContext += `- TÍTULO: ${m.title}\n  INFORMACIÓN EXTRAÍDA DEL POSTER: ${m.ocr_content || 'Aún no se ha leído la información visual de este póster.'}\n  CUÁNDO USAR: ${m.ai_instructions}\n  ETIQUETA EXACTA A PEGAR EN EL CHAT: <<MEDIA:${m.url}>>\n\n`;
         });
     } else {
         mediaContext += "No hay posters cargados actualmente.\n";
