@@ -39,7 +39,7 @@ serve(async (req) => {
     
     const separator = isFirst ? '?' : '&';
 
-    // CARGAR POSTERS DESDE MEDIA MANAGER PARA EL SIMULADOR (CON OCR)
+    // CARGAR POSTERS
     const { data: mediaAssets } = await supabaseClient
         .from('media_assets')
         .select('title, url, ai_instructions, ocr_content, category')
@@ -47,30 +47,48 @@ serve(async (req) => {
 
     let mediaContext = "\n=== BÓVEDA DE POSTERS (MEDIA MANAGER) ===\n";
     if (mediaAssets && mediaAssets.length > 0) {
-        mediaContext += `INSTRUCCIÓN CRÍTICA DE VISUALES: 
-Cuando el cliente pida información o cuando ya sepas su CIUDAD, DEBES adjuntar el poster correspondiente AUTOMÁTICAMENTE en tu respuesta. 
-NO le preguntes si quiere ver la imagen, envíala directamente. 
-NUNCA uses markdown como ![imagen](url). Para enviar una imagen, SIMPLEMENTE PEGA la etiqueta exacta <<MEDIA:URL>> en cualquier parte de tu mensaje.
-
-CATÁLOGO DISPONIBLE:\n`;
+        mediaContext += `INSTRUCCIÓN CRÍTICA DE VISUALES: Cuando el cliente pida información o cuando ya sepas su CIUDAD, DEBES adjuntar el poster correspondiente AUTOMÁTICAMENTE. NUNCA uses markdown como ![imagen](url). Pega la etiqueta exacta <<MEDIA:URL>>.\n\n`;
         mediaAssets.forEach(m => {
-            mediaContext += `- TÍTULO: ${m.title}\n  INFORMACIÓN EXTRAÍDA DEL POSTER: ${m.ocr_content || 'Sin información extraída'}\n  CUÁNDO USAR: ${m.ai_instructions}\n  ETIQUETA EXACTA A PEGAR: <<MEDIA:${m.url}>>\n\n`;
+            mediaContext += `- TÍTULO: ${m.title}\n  OCR: ${m.ocr_content || 'Sin información extraída'}\n  CUÁNDO USAR: ${m.ai_instructions}\n  ETIQUETA EXACTA: <<MEDIA:${m.url}>>\n\n`;
         });
-    } else {
-        mediaContext += "No hay posters cargados actualmente.\n";
     }
+
+    // CARGAR VERDAD MAESTRA (SITIO WEB)
+    const { data: webPages } = await supabaseClient.from('main_website_content').select('title, content').eq('scrape_status', 'success');
+    let masterTruth = "\n=== VERDAD MAESTRA (SITIO WEB OFICIAL) ===\n";
+    if (webPages && webPages.length > 0) {
+        masterTruth += "Esta es la información OFICIAL. NUNCA inventes nombres ni datos que no estén aquí.\n";
+        webPages.forEach(p => {
+            if(p.content) masterTruth += `\n[PÁGINA: ${p.title}]\n${p.content.substring(0, 3000)}\n`;
+        });
+    }
+
+    // CARGAR BASE DE CONOCIMIENTO
+    const { data: kbDocs } = await supabaseClient.from('knowledge_documents').select('title, category, content, description');
+    let kbContext = "\n=== BASE DE CONOCIMIENTO TÉCNICO ===\n";
+    if (kbDocs && kbDocs.length > 0) {
+        kbDocs.forEach(d => {
+            if(d.content) kbContext += `\n[RECURSO: ${d.title} | CAT: ${d.category}]\nContenido: ${d.content.substring(0, 2000)}\n`;
+        });
+    }
+
+    const pRelearning = getConfig('prompt_relearning');
 
     const systemPrompt = `
       [ADN]: ${customPrompts?.prompt_adn_core || getConfig('prompt_adn_core')}
       [VENTA]: ${customPrompts?.prompt_estrategia_cierre || getConfig('prompt_estrategia_cierre')}
+      
+      ${pRelearning && pRelearning.trim() !== '' && pRelearning !== '# Aún no hay lecciones inyectadas.' ? `\n=== REGLAS #CIA (PRIORIDAD ABSOLUTA) ===\n${pRelearning}\n` : ''}
+
+      ${masterTruth}
+      
+      ${kbContext}
 
       ${mediaContext}
 
       === GENERACIÓN DE LINK FUNNELKIT ===
-      Debes usar exactamente este formato para los parámetros dinámicos:
+      Formato exacto para parámetros dinámicos:
       ${basePaymentLink}${separator}wffn_billing_first_name=NOMBRE&wffn_billing_email=CORREO&wffn_billing_city=CIUDAD
-      
-      IMPORTANTE: Tu WordPress usa el prefijo "wffn_billing_". No lo cambies.
     `;
 
     const messages = [
@@ -96,7 +114,7 @@ CATÁLOGO DISPONIBLE:\n`;
     
     return new Response(JSON.stringify({ 
         answer: parts[0].trim(), 
-        explanation: parts[1] ? JSON.parse(parts[1].trim()) : { layers_used: ["FUNNELKIT"], reasoning: "Respuesta generada correctamente." }
+        explanation: parts[1] ? JSON.parse(parts[1].trim()) : { layers_used: ["FUNNELKIT", "VERDAD MAESTRA"], reasoning: "Contexto cruzado correctamente." }
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
   } catch (error: any) {

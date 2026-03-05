@@ -46,7 +46,7 @@ serve(async (req) => {
     if (lead.telefono) addParam('wffn_billing_phone', encodeURIComponent(lead.telefono));
     if (lead.ciudad) addParam('wffn_billing_city', encodeURIComponent(lead.ciudad));
 
-    // CARGAR POSTERS DESDE MEDIA MANAGER (AHORA INCLUYE EL TEXTO EXTRAIDO OCR)
+    // CARGAR POSTERS DESDE MEDIA MANAGER (OCR)
     const { data: mediaAssets } = await supabaseClient
         .from('media_assets')
         .select('title, url, ai_instructions, ocr_content, category')
@@ -61,22 +61,48 @@ REGLA DE ORO: NUNCA uses enlaces markdown como ![imagen](url). Para enviar una i
 
 CATÁLOGO DISPONIBLE:\n`;
         mediaAssets.forEach(m => {
-            mediaContext += `- TÍTULO: ${m.title}\n  INFORMACIÓN EXTRAÍDA DEL POSTER: ${m.ocr_content || 'Aún no se ha leído la información visual de este póster.'}\n  CUÁNDO USAR: ${m.ai_instructions}\n  ETIQUETA EXACTA A PEGAR EN EL CHAT: <<MEDIA:${m.url}>>\n\n`;
+            mediaContext += `- TÍTULO: ${m.title}\n  INFORMACIÓN EXTRAÍDA DEL POSTER: ${m.ocr_content || 'Aún no se ha leído la información visual.'}\n  CUÁNDO USAR: ${m.ai_instructions}\n  ETIQUETA EXACTA A PEGAR EN EL CHAT: <<MEDIA:${m.url}>>\n\n`;
         });
     } else {
         mediaContext += "No hay posters cargados actualmente.\n";
+    }
+
+    // CARGAR VERDAD MAESTRA (SITIO WEB)
+    const { data: webPages } = await supabaseClient.from('main_website_content').select('title, content').eq('scrape_status', 'success');
+    let masterTruth = "\n=== VERDAD MAESTRA (SITIO WEB OFICIAL) ===\n";
+    if (webPages && webPages.length > 0) {
+        masterTruth += "Esta es la información OFICIAL e innegable de la academia. Usa esto para responder sobre fechas, profesores, precios y detalles. NUNCA inventes nombres ni datos que no estén aquí.\n";
+        webPages.forEach(p => {
+            if(p.content) masterTruth += `\n[PÁGINA: ${p.title}]\n${p.content.substring(0, 3000)}\n`; // Limitado para no exceder tokens
+        });
+    }
+
+    // CARGAR BASE DE CONOCIMIENTO (DOCUMENTOS Y TALLERES EXTRAS)
+    const { data: kbDocs } = await supabaseClient.from('knowledge_documents').select('title, category, content, description');
+    let kbContext = "\n=== BASE DE CONOCIMIENTO TÉCNICO ===\n";
+    if (kbDocs && kbDocs.length > 0) {
+        kbDocs.forEach(d => {
+            if(d.content) kbContext += `\n[RECURSO: ${d.title} | CAT: ${d.category}]\nInstrucción: ${d.description || 'N/A'}\nContenido: ${d.content.substring(0, 2000)}\n`;
+        });
     }
 
     const bankInfo = `Banco: ${getConfig('bank_name')}\nCuenta: ${getConfig('bank_account')}\nCLABE: ${getConfig('bank_clabe')}\nTitular: ${getConfig('bank_holder')}`;
     const pAlma = getConfig('prompt_alma_samurai');
     const pAdn = getConfig('prompt_adn_core');
     const pEstrategia = getConfig('prompt_estrategia_cierre');
+    const pRelearning = getConfig('prompt_relearning'); // REGLAS #CIA
 
     const systemPrompt = `
 === CONSTITUCIÓN TÁCTICA ===
 ${pAlma}
 ${pAdn}
 ${pEstrategia}
+
+${pRelearning && pRelearning.trim() !== '' && pRelearning !== '# Aún no hay lecciones inyectadas.' ? `\n=== REGLAS #CIA (PRIORIDAD ABSOLUTA) ===\nEstas reglas corrigen comportamientos pasados. Síguelas por encima de todo lo demás:\n${pRelearning}\n` : ''}
+
+${masterTruth}
+
+${kbContext}
 
 ${mediaContext}
 
@@ -87,7 +113,7 @@ ${paymentLink}
 === DATOS PARA TRANSFERENCIA ===
 ${bankInfo}
 
-[REGLA]: Entrega el link de pago solamente si el cliente ya te dio su Ciudad y Email.
+[REGLA VITAL]: Entrega el link de pago o la cuenta SOLAMENTE si el cliente ya te dio su Ciudad y Email (Fase de Cierre).
 `;
 
     return new Response(JSON.stringify({ system_prompt: systemPrompt }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
