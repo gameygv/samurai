@@ -68,6 +68,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
     {
       title: "SISTEMA",
       items: [
+        { icon: Users, label: 'Usuarios', path: '/users' },
         { icon: BarChart3, label: 'Meta CAPI', path: '/meta-capi' },
         { icon: BookOpen, label: 'Manual de Ayuda', path: '/manual' },
         { icon: SettingsIcon, label: 'Ajustes', path: '/settings' },
