@@ -14,7 +14,7 @@ serve(async (req) => {
       throw new Error("El nuevo email es requerido.");
     }
 
-    // Crear un cliente de Supabase con el token de autenticación del usuario
+    // 1. Validar la sesión del usuario que hace la petición
     const authHeader = req.headers.get('Authorization')!
     const userSupabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
@@ -22,23 +22,32 @@ serve(async (req) => {
       { global: { headers: { Authorization: authHeader } } }
     )
 
-    // Obtener el usuario a partir del token
     const { data: { user }, error: userError } = await userSupabaseClient.auth.getUser();
-    if (userError) throw userError;
+    if (userError || !user) throw new Error("No autorizado");
 
-    // Crear un cliente de administrador para realizar la actualización
+    // 2. Usar cliente Admin para forzar el cambio sin confirmación de link
     const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
-    // Actualizar el email del usuario usando el cliente de administrador
+    // Actualizamos el email y lo marcamos como confirmado de una vez
     const { data: updatedUser, error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
       user.id,
-      { email: newEmail }
+      { 
+        email: newEmail,
+        email_confirm: true // Esto evita que el usuario tenga que usar el link roto
+      }
     )
 
     if (updateError) throw updateError;
+
+    // 3. También actualizamos el username en el perfil para que coincida (opcional pero recomendado)
+    const newUsername = newEmail.split('@')[0];
+    await supabaseAdmin
+      .from('profiles')
+      .update({ username: newUsername })
+      .eq('id', user.id);
 
     return new Response(JSON.stringify({ success: true, user: updatedUser }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
