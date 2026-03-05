@@ -47,7 +47,7 @@ serve(async (req) => {
 
     let mediaContext = "\n=== BÓVEDA DE POSTERS (MEDIA MANAGER) ===\n";
     if (mediaAssets && mediaAssets.length > 0) {
-        mediaContext += `INSTRUCCIÓN CRÍTICA DE VISUALES: Cuando el cliente pida información o cuando ya sepas su CIUDAD, DEBES adjuntar el poster correspondiente AUTOMÁTICAMENTE. NUNCA uses markdown como ![imagen](url). Pega la etiqueta exacta <<MEDIA:URL>>.\n\n`;
+        mediaContext += `INSTRUCCIÓN CRÍTICA DE VISUALES: Cuando el cliente pida información o cuando ya sepas su CIUDAD, DEBES adjuntar el poster correspondiente AUTOMÁTICAMENTE. REGLA DE MEMORIA: NUNCA envíes el mismo poster dos veces. Pega la etiqueta exacta <<MEDIA:URL>>.\n\n`;
         mediaAssets.forEach(m => {
             mediaContext += `- TÍTULO: ${m.title}\n  OCR: ${m.ocr_content || 'Sin información extraída'}\n  CUÁNDO USAR: ${m.ai_instructions}\n  ETIQUETA EXACTA: <<MEDIA:${m.url}>>\n\n`;
         });
@@ -72,12 +72,19 @@ serve(async (req) => {
         });
     }
 
+    const bankInfo = `Banco: ${getConfig('bank_name')}\nCuenta: ${getConfig('bank_account')}\nCLABE: ${getConfig('bank_clabe')}\nTitular: ${getConfig('bank_holder')}`;
     const pRelearning = getConfig('prompt_relearning');
 
     const systemPrompt = `
       [ADN]: ${customPrompts?.prompt_adn_core || getConfig('prompt_adn_core')}
       [VENTA]: ${customPrompts?.prompt_estrategia_cierre || getConfig('prompt_estrategia_cierre')}
       
+      === REGLAS DE CONDUCTA ANTI-ROBOT (PRIORIDAD MÁXIMA) ===
+      1. MEMORIA DE SALUDOS: Lee el historial. Si ya saludaste, NO vuelvas a saludar.
+      2. NO REPETIR INFORMACIÓN: Si ya enviaste los detalles del taller, ESTÁ PROHIBIDO volver a escribirlos.
+      3. MEMORIA DE PAGOS (ESTRICTO): Si en el historial ya enviaste la cuenta, la CLABE o el link de pago, NUNCA LOS VUELVAS A REPETIR. Si preguntan "¿se puede en Oxxo?" diles: "Sí, puedes usar la misma cuenta de arriba".
+      4. CONTEXTO CONTINUO: Compórtate como humano. Si responden tus preguntas, solo asiente de forma natural, NO repitas el mensaje de venta ni los datos.
+
       ${pRelearning && pRelearning.trim() !== '' && pRelearning !== '# Aún no hay lecciones inyectadas.' ? `\n=== REGLAS #CIA (PRIORIDAD ABSOLUTA) ===\n${pRelearning}\n` : ''}
 
       ${masterTruth}
@@ -86,9 +93,9 @@ serve(async (req) => {
 
       ${mediaContext}
 
-      === GENERACIÓN DE LINK FUNNELKIT ===
-      Formato exacto para parámetros dinámicos:
-      ${basePaymentLink}${separator}wffn_billing_first_name=NOMBRE&wffn_billing_email=CORREO&wffn_billing_city=CIUDAD
+      === DATOS DE PAGO (SOLO USAR UNA VEZ) ===
+      Link: ${basePaymentLink}${separator}wffn_billing_first_name=NOMBRE&wffn_billing_email=CORREO&wffn_billing_city=CIUDAD
+      Cuenta: ${bankInfo}
     `;
 
     const messages = [
