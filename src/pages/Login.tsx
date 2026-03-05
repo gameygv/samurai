@@ -37,7 +37,7 @@ const Login = () => {
     e.preventDefault();
     setLoading(true);
 
-    const internalEmail = username.includes('@') ? username : `${username.toLowerCase().trim()}@samurai.local`;
+    const internalEmail = username.includes('@') ? username : `${username.toLowerCase().trim()}@teb.local`;
 
     try {
       const { data, error } = await supabase.auth.signInWithPassword({

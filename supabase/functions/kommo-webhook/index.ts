@@ -63,16 +63,16 @@ serve(async (req) => {
     console.log(`[kommo-webhook] Procesando nota para Lead: ${lead.nombre}`);
 
     // 2. Procesar Comandos
-    if (noteText.includes('#SamuraiOFF')) {
+    if (noteText.includes('#AI_OFF')) {
         await supabaseClient.from('leads').update({ ai_paused: true }).eq('id', lead.id);
         await supabaseClient.from('activity_logs').insert({ 
-            action: 'UPDATE', resource: 'LEADS', description: `Samurai PAUSADO vía Kommo CRM para ${lead.nombre}`, status: 'OK' 
+            action: 'UPDATE', resource: 'LEADS', description: `IA PAUSADA vía Kommo CRM para ${lead.nombre}`, status: 'OK' 
         });
     } 
-    else if (noteText.includes('#SamuraiON')) {
+    else if (noteText.includes('#AI_ON')) {
         await supabaseClient.from('leads').update({ ai_paused: false }).eq('id', lead.id);
         await supabaseClient.from('activity_logs').insert({ 
-            action: 'UPDATE', resource: 'LEADS', description: `Samurai ACTIVADO vía Kommo CRM para ${lead.nombre}`, status: 'OK' 
+            action: 'UPDATE', resource: 'LEADS', description: `IA ACTIVADA vía Kommo CRM para ${lead.nombre}`, status: 'OK' 
         });
     }
     else if (noteText.includes('#CIA')) {

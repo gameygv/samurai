@@ -48,7 +48,7 @@ serve(async (req) => {
            ...eventData.custom_data,
            currency: eventData.currency || 'MXN',
            value: eventData.value || 0,
-           source: 'samurai_crm_v2'
+           source: 'teb_crm_v2'
         },
         action_source: 'chat',
       }],

@@ -19,8 +19,8 @@ serve(async (req) => {
     const masterTruth = webContent?.map(w => `[DATA WEB: ${w.title}]: ${w.content.substring(0, 500)}...`).join('\n') || "No hay datos web indexados.";
 
     const systemInstruction = `
-Eres el "Ingeniero Maestro de Samurai", experto en optimización de prompts y ventas.
-Tu misión es reescribir la configuración de Samurai basándote en el feedback del usuario y capturas de pantalla.
+Eres el "Ingeniero Maestro de The Elephant Bowl AI", experto en optimización de prompts y ventas.
+Tu misión es reescribir la configuración de la IA basándote en el feedback del usuario y capturas de pantalla.
 
 VERDAD MAESTRA (Datos reales del negocio):
 ${masterTruth}

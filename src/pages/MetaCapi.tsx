@@ -116,7 +116,7 @@ const MetaCapi = () => {
               <CardHeader className="flex flex-row items-center justify-between border-b border-slate-800">
                 <div>
                   <CardTitle className="text-sm uppercase tracking-widest text-white">Eventos Server-Side</CardTitle>
-                  <CardDescription>Samurai envía estos datos automáticamente para bajar tu CPA.</CardDescription>
+                  <CardDescription>La IA envía estos datos automáticamente para bajar tu CPA.</CardDescription>
                 </div>
                 <Button size="sm" onClick={() => setIsSendDialogOpen(true)} className="bg-indigo-600/20 text-indigo-400 border border-indigo-500/30 hover:bg-indigo-600 hover:text-white">
                    <Send className="w-3 h-3 mr-2" /> Test Manual

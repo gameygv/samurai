@@ -123,13 +123,13 @@ const Manual = () => {
                 <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-6">
                    <div className="bg-red-900/10 border border-red-900/50 p-4 rounded-xl">
                       <div className="flex items-center gap-2 mb-2 text-red-400 font-bold">
-                         <Pause className="w-5 h-5" /> #STOP
+                         <Pause className="w-5 h-5" /> #AI_OFF
                       </div>
                       <p className="text-xs text-slate-400">Pausa total de la IA en ese chat. Úsalo si quieres tomar el control manual.</p>
                    </div>
                    <div className="bg-green-900/10 border border-green-900/50 p-4 rounded-xl">
                       <div className="flex items-center gap-2 mb-2 text-green-500 font-bold">
-                         <Play className="w-5 h-5" /> #START
+                         <Play className="w-5 h-5" /> #AI_ON
                       </div>
                       <p className="text-xs text-slate-400">Reactiva la IA. Retomará el protocolo donde se quedó.</p>
                    </div>

@@ -115,7 +115,7 @@ const KnowledgeBase = () => {
             </div>
             <div className="flex-1">
               <h3 className="text-white font-bold text-sm">Sincronización con theelephantbowl.com</h3>
-              <p className="text-xs text-slate-400">Samurai utiliza el contenido indexado del sitio oficial como su verdad absoluta. Aquí puedes añadir recursos adicionales.</p>
+              <p className="text-xs text-slate-400">La IA utiliza el contenido indexado del sitio oficial como su verdad absoluta. Aquí puedes añadir recursos adicionales.</p>
             </div>
             <Button variant="outline" size="sm" className="border-indigo-500/30 text-indigo-400" onClick={() => window.location.href='/website-content'}>
                Configurar Verdad Maestra

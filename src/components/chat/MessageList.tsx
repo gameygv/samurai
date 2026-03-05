@@ -73,9 +73,9 @@ export const MessageList = ({ messages, loading }: MessageListProps) => {
                     {renderMessageContent(msg.mensaje)}
                   </div>
                   <div className="flex items-center gap-2 mt-1 px-1 opacity-60">
-                     {msg.emisor === 'SAMURAI' && <Bot className="w-3 h-3 text-indigo-400" />}
+                     {(msg.emisor === 'IA' || msg.emisor === 'SAMURAI') && <Bot className="w-3 h-3 text-indigo-400" />}
                      <span className="text-[9px] text-slate-500 font-mono uppercase tracking-wider">
-                        {msg.emisor === 'SAMURAI' ? 'ELEPHANT BOWL AI' : 'CLIENTE'} • {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        {(msg.emisor === 'IA' || msg.emisor === 'SAMURAI') ? 'ELEPHANT BOWL AI' : 'CLIENTE'} • {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                      </span>
                   </div>
                 </div>

@@ -158,7 +158,7 @@ serve(async (req) => {
             model: "gpt-4o",
             messages: [
                 { role: "system", content: finalSystemPrompt },
-                ...historyMsgs.map(m => ({ role: (m.emisor === 'SAMURAI' ? 'assistant' : 'user'), content: m.mensaje })),
+                ...historyMsgs.map(m => ({ role: (m.emisor === 'IA' ? 'assistant' : 'user'), content: m.mensaje })),
                 { role: "user", content: userMessageContent } 
             ],
             temperature: 0.3
@@ -252,7 +252,7 @@ serve(async (req) => {
             // Guardar en el chat con etiqueta de error para que sepas que NO le llegó
             await supabaseClient.from('conversaciones').insert({ 
                 lead_id: lead.id, 
-                emisor: 'SAMURAI', 
+                emisor: 'IA', 
                 mensaje: `[ERROR WA] ` + (mediaUrl ? `[IMG: ${mediaUrl}] ${textToSend}` : textToSend), 
                 platform: 'ERROR' 
             });
@@ -260,7 +260,7 @@ serve(async (req) => {
             // Guardado Exitoso
             await supabaseClient.from('conversaciones').insert({ 
                 lead_id: lead.id, 
-                emisor: 'SAMURAI', 
+                emisor: 'IA', 
                 mensaje: mediaUrl ? `[IMG: ${mediaUrl}] ${textToSend}` : textToSend, 
                 platform: 'WHATSAPP_AUTO' 
             });

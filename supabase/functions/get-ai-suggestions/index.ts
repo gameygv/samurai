@@ -26,8 +26,7 @@ serve(async (req) => {
     if (!lead?.ciudad) missingData.push("CIUDAD");
     if (!lead?.nombre || lead.nombre.includes('Nuevo')) missingData.push("NOMBRE");
 
-    // 2. Obtener Contexto Maestro (Sam Persona)
-    // AHORA PASAMOS EL LEAD PARA QUE EL LINK DE PAGO VENGA PERSONALIZADO EN LAS SUGERENCIAS
+    // 2. Obtener Contexto Maestro (IA Persona)
     const { data: kernelData } = await supabaseClient.functions.invoke('get-samurai-context', {
        body: { lead: lead }
     });
@@ -49,8 +48,8 @@ serve(async (req) => {
       ${transcript}
 
       TU TAREA:
-      Eres el Co-piloto de Sam. Genera 3 opciones de respuesta CORTAS (max 30 palabras) para que el humano las use.
-      Deben sonar exactamente como Sam. NUNCA uses la etiqueta <<MEDIA:URL>> en las sugerencias.
+      Eres el Co-piloto de la IA. Genera 3 opciones de respuesta CORTAS (max 30 palabras) para que el humano las use.
+      Deben sonar exactamente como la IA. NUNCA uses la etiqueta <<MEDIA:URL>> en las sugerencias.
       
       ESTRATEGIA:
       - Si faltan datos, la opción [VENTA] DEBE pedirlos estratégicamente.

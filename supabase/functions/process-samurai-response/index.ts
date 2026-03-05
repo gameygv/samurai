@@ -54,7 +54,7 @@ serve(async (req) => {
     if (client_message) {
       await supabaseClient.from('conversaciones').insert({ lead_id: lead.id, emisor: 'CLIENTE', mensaje: client_message, platform: 'API' });
     }
-    await supabaseClient.from('conversaciones').insert({ lead_id: lead.id, emisor: 'SAMURAI', mensaje: ai_response, platform: 'API' });
+    await supabaseClient.from('conversaciones').insert({ lead_id: lead.id, emisor: 'IA', mensaje: ai_response, platform: 'API' });
     
     await supabaseClient.from('leads').update({ last_message_at: new Date().toISOString() }).eq('id', lead.id);
 
@@ -74,6 +74,6 @@ serve(async (req) => {
     return new Response(JSON.stringify({ success: true, lead_id: lead.id }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
   } catch (error: any) {
-    return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: corsHeaders })
+    return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: corsHeaders });
   }
 })

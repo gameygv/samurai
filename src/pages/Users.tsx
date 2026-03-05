@@ -48,7 +48,7 @@ const UsersPage = () => {
       // NOTE: In client-side logic we can't create users without logging out.
       // This is simulated logic or instructions.
       
-      const email = `${newUsername.toLowerCase().trim()}@samurai.local`;
+      const email = `${newUsername.toLowerCase().trim()}@teb.local`;
       
       toast.info("Instrucciones para crear en Supabase Dashboard:", {
          description: `1. Auth > Users > Invite/Create\n2. Email: ${email}\n3. Pass: (temporal)\n4. Insertar fila en tabla 'profiles'.`
@@ -83,7 +83,7 @@ const UsersPage = () => {
                </DialogHeader>
                <form onSubmit={handleCreateUser} className="space-y-4 pt-4">
                   <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded text-blue-400 text-xs">
-                     ℹ️ El sistema usa el dominio interno <strong>@samurai.local</strong>.
+                     ℹ️ El sistema usa el dominio interno <strong>@teb.local</strong>.
                      Solo ingresa el nombre de usuario.
                   </div>
                   <div className="space-y-2">
@@ -95,7 +95,7 @@ const UsersPage = () => {
                            className="bg-slate-950 border-slate-800 flex-1" 
                            placeholder="ej: gamey"
                         />
-                        <span className="text-slate-500 text-sm font-mono">@samurai.local</span>
+                        <span className="text-slate-500 text-sm font-mono">@teb.local</span>
                      </div>
                   </div>
                   <div className="space-y-2">
@@ -171,7 +171,7 @@ const UsersPage = () => {
                       </Badge>
                     </TableCell>
                     <TableCell className="text-xs text-slate-500 font-mono">
-                        {u.username}@samurai.local
+                        {u.username}@teb.local
                     </TableCell>
                     <TableCell>
                        {u.is_active ? (
