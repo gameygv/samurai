@@ -102,12 +102,11 @@ const Index = () => {
       }));
       setUpcomingTasks(tasks);
 
-      // Usando paleta dorada elegante para el embudo
       setFunnelData([
-        { name: 'Prospectos', value: leads.length, color: '#A48E75' },
-        { name: 'Identificados', value: identified, color: '#BCAB94' },
-        { name: 'Listos CAPI', value: capiReady, color: '#D4AF37' },
-        { name: 'Cierre Hot', value: leads.filter(l => l.buying_intent === 'ALTO').length, color: '#B48B25' }
+        { name: 'Prospectos', value: leads.length, color: '#946f51' },
+        { name: 'Identificados', value: identified, color: '#A48E75' },
+        { name: 'Listos CAPI', value: capiReady, color: '#BCAB94' },
+        { name: 'Cierre Hot', value: leads.filter(l => l.buying_intent === 'ALTO').length, color: '#D4AF37' }
       ]);
 
       setStats({
@@ -155,7 +154,7 @@ const Index = () => {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           <StatCard title="Salud Meta CAPI" value={`${stats.totalLeads > 0 ? Math.round((stats.capiReadyLeads / stats.totalLeads) * 100) : 0}%`} icon={Fingerprint} color="text-amber-500" bg="bg-amber-500/10" footer={`${stats.capiReadyLeads} Leads con Datos Full`} />
           <StatCard title="Alertas #CIA" value={stats.totalErrors} icon={AlertTriangle} color="text-orange-400" bg="bg-orange-500/10" footer="Mejoras de Conducta" />
-          <StatCard title="Ventas Validadas" value={stats.validatedSales} icon={DollarSign} color="text-amber-400" bg="bg-amber-400/10" footer="Reservas Confirmadas" />
+          <StatCard title="Ventas Validadas" value={stats.validatedSales} icon={DollarSign} color="text-emerald-400" bg="bg-emerald-500/10" footer="Reservas Confirmadas" />
           <StatCard title="Total Prospectos" value={stats.totalLeads} icon={Users2} color="text-slate-400" bg="bg-slate-700/50" footer="Tráfico Acumulado" />
         </div>
 
