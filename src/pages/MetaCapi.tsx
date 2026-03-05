@@ -11,7 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { 
   BarChart3, Settings, BookOpen, CheckCircle2, AlertCircle, Loader2, 
-  Send, Eye, Save, Link, ArrowRight, XCircle, Map, GitMerge, RefreshCw, Briefcase, Activity
+  Send, Eye, Save, Link, ArrowRight, XCircle, Map, GitMerge, RefreshCw, Briefcase, Activity, Fingerprint, Database, ShieldCheck, FlaskConical
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { SendEventDialog } from '@/components/meta/SendEventDialog';
@@ -28,22 +28,13 @@ const MetaCapi = () => {
   const [isPayloadViewerOpen, setIsPayloadViewerOpen] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<any>(null);
 
-  const [mapping, setMapping] = useState([
+  const [mapping] = useState([
     { samuraiField: 'email', metaField: 'user_data.em (SHA-256)', enabled: true, description: 'Email del prospecto' },
     { samuraiField: 'nombre', metaField: 'user_data.fn (SHA-256)', enabled: true, description: 'Nombre' },
     { samuraiField: 'apellido', metaField: 'user_data.ln (SHA-256)', enabled: true, description: 'Apellido' },
     { samuraiField: 'telefono', metaField: 'user_data.ph (SHA-256)', enabled: true, description: 'WhatsApp' },
     { samuraiField: 'ciudad', metaField: 'user_data.ct (SHA-256)', enabled: true, description: 'Ciudad extraída' },
-    { samuraiField: 'estado', metaField: 'user_data.st (SHA-256)', enabled: true, description: 'Estado (Inferido)' },
-    { samuraiField: 'cp', metaField: 'user_data.zp (SHA-256)', enabled: true, description: 'Código Postal (Inferido)' },
-    { samuraiField: 'pais', metaField: 'user_data.country (SHA-256)', enabled: true, description: 'País (Por defecto MX)' },
-    { samuraiField: 'id (Supabase)', metaField: 'user_data.external_id', enabled: true, description: 'ID Único del CRM' },
-    { samuraiField: 'buying_intent', metaField: 'custom_data.intention', enabled: true, description: 'ALTO / MEDIO / BAJO' },
-    { samuraiField: 'servicio_interes', metaField: 'custom_data.content_name', enabled: true, description: 'Taller/Servicio' },
-    { samuraiField: 'origen_contacto', metaField: 'custom_data.lead_source', enabled: true, description: 'fb_ads, ig_organico...' },
-    { samuraiField: 'main_pain', metaField: 'custom_data.main_pain', enabled: true, description: 'Dolor principal a sanar' },
-    { samuraiField: 'tiempo_compra', metaField: 'custom_data.time_to_buy', enabled: true, description: 'Urgencia temporal' },
-    { samuraiField: 'lead_score', metaField: 'custom_data.lead_score', enabled: true, description: 'Calidad 1-100' },
+    { samuraiField: 'id (CRM)', metaField: 'user_data.external_id', enabled: true, description: 'ID Único para deduplicación' },
   ]);
 
   useEffect(() => { fetchData(); }, []);
@@ -51,7 +42,7 @@ const MetaCapi = () => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const { data: configData } = await supabase.from('app_config').select('*').in('key', ['meta_pixel_id', 'meta_access_token', 'meta_account_id', 'meta_test_mode', 'meta_test_event_code', 'meta_capi_mapping']);
+      const { data: configData } = await supabase.from('app_config').select('*').in('key', ['meta_pixel_id', 'meta_access_token', 'meta_account_id', 'meta_test_mode', 'meta_test_event_code']);
       const { data: eventsData } = await supabase.from('meta_capi_events').select('*').order('created_at', { ascending: false }).limit(50);
 
       if (configData) {
@@ -82,90 +73,103 @@ const MetaCapi = () => {
         { key: 'meta_test_event_code', value: config.test_event_code, category: 'META_CAPI' },
       ];
       await supabase.from('app_config').upsert(configToSave, { onConflict: 'key' });
-      toast.success("Configuración guardada correctamente.");
+      toast.success("Configuración de CAPI actualizada.");
     } finally {
       setSaving(false);
     }
+  };
+
+  const calculateEMQ = (event: any) => {
+    const ud = event.unhashed_data?.user_data || {};
+    const identifiers = [!!ud.em, !!ud.ph, !!ud.fn, !!ud.ln, !!ud.ct, !!ud.st, !!ud.zp];
+    return identifiers.filter(Boolean).length;
   };
 
   return (
     <Layout>
       <div className="max-w-7xl mx-auto space-y-6 pb-12">
         <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-white flex items-center gap-2">
-              <BarChart3 className="w-8 h-8 text-indigo-500" /> Meta Conversions API
-            </h1>
-            <p className="text-slate-400">Control total del entrenamiento de tu algoritmo de anuncios.</p>
+          <div className="flex items-center gap-4">
+             <div className="p-3 bg-indigo-900/30 rounded-xl border border-indigo-500/20">
+                <BarChart3 className="w-8 h-8 text-indigo-400" />
+             </div>
+             <div>
+                <h1 className="text-3xl font-bold text-white tracking-tight">Meta Conversions API (CAPI)</h1>
+                <p className="text-slate-400 text-sm">Auditoría en tiempo real del entrenamiento de tu Pixel.</p>
+             </div>
           </div>
           <div className="flex gap-3">
-             <Button variant="outline" onClick={fetchData} className="border-slate-800 text-slate-400"><RefreshCw className="w-4 h-4 mr-2" /> Actualizar</Button>
-             <Button onClick={handleSaveConfig} disabled={saving} className="bg-indigo-600"><Save className="w-4 h-4 mr-2" /> Guardar Cambios</Button>
+             <Button variant="outline" onClick={fetchData} className="border-slate-800 text-slate-400 hover:bg-slate-800"><RefreshCw className={cn("w-4 h-4 mr-2", loading && "animate-spin")} /> Actualizar</Button>
+             <Button onClick={handleSaveConfig} disabled={saving} className="bg-indigo-600 hover:bg-indigo-700 shadow-lg shadow-indigo-900/20"><Save className="w-4 h-4 mr-2" /> Guardar Cambios</Button>
           </div>
         </div>
 
         <Tabs defaultValue="bitacora" className="w-full">
-          <TabsList className="bg-slate-900 border border-slate-800">
-            <TabsTrigger value="bitacora"><BookOpen className="w-4 h-4 mr-2" /> Bitácora de Eventos</TabsTrigger>
-            <TabsTrigger value="configuracion"><Settings className="w-4 h-4 mr-2" /> Configuración</TabsTrigger>
-            <TabsTrigger value="mapper"><GitMerge className="w-4 h-4 mr-2" /> Data Mapper</TabsTrigger>
+          <TabsList className="bg-slate-900 border border-slate-800 p-1 rounded-xl">
+            <TabsTrigger value="bitacora" className="gap-2"><Activity className="w-4 h-4" /> Monitor de Tráfico</TabsTrigger>
+            <TabsTrigger value="configuracion" className="gap-2"><Settings className="w-4 h-4" /> Credenciales</TabsTrigger>
+            <TabsTrigger value="mapper" className="gap-2"><GitMerge className="w-4 h-4" /> Data Mapper</TabsTrigger>
           </TabsList>
 
           <TabsContent value="bitacora" className="mt-6">
-            <Card className="bg-slate-900 border-slate-800">
-              <CardHeader className="flex flex-row items-center justify-between border-b border-slate-800">
+            <Card className="bg-slate-900 border-slate-800 shadow-2xl rounded-2xl overflow-hidden">
+              <CardHeader className="flex flex-row items-center justify-between border-b border-slate-800 bg-slate-950/20">
                 <div>
-                  <CardTitle className="text-sm uppercase tracking-widest text-white">Eventos Server-Side</CardTitle>
-                  <CardDescription>La IA envía estos datos automáticamente para bajar tu CPA.</CardDescription>
+                  <CardTitle className="text-xs uppercase tracking-widest text-slate-200 font-bold">Eventos del Servidor</CardTitle>
+                  <CardDescription className="text-[10px] mt-1">La IA sincroniza estos datos para optimizar tu CPA.</CardDescription>
                 </div>
-                <Button size="sm" onClick={() => setIsSendDialogOpen(true)} className="bg-indigo-600/20 text-indigo-400 border border-indigo-500/30 hover:bg-indigo-600 hover:text-white">
-                   <Send className="w-3 h-3 mr-2" /> Test Manual
+                <Button size="sm" onClick={() => setIsSendDialogOpen(true)} className="bg-indigo-600 hover:bg-indigo-700 h-9 px-4 rounded-xl font-bold text-xs">
+                   <Send className="w-3 h-3 mr-2" /> DISPARO MANUAL
                 </Button>
               </CardHeader>
               <CardContent className="p-0">
                 <Table>
                   <TableHeader>
-                    <TableRow className="border-slate-800 bg-slate-950/20">
-                      <TableHead className="text-[10px] uppercase font-bold text-slate-500">Fecha</TableHead>
-                      <TableHead className="text-[10px] uppercase font-bold text-slate-500">WhatsApp ID</TableHead>
+                    <TableRow className="border-slate-800 bg-slate-900/40 hover:bg-slate-900/40">
+                      <TableHead className="text-[10px] uppercase font-bold text-slate-500 pl-6">Timestamp</TableHead>
+                      <TableHead className="text-[10px] uppercase font-bold text-slate-500">Lead ID</TableHead>
                       <TableHead className="text-[10px] uppercase font-bold text-slate-500">Evento</TableHead>
-                      <TableHead className="text-[10px] uppercase font-bold text-slate-500">Calidad (EMQ)</TableHead>
-                      <TableHead className="text-[10px] uppercase font-bold text-slate-500 text-center">Estatus</TableHead>
-                      <TableHead className="text-[10px] uppercase font-bold text-slate-500 text-right">Acción</TableHead>
+                      <TableHead className="text-[10px] uppercase font-bold text-slate-500">EMQ (Match Score)</TableHead>
+                      <TableHead className="text-[10px] uppercase font-bold text-slate-500 text-center">Status</TableHead>
+                      <TableHead className="text-[10px] uppercase font-bold text-slate-500 text-right pr-6">Acción</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {loading ? (
-                      <TableRow><TableCell colSpan={6} className="text-center h-32"><Loader2 className="w-6 h-6 animate-spin mx-auto text-indigo-500" /></TableCell></TableRow>
+                      <TableRow><TableCell colSpan={6} className="text-center h-48"><Loader2 className="w-8 h-8 animate-spin mx-auto text-indigo-500" /></TableCell></TableRow>
                     ) : events.length === 0 ? (
-                      <TableRow><TableCell colSpan={6} className="text-center h-32 text-slate-600 italic">No hay eventos registrados aún.</TableCell></TableRow>
+                      <TableRow><TableCell colSpan={6} className="text-center h-48 text-slate-600 italic">No hay eventos capturados aún.</TableCell></TableRow>
                     ) : events.map(event => {
-                      // Calcular EMQ en base a datos crudos
-                      const ud = event.unhashed_data?.user_data || {};
-                      const fields = [true, !!ud.em, !!ud.fn, !!ud.ln, !!ud.ct, !!ud.st, !!ud.zp];
-                      const emqScore = fields.filter(Boolean).length;
-
+                      const emqScore = calculateEMQ(event);
                       return (
-                      <TableRow key={event.id} className="border-slate-800 hover:bg-slate-800/30 transition-colors">
-                        <TableCell className="text-[10px] text-slate-500 font-mono">{new Date(event.created_at).toLocaleString()}</TableCell>
-                        <TableCell className="font-mono text-xs text-slate-300">{event.whatsapp_id}</TableCell>
-                        <TableCell><Badge variant="outline" className="text-[9px] border-indigo-500/30 text-indigo-400 font-bold">{event.event_name}</Badge></TableCell>
+                      <TableRow key={event.id} className="border-slate-800 hover:bg-slate-800/40 transition-colors">
+                        <TableCell className="text-[10px] text-slate-500 font-mono pl-6">{new Date(event.created_at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</TableCell>
+                        <TableCell className="font-mono text-[10px] text-slate-400">{event.whatsapp_id?.substring(0,10) || 'WEB_DIRECT'}</TableCell>
+                        <TableCell><Badge variant="outline" className="text-[9px] border-indigo-500/30 text-indigo-300 font-bold bg-indigo-500/5">{event.event_name}</Badge></TableCell>
                         <TableCell>
                            <div className="flex items-center gap-2">
                               <div className="flex gap-0.5">
                                  {[1,2,3,4,5,6,7].map(n => (
-                                    <div key={n} className={cn("w-1.5 h-3 rounded-sm", n <= emqScore ? "bg-amber-500" : "bg-slate-800")} />
+                                    <div key={n} className={cn("w-1.5 h-3 rounded-sm", n <= emqScore ? "bg-amber-500 shadow-[0_0_5px_rgba(245,158,11,0.4)]" : "bg-slate-800")} />
                                  ))}
                               </div>
-                              <span className="text-[9px] text-slate-500 font-mono">{emqScore}/7</span>
+                              <span className="text-[10px] font-bold text-slate-500">{emqScore}/7</span>
                            </div>
                         </TableCell>
                         <TableCell className="text-center">
-                           {event.status === 'OK' ? <div className="w-2 h-2 rounded-full bg-green-500 mx-auto shadow-[0_0_8px_rgba(34,197,94,0.5)]" /> : <div className="w-2 h-2 rounded-full bg-red-500 mx-auto" />}
+                           {event.status === 'OK' ? (
+                               <div className="inline-flex items-center gap-1.5 text-[10px] text-emerald-500 font-bold bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                                   <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /> SUCCESS
+                               </div>
+                           ) : (
+                               <div className="inline-flex items-center gap-1.5 text-[10px] text-red-500 font-bold bg-red-500/10 px-2 py-0.5 rounded-full border border-red-500/20">
+                                   <div className="w-1.5 h-1.5 rounded-full bg-red-500" /> FAILED
+                               </div>
+                           )}
                         </TableCell>
-                        <TableCell className="text-right">
-                          <Button variant="ghost" size="sm" className="h-7 text-[10px] text-slate-400 hover:text-white" onClick={() => { setSelectedEvent(event); setIsPayloadViewerOpen(true); }}>
-                             <Activity className="w-3 h-3 mr-1 text-amber-500" /> AUDITAR
+                        <TableCell className="text-right pr-6">
+                          <Button variant="ghost" size="sm" className="h-8 text-[10px] text-slate-400 hover:text-amber-500 hover:bg-amber-500/5 font-bold" onClick={() => { setSelectedEvent(event); setIsPayloadViewerOpen(true); }}>
+                             <Eye className="w-3.5 h-3.5 mr-1.5" /> AUDITAR
                           </Button>
                         </TableCell>
                       </TableRow>
@@ -177,87 +181,68 @@ const MetaCapi = () => {
           </TabsContent>
 
           <TabsContent value="configuracion" className="mt-6">
-             <Card className="bg-slate-900 border-slate-800 shadow-xl">
-                <CardHeader><CardTitle className="text-white text-lg">Credenciales API Meta</CardTitle></CardHeader>
-                <CardContent className="space-y-6">
-                   <div className="space-y-2">
-                      <Label>Pixel ID</Label>
-                      <Input 
-                        value={config.pixel_id} 
-                        onChange={e => setConfig({...config, pixel_id: e.target.value})} 
-                        className="bg-slate-950 border-slate-800 font-mono" 
-                        placeholder="Ej: 1234567890"
-                      />
-                   </div>
-                   
-                   <div className="space-y-2">
-                      <Label className="flex items-center gap-2">Ad Account ID <span className="text-[10px] text-slate-500 font-normal">(Opcional, para referencia administrativa)</span></Label>
-                      <div className="relative">
-                         <Briefcase className="absolute left-3 top-3 h-4 w-4 text-slate-500" />
-                         <Input 
-                           value={config.account_id} 
-                           onChange={e => setConfig({...config, account_id: e.target.value})} 
-                           className="pl-9 bg-slate-950 border-slate-800 font-mono" 
-                           placeholder="act_123456789"
-                         />
-                      </div>
-                   </div>
+             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <Card className="bg-slate-900 border-slate-800 shadow-xl rounded-2xl overflow-hidden">
+                    <CardHeader className="bg-slate-950/30 border-b border-slate-800">
+                        <CardTitle className="text-white text-sm flex items-center gap-2 uppercase tracking-widest font-bold"><ShieldCheck className="w-4 h-4 text-emerald-500"/> Identidad del Píxel</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-6 pt-6">
+                       <div className="space-y-2">
+                          <Label className="text-[10px] uppercase font-bold text-slate-400">Pixel ID</Label>
+                          <Input value={config.pixel_id} onChange={e => setConfig({...config, pixel_id: e.target.value})} className="bg-slate-950 border-slate-800 font-mono h-11" placeholder="Ej: 1234567890" />
+                       </div>
+                       <div className="space-y-2">
+                          <Label className="text-[10px] uppercase font-bold text-slate-400">Access Token (Server-Side Key)</Label>
+                          <Input type="password" value={config.access_token} onChange={e => setConfig({...config, access_token: e.target.value})} className="bg-slate-950 border-slate-800 font-mono h-11" placeholder="EAA..." />
+                       </div>
+                    </CardContent>
+                </Card>
 
-                   <div className="space-y-2">
-                      <Label>Access Token (System User)</Label>
-                      <Input 
-                        type="password" 
-                        value={config.access_token} 
-                        onChange={e => setConfig({...config, access_token: e.target.value})} 
-                        className="bg-slate-950 border-slate-800 font-mono" 
-                        placeholder="EAA..."
-                      />
-                   </div>
-
-                   <div className="flex items-center justify-between pt-4 p-4 bg-slate-950 rounded border border-slate-800">
-                      <div className="flex items-center space-x-3">
-                         <Switch checked={config.test_mode} onCheckedChange={c => setConfig({...config, test_mode: c})} />
-                         <div>
-                            <Label>Modo Test (Sandbox)</Label>
-                            <p className="text-[10px] text-slate-500">Activa esto para ver eventos en la herramienta "Test Events" de Meta.</p>
-                         </div>
-                      </div>
-                      {config.test_mode && (
-                         <div className="w-48">
-                            <Input 
-                              value={config.test_event_code} 
-                              onChange={e => setConfig({...config, test_event_code: e.target.value})} 
-                              placeholder="TEST12345" 
-                              className="bg-slate-900 text-xs font-mono text-center border-slate-700 focus:border-green-500 text-green-400" 
-                            />
-                         </div>
-                      )}
-                   </div>
-                </CardContent>
-             </Card>
+                <Card className="bg-slate-900 border-slate-800 shadow-xl rounded-2xl overflow-hidden">
+                    <CardHeader className="bg-slate-950/30 border-b border-slate-800">
+                        <CardTitle className="text-white text-sm flex items-center gap-2 uppercase tracking-widest font-bold"><FlaskConical className="w-4 h-4 text-amber-500"/> Modo SandBox / Pruebas</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-6 pt-6">
+                       <div className="flex items-center justify-between p-4 bg-slate-950 rounded-xl border border-slate-800">
+                          <div className="flex items-center space-x-3">
+                             <Switch checked={config.test_mode} onCheckedChange={c => setConfig({...config, test_mode: c})} />
+                             <div>
+                                <Label className="text-sm font-bold">Activar Sandbox</Label>
+                                <p className="text-[10px] text-slate-500">Envía eventos a la pestaña "Probar Eventos" de Meta.</p>
+                             </div>
+                          </div>
+                       </div>
+                       {config.test_mode && (
+                          <div className="space-y-2 animate-in fade-in slide-in-from-top-2">
+                             <Label className="text-[10px] uppercase font-bold text-emerald-400">Test Event Code</Label>
+                             <Input 
+                               value={config.test_event_code} 
+                               onChange={e => setConfig({...config, test_event_code: e.target.value})} 
+                               placeholder="TEST12345" 
+                               className="bg-slate-950 text-xl font-mono text-center border-emerald-500/30 focus:border-emerald-500 text-emerald-400 h-14" 
+                             />
+                          </div>
+                       )}
+                    </CardContent>
+                </Card>
+             </div>
           </TabsContent>
 
           <TabsContent value="mapper" className="mt-6">
-             <Card className="bg-slate-900 border-slate-800">
-                <CardHeader>
-                   <CardTitle className="text-sm">Advanced Matching Activo</CardTitle>
-                   <CardDescription>Estos datos se extraen automáticamente de la conversación por el "Analista CAPI" y se envían a Meta.</CardDescription>
+             <Card className="bg-slate-900 border-slate-800 shadow-xl rounded-2xl overflow-hidden">
+                <CardHeader className="bg-slate-950/30 border-b border-slate-800">
+                   <CardTitle className="text-sm uppercase tracking-widest font-bold flex items-center gap-2"><GitMerge className="w-4 h-4 text-indigo-400" /> Mapping de Atributos del Samurai</CardTitle>
                 </CardHeader>
-                <CardContent className="pt-2">
+                <CardContent className="p-0">
                    <Table>
-                      <TableHeader>
-                         <TableRow className="border-slate-800 bg-slate-950/50">
-                            <TableHead className="text-slate-500 text-[10px] uppercase font-bold">Columna Local</TableHead>
-                            <TableHead className="text-slate-500 text-[10px] uppercase font-bold">Propiedad Meta</TableHead>
-                            <TableHead className="text-slate-500 text-[10px] uppercase font-bold">Descripción</TableHead>
-                         </TableRow>
-                      </TableHeader>
+                      <TableHeader><TableRow className="border-slate-800 bg-slate-900/20"><TableHead className="text-slate-500 text-[10px] uppercase font-bold pl-6">Atributo CRM</TableHead><TableHead className="text-slate-500 text-[10px] uppercase font-bold">Campo Meta (Standard)</TableHead><TableHead className="text-slate-500 text-[10px] uppercase font-bold">Encriptación</TableHead><TableHead className="text-slate-500 text-[10px] uppercase font-bold pr-6">Función</TableHead></TableRow></TableHeader>
                       <TableBody>
                          {mapping.map((m, i) => (
-                            <TableRow key={i} className="border-slate-800">
-                               <TableCell className="font-mono text-amber-500 text-[10px] font-bold">{m.samuraiField}</TableCell>
+                            <TableRow key={i} className="border-slate-800 hover:bg-slate-800/20">
+                               <TableCell className="font-mono text-amber-500 text-[10px] font-bold pl-6">{m.samuraiField}</TableCell>
                                <TableCell className="font-mono text-indigo-400 text-[10px]">{m.metaField}</TableCell>
-                               <TableCell className="text-slate-400 text-xs italic">{m.description}</TableCell>
+                               <TableCell><Badge className="bg-slate-950 text-slate-500 border-slate-800 text-[9px] uppercase font-bold">SHA-256 (Hashed)</Badge></TableCell>
+                               <TableCell className="text-slate-400 text-xs italic pr-6">{m.description}</TableCell>
                             </TableRow>
                          ))}
                       </TableBody>
