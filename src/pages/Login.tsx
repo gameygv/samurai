@@ -5,14 +5,13 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
-import { Loader2, ShieldCheck, AlertCircle, Mail, Wifi, WifiOff, RefreshCw, Info, LifeBuoy, CheckCircle2, Key } from 'lucide-react';
+import { Loader2, ShieldCheck, Mail, Wifi, WifiOff } from 'lucide-react';
 import { toast } from 'sonner';
 
 const Login = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const [repairing, setRepairing] = useState(false);
   const [dbStatus, setDbStatus] = useState<'checking' | 'ok' | 'error'>('checking');
   const navigate = useNavigate();
 
@@ -47,57 +46,13 @@ const Login = () => {
     } catch (error: any) {
       let msg = error.message;
       if (msg.includes("Invalid login credentials")) {
-          msg = "Email o contraseña incorrectos. Si el problema persiste, usa el reseteo de emergencia.";
+          msg = "Email o contraseña incorrectos.";
       } else if (msg.includes("Email not confirmed")) {
-          msg = "Email pendiente de confirmación. Usa el botón de REPARAR abajo para forzar la activación.";
+          msg = "Email pendiente de confirmación. Contacta a un administrador.";
       }
       toast.error(msg, { duration: 6000 });
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleEmergencyRepair = async () => {
-    if (!email.includes('@')) {
-        toast.error("Ingresa tu nuevo email completo (gameygv@gmail.com) para repararlo.");
-        return;
-    }
-    setRepairing(true);
-    const tid = toast.loading("Reparando identidad digital...");
-    try {
-        const { data, error } = await supabase.functions.invoke('update-user-email', {
-            body: { email: email.trim() }
-        });
-        if (error) throw error;
-        toast.success(data.message, { id: tid, duration: 5000 });
-    } catch (err: any) {
-        toast.error("Fallo de rescate: " + err.message, { id: tid });
-    } finally {
-        setRepairing(false);
-    }
-  };
-
-  const handleEmergencyPasswordReset = async () => {
-    if (!email.includes('@')) {
-        toast.error("Ingresa tu email completo (gameygv@gmail.com) para el reseteo.");
-        return;
-    }
-    if (!confirm("Esto restablecerá tu contraseña a una temporal. ¿Continuar?")) {
-        return;
-    }
-    setRepairing(true);
-    const tid = toast.loading("Iniciando protocolo de recuperación de acceso...");
-    try {
-        const tempPassword = "password123";
-        const { data, error } = await supabase.functions.invoke('admin-reset-password', {
-            body: { email: email.trim(), newPassword: tempPassword }
-        });
-        if (error) throw error;
-        toast.success(`¡Acceso recuperado! Tu contraseña temporal es: ${tempPassword}. Inicia sesión y cámbiala inmediatamente.`, { id: tid, duration: 10000 });
-    } catch (err: any) {
-        toast.error("Fallo de reseteo: " + err.message, { id: tid });
-    } finally {
-        setRepairing(false);
     }
   };
 
@@ -152,40 +107,11 @@ const Login = () => {
               Acceder al Sistema
             </Button>
           </form>
-
-          <div className="pt-4 border-t border-slate-800 space-y-3">
-             <div className="flex flex-col items-center gap-2">
-                <p className="text-[10px] text-slate-500 uppercase font-bold tracking-widest">¿Email no confirmado?</p>
-                <Button 
-                    variant="outline" 
-                    size="sm" 
-                    className="w-full border-amber-600/30 text-amber-500 hover:bg-amber-600/10 h-10 rounded-xl font-bold"
-                    onClick={handleEmergencyRepair}
-                    disabled={repairing}
-                >
-                    {repairing ? <Loader2 className="w-4 h-4 animate-spin mr-2"/> : <LifeBuoy className="w-4 h-4 mr-2" />}
-                    FORZAR REPARACIÓN DE CUENTA
-                </Button>
-             </div>
-             <div className="flex flex-col items-center gap-2 pt-2">
-                <p className="text-[10px] text-slate-500 uppercase font-bold tracking-widest">¿Contraseña olvidada o bloqueada?</p>
-                <Button 
-                    variant="destructive" 
-                    size="sm" 
-                    className="w-full h-10 rounded-xl font-bold"
-                    onClick={handleEmergencyPasswordReset}
-                    disabled={repairing}
-                >
-                    {repairing ? <Loader2 className="w-4 h-4 animate-spin mr-2"/> : <Key className="w-4 h-4 mr-2" />}
-                    RESETEO DE EMERGENCIA
-                </Button>
-             </div>
-          </div>
         </CardContent>
 
         <CardFooter className="flex justify-center bg-slate-950/30 p-4 border-t border-slate-800/50">
            <span className="text-[9px] text-slate-600 font-mono flex items-center gap-2">
-              <LifeBuoy className="w-3 h-3"/> EMERGENCY RECOVERY MODE ACTIVE
+              {dbStatus === 'ok' ? <><Wifi className="w-3 h-3 text-amber-500"/> KERNEL CONNECTION: STABLE</> : <><WifiOff className="w-3 h-3 text-red-500"/> KERNEL OFFLINE</>}
            </span>
         </CardFooter>
       </Card>
