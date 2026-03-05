@@ -25,19 +25,16 @@ serve(async (req) => {
     let paymentLink = `${baseUrl}${path}`;
     let isFirstParam = true;
 
-    // Si hay un producto configurado, lo añadimos. Si está vacío, lo omitimos para evitar redirecciones que borren los datos.
     if (productId && productId.trim() !== '') {
         paymentLink += `?add-to-cart=${productId}`;
         isFirstParam = false;
     }
     
-    // Función auxiliar para agregar parámetros correctamente con ? o &
     const addParam = (key, value) => {
         paymentLink += `${isFirstParam ? '?' : '&'}${key}=${value}`;
         isFirstParam = false;
     };
     
-    // MAPEADO EXACTO PARA FUNNELKIT
     if (lead.nombre && !lead.nombre.includes('Nuevo Lead')) {
         const names = lead.nombre.trim().split(' ');
         addParam('wffn_billing_first_name', encodeURIComponent(names[0]));
@@ -45,17 +42,29 @@ serve(async (req) => {
            addParam('wffn_billing_last_name', encodeURIComponent(names.slice(1).join(' ')));
         }
     }
-    
-    if (lead.email) {
-       addParam('wffn_billing_email', encodeURIComponent(lead.email));
-    }
-    
-    if (lead.telefono) {
-       addParam('wffn_billing_phone', encodeURIComponent(lead.telefono));
-    }
-    
-    if (lead.ciudad) {
-       addParam('wffn_billing_city', encodeURIComponent(lead.ciudad));
+    if (lead.email) addParam('wffn_billing_email', encodeURIComponent(lead.email));
+    if (lead.telefono) addParam('wffn_billing_phone', encodeURIComponent(lead.telefono));
+    if (lead.ciudad) addParam('wffn_billing_city', encodeURIComponent(lead.ciudad));
+
+    // CARGAR POSTERS DESDE MEDIA MANAGER
+    const { data: mediaAssets } = await supabaseClient
+        .from('media_assets')
+        .select('title, url, ai_instructions')
+        .eq('category', 'POSTER');
+
+    let mediaContext = "\n=== BÓVEDA DE POSTERS (MEDIA MANAGER) ===\n";
+    if (mediaAssets && mediaAssets.length > 0) {
+        mediaContext += `INSTRUCCIÓN CRÍTICA DE VISUALES: 
+Cuando el cliente pida información o cuando ya hayas identificado su CIUDAD, DEBES adjuntar el poster correspondiente de esa ciudad AUTOMÁTICAMENTE en tu respuesta. 
+NO le preguntes si quiere ver la imagen, envíala directamente de forma proactiva. 
+REGLA DE ORO: NUNCA uses enlaces markdown como ![imagen](url). Para enviar una imagen, SIMPLEMENTE PEGA la etiqueta exacta <<MEDIA:URL>> en cualquier parte de tu mensaje (al final es ideal).
+
+CATÁLOGO DISPONIBLE:\n`;
+        mediaAssets.forEach(m => {
+            mediaContext += `- TÍTULO: ${m.title}\n  CUÁNDO USAR: ${m.ai_instructions}\n  ETIQUETA EXACTA A PEGAR EN EL CHAT: <<MEDIA:${m.url}>>\n\n`;
+        });
+    } else {
+        mediaContext += "No hay posters cargados actualmente.\n";
     }
 
     const bankInfo = `Banco: ${getConfig('bank_name')}\nCuenta: ${getConfig('bank_account')}\nCLABE: ${getConfig('bank_clabe')}\nTitular: ${getConfig('bank_holder')}`;
@@ -69,6 +78,8 @@ ${pAlma}
 ${pAdn}
 ${pEstrategia}
 
+${mediaContext}
+
 === LINK DE PAGO (MAPEO FUNNELKIT OK) ===
 Usa este link exacto. Ya tiene los campos wffn_billing_ mapeados dinámicamente:
 ${paymentLink}
@@ -76,7 +87,7 @@ ${paymentLink}
 === DATOS PARA TRANSFERENCIA ===
 ${bankInfo}
 
-[REGLA]: Entrega el link solamente si el cliente ya te dio su Ciudad y Email.
+[REGLA]: Entrega el link de pago solamente si el cliente ya te dio su Ciudad y Email.
 `;
 
     return new Response(JSON.stringify({ system_prompt: systemPrompt }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });

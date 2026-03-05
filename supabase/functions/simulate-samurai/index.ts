@@ -39,9 +39,32 @@ serve(async (req) => {
     
     const separator = isFirst ? '?' : '&';
 
+    // CARGAR POSTERS DESDE MEDIA MANAGER PARA EL SIMULADOR
+    const { data: mediaAssets } = await supabaseClient
+        .from('media_assets')
+        .select('title, url, ai_instructions')
+        .eq('category', 'POSTER');
+
+    let mediaContext = "\n=== BÓVEDA DE POSTERS (MEDIA MANAGER) ===\n";
+    if (mediaAssets && mediaAssets.length > 0) {
+        mediaContext += `INSTRUCCIÓN CRÍTICA DE VISUALES: 
+Cuando el cliente pida información o cuando ya sepas su CIUDAD, DEBES adjuntar el poster correspondiente AUTOMÁTICAMENTE en tu respuesta. 
+NO le preguntes si quiere ver la imagen, envíala directamente. 
+NUNCA uses markdown como ![imagen](url). Para enviar una imagen, SIMPLEMENTE PEGA la etiqueta exacta <<MEDIA:URL>> en cualquier parte de tu mensaje.
+
+CATÁLOGO DISPONIBLE:\n`;
+        mediaAssets.forEach(m => {
+            mediaContext += `- TÍTULO: ${m.title}\n  CUÁNDO USAR: ${m.ai_instructions}\n  ETIQUETA EXACTA A PEGAR: <<MEDIA:${m.url}>>\n\n`;
+        });
+    } else {
+        mediaContext += "No hay posters cargados actualmente.\n";
+    }
+
     const systemPrompt = `
       [ADN]: ${customPrompts?.prompt_adn_core || getConfig('prompt_adn_core')}
       [VENTA]: ${customPrompts?.prompt_estrategia_cierre || getConfig('prompt_estrategia_cierre')}
+
+      ${mediaContext}
 
       === GENERACIÓN DE LINK FUNNELKIT ===
       Debes usar exactamente este formato para los parámetros dinámicos:
@@ -73,7 +96,7 @@ serve(async (req) => {
     
     return new Response(JSON.stringify({ 
         answer: parts[0].trim(), 
-        explanation: parts[1] ? JSON.parse(parts[1].trim()) : { layers_used: ["FUNNELKIT"], reasoning: "Link wffn_billing_ generado correctamente." }
+        explanation: parts[1] ? JSON.parse(parts[1].trim()) : { layers_used: ["FUNNELKIT"], reasoning: "Respuesta generada correctamente." }
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
   } catch (error: any) {
