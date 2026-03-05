@@ -102,11 +102,12 @@ const Index = () => {
       }));
       setUpcomingTasks(tasks);
 
+      // Usando paleta dorada elegante para el embudo
       setFunnelData([
-        { name: 'Prospectos', value: leads.length, color: '#34d399' },
-        { name: 'Identificados', value: identified, color: '#10b981' },
-        { name: 'Listos CAPI', value: capiReady, color: '#059669' },
-        { name: 'Cierre Hot', value: leads.filter(l => l.buying_intent === 'ALTO').length, color: '#047857' }
+        { name: 'Prospectos', value: leads.length, color: '#A48E75' },
+        { name: 'Identificados', value: identified, color: '#BCAB94' },
+        { name: 'Listos CAPI', value: capiReady, color: '#D4AF37' },
+        { name: 'Cierre Hot', value: leads.filter(l => l.buying_intent === 'ALTO').length, color: '#B48B25' }
       ]);
 
       setStats({
@@ -128,51 +129,51 @@ const Index = () => {
     }
   };
 
-  if (loading) return <Layout><div className="flex h-[80vh] items-center justify-center"><Loader2 className="w-10 h-10 animate-spin text-indigo-600" /></div></Layout>;
+  if (loading) return <Layout><div className="flex h-[80vh] items-center justify-center"><Loader2 className="w-10 h-10 animate-spin text-amber-600" /></div></Layout>;
 
   return (
     <Layout>
       <div className="space-y-8 pb-12">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-white tracking-tight flex items-center gap-3">
-               <div className="w-10 h-10 flex items-center justify-center shadow-lg shrink-0">
-                  <img src="/logo.png" alt="Logo" className="w-full h-full object-contain drop-shadow-md" />
+            <h1 className="text-3xl font-bold text-slate-50 tracking-tight flex items-center gap-4">
+               <div className="w-12 h-12 flex items-center justify-center shadow-2xl shrink-0 bg-slate-900 rounded-xl p-2 border border-slate-800">
+                  <img src="/logo.png" alt="Logo" className="w-full h-full object-contain" />
                </div>
-               Elephant Bowl Hub
+               The Elephant Bowl Hub
             </h1>
-            <p className="text-slate-400 text-sm">Operaciones Tácticas & Inteligencia de Datos</p>
+            <p className="text-slate-400 text-sm mt-1">Operaciones Tácticas & Inteligencia de Datos</p>
           </div>
-          <div className="flex items-center gap-3 bg-slate-900/50 p-2 px-4 rounded-full border border-slate-800 h-10 shadow-lg">
-             <div className={`w-2 h-2 rounded-full animate-pulse ${latency !== null ? 'bg-green-500' : 'bg-red-400'}`}></div>
-             <span className="text-[10px] font-mono text-slate-300 uppercase tracking-widest">
+          <div className="flex items-center gap-3 bg-slate-900 p-2 px-4 rounded-full border border-slate-800 h-10 shadow-lg">
+             <div className={`w-2 h-2 rounded-full animate-pulse ${latency !== null ? 'bg-amber-500' : 'bg-red-400'}`}></div>
+             <span className="text-[10px] font-mono text-slate-300 uppercase tracking-widest font-bold">
                 {latency !== null ? `KERNEL: ONLINE | LATENCY: ${latency}ms` : 'KERNEL: RECONNECTING...'}
              </span>
           </div>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-          <StatCard title="Salud Meta CAPI" value={`${stats.totalLeads > 0 ? Math.round((stats.capiReadyLeads / stats.totalLeads) * 100) : 0}%`} icon={Fingerprint} color="text-indigo-400" bg="bg-indigo-500/10" footer={`${stats.capiReadyLeads} Leads con Datos Full`} />
-          <StatCard title="Alertas #CIA" value={stats.totalErrors} icon={AlertTriangle} color="text-yellow-500" bg="bg-yellow-500/10" footer="Mejoras de Conducta" />
-          <StatCard title="Ventas Validadas" value={stats.validatedSales} icon={DollarSign} color="text-emerald-400" bg="bg-emerald-500/10" footer="Reservas Confirmadas" />
-          <StatCard title="Total Prospectos" value={stats.totalLeads} icon={Users2} color="text-slate-400" bg="bg-slate-500/10" footer="Tráfico Acumulado" />
+          <StatCard title="Salud Meta CAPI" value={`${stats.totalLeads > 0 ? Math.round((stats.capiReadyLeads / stats.totalLeads) * 100) : 0}%`} icon={Fingerprint} color="text-amber-500" bg="bg-amber-500/10" footer={`${stats.capiReadyLeads} Leads con Datos Full`} />
+          <StatCard title="Alertas #CIA" value={stats.totalErrors} icon={AlertTriangle} color="text-orange-400" bg="bg-orange-500/10" footer="Mejoras de Conducta" />
+          <StatCard title="Ventas Validadas" value={stats.validatedSales} icon={DollarSign} color="text-amber-400" bg="bg-amber-400/10" footer="Reservas Confirmadas" />
+          <StatCard title="Total Prospectos" value={stats.totalLeads} icon={Users2} color="text-slate-400" bg="bg-slate-700/50" footer="Tráfico Acumulado" />
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
           <div className="lg:col-span-8 space-y-8">
              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                <Card className="bg-slate-900 border-slate-800 flex flex-col shadow-2xl">
+                <Card className="bg-slate-900 border-slate-800 flex flex-col shadow-2xl rounded-2xl">
                   <CardHeader className="py-4 border-b border-slate-800">
-                     <CardTitle className="text-white text-xs flex items-center gap-2 uppercase tracking-widest">
-                        <BarChart3 className="w-4 h-4 text-indigo-400" /> Pipeline de Conversión (CAPI)
+                     <CardTitle className="text-slate-200 text-xs flex items-center gap-2 uppercase tracking-widest font-bold">
+                        <BarChart3 className="w-4 h-4 text-amber-500" /> Pipeline de Conversión (CAPI)
                      </CardTitle>
                   </CardHeader>
                   <CardContent className="p-6 h-[250px]">
                      <ResponsiveContainer width="100%" height="100%">
                         <BarChart data={funnelData} layout="vertical" margin={{ left: 20 }}>
                            <XAxis type="number" hide />
-                           <YAxis dataKey="name" type="category" stroke="#eadad0" fontSize={10} width={100} />
-                           <Tooltip cursor={{ fill: 'rgba(255,255,255,0.05)' }} contentStyle={{ backgroundColor: '#5d412b', border: 'none', borderRadius: '8px', fontSize: '10px', color: '#fff' }} />
+                           <YAxis dataKey="name" type="category" stroke="#D5C9B8" fontSize={10} width={100} />
+                           <Tooltip cursor={{ fill: 'rgba(255,255,255,0.05)' }} contentStyle={{ backgroundColor: '#1A1714', border: '1px solid #3D3730', borderRadius: '8px', fontSize: '10px', color: '#FDFBF7' }} />
                            <Bar dataKey="value" radius={[0, 4, 4, 0]} barSize={25}>
                               {funnelData.map((entry, index) => (
                                  <Cell key={`cell-${index}`} fill={entry.color} />
@@ -187,10 +188,10 @@ const Index = () => {
              </div>
 
              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <QuickButton label="Probar IA" path="/brain?tab=simulador" icon={Zap} color="bg-indigo-600/10 text-indigo-400 border-indigo-500/20" />
-                <QuickButton label="Radar Leads" path="/leads" icon={MessageSquare} color="bg-emerald-600/10 text-emerald-400 border-emerald-500/20" />
-                <QuickButton label="Media Manager" path="/media" icon={ImageIcon} color="bg-blue-600/10 text-blue-400 border-blue-500/20" />
-                <QuickButton label="Monitor Live" path="/activity" icon={Activity} color="bg-orange-600/10 text-orange-400 border-orange-500/20" />
+                <QuickButton label="Probar IA" path="/brain?tab=simulador" icon={Zap} color="bg-indigo-900/30 text-amber-500 border-indigo-900/50" />
+                <QuickButton label="Radar Leads" path="/leads" icon={MessageSquare} color="bg-slate-800/50 text-slate-300 border-slate-700" />
+                <QuickButton label="Media Manager" path="/media" icon={ImageIcon} color="bg-slate-800/50 text-slate-300 border-slate-700" />
+                <QuickButton label="Monitor Live" path="/activity" icon={Activity} color="bg-slate-800/50 text-slate-300 border-slate-700" />
              </div>
           </div>
 
@@ -198,28 +199,28 @@ const Index = () => {
             <SystemStatus />
             <BrainHealthCard health={brainHealth} />
             
-            <Card className="bg-black border-slate-800 font-mono text-[9px] shadow-2xl flex flex-col rounded-xl overflow-hidden h-[300px]">
-              <div className="px-4 py-2 border-b border-slate-800 bg-slate-900/80 flex items-center justify-center">
-                 <div className="flex items-center gap-2 text-slate-500"><Terminal className="w-3.5 h-3.5" /><span className="font-bold uppercase tracking-widest">Live Activity Log</span></div>
+            <Card className="bg-[#1A1714] border-slate-800 font-mono text-[9px] shadow-2xl flex flex-col rounded-2xl overflow-hidden h-[300px]">
+              <div className="px-4 py-3 border-b border-slate-800 bg-[#292520] flex items-center justify-center">
+                 <div className="flex items-center gap-2 text-slate-400"><Terminal className="w-3.5 h-3.5" /><span className="font-bold uppercase tracking-widest">Live Activity Log</span></div>
               </div>
               <ScrollArea className="flex-1 p-4">
                  <div className="space-y-1.5">
                     {stats.recentLogs.map((log, i) => (
-                        <div key={i} className="flex items-start gap-2 border-l border-slate-800 pl-2 group">
+                        <div key={i} className="flex items-start gap-2 border-l border-slate-700 pl-2 group">
                           <span className="text-slate-500 shrink-0">[{new Date(log.created_at).toLocaleTimeString([], { hour12: false })}]</span> 
                           <span className={cn(
                               "shrink-0 px-1 rounded uppercase font-bold",
-                              log.action === 'ERROR' ? 'bg-red-500/20 text-red-400' : 
-                              log.action === 'CREATE' ? 'bg-green-500/20 text-green-400' :
-                              'bg-indigo-500/20 text-indigo-400'
+                              log.action === 'ERROR' ? 'bg-red-900/30 text-red-400' : 
+                              log.action === 'CREATE' ? 'bg-amber-900/30 text-amber-500' :
+                              'bg-indigo-900/50 text-indigo-300'
                           )}>{log.action}</span> 
-                          <span className="text-slate-300 truncate max-w-[200px] group-hover:text-white transition-colors">{log.description}</span>
+                          <span className="text-slate-300 truncate max-w-[200px] group-hover:text-amber-100 transition-colors">{log.description}</span>
                         </div>
                     ))}
                  </div>
               </ScrollArea>
               <div className="p-2 bg-slate-900/50 border-t border-slate-800 text-center">
-                 <button onClick={() => window.location.href='/activity'} className="text-[8px] text-slate-500 hover:text-indigo-400 uppercase font-bold tracking-widest">Ver Monitor en Vivo</button>
+                 <button onClick={() => window.location.href='/activity'} className="text-[8px] text-slate-500 hover:text-amber-500 uppercase font-bold tracking-widest transition-colors">Ver Monitor en Vivo</button>
               </div>
             </Card>
           </div>
@@ -232,7 +233,7 @@ const Index = () => {
 const QuickButton = ({ label, path, icon: Icon, color }: any) => (
    <Button 
      variant="outline" 
-     className={cn("flex flex-col h-20 gap-2 items-center justify-center border transition-all hover:scale-105 active:scale-95", color)} 
+     className={cn("flex flex-col h-20 gap-2 items-center justify-center border transition-all hover:scale-105 active:scale-95 rounded-xl shadow-lg", color)} 
      onClick={() => window.location.href = path}
    >
       <Icon className="w-5 h-5" />
@@ -241,10 +242,10 @@ const QuickButton = ({ label, path, icon: Icon, color }: any) => (
 );
 
 const StatCard = ({ title, value, icon: Icon, color, bg, footer }: any) => (
-  <Card className="bg-slate-900 border-slate-800 p-6 hover:border-indigo-500/30 transition-all group shadow-lg">
+  <Card className="bg-slate-900 border-slate-800 p-6 hover:border-slate-700 transition-all group shadow-xl rounded-2xl">
     <div className="flex justify-between items-start">
-      <div><p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{title}</p><h3 className="text-3xl font-bold text-white mt-2">{value}</h3></div>
-      <div className={cn("p-3 rounded-xl shadow-inner", bg, color, "group-hover:rotate-12 transition-transform")}><Icon className="w-6 h-6" /></div>
+      <div><p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{title}</p><h3 className="text-3xl font-bold text-slate-50 mt-2">{value}</h3></div>
+      <div className={cn("p-3 rounded-xl shadow-inner", bg, color, "group-hover:scale-110 transition-transform")}><Icon className="w-6 h-6" /></div>
     </div>
     <p className="mt-4 text-[9px] text-slate-500 font-mono uppercase tracking-widest">{footer}</p>
   </Card>

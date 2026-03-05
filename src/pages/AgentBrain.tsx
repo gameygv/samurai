@@ -211,100 +211,100 @@ const AgentBrain = () => {
     } finally { setLoadingMaster(false); }
   };
 
-  if (loading) return <Layout><div className="flex h-[80vh] items-center justify-center"><Loader2 className="animate-spin text-indigo-600 w-10 h-10" /></div></Layout>;
+  if (loading) return <Layout><div className="flex h-[80vh] items-center justify-center"><Loader2 className="animate-spin text-amber-500 w-10 h-10" /></div></Layout>;
 
   return (
     <Layout>
       <div className="max-w-[1600px] mx-auto flex flex-col h-[calc(100vh-140px)] gap-6 overflow-hidden">
         
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 shrink-0 bg-slate-900/50 p-5 rounded-xl border border-slate-800 shadow-xl">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 shrink-0 bg-slate-900 p-5 rounded-2xl border border-slate-800 shadow-xl">
           <div className="flex items-center gap-4">
-            <div className="p-3 bg-indigo-600/10 rounded-xl border border-indigo-500/20">
-               <BrainCircuit className="w-8 h-8 text-indigo-400" />
+            <div className="p-3 bg-indigo-900/30 rounded-xl border border-indigo-900/50">
+               <BrainCircuit className="w-8 h-8 text-amber-500" />
             </div>
             <div>
-              <h1 className="text-3xl font-bold text-white tracking-tight">Cerebro Core</h1>
-              <p className="text-slate-400 text-sm">Control central de la consciencia y lógica de Elephant Bowl.</p>
+              <h1 className="text-3xl font-bold text-slate-50 tracking-tight">Cerebro Core</h1>
+              <p className="text-slate-400 text-sm">Control central de la consciencia y lógica de The Elephant Bowl.</p>
             </div>
           </div>
           <div className="flex gap-3">
-             <Button variant="outline" onClick={handleCreateSnapshot} className="border-slate-700 text-slate-300 hover:bg-slate-800 h-11 px-6 font-bold">
-                <GitBranch className="w-4 h-4 mr-2 text-indigo-400"/> SNAPSHOT
+             <Button variant="outline" onClick={handleCreateSnapshot} className="border-slate-700 text-slate-300 hover:bg-slate-800 h-11 px-6 font-bold rounded-xl">
+                <GitBranch className="w-4 h-4 mr-2 text-amber-500"/> SNAPSHOT
              </Button>
-             <Button onClick={handleSaveAll} disabled={saving} className="bg-indigo-600 hover:bg-indigo-700 h-11 px-8 font-bold shadow-lg shadow-indigo-900/30 transition-all active:scale-95">
-                {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />} APLICAR CAMBIOS
+             <Button onClick={handleSaveAll} disabled={saving} className="bg-indigo-900 hover:bg-indigo-800 text-slate-50 h-11 px-8 font-bold shadow-lg transition-all active:scale-95 rounded-xl uppercase tracking-widest text-xs">
+                {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2 text-amber-500" />} APLICAR CAMBIOS
              </Button>
           </div>
         </div>
 
         <Tabs value={activeTab} onValueChange={v => setSearchParams({ tab: v })} className="flex-1 flex flex-col min-h-0">
-          <TabsList className="bg-slate-900/80 border border-slate-800 p-1 mb-4 shrink-0 h-auto flex-wrap justify-start gap-1">
-             <TabsTrigger value="alma" className="gap-2 px-4 py-2"><Bot className="w-4 h-4"/> 1. Alma</TabsTrigger>
-             <TabsTrigger value="identidad" className="gap-2 px-4 py-2"><Fingerprint className="w-4 h-4"/> 2. ADN & Venta</TabsTrigger>
-             <TabsTrigger value="versiones" className="gap-2 px-4 py-2"><GitBranch className="w-4 h-4"/> 3. Snapshots</TabsTrigger>
-             <TabsTrigger value="vision" className="gap-2 px-4 py-2"><EyeIcon className="w-4 h-4"/> 4. Ojo Halcón</TabsTrigger>
-             <TabsTrigger value="simulador" className="gap-2 px-4 py-2"><MessageSquare className="w-4 h-4"/> 5. Simulador</TabsTrigger>
-             <TabsTrigger value="debug" className="gap-2 px-4 py-2"><Terminal className="w-4 h-4"/> 6. Kernel Debug</TabsTrigger>
-             <TabsTrigger value="lab" className="gap-2 px-4 py-2 bg-indigo-600/10 text-indigo-400 data-[state=active]:bg-indigo-600 data-[state=active]:text-white"><FlaskConical className="w-4 h-4"/> 7. Laboratorio IA</TabsTrigger>
+          <TabsList className="bg-slate-900 border border-slate-800 p-1 mb-4 shrink-0 h-auto flex-wrap justify-start gap-1 rounded-xl">
+             <TabsTrigger value="alma" className="gap-2 px-4 py-2 data-[state=active]:bg-indigo-900/50 data-[state=active]:text-amber-500"><Bot className="w-4 h-4"/> 1. Alma</TabsTrigger>
+             <TabsTrigger value="identidad" className="gap-2 px-4 py-2 data-[state=active]:bg-indigo-900/50 data-[state=active]:text-amber-500"><Fingerprint className="w-4 h-4"/> 2. ADN & Venta</TabsTrigger>
+             <TabsTrigger value="versiones" className="gap-2 px-4 py-2 data-[state=active]:bg-indigo-900/50 data-[state=active]:text-amber-500"><GitBranch className="w-4 h-4"/> 3. Snapshots</TabsTrigger>
+             <TabsTrigger value="vision" className="gap-2 px-4 py-2 data-[state=active]:bg-indigo-900/50 data-[state=active]:text-amber-500"><EyeIcon className="w-4 h-4"/> 4. Ojo Halcón</TabsTrigger>
+             <TabsTrigger value="simulador" className="gap-2 px-4 py-2 data-[state=active]:bg-indigo-900/50 data-[state=active]:text-amber-500"><MessageSquare className="w-4 h-4"/> 5. Simulador</TabsTrigger>
+             <TabsTrigger value="debug" className="gap-2 px-4 py-2 data-[state=active]:bg-indigo-900/50 data-[state=active]:text-amber-500"><Terminal className="w-4 h-4"/> 6. Kernel Debug</TabsTrigger>
+             <TabsTrigger value="lab" className="gap-2 px-4 py-2 bg-indigo-900/20 text-slate-400 data-[state=active]:bg-amber-600 data-[state=active]:text-slate-950"><FlaskConical className="w-4 h-4"/> 7. Laboratorio IA</TabsTrigger>
           </TabsList>
 
-          <div className="flex-1 flex flex-col min-h-0 bg-slate-900/20 rounded-xl border border-slate-800/50 p-1">
+          <div className="flex-1 flex flex-col min-h-0 bg-transparent rounded-xl p-1">
             
             <TabsContent value="lab" className="m-0 h-full flex flex-col data-[state=inactive]:hidden">
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 h-full">
                    <div className="lg:col-span-8 flex flex-col gap-4">
-                      <Card className="bg-slate-950 border-slate-800 flex-1 flex flex-col overflow-hidden shadow-2xl rounded-xl">
-                         <CardHeader className="border-b border-slate-800 bg-slate-900/50 py-3 flex items-center justify-between shrink-0 px-6">
+                      <Card className="bg-slate-900 border-slate-800 flex-1 flex flex-col overflow-hidden shadow-2xl rounded-2xl">
+                         <CardHeader className="border-b border-slate-800 bg-slate-950/30 py-4 flex items-center justify-between shrink-0 px-6">
                             <div>
-                               <CardTitle className="text-white text-xs flex items-center gap-2 uppercase tracking-widest"><FlaskConical className="w-4 h-4 text-indigo-400" /> Arquitecto de Prompts</CardTitle>
-                               <CardDescription className="text-[10px]">Evolución asistida de la consciencia de la IA.</CardDescription>
+                               <CardTitle className="text-slate-50 text-xs flex items-center gap-2 uppercase tracking-widest font-bold"><FlaskConical className="w-4 h-4 text-amber-500" /> Arquitecto de Prompts</CardTitle>
+                               <CardDescription className="text-[10px] mt-1">Evolución asistida de la consciencia de la IA.</CardDescription>
                             </div>
-                            <Button variant="ghost" size="sm" onClick={() => setLabMessages([])} className="h-8 text-[10px] text-slate-500 hover:text-white"><RefreshCcw className="w-3 h-3 mr-2"/> Reiniciar</Button>
+                            <Button variant="ghost" size="sm" onClick={() => setLabMessages([])} className="h-8 text-[10px] text-slate-400 hover:text-amber-500"><RefreshCcw className="w-3 h-3 mr-2"/> Reiniciar</Button>
                          </CardHeader>
                          <ScrollArea className="flex-1 p-6">
                             <div className="space-y-6">
                                {labMessages.length === 0 && (
                                   <div className="text-center py-20">
-                                     <Bot className="w-12 h-12 text-slate-800 mx-auto mb-4 opacity-20" />
-                                     <p className="text-slate-500 italic text-sm">"Hola, soy el Arquitecto. ¿Qué quieres que aprenda la IA hoy?"</p>
+                                     <Bot className="w-12 h-12 text-slate-700 mx-auto mb-4 opacity-50" />
+                                     <p className="text-slate-400 italic text-sm">"Hola, soy el Arquitecto. ¿Qué quieres que aprenda la IA hoy?"</p>
                                   </div>
                                )}
                                {labMessages.map((m, i) => (
                                   <div key={i} className={cn("flex flex-col gap-2", m.role === 'user' ? 'items-end' : 'items-start')}>
-                                     <div className={cn("p-4 rounded-2xl text-sm max-w-[85%] border shadow-lg", m.role === 'user' ? 'bg-indigo-600/10 border-indigo-500/20 text-indigo-100' : 'bg-slate-900 border-slate-800 text-slate-200')}>
+                                     <div className={cn("p-4 rounded-2xl text-sm max-w-[85%] border shadow-lg", m.role === 'user' ? 'bg-indigo-900/40 border-indigo-900/60 text-slate-100' : 'bg-slate-950 border-slate-800 text-slate-300')}>
                                         {m.image && <img src={m.image} className="w-full max-w-[300px] rounded-lg mb-3 border border-white/10" />}
                                         {m.text}
                                      </div>
                                   </div>
                                ))}
-                               {labProcessing && <div className="flex gap-2 items-center text-indigo-400 text-xs animate-pulse"><Loader2 className="w-4 h-4 animate-spin"/> El Arquitecto está redactando los nuevos prompts...</div>}
+                               {labProcessing && <div className="flex gap-2 items-center text-amber-500 text-xs animate-pulse"><Loader2 className="w-4 h-4 animate-spin"/> El Arquitecto está redactando los nuevos prompts...</div>}
                             </div>
                          </ScrollArea>
                          
-                         <form onSubmit={handleLabSubmit} className="p-4 bg-slate-900 border-t border-slate-800 shrink-0 space-y-4">
+                         <form onSubmit={handleLabSubmit} className="p-4 bg-slate-950/50 border-t border-slate-800 shrink-0 space-y-4">
                             {labImage && (
-                               <div className="flex items-center gap-4 bg-slate-950 p-2 rounded-lg border border-indigo-500/30">
-                                  <img src={labImage} className="w-12 h-12 rounded object-cover" />
-                                  <span className="text-[10px] text-indigo-400 flex-1">Captura lista para analizar</span>
-                                  <Button size="sm" variant="ghost" onClick={() => setLabImage(null)} className="text-red-400">Eliminar</Button>
+                               <div className="flex items-center gap-4 bg-[#1A1714] p-2 rounded-lg border border-slate-800">
+                                  <img src={labImage} className="w-12 h-12 rounded object-cover border border-slate-700" />
+                                  <span className="text-[10px] text-amber-500 flex-1">Captura lista para analizar</span>
+                                  <Button size="sm" variant="ghost" onClick={() => setLabImage(null)} className="text-red-400 hover:bg-red-900/20">Eliminar</Button>
                                </div>
                             )}
                             <div className="flex gap-4">
                                <div className="relative shrink-0">
                                   <input type="file" id="lab-upload" className="hidden" accept="image/*" onChange={handleLabImageUpload} />
                                   <label htmlFor="lab-upload" className="flex items-center justify-center w-12 h-12 rounded-xl bg-slate-800 border border-slate-700 cursor-pointer hover:bg-slate-700 transition-colors">
-                                     <ImageIcon className="w-5 h-5 text-slate-400" />
+                                     <ImageIcon className="w-5 h-5 text-slate-300" />
                                   </label>
                                </div>
                                <Input 
                                  value={labInput} 
                                  onChange={e => setLabInput(e.target.value)} 
                                  placeholder="Dime qué corregir o sube una captura..." 
-                                 className="bg-slate-950 border-slate-800 text-white h-12" 
+                                 className="bg-[#1A1714] border-slate-800 text-slate-50 h-12 rounded-xl" 
                                  disabled={labProcessing} 
                                />
-                               <Button type="submit" disabled={labProcessing || (!labInput.trim() && !labImage)} className="bg-indigo-600 h-12 px-6">
-                                  <Send className="w-5 h-5" />
+                               <Button type="submit" disabled={labProcessing || (!labInput.trim() && !labImage)} className="bg-indigo-900 hover:bg-indigo-800 text-slate-50 h-12 px-6 rounded-xl">
+                                  <Send className="w-5 h-5 text-amber-500" />
                                </Button>
                             </div>
                          </form>
@@ -312,21 +312,21 @@ const AgentBrain = () => {
                    </div>
 
                    <div className="lg:col-span-4 flex flex-col gap-6">
-                      <Card className="bg-slate-900 border-slate-800 border-l-4 border-l-yellow-600 shadow-xl">
-                         <CardHeader><CardTitle className="text-xs uppercase tracking-widest text-yellow-500 flex items-center gap-2"><Sparkles className="w-4 h-4"/> Propuesta de Mejora</CardTitle></CardHeader>
+                      <Card className="bg-slate-900 border-slate-800 border-l-4 border-l-amber-600 shadow-xl rounded-2xl">
+                         <CardHeader><CardTitle className="text-xs uppercase tracking-widest text-amber-500 flex items-center gap-2"><Sparkles className="w-4 h-4"/> Propuesta de Mejora</CardTitle></CardHeader>
                          <CardContent className="space-y-4">
                             {!proposedPrompts ? (
-                               <div className="py-10 text-center text-slate-600 text-[10px] italic">No hay cambios propuestos aún.</div>
+                               <div className="py-10 text-center text-slate-500 text-[10px] italic">No hay cambios propuestos aún.</div>
                             ) : (
                                <div className="space-y-4">
-                                  <div className="p-3 bg-slate-950 rounded border border-slate-800">
-                                     <p className="text-[10px] text-slate-500 uppercase font-bold mb-2">Impacto:</p>
-                                     <ul className="text-[10px] text-slate-300 space-y-2">
-                                        <li className="flex items-center gap-2"><div className="w-1 h-1 rounded-full bg-indigo-500"/> Se ajustó la personalidad.</li>
-                                        <li className="flex items-center gap-2"><div className="w-1 h-1 rounded-full bg-indigo-500"/> Se optimizó la estrategia de venta.</li>
+                                  <div className="p-4 bg-slate-950 rounded-xl border border-slate-800">
+                                     <p className="text-[10px] text-slate-400 uppercase font-bold mb-3 tracking-widest">Impacto Calculado:</p>
+                                     <ul className="text-[11px] text-slate-300 space-y-3">
+                                        <li className="flex items-center gap-3"><div className="w-1.5 h-1.5 rounded-full bg-amber-500"/> Se ajustó la personalidad.</li>
+                                        <li className="flex items-center gap-3"><div className="w-1.5 h-1.5 rounded-full bg-amber-500"/> Se optimizó la estrategia de venta.</li>
                                      </ul>
                                   </div>
-                                  <Button onClick={applyProposedPrompts} className="w-full bg-yellow-600 hover:bg-yellow-700 h-12 font-bold shadow-lg shadow-yellow-900/20">
+                                  <Button onClick={applyProposedPrompts} className="w-full bg-amber-600 hover:bg-amber-500 text-slate-950 h-12 font-bold shadow-lg rounded-xl uppercase tracking-widest text-xs">
                                      <CheckCircle2 className="w-4 h-4 mr-2" /> APLICAR PROPUESTA
                                   </Button>
                                </div>
@@ -338,18 +338,18 @@ const AgentBrain = () => {
             </TabsContent>
 
             <TabsContent value="alma" className="m-0 h-full flex flex-col data-[state=inactive]:hidden">
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 flex-1 min-h-0">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 flex-1 min-h-0">
                   <div className="h-full min-h-0">
-                     <PromptEditor title="Alma de Elephant Bowl" icon={Bot} value={prompts['prompt_alma_samurai']} onChange={v => handlePromptChange('prompt_alma_samurai', v)} />
+                     <PromptEditor title="Alma de The Elephant Bowl" icon={Bot} value={prompts['prompt_alma_samurai']} onChange={v => handlePromptChange('prompt_alma_samurai', v)} color="text-amber-500" />
                   </div>
-                  <Card className="bg-slate-900 border-slate-800 border-l-4 border-l-emerald-500 flex flex-col h-full overflow-hidden shadow-2xl">
-                    <CardHeader className="shrink-0 py-4 border-b border-slate-800 bg-slate-950/20"><CardTitle className="text-white text-xs uppercase tracking-widest flex items-center gap-2"><Layers className="w-4 h-4 text-emerald-400" /> Jerarquía Técnica</CardTitle></CardHeader>
+                  <Card className="bg-slate-900 border-slate-800 flex flex-col h-full overflow-hidden shadow-2xl rounded-2xl">
+                    <CardHeader className="shrink-0 py-4 border-b border-slate-800 bg-slate-950/30"><CardTitle className="text-slate-50 text-xs uppercase tracking-widest flex items-center gap-2"><Layers className="w-4 h-4 text-amber-500" /> Jerarquía Técnica</CardTitle></CardHeader>
                     <ScrollArea className="flex-1 p-6">
                       <div className="space-y-4">
-                          <KernelStep num={1} title="Alma & ADN Core" desc="Define quién eres y cómo hablas." color="text-indigo-400" icon={Bot}/>
-                          <KernelStep num={2} title="Estrategia de Cierre" desc="Protocolo táctico de ventas." color="text-blue-400" icon={Target}/>
-                          <KernelStep num={3} title="Media Manager" desc="Envío inteligente de posters." color="text-yellow-600" icon={ImageIcon}/>
-                          <KernelStep num={4} title="Verdad Maestra" desc="Datos oficiales del negocio." color="text-emerald-400" icon={Database}/>
+                          <KernelStep num={1} title="Alma & ADN Core" desc="Define quién eres y cómo hablas." color="text-amber-500" icon={Bot}/>
+                          <KernelStep num={2} title="Estrategia de Cierre" desc="Protocolo táctico de ventas." color="text-indigo-300" icon={Target}/>
+                          <KernelStep num={3} title="Media Manager" desc="Envío inteligente de posters." color="text-slate-400" icon={ImageIcon}/>
+                          <KernelStep num={4} title="Verdad Maestra" desc="Datos oficiales del negocio." color="text-slate-300" icon={Database}/>
                           <KernelStep num={5} title="Bitácora #CIA" desc="Correcciones críticas prioritarias." color="text-red-400" icon={AlertTriangle}/>
                       </div>
                     </ScrollArea>
@@ -358,35 +358,35 @@ const AgentBrain = () => {
             </TabsContent>
 
             <TabsContent value="identidad" className="m-0 h-full data-[state=inactive]:hidden">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 h-full min-h-0">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 h-full min-h-0">
                    <div className="h-full min-h-0">
-                      <PromptEditor title="ADN Core (Personalidad)" icon={Fingerprint} value={prompts['prompt_adn_core']} onChange={v => handlePromptChange('prompt_adn_core', v)} />
+                      <PromptEditor title="ADN Core (Personalidad)" icon={Fingerprint} value={prompts['prompt_adn_core']} onChange={v => handlePromptChange('prompt_adn_core', v)} color="text-amber-500" />
                    </div>
                    <div className="h-full min-h-0">
-                      <PromptEditor title="Estrategia de Cierre" icon={Target} value={prompts['prompt_estrategia_cierre']} onChange={v => handlePromptChange('prompt_estrategia_cierre', v)} color="text-blue-400" />
+                      <PromptEditor title="Estrategia de Cierre" icon={Target} value={prompts['prompt_estrategia_cierre']} onChange={v => handlePromptChange('prompt_estrategia_cierre', v)} color="text-indigo-300" />
                    </div>
                 </div>
             </TabsContent>
 
             <TabsContent value="versiones" className="m-0 h-full data-[state=inactive]:hidden flex flex-col">
-               <Card className="bg-slate-900 border-slate-800 flex-1 flex flex-col overflow-hidden shadow-2xl">
-                  <CardHeader className="shrink-0 border-b border-slate-800 p-6 bg-slate-950/20"><CardTitle className="text-white text-sm flex items-center gap-2 uppercase tracking-widest font-bold"><History className="w-5 h-5 text-indigo-400" /> Snapshots Guardados</CardTitle></CardHeader>
+               <Card className="bg-slate-900 border-slate-800 flex-1 flex flex-col overflow-hidden shadow-2xl rounded-2xl">
+                  <CardHeader className="shrink-0 border-b border-slate-800 p-6 bg-slate-950/30"><CardTitle className="text-slate-50 text-sm flex items-center gap-2 uppercase tracking-widest font-bold"><History className="w-5 h-5 text-amber-500" /> Snapshots Guardados</CardTitle></CardHeader>
                   <ScrollArea className="flex-1">
                      <Table>
-                        <TableHeader><TableRow className="border-slate-800 bg-slate-950/40"><TableHead className="pl-6 text-[10px] uppercase font-bold text-slate-500">Nombre</TableHead><TableHead className="text-[10px] uppercase font-bold text-slate-500">Capturado el</TableHead><TableHead className="text-right pr-6 text-[10px] uppercase font-bold text-slate-500">Acción</TableHead></TableRow></TableHeader>
+                        <TableHeader><TableRow className="border-slate-800 bg-slate-950/50"><TableHead className="pl-6 text-[10px] uppercase font-bold text-slate-400">Nombre</TableHead><TableHead className="text-[10px] uppercase font-bold text-slate-400">Capturado el</TableHead><TableHead className="text-right pr-6 text-[10px] uppercase font-bold text-slate-400">Acción</TableHead></TableRow></TableHeader>
                         <TableBody>
                            {versions.length === 0 ? (
-                              <TableRow><TableCell colSpan={3} className="text-center py-20 text-slate-600 italic">No hay snapshots creados.</TableCell></TableRow>
+                              <TableRow><TableCell colSpan={3} className="text-center py-20 text-slate-500 italic">No hay snapshots creados.</TableCell></TableRow>
                            ) : versions.map(v => (
-                              <TableRow key={v.id} className="border-slate-800 hover:bg-slate-800/30 transition-colors group">
-                                 <TableCell className="font-mono text-indigo-400 text-xs pl-6">{v.version_name}</TableCell>
-                                 <TableCell className="text-slate-400 text-[10px]">{new Date(v.created_at).toLocaleString()}</TableCell>
+                              <TableRow key={v.id} className="border-slate-800 hover:bg-slate-800/50 transition-colors group">
+                                 <TableCell className="font-mono text-amber-500 text-xs pl-6 font-medium">{v.version_name}</TableCell>
+                                 <TableCell className="text-slate-400 text-[10px] font-mono">{new Date(v.created_at).toLocaleString()}</TableCell>
                                  <TableCell className="text-right pr-6">
                                     <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                       <Button variant="ghost" size="sm" className="h-8 text-[10px] text-red-400 hover:bg-red-500/10" onClick={() => handleDeleteSnapshot(v.id)}>
+                                       <Button variant="ghost" size="sm" className="h-8 text-[10px] text-red-400 hover:bg-red-900/20" onClick={() => handleDeleteSnapshot(v.id)}>
                                           <Trash2 className="w-3.5 h-3.5 mr-1" /> BORRAR
                                        </Button>
-                                       <Button variant="secondary" size="sm" className="h-8 text-[10px] font-bold" onClick={() => handleRestoreSnapshot(v)}>
+                                       <Button variant="secondary" size="sm" className="h-8 text-[10px] font-bold bg-slate-800 hover:bg-slate-700 text-slate-200" onClick={() => handleRestoreSnapshot(v)}>
                                           RESTAURAR
                                        </Button>
                                     </div>
@@ -400,37 +400,37 @@ const AgentBrain = () => {
             </TabsContent>
 
             <TabsContent value="vision" className="m-0 h-full data-[state=inactive]:hidden">
-                <PromptEditor title="Ojo de Halcón (Instrucciones OCR)" icon={EyeIcon} value={prompts['prompt_vision_instrucciones']} onChange={v => handlePromptChange('prompt_vision_instrucciones', v)} color="text-red-400" />
+                <PromptEditor title="Ojo de Halcón (Instrucciones OCR)" icon={EyeIcon} value={prompts['prompt_vision_instrucciones']} onChange={v => handlePromptChange('prompt_vision_instrucciones', v)} color="text-amber-500" />
             </TabsContent>
 
             <TabsContent value="simulador" className="m-0 h-full flex flex-col data-[state=inactive]:hidden">
-                <Card className="bg-slate-950 border-slate-800 flex-1 flex flex-col overflow-hidden shadow-2xl rounded-xl">
-                    <CardHeader className="border-b border-slate-800 bg-slate-900/50 py-3 flex items-center justify-between shrink-0 px-6">
-                        <CardTitle className="text-white text-xs flex items-center gap-2 uppercase tracking-widest"><MessageSquare className="w-4 h-4 text-blue-400" /> Entorno de Pruebas</CardTitle>
+                <Card className="bg-[#1A1714] border-slate-800 flex-1 flex flex-col overflow-hidden shadow-2xl rounded-2xl">
+                    <CardHeader className="border-b border-slate-800 bg-slate-900/50 py-4 flex flex-row items-center justify-between shrink-0 px-6">
+                        <CardTitle className="text-slate-50 text-xs flex items-center gap-2 uppercase tracking-widest font-bold"><MessageSquare className="w-4 h-4 text-amber-500" /> Entorno de Pruebas</CardTitle>
                         <div className="flex items-center gap-4">
-                           <Badge variant="outline" className="text-[8px] border-indigo-500/30 text-indigo-400 bg-indigo-500/5">MODO: TIEMPO REAL</Badge>
-                           <Button variant="ghost" size="sm" onClick={() => setSimHistory([])} className="h-8 text-[10px] text-slate-500 hover:text-white"><RefreshCcw className="w-3 h-3 mr-2"/> Limpiar</Button>
+                           <Badge variant="outline" className="text-[9px] border-amber-500/30 text-amber-500 bg-amber-500/10 uppercase tracking-widest">Tiempo Real</Badge>
+                           <Button variant="ghost" size="sm" onClick={() => setSimHistory([])} className="h-8 text-[10px] text-slate-400 hover:text-amber-500"><RefreshCcw className="w-3 h-3 mr-2"/> Limpiar</Button>
                         </div>
                     </CardHeader>
-                    <ScrollArea className="flex-1 p-6 bg-slate-950">
+                    <ScrollArea className="flex-1 p-6">
                        <div className="max-w-4xl mx-auto space-y-6 pb-4">
                           {simHistory.length === 0 && (
                             <div className="text-center py-20">
-                               <MessageSquare className="w-12 h-12 text-slate-800 mx-auto mb-4 opacity-20" />
-                               <p className="text-slate-500 italic text-sm">Prueba lo que acabas de escribir arriba antes de guardar.</p>
+                               <MessageSquare className="w-12 h-12 text-slate-700 mx-auto mb-4 opacity-50" />
+                               <p className="text-slate-400 italic text-sm">Prueba lo que acabas de escribir arriba antes de guardar.</p>
                             </div>
                           )}
                           {simHistory.map((m, i) => (
                              <div key={i} className={cn("flex flex-col gap-2", m.role === 'user' ? 'items-end' : 'items-start')}>
-                                <div className={cn("p-4 rounded-2xl text-sm max-w-[85%] border shadow-lg", m.role === 'user' ? 'bg-indigo-600/10 border-indigo-500/20 text-indigo-100' : 'bg-slate-900 border-slate-800 text-slate-200')}>
+                                <div className={cn("p-4 rounded-2xl text-sm max-w-[85%] border shadow-lg leading-relaxed", m.role === 'user' ? 'bg-indigo-900/40 border-indigo-900/60 text-slate-100' : 'bg-slate-900 border-slate-800 text-slate-200')}>
                                    {m.text}
                                 </div>
                                 {m.explanation && (
-                                   <div className="bg-black/40 border border-slate-800 p-4 rounded-xl w-full mt-2 shadow-inner">
-                                      <p className="text-[10px] text-emerald-500 font-bold uppercase mb-3 flex items-center gap-2"><Zap className="w-3.5 h-3.5"/> Razonamiento Técnico:</p>
-                                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                         <div><p className="text-[9px] text-slate-600 uppercase font-bold mb-2">Capas Usadas</p><div className="flex flex-wrap gap-1.5">{m.explanation.layers_used.map((l:any, idx:number)=>(<Badge key={idx} variant="outline" className="text-[8px] border-slate-700 text-slate-400 bg-slate-900">{l}</Badge>))}</div></div>
-                                         <div><p className="text-[9px] text-slate-600 uppercase font-bold mb-2">Lógica Aplicada</p><p className="text-[10px] text-slate-400 leading-relaxed italic">"{m.explanation.reasoning}"</p></div>
+                                   <div className="bg-[#0D0B0A]/50 border border-slate-800/80 p-5 rounded-2xl w-full mt-2 shadow-inner">
+                                      <p className="text-[10px] text-amber-500 font-bold uppercase tracking-widest mb-4 flex items-center gap-2"><Zap className="w-3.5 h-3.5"/> Razonamiento Técnico:</p>
+                                      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                         <div><p className="text-[9px] text-slate-500 uppercase font-bold mb-3 tracking-widest">Capas Usadas</p><div className="flex flex-wrap gap-2">{m.explanation.layers_used.map((l:any, idx:number)=>(<Badge key={idx} variant="outline" className="text-[9px] border-slate-700 text-slate-300 bg-slate-800/50 py-1">{l}</Badge>))}</div></div>
+                                         <div><p className="text-[9px] text-slate-500 uppercase font-bold mb-3 tracking-widest">Lógica Aplicada</p><p className="text-xs text-slate-300 leading-relaxed italic border-l-2 border-slate-700 pl-3">"{m.explanation.reasoning}"</p></div>
                                       </div>
                                    </div>
                                 )}
@@ -438,31 +438,31 @@ const AgentBrain = () => {
                           ))}
                        </div>
                     </ScrollArea>
-                    <form onSubmit={handleSimulate} className="p-4 bg-slate-900 border-t border-slate-800 shrink-0 flex gap-4">
+                    <form onSubmit={handleSimulate} className="p-4 bg-slate-900/50 border-t border-slate-800 shrink-0 flex gap-4">
                        <Input 
                          value={simQuestion} 
                          onChange={e => setSimQuestion(e.target.value)} 
                          placeholder="Escribe un mensaje de cliente..." 
-                         className="bg-slate-950 border-slate-800 text-white h-12" 
+                         className="bg-slate-950 border-slate-800 text-slate-50 h-12 rounded-xl focus:border-amber-500" 
                          disabled={simulating} 
                        />
-                       <Button type="submit" disabled={simulating || !simQuestion.trim()} className="bg-indigo-600 hover:bg-indigo-700 shrink-0 h-12 px-6">
-                          {simulating ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
+                       <Button type="submit" disabled={simulating || !simQuestion.trim()} className="bg-indigo-900 hover:bg-indigo-800 shrink-0 h-12 px-6 rounded-xl shadow-lg">
+                          {simulating ? <Loader2 className="w-5 h-5 animate-spin text-amber-500" /> : <Send className="w-5 h-5 text-amber-500" />}
                        </Button>
                     </form>
                 </Card>
             </TabsContent>
 
             <TabsContent value="debug" className="m-0 h-full flex flex-col data-[state=inactive]:hidden">
-                <Card className="bg-slate-900 border-slate-800 shadow-2xl relative flex-1 flex flex-col overflow-hidden">
+                <Card className="bg-[#0D0B0A] border-slate-800 shadow-2xl relative flex-1 flex flex-col overflow-hidden rounded-2xl">
                     <div className="absolute top-4 right-6 z-10">
-                       <Button onClick={handleRefreshMaster} variant="outline" className="h-9 text-[10px] border-indigo-500/50 text-indigo-400 bg-slate-950 hover:bg-indigo-500/20 font-bold" disabled={loadingMaster}>
-                          {loadingMaster ? <Loader2 className="w-3 h-3 animate-spin mr-2"/> : <RefreshCcw className="w-3 h-3 mr-2"/>} RE-COMPILAR
+                       <Button onClick={handleRefreshMaster} variant="outline" className="h-9 text-[10px] border-slate-700 text-amber-500 bg-slate-900 hover:bg-slate-800 font-bold uppercase tracking-widest rounded-lg" disabled={loadingMaster}>
+                          {loadingMaster ? <Loader2 className="w-3 h-3 animate-spin mr-2"/> : <RefreshCcw className="w-3 h-3 mr-2"/>} Re-compilar
                        </Button>
                     </div>
-                    <CardHeader className="shrink-0 py-4 bg-slate-950/20 border-b border-slate-800"><CardTitle className="text-[10px] text-slate-500 flex items-center gap-2 uppercase tracking-widest"><Terminal className="w-4 h-4" /> Inspección del Kernel</CardTitle></CardHeader>
-                    <div className="flex-1 bg-black p-8 overflow-y-auto custom-scrollbar">
-                       <pre className="text-[11px] text-slate-500 font-mono whitespace-pre-wrap leading-relaxed select-text">
+                    <CardHeader className="shrink-0 py-4 bg-slate-900/50 border-b border-slate-800"><CardTitle className="text-[10px] text-slate-400 flex items-center gap-2 uppercase tracking-widest font-bold"><Terminal className="w-4 h-4 text-slate-500" /> Inspección del Kernel</CardTitle></CardHeader>
+                    <div className="flex-1 p-8 overflow-y-auto custom-scrollbar">
+                       <pre className="text-[11px] text-slate-400 font-mono whitespace-pre-wrap leading-relaxed select-text">
                           {loadingMaster ? "Cargando constitución..." : masterPrompt || "Presiona Re-compilar para ver el prompt final."}
                        </pre>
                     </div>

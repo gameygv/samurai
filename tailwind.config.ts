@@ -19,33 +19,33 @@ export default {
     },
     extend: {
       colors: {
-        // Redefinimos 'slate' con tonos tierra basados en #946f51
+        // Terracota Elegante (Basado exactamente en #946f51)
         slate: {
-          50: '#ffffff',
-          100: '#fcf9f7',
-          200: '#f9f3ef',
-          300: '#f2e7df',
-          400: '#eadad0',
-          500: '#e0cec0',
-          600: '#412916',
-          700: '#573b24', // Hover states
-          800: '#6c4c32', // Borders
-          900: '#825e41', // Cards (Un poco más oscuro para dar profundidad)
-          950: '#946f51', // Fondo principal exacto del logo
+          50: '#FDFBF7',  // Crema muy suave para textos
+          100: '#F6F3ED',
+          200: '#E8E1D5',
+          300: '#D5C9B8',
+          400: '#BCAB94',
+          500: '#A48E75',
+          600: '#8C7459',
+          700: '#6E553E',
+          800: '#564230', // Bordes
+          900: '#423122', // Cards y Paneles (Más profundo para mejor contraste)
+          950: '#946f51', // Fondo base (El color de tu logo)
         },
-        // Redefinimos 'indigo' con un Esmeralda vibrante para contraste estético
+        // Onyx Profundo (Reemplaza los verdes/azules por un carbón cálido muy elegante)
         indigo: {
-          50: '#ecfdf5',
-          100: '#d1fae5',
-          200: '#a7f3d0',
-          300: '#6ee7b7',
-          400: '#34d399',
-          500: '#10b981',
-          600: '#059669', // Color principal de botones
-          700: '#047857',
-          800: '#065f46',
-          900: '#064e3b',
-          950: '#022c22',
+          50: '#F8F7F5',
+          100: '#EBE8E3',
+          200: '#D1CAC1',
+          300: '#B3A99D',
+          400: '#94887A',
+          500: '#756A5E',
+          600: '#544C43', 
+          700: '#3D3730', 
+          800: '#292520', // Hover de botones
+          900: '#1A1714', // Botones principales
+          950: '#0D0B0A', // Fondos ultra oscuros
         },
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",

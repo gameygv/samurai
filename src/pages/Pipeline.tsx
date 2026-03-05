@@ -23,10 +23,11 @@ const Pipeline = () => {
 
   const TICKET_PRICE = 1500;
 
+  // Tonos dorados / tierra en lugar de los colores de semáforo genéricos
   const columns = [
-    { id: 'BAJO', title: '1. DATA HUNTING', icon: Fingerprint, color: 'border-blue-500/50 bg-blue-500/5', desc: 'Faltan Nombre/Ciudad' },
-    { id: 'MEDIO', title: '2. SEDUCCIÓN', icon: Image, color: 'border-yellow-500/50 bg-yellow-500/5', desc: 'Enviando Posters' },
-    { id: 'ALTO', title: '3. CIERRE ($)', icon: Target, color: 'border-red-500/50 bg-red-500/5', desc: 'Link Enviado' }
+    { id: 'BAJO', title: '1. DATA HUNTING', icon: Fingerprint, color: 'border-slate-700 bg-slate-800/30', desc: 'Faltan Nombre/Ciudad' },
+    { id: 'MEDIO', title: '2. SEDUCCIÓN', icon: Image, color: 'border-indigo-900/50 bg-indigo-900/10', desc: 'Enviando Posters' },
+    { id: 'ALTO', title: '3. CIERRE ($)', icon: Target, color: 'border-amber-700/50 bg-amber-900/10', desc: 'Link Enviado' }
   ];
 
   useEffect(() => {
@@ -67,20 +68,20 @@ const Pipeline = () => {
         
         {/* HEADER TÁCTICO FINANCIERO */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-           <Card className="bg-slate-900/50 border-slate-800 p-4 flex items-center gap-4">
-              <div className="p-3 rounded-xl bg-indigo-500/10 text-indigo-400"><Trello className="w-6 h-6" /></div>
-              <div><h3 className="text-xs font-bold text-slate-500 uppercase">Total en Embudo</h3><p className="text-2xl font-bold text-white">{leads.length} Leads</p></div>
+           <Card className="bg-slate-900 border-slate-800 p-4 flex items-center gap-4 rounded-2xl shadow-lg">
+              <div className="p-3 rounded-xl bg-slate-800 text-slate-300"><Trello className="w-6 h-6" /></div>
+              <div><h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest">Total en Embudo</h3><p className="text-2xl font-bold text-slate-50">{leads.length} Leads</p></div>
            </Card>
-           <Card className="bg-slate-900/50 border-slate-800 p-4 flex items-center gap-4">
-              <div className="p-3 rounded-xl bg-emerald-500/10 text-emerald-400"><ShieldCheck className="w-6 h-6" /></div>
-              <div><h3 className="text-xs font-bold text-slate-500 uppercase">Salud Meta CAPI</h3><p className="text-2xl font-bold text-white">{capiReadyCount} <span className="text-xs text-slate-500 font-normal">Listos</span></p></div>
+           <Card className="bg-slate-900 border-slate-800 p-4 flex items-center gap-4 rounded-2xl shadow-lg">
+              <div className="p-3 rounded-xl bg-indigo-900/30 text-indigo-300 border border-indigo-900/50"><ShieldCheck className="w-6 h-6" /></div>
+              <div><h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest">Salud Meta CAPI</h3><p className="text-2xl font-bold text-slate-50">{capiReadyCount} <span className="text-xs text-slate-500 font-normal">Listos</span></p></div>
            </Card>
-           <Card className="bg-slate-900/50 border-emerald-500/30 p-4 flex items-center justify-between border-l-4 border-l-emerald-500">
+           <Card className="bg-slate-900 border-amber-600/30 p-4 flex items-center justify-between border-l-4 border-l-amber-500 rounded-2xl shadow-xl">
               <div className="flex items-center gap-4">
-                 <div className="p-3 rounded-xl bg-emerald-500/10 text-emerald-400"><DollarSign className="w-6 h-6" /></div>
-                 <div><h3 className="text-xs font-bold text-slate-500 uppercase">Potencial Cierre</h3><p className="text-2xl font-bold text-white">${totalValue.toLocaleString()}</p></div>
+                 <div className="p-3 rounded-xl bg-amber-900/30 text-amber-500"><DollarSign className="w-6 h-6" /></div>
+                 <div><h3 className="text-xs font-bold text-amber-600/80 uppercase tracking-widest">Potencial Cierre</h3><p className="text-2xl font-bold text-slate-50">${totalValue.toLocaleString()}</p></div>
               </div>
-              <Button className="bg-emerald-600 hover:bg-emerald-700 h-10" onClick={() => setIsCreateOpen(true)}><UserPlus className="w-4 h-4 mr-2" /> Nuevo</Button>
+              <Button className="bg-indigo-900 hover:bg-indigo-800 text-slate-50 h-11 px-5 rounded-xl shadow-lg" onClick={() => setIsCreateOpen(true)}><UserPlus className="w-4 h-4 mr-2" /> Nuevo</Button>
            </Card>
         </div>
 
@@ -88,24 +89,24 @@ const Pipeline = () => {
           {columns.map((col) => {
             const leadsInCol = getLeadsByIntent(col.id);
             return (
-              <div key={col.id} className={cn("rounded-xl border flex flex-col min-h-0 shadow-2xl overflow-hidden", col.color)} onDragOver={(e) => e.preventDefault()} onDrop={(e) => handleDrop(e, col.id)}>
-                <div className="p-4 border-b border-slate-800/50 bg-slate-900/40 flex justify-between items-center">
-                   <div><h3 className="font-bold text-xs text-white uppercase tracking-widest flex items-center gap-2"><col.icon className="w-4 h-4 text-indigo-400" /> {col.title}</h3><p className="text-[9px] text-slate-400 mt-1">{col.desc}</p></div>
-                   <Badge className="bg-slate-950 text-indigo-400 border-indigo-500/20">{leadsInCol.length}</Badge>
+              <div key={col.id} className={cn("rounded-2xl border flex flex-col min-h-0 shadow-2xl overflow-hidden", col.color)} onDragOver={(e) => e.preventDefault()} onDrop={(e) => handleDrop(e, col.id)}>
+                <div className="p-4 border-b border-slate-800/50 bg-slate-900/60 flex justify-between items-center backdrop-blur-sm">
+                   <div><h3 className="font-bold text-xs text-slate-200 uppercase tracking-widest flex items-center gap-2"><col.icon className="w-4 h-4 text-slate-400" /> {col.title}</h3><p className="text-[9px] text-slate-500 mt-1">{col.desc}</p></div>
+                   <Badge className="bg-slate-950 text-slate-300 border-slate-700 shadow-inner">{leadsInCol.length}</Badge>
                 </div>
-                <div className="flex-1 overflow-y-auto p-3 space-y-3 custom-scrollbar">
+                <div className="flex-1 overflow-y-auto p-3 space-y-3 custom-scrollbar bg-slate-950/20">
                   {leadsInCol.map((lead) => (
                     <div key={lead.id} draggable onDragStart={(e) => handleDragStart(e, lead.id)} className="cursor-move">
-                       <Card className="bg-slate-900 border-slate-800 hover:border-indigo-500/50 transition-all group relative overflow-hidden" onClick={() => { setSelectedLead(lead); setIsChatOpen(true); }}>
-                         <div className={cn("absolute left-0 top-0 bottom-0 w-1", lead.ai_paused ? "bg-red-500" : "bg-emerald-500")} />
-                         <CardContent className="p-3 pl-5 space-y-2">
+                       <Card className="bg-slate-900 border-slate-800 hover:border-slate-600 transition-all group relative overflow-hidden shadow-md">
+                         <div className={cn("absolute left-0 top-0 bottom-0 w-1", lead.ai_paused ? "bg-red-900" : "bg-amber-600")} />
+                         <CardContent className="p-3 pl-5 space-y-3">
                             <div className="flex justify-between items-start">
-                               <div><p className="text-xs font-bold text-white group-hover:text-indigo-400 transition-colors truncate max-w-[150px]">{lead.nombre || lead.telefono}</p></div>
-                               <GripVertical className="w-3 h-3 text-slate-700 opacity-0 group-hover:opacity-100 transition-opacity" />
+                               <div><p className="text-xs font-bold text-slate-100 group-hover:text-amber-400 transition-colors truncate max-w-[150px]">{lead.nombre || lead.telefono}</p></div>
+                               <GripVertical className="w-3 h-3 text-slate-600 opacity-0 group-hover:opacity-100 transition-opacity" />
                             </div>
-                            <div className="flex gap-1">
-                               {lead.ciudad && <Badge variant="outline" className="text-[8px] h-4 px-1 border-slate-700 text-slate-400"><MapPin className="w-2 h-2 mr-1"/>{lead.ciudad}</Badge>}
-                               {lead.email && <Badge variant="outline" className="text-[8px] h-4 px-1 border-emerald-500/30 text-emerald-500"><Mail className="w-2 h-2"/></Badge>}
+                            <div className="flex gap-1.5 flex-wrap">
+                               {lead.ciudad && <Badge variant="outline" className="text-[8px] h-4 px-1.5 border-slate-700 text-slate-400 font-medium"><MapPin className="w-2 h-2 mr-1"/>{lead.ciudad}</Badge>}
+                               {lead.email && <Badge variant="outline" className="text-[8px] h-4 px-1.5 border-indigo-900/50 text-indigo-300 font-medium"><Mail className="w-2 h-2 mr-1"/> OK</Badge>}
                             </div>
                          </CardContent>
                        </Card>

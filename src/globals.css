@@ -38,44 +38,45 @@
   .dark {
     /* Fondo principal: #946f51 convertido a HSL */
     --background: 28 29% 45%; 
-    --foreground: 30 30% 95%;
+    /* Textos color crema suave (#FDFBF7) */
+    --foreground: 40 33% 98%;
 
-    /* Tarjetas: #825e41 (más oscuras para profundidad y contraste) */
-    --card: 27 33% 38%;
-    --card-foreground: 30 30% 95%;
+    /* Tarjetas: Un tono más profundo y elegante (#423122) */
+    --card: 28 32% 20%;
+    --card-foreground: 40 33% 98%;
 
-    --popover: 27 33% 38%;
-    --popover-foreground: 30 30% 95%;
+    --popover: 28 32% 20%;
+    --popover-foreground: 40 33% 98%;
 
-    /* Botones primarios (Esmeralda) */
-    --primary: 161 94% 30%;
-    --primary-foreground: 0 0% 100%;
+    /* Botones primarios (Onyx #1A1714) */
+    --primary: 30 11% 9%;
+    --primary-foreground: 40 33% 98%;
 
-    /* Secundarios */
-    --secondary: 27 37% 31%;
-    --secondary-foreground: 30 30% 95%;
+    /* Secundarios (#564230) */
+    --secondary: 28 28% 26%;
+    --secondary-foreground: 40 33% 98%;
 
-    --muted: 27 37% 31%;
-    --muted-foreground: 28 30% 80%;
+    --muted: 28 28% 26%;
+    --muted-foreground: 30 20% 75%;
 
-    --accent: 27 37% 31%;
-    --accent-foreground: 30 30% 95%;
+    --accent: 28 28% 26%;
+    --accent-foreground: 40 33% 98%;
 
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 210 40% 98%;
 
-    --border: 27 37% 31%;
-    --input: 27 37% 31%;
-    --ring: 161 94% 30%;
+    --border: 28 28% 26%;
+    --input: 28 28% 26%;
+    --ring: 30 11% 9%;
     
     --sidebar-background: 28 29% 45%;
-    --sidebar-foreground: 30 30% 95%;
-    --sidebar-primary: 161 94% 30%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 27 37% 31%;
-    --sidebar-accent-foreground: 30 30% 95%;
-    --sidebar-border: 27 37% 31%;
-    --sidebar-ring: 161 94% 30%;
+    --sidebar-foreground: 40 33% 98%;
+    --sidebar-primary: 30 11% 9%;
+    --sidebar-primary-foreground: 40 33% 98%;
+    --sidebar-accent: 28 28% 26%;
+    --sidebar-accent-foreground: 40 33% 98%;
+    --sidebar-border: 28 28% 26%;
+    --sidebar-ring: 30 11% 9%;
   }
 }
 
