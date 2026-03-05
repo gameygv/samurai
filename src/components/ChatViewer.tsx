@@ -45,8 +45,9 @@ const ChatViewer = ({ lead: initialLead, open, onOpenChange }: ChatViewerProps) 
   const [draftMessage, setDraftMessage] = useState('');
   
   const [memoryForm, setMemoryForm] = useState({
-    nombre: '', email: '', summary: '', mood: 'NEUTRO', buying_intent: 'BAJO',
-    followup_stage: 0, next_followup_at: null, ciudad: '', perfil_psicologico: ''
+    nombre: '', apellido: '', email: '', summary: '', mood: 'NEUTRO', buying_intent: 'BAJO',
+    followup_stage: 0, next_followup_at: null, ciudad: '', estado: '', cp: '', pais: 'mx',
+    perfil_psicologico: '', main_pain: '', servicio_interes: '', origen_contacto: '', tiempo_compra: '', lead_score: 0
   });
 
   useEffect(() => {
@@ -83,10 +84,24 @@ const ChatViewer = ({ lead: initialLead, open, onOpenChange }: ChatViewerProps) 
 
   const updateMemoryForm = (data: any) => {
      setMemoryForm({
-        nombre: data.nombre || '', email: data.email || '', summary: data.summary || '',
-        mood: data.estado_emocional_actual || 'NEUTRO', buying_intent: data.buying_intent || 'BAJO',
-        followup_stage: data.followup_stage || 0, next_followup_at: data.next_followup_at || null,
-        ciudad: data.ciudad || '', perfil_psicologico: data.perfil_psicologico || ''
+        nombre: data.nombre || '', 
+        apellido: data.apellido || '', 
+        email: data.email || '', 
+        summary: data.summary || '',
+        mood: data.estado_emocional_actual || 'NEUTRO', 
+        buying_intent: data.buying_intent || 'BAJO',
+        followup_stage: data.followup_stage || 0, 
+        next_followup_at: data.next_followup_at || null,
+        ciudad: data.ciudad || '', 
+        estado: data.estado || '', 
+        cp: data.cp || '', 
+        pais: data.pais || 'mx',
+        perfil_psicologico: data.perfil_psicologico || '',
+        main_pain: data.main_pain || '',
+        servicio_interes: data.servicio_interes || '',
+        origen_contacto: data.origen_contacto || '',
+        tiempo_compra: data.tiempo_compra || '',
+        lead_score: data.lead_score || 0
      });
   };
 
@@ -138,9 +153,22 @@ const ChatViewer = ({ lead: initialLead, open, onOpenChange }: ChatViewerProps) 
      setSending(true);
      try {
         await supabase.from('leads').update({
-              nombre: memoryForm.nombre, email: memoryForm.email, summary: memoryForm.summary,
-              estado_emocional_actual: memoryForm.mood, buying_intent: memoryForm.buying_intent,
-              ciudad: memoryForm.ciudad, perfil_psicologico: memoryForm.perfil_psicologico
+              nombre: memoryForm.nombre, 
+              apellido: memoryForm.apellido,
+              email: memoryForm.email, 
+              summary: memoryForm.summary,
+              estado_emocional_actual: memoryForm.mood, 
+              buying_intent: memoryForm.buying_intent,
+              ciudad: memoryForm.ciudad, 
+              estado: memoryForm.estado,
+              cp: memoryForm.cp,
+              pais: memoryForm.pais,
+              perfil_psicologico: memoryForm.perfil_psicologico,
+              main_pain: memoryForm.main_pain,
+              servicio_interes: memoryForm.servicio_interes,
+              origen_contacto: memoryForm.origen_contacto,
+              tiempo_compra: memoryForm.tiempo_compra,
+              lead_score: memoryForm.lead_score
            }).eq('id', lead.id);
         toast.success('Memoria del Samurai actualizada');
         setIsEditingMemory(false);
@@ -197,7 +225,7 @@ const ChatViewer = ({ lead: initialLead, open, onOpenChange }: ChatViewerProps) 
 
         {/* MEMORY PANEL (Responsive) */}
         <div className={cn(
-           "w-full sm:w-[340px] sm:min-w-[340px] flex-shrink-0 bg-slate-900/50 border-l border-slate-800 flex flex-col overflow-y-auto absolute sm:relative z-20 h-full transition-transform duration-300",
+           "w-full sm:w-[380px] sm:min-w-[380px] flex-shrink-0 bg-slate-900/50 border-l border-slate-800 flex flex-col overflow-y-auto absolute sm:relative z-20 h-full transition-transform duration-300",
            showMemoryMobile ? "translate-x-0" : "translate-x-full sm:translate-x-0"
         )}>
            {/* Mobile Header for Panel */}

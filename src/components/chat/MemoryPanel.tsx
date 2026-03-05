@@ -3,11 +3,16 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
-import { BrainCircuit, Edit2, Save, Loader2, ShieldAlert, Zap, Fingerprint, Sparkles, Heart, ShieldX, ShieldCheck, AlertTriangle, CreditCard } from 'lucide-react';
+import { 
+  BrainCircuit, Edit2, Save, Loader2, ShieldAlert, Zap, 
+  Fingerprint, Sparkles, Heart, ShieldX, ShieldCheck, AlertTriangle, 
+  CreditCard, MapPin, Navigation, TrendingUp, BarChart3, Database
+} from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 
 interface MemoryPanelProps {
   currentAnalysis: any;
@@ -33,20 +38,30 @@ export const MemoryPanel = ({
   const [analyzing, setAnalyzing] = useState(false);
   const [updatingPayment, setUpdatingPayment] = useState(false);
 
-  const hasName = currentAnalysis.nombre && !currentAnalysis.nombre.includes('Nuevo');
-  const hasCity = currentAnalysis.ciudad && currentAnalysis.ciudad.length > 2;
-  const hasEmail = currentAnalysis.email && currentAnalysis.email.includes('@');
-  const healthPercent = (Number(!!hasName) + Number(!!hasCity) + Number(!!hasEmail)) * 33.3;
+  // Advanced CAPI Health Calculation (7 Key Meta Identifiers)
+  // Phone is assumed always present if they are in WA
+  const capiFields = [
+     true, // Phone
+     !!(currentAnalysis.email && currentAnalysis.email.includes('@')),
+     !!(currentAnalysis.nombre && !currentAnalysis.nombre.includes('Nuevo')),
+     !!(currentAnalysis.apellido && currentAnalysis.apellido.length > 1),
+     !!(currentAnalysis.ciudad && currentAnalysis.ciudad.length > 2),
+     !!(currentAnalysis.estado && currentAnalysis.estado.length > 1),
+     !!(currentAnalysis.cp && currentAnalysis.cp.length > 3)
+  ];
+  
+  const healthScore = capiFields.filter(Boolean).length;
+  const healthPercent = Math.round((healthScore / 7) * 100);
 
   const handleRunAnalysis = async () => {
      setAnalyzing(true);
-     const tid = toast.loading("Sam escaneando intenciones...");
+     const tid = toast.loading("Analista CAPI escaneando datos...");
      try {
         const { data, error } = await supabase.functions.invoke('analyze-leads', {
-           body: { lead_id: currentAnalysis.id }
+           body: { lead_id: currentAnalysis.id, force: true }
         });
         if (error) throw new Error(error.message);
-        toast.success(`¡Perfil Enriquecido!`, { id: tid });
+        toast.success(`¡Perfil enriquecido y segmentado!`, { id: tid });
         if (onAnalysisComplete) onAnalysisComplete();
      } catch (err: any) {
         toast.error("Error: " + err.message, { id: tid });
@@ -78,7 +93,7 @@ export const MemoryPanel = ({
     try {
       await supabase.from('leads').update({ payment_status: status }).eq('id', currentAnalysis.id);
       toast.success(`Estatus de pago actualizado a ${status}`);
-      if (onAnalysisComplete) onAnalysisComplete(); // Refrescar los datos del lead en la vista superior
+      if (onAnalysisComplete) onAnalysisComplete(); 
     } catch (err: any) {
       toast.error('Fallo al actualizar el pago: ' + err.message);
     } finally {
@@ -87,22 +102,26 @@ export const MemoryPanel = ({
   };
 
   return (
-    <div className="w-[340px] min-w-[340px] flex-shrink-0 bg-slate-900/90 flex flex-col overflow-y-auto border-l border-slate-800">
-      <div className="p-5 space-y-6">
+    <div className="w-full flex-shrink-0 bg-slate-900/90 flex flex-col h-full">
+      <div className="p-4 bg-slate-950/50 border-b border-slate-800 flex justify-between items-center shrink-0">
+         <div className="flex flex-col">
+            <span className="text-[10px] text-slate-500 uppercase tracking-widest font-bold">Event Match Quality</span>
+            <div className="flex items-center gap-2 mt-1">
+               <div className="w-24 h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                  <div className={cn("h-full transition-all duration-1000", healthPercent > 70 ? 'bg-emerald-500' : healthPercent > 40 ? 'bg-amber-500' : 'bg-red-500')} style={{ width: `${healthPercent}%` }} />
+               </div>
+               <span className="text-[10px] font-mono font-bold text-amber-500">{healthScore}/7</span>
+            </div>
+         </div>
+         <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-amber-500 bg-slate-900 border border-slate-800 shadow-sm rounded-lg" onClick={handleRunAnalysis} disabled={analyzing} title="Forzar Análisis IA">
+            {analyzing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Database className="w-4 h-4" />}
+         </Button>
+      </div>
 
-        {/* CAPI HEALTH */}
+      <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-5">
+
+        {/* FINANCIAL AUDIT */}
         <div className="space-y-3">
-           <div className="flex justify-between items-end">
-              <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Salud de Datos (CAPI)</h4>
-              <span className="text-[10px] font-mono text-amber-500 font-bold">{Math.round(healthPercent)}%</span>
-           </div>
-           <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden flex">
-              <div className={cn("h-full transition-all duration-1000", healthPercent > 60 ? 'bg-emerald-500' : 'bg-amber-500')} style={{ width: `${healthPercent}%` }} />
-           </div>
-        </div>
-
-        {/* FINANCIAL AUDIT - OJO DE HALCÓN */}
-        <div className="space-y-3 border-t border-slate-800/60 pt-6">
            <h4 className="text-[10px] font-bold text-slate-300 uppercase tracking-widest flex items-center gap-2">
               <CreditCard className="w-3.5 h-3.5 text-indigo-400" /> Auditoría de Pago
            </h4>
@@ -116,76 +135,95 @@ export const MemoryPanel = ({
               </div>
 
               <div className="flex gap-2 pt-2 border-t border-slate-800">
-                <Button 
-                  size="sm" 
-                  variant="outline" 
-                  className="flex-1 h-7 text-[9px] border-emerald-500/30 text-emerald-500 hover:bg-emerald-900/20"
-                  onClick={() => handleUpdatePaymentStatus('VALID')}
-                  disabled={updatingPayment}
-                >
+                <Button size="sm" variant="outline" className="flex-1 h-7 text-[9px] border-emerald-500/30 text-emerald-500 hover:bg-emerald-900/20 rounded-lg" onClick={() => handleUpdatePaymentStatus('VALID')} disabled={updatingPayment}>
                   VALIDAR
                 </Button>
-                <Button 
-                  size="sm" 
-                  variant="outline" 
-                  className="flex-1 h-7 text-[9px] border-red-500/30 text-red-500 hover:bg-red-900/20"
-                  onClick={() => handleUpdatePaymentStatus('INVALID')}
-                  disabled={updatingPayment}
-                >
+                <Button size="sm" variant="outline" className="flex-1 h-7 text-[9px] border-red-500/30 text-red-500 hover:bg-red-900/20 rounded-lg" onClick={() => handleUpdatePaymentStatus('INVALID')} disabled={updatingPayment}>
                   DENEGAR
                 </Button>
               </div>
            </div>
         </div>
 
-        {/* PSYCHOGRAPHIC RADAR */}
-        <div className="space-y-4 border-t border-slate-800/60 pt-6">
-           <div className="flex items-center justify-between">
-              <h4 className="text-[10px] font-bold text-slate-300 uppercase tracking-widest flex items-center gap-2">
-                  <BrainCircuit className="w-3.5 h-3.5 text-indigo-400" /> Perfil Táctico
-              </h4>
-              <Button variant="ghost" size="icon" className="h-6 w-6 text-slate-500 hover:text-amber-500" onClick={handleRunAnalysis} disabled={analyzing}>
-                 {analyzing ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
-              </Button>
-           </div>
-           
-           <div className="space-y-3">
-              <div className="bg-slate-950 border border-slate-800 p-3 rounded-xl shadow-inner">
-                 <p className="text-[9px] text-indigo-400 font-bold uppercase tracking-widest mb-1.5 flex items-center gap-1"><Heart className="w-3 h-3" /> Motivación</p>
-                 <p className="text-[10px] text-slate-300 italic">{currentAnalysis.perfil_psicologico?.split('OBJECIÓN:')[0].replace('MOTIVACIÓN:', '').trim() || 'Desconocida'}</p>
-              </div>
-              <div className="bg-slate-950 border border-slate-800 p-3 rounded-xl shadow-inner">
-                 <p className="text-[9px] text-red-400 font-bold uppercase tracking-widest mb-1.5 flex items-center gap-1"><ShieldX className="w-3 h-3" /> Objeción</p>
-                 <p className="text-[10px] text-slate-300 italic">{currentAnalysis.perfil_psicologico?.split('OBJECIÓN:')[1]?.split('PERFIL:')[0].trim() || 'Ninguna detectada'}</p>
-              </div>
-           </div>
-        </div>
-
-        {/* CORE DATA */}
-        <div className="border-t border-slate-800/60 pt-6 space-y-4">
-           <div className="flex items-center justify-between">
-              <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Datos de Registro</h4>
+        {/* CORE DATA ACCORDION */}
+        <div className="space-y-2">
+           <div className="flex justify-between items-center mb-1">
+              <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2"><Fingerprint className="w-3.5 h-3.5" /> Identidad & CAPI</h4>
               {!isEditing && <Button variant="ghost" size="icon" className="h-6 w-6 text-slate-500 hover:text-white" onClick={() => setIsEditing(true)}><Edit2 className="w-3 h-3" /></Button>}
            </div>
-           
-           <div className="space-y-3 bg-slate-950 p-4 rounded-xl border border-slate-800 shadow-inner">
-              <div className="space-y-1">
-                 <Label className="text-[9px] text-slate-500 uppercase tracking-widest">Nombre</Label>
-                 {isEditing ? <Input value={memoryForm.nombre} onChange={e => setMemoryForm({...memoryForm, nombre: e.target.value})} className="h-8 text-xs bg-slate-900 border-slate-700" /> : 
-                 <div className="text-xs text-slate-100 font-bold">{currentAnalysis.nombre || 'Desconocido'}</div>}
+
+           {isEditing ? (
+              <div className="space-y-3 bg-slate-950 p-4 rounded-xl border border-indigo-500/50 shadow-inner">
+                 <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1"><Label className="text-[9px] text-slate-500">Nombre</Label><Input value={memoryForm.nombre} onChange={e => setMemoryForm({...memoryForm, nombre: e.target.value})} className="h-8 text-xs bg-slate-900 border-slate-700" /></div>
+                    <div className="space-y-1"><Label className="text-[9px] text-slate-500">Apellido</Label><Input value={memoryForm.apellido} onChange={e => setMemoryForm({...memoryForm, apellido: e.target.value})} className="h-8 text-xs bg-slate-900 border-slate-700" /></div>
+                 </div>
+                 <div className="space-y-1"><Label className="text-[9px] text-slate-500">Email</Label><Input value={memoryForm.email} onChange={e => setMemoryForm({...memoryForm, email: e.target.value})} className="h-8 text-xs bg-slate-900 border-slate-700" /></div>
+                 
+                 <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-800">
+                    <div className="space-y-1"><Label className="text-[9px] text-slate-500">Ciudad</Label><Input value={memoryForm.ciudad} onChange={e => setMemoryForm({...memoryForm, ciudad: e.target.value})} className="h-8 text-xs bg-slate-900 border-slate-700" /></div>
+                    <div className="space-y-1"><Label className="text-[9px] text-slate-500">Estado</Label><Input value={memoryForm.estado} onChange={e => setMemoryForm({...memoryForm, estado: e.target.value})} className="h-8 text-xs bg-slate-900 border-slate-700" placeholder="nl, jalisco..." /></div>
+                 </div>
+                 <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1"><Label className="text-[9px] text-slate-500">CP</Label><Input value={memoryForm.cp} onChange={e => setMemoryForm({...memoryForm, cp: e.target.value})} className="h-8 text-xs bg-slate-900 border-slate-700" /></div>
+                    <div className="space-y-1"><Label className="text-[9px] text-slate-500">País</Label><Input value={memoryForm.pais} onChange={e => setMemoryForm({...memoryForm, pais: e.target.value})} className="h-8 text-xs bg-slate-900 border-slate-700" placeholder="mx" /></div>
+                 </div>
+
+                 <div className="pt-2 border-t border-slate-800 space-y-2">
+                    <div className="space-y-1"><Label className="text-[9px] text-slate-500">Servicio de Interés</Label><Input value={memoryForm.servicio_interes} onChange={e => setMemoryForm({...memoryForm, servicio_interes: e.target.value})} className="h-8 text-xs bg-slate-900 border-slate-700" /></div>
+                    <div className="space-y-1"><Label className="text-[9px] text-slate-500">Dolor Principal</Label><Input value={memoryForm.main_pain} onChange={e => setMemoryForm({...memoryForm, main_pain: e.target.value})} className="h-8 text-xs bg-slate-900 border-slate-700" /></div>
+                    <div className="space-y-1"><Label className="text-[9px] text-slate-500">Score Calidad (1-100)</Label><Input type="number" value={memoryForm.lead_score} onChange={e => setMemoryForm({...memoryForm, lead_score: parseInt(e.target.value)})} className="h-8 text-xs bg-slate-900 border-slate-700" /></div>
+                 </div>
+                 
+                 <Button onClick={onSave} disabled={saving} className="w-full bg-amber-600 hover:bg-amber-500 text-slate-900 h-9 text-xs font-bold shadow-lg rounded-lg mt-2"><Save className="w-3.5 h-3.5 mr-2" /> Guardar Todos</Button>
               </div>
-              <div className="space-y-1">
-                 <Label className="text-[9px] text-slate-500 uppercase tracking-widest">Email</Label>
-                 {isEditing ? <Input value={memoryForm.email} onChange={e => setMemoryForm({...memoryForm, email: e.target.value})} className="h-8 text-xs bg-slate-900 border-slate-700" /> : 
-                 <div className="text-xs truncate font-mono text-emerald-400">{currentAnalysis.email || 'Falta Email'}</div>}
-              </div>
-              <div className="space-y-1">
-                 <Label className="text-[9px] text-slate-500 uppercase tracking-widest">Ciudad</Label>
-                 {isEditing ? <Input value={memoryForm.ciudad} onChange={e => setMemoryForm({...memoryForm, ciudad: e.target.value})} className="h-8 text-xs bg-slate-900 border-slate-700" /> : 
-                 <div className="text-xs text-slate-300">{currentAnalysis.ciudad || 'Pendiente'}</div>}
-              </div>
-           </div>
-           {isEditing && <Button onClick={onSave} disabled={saving} className="w-full bg-indigo-900 hover:bg-indigo-800 text-amber-500 h-10 text-xs font-bold shadow-lg rounded-xl"><Save className="w-3.5 h-3.5 mr-2" /> Guardar Cambios</Button>}
+           ) : (
+              <Accordion type="single" collapsible defaultValue="identidad" className="bg-slate-950 border border-slate-800 rounded-xl overflow-hidden shadow-inner">
+                <AccordionItem value="identidad" className="border-b border-slate-800">
+                  <AccordionTrigger className="px-4 py-3 text-xs font-bold hover:no-underline">Contacto</AccordionTrigger>
+                  <AccordionContent className="px-4 pb-4 space-y-2">
+                     <div className="flex flex-col gap-1">
+                        <span className="text-[9px] text-slate-500 uppercase tracking-widest">Nombre Completo</span>
+                        <span className="text-xs text-slate-200">{currentAnalysis.nombre || ''} {currentAnalysis.apellido || ''} {!currentAnalysis.nombre && !currentAnalysis.apellido && 'Desconocido'}</span>
+                     </div>
+                     <div className="flex flex-col gap-1 mt-2">
+                        <span className="text-[9px] text-slate-500 uppercase tracking-widest">Email</span>
+                        <span className="text-xs text-emerald-400 font-mono">{currentAnalysis.email || 'Falta Correo'}</span>
+                     </div>
+                  </AccordionContent>
+                </AccordionItem>
+
+                <AccordionItem value="ubicacion" className="border-b border-slate-800">
+                  <AccordionTrigger className="px-4 py-3 text-xs font-bold hover:no-underline">Ubicación Geo</AccordionTrigger>
+                  <AccordionContent className="px-4 pb-4">
+                     <div className="grid grid-cols-2 gap-3">
+                        <div className="flex flex-col"><span className="text-[9px] text-slate-500 uppercase">Ciudad</span><span className="text-xs text-slate-200 truncate">{currentAnalysis.ciudad || '-'}</span></div>
+                        <div className="flex flex-col"><span className="text-[9px] text-slate-500 uppercase">Estado</span><span className="text-xs text-slate-200 truncate">{currentAnalysis.estado || '-'}</span></div>
+                        <div className="flex flex-col"><span className="text-[9px] text-slate-500 uppercase">CP</span><span className="text-xs text-slate-200 font-mono">{currentAnalysis.cp || '-'}</span></div>
+                        <div className="flex flex-col"><span className="text-[9px] text-slate-500 uppercase">País</span><span className="text-xs text-slate-200 uppercase">{currentAnalysis.pais || 'MX'}</span></div>
+                     </div>
+                  </AccordionContent>
+                </AccordionItem>
+
+                <AccordionItem value="contexto">
+                  <AccordionTrigger className="px-4 py-3 text-xs font-bold hover:no-underline">Segmentación & Scoring</AccordionTrigger>
+                  <AccordionContent className="px-4 pb-4 space-y-3">
+                     <div className="flex items-center justify-between p-2 bg-slate-900 rounded border border-slate-800">
+                        <span className="text-[10px] text-slate-400 uppercase tracking-widest">Lead Score</span>
+                        <Badge variant="outline" className="bg-indigo-900/30 text-indigo-300 border-indigo-500/30">{currentAnalysis.lead_score || 0}/100</Badge>
+                     </div>
+                     <div className="flex flex-col gap-1">
+                        <span className="text-[9px] text-slate-500 uppercase tracking-widest">Servicio Deseado</span>
+                        <span className="text-xs text-slate-200">{currentAnalysis.servicio_interes || 'Por definir'}</span>
+                     </div>
+                     <div className="flex flex-col gap-1">
+                        <span className="text-[9px] text-slate-500 uppercase tracking-widest">Dolor Principal</span>
+                        <span className="text-xs text-slate-200 italic">{currentAnalysis.main_pain || currentAnalysis.perfil_psicologico?.split('OBJECIÓN:')[0].replace('MOTIVACIÓN:', '').trim() || 'No detectado'}</span>
+                     </div>
+                  </AccordionContent>
+                </AccordionItem>
+              </Accordion>
+           )}
         </div>
 
         {/* BITÁCORA #CIA QUICK */}
@@ -199,12 +237,14 @@ export const MemoryPanel = ({
            </Button>
         </div>
 
-        <div className="border-t border-slate-800/60 pt-6">
-           <Button variant="outline" className={`w-full h-11 text-xs font-bold uppercase tracking-widest rounded-xl shadow-lg transition-all ${currentAnalysis.ai_paused ? 'border-emerald-500/50 text-emerald-500 bg-emerald-500/10 hover:bg-emerald-500/20' : 'border-red-500/50 text-red-500 bg-red-500/10 hover:bg-red-500/20'}`} onClick={onToggleFollowup}>
-              {currentAnalysis.ai_paused ? <Zap className="w-4 h-4 mr-2"/> : <ShieldAlert className="w-4 h-4 mr-2"/>}
-              {currentAnalysis.ai_paused ? 'ACTIVAR SAMURAI' : 'PAUSAR SAMURAI'}
-           </Button>
-        </div>
+      </div>
+      
+      {/* ACTION FOOTER */}
+      <div className="p-4 bg-slate-950/50 border-t border-slate-800 shrink-0">
+         <Button variant="outline" className={`w-full h-11 text-xs font-bold uppercase tracking-widest rounded-xl shadow-lg transition-all ${currentAnalysis.ai_paused ? 'border-emerald-500/50 text-emerald-500 bg-emerald-500/10 hover:bg-emerald-500/20' : 'border-red-500/50 text-red-500 bg-red-500/10 hover:bg-red-500/20'}`} onClick={onToggleFollowup}>
+            {currentAnalysis.ai_paused ? <Zap className="w-4 h-4 mr-2"/> : <ShieldAlert className="w-4 h-4 mr-2"/>}
+            {currentAnalysis.ai_paused ? 'ACTIVAR SAMURAI' : 'PAUSAR SAMURAI'}
+         </Button>
       </div>
     </div>
   );
