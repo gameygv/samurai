@@ -19,23 +19,20 @@ serve(async (req) => {
     )
 
     const url = new URL(req.url);
-    const kommo_id = url.searchParams.get('kommo_id');
     const phone = url.searchParams.get('phone');
 
-    if (!kommo_id && !phone) {
-      throw new Error("Se requiere 'kommo_id' o 'phone' como parámetro en la URL.");
+    if (!phone) {
+      throw new Error("Se requiere el parámetro 'phone' en la URL.");
     }
 
     // --- 1. ENCONTRAR AL LEAD ---
-    let leadQuery = supabaseClient.from('leads').select('*').limit(1).single();
-    if (kommo_id) {
-      leadQuery = leadQuery.eq('kommo_id', kommo_id);
-    } else if (phone) {
-      const cleanPhone = phone.replace(/\D/g, '');
-      leadQuery = leadQuery.or(`telefono.ilike.%${cleanPhone}%`);
-    }
-    
-    const { data: lead, error: leadError } = await leadQuery;
+    const cleanPhone = phone.replace(/\D/g, '');
+    const { data: lead, error: leadError } = await supabaseClient
+      .from('leads')
+      .select('*')
+      .or(`telefono.ilike.%${cleanPhone}%`)
+      .limit(1)
+      .single();
 
     if (leadError || !lead) {
       return new Response(JSON.stringify({ history: "Nuevo prospecto.", profile: "Sin datos previos." }), {

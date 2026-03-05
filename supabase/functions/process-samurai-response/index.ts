@@ -20,7 +20,6 @@ serve(async (req) => {
 
     // Extraer datos de la URL o Body
     const url = new URL(req.url);
-    const kommo_id = url.searchParams.get('kommo_id');
     const phone = url.searchParams.get('phone');
     const name = url.searchParams.get('name');
     const client_message = url.searchParams.get('client_message');
@@ -30,11 +29,7 @@ serve(async (req) => {
 
     // 1. IDENTIFICAR LEAD
     let lead = null;
-    if (kommo_id) {
-        const { data } = await supabaseClient.from('leads').select('*').eq('kommo_id', kommo_id).maybeSingle();
-        lead = data;
-    }
-    if (!lead && phone) {
+    if (phone) {
         const cleanPhone = phone.replace(/\D/g, '');
         const { data } = await supabaseClient.from('leads').select('*').or(`telefono.ilike.%${cleanPhone}%`).limit(1).maybeSingle();
         lead = data;
@@ -45,7 +40,6 @@ serve(async (req) => {
         const { data: newLead } = await supabaseClient.from('leads').insert({
             nombre: name || 'Nuevo Lead WhatsApp',
             telefono: phone,
-            kommo_id: kommo_id || null,
         }).select().single();
         lead = newLead;
     }
@@ -59,7 +53,7 @@ serve(async (req) => {
     await supabaseClient.from('leads').update({ last_message_at: new Date().toISOString() }).eq('id', lead.id);
 
     // --- EL GATILLO DE MEMORIA AUTOMÁTICO ---
-    // Forzamos el análisis del lead para que Sam "recuerde" lo que acaba de pasar
+    // Forzamos el análisis del lead para que la IA "recuerde" lo que acaba de pasar
     console.log(`[process-response] Actualizando memoria para lead: ${lead.id}`);
     
     fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/analyze-leads`, {
