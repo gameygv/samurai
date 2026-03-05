@@ -11,11 +11,12 @@ import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { 
   BarChart3, Settings, BookOpen, CheckCircle2, AlertCircle, Loader2, 
-  Send, Eye, Save, Link, ArrowRight, XCircle, Map, GitMerge, RefreshCw, Briefcase
+  Send, Eye, Save, Link, ArrowRight, XCircle, Map, GitMerge, RefreshCw, Briefcase, Activity
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { SendEventDialog } from '@/components/meta/SendEventDialog';
 import { PayloadViewer } from '@/components/meta/PayloadViewer';
+import { cn } from '@/lib/utils';
 
 const MetaCapi = () => {
   const [config, setConfig] = useState({ pixel_id: '', access_token: '', account_id: '', test_mode: false, test_event_code: '' });
@@ -128,30 +129,47 @@ const MetaCapi = () => {
                       <TableHead className="text-[10px] uppercase font-bold text-slate-500">Fecha</TableHead>
                       <TableHead className="text-[10px] uppercase font-bold text-slate-500">WhatsApp ID</TableHead>
                       <TableHead className="text-[10px] uppercase font-bold text-slate-500">Evento</TableHead>
+                      <TableHead className="text-[10px] uppercase font-bold text-slate-500">Calidad (EMQ)</TableHead>
                       <TableHead className="text-[10px] uppercase font-bold text-slate-500 text-center">Estatus</TableHead>
                       <TableHead className="text-[10px] uppercase font-bold text-slate-500 text-right">Acción</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {loading ? (
-                      <TableRow><TableCell colSpan={5} className="text-center h-32"><Loader2 className="w-6 h-6 animate-spin mx-auto text-indigo-500" /></TableCell></TableRow>
+                      <TableRow><TableCell colSpan={6} className="text-center h-32"><Loader2 className="w-6 h-6 animate-spin mx-auto text-indigo-500" /></TableCell></TableRow>
                     ) : events.length === 0 ? (
-                      <TableRow><TableCell colSpan={5} className="text-center h-32 text-slate-600 italic">No hay eventos registrados aún.</TableCell></TableRow>
-                    ) : events.map(event => (
+                      <TableRow><TableCell colSpan={6} className="text-center h-32 text-slate-600 italic">No hay eventos registrados aún.</TableCell></TableRow>
+                    ) : events.map(event => {
+                      // Calcular EMQ en base a datos crudos
+                      const ud = event.unhashed_data?.user_data || {};
+                      const fields = [true, !!ud.em, !!ud.fn, !!ud.ln, !!ud.ct, !!ud.st, !!ud.zp];
+                      const emqScore = fields.filter(Boolean).length;
+
+                      return (
                       <TableRow key={event.id} className="border-slate-800 hover:bg-slate-800/30 transition-colors">
                         <TableCell className="text-[10px] text-slate-500 font-mono">{new Date(event.created_at).toLocaleString()}</TableCell>
                         <TableCell className="font-mono text-xs text-slate-300">{event.whatsapp_id}</TableCell>
                         <TableCell><Badge variant="outline" className="text-[9px] border-indigo-500/30 text-indigo-400 font-bold">{event.event_name}</Badge></TableCell>
+                        <TableCell>
+                           <div className="flex items-center gap-2">
+                              <div className="flex gap-0.5">
+                                 {[1,2,3,4,5,6,7].map(n => (
+                                    <div key={n} className={cn("w-1.5 h-3 rounded-sm", n <= emqScore ? "bg-amber-500" : "bg-slate-800")} />
+                                 ))}
+                              </div>
+                              <span className="text-[9px] text-slate-500 font-mono">{emqScore}/7</span>
+                           </div>
+                        </TableCell>
                         <TableCell className="text-center">
                            {event.status === 'OK' ? <div className="w-2 h-2 rounded-full bg-green-500 mx-auto shadow-[0_0_8px_rgba(34,197,94,0.5)]" /> : <div className="w-2 h-2 rounded-full bg-red-500 mx-auto" />}
                         </TableCell>
                         <TableCell className="text-right">
                           <Button variant="ghost" size="sm" className="h-7 text-[10px] text-slate-400 hover:text-white" onClick={() => { setSelectedEvent(event); setIsPayloadViewerOpen(true); }}>
-                             <Eye className="w-3 h-3 mr-1" /> VER JSON
+                             <Activity className="w-3 h-3 mr-1 text-amber-500" /> AUDITAR
                           </Button>
                         </TableCell>
                       </TableRow>
-                    ))}
+                    )})}
                   </TableBody>
                 </Table>
               </CardContent>
@@ -250,7 +268,7 @@ const MetaCapi = () => {
         </Tabs>
 
         <SendEventDialog open={isSendDialogOpen} onOpenChange={setIsSendDialogOpen} config={config} onSuccess={fetchData} />
-        {selectedEvent && <PayloadViewer open={isPayloadViewerOpen} onOpenChange={setIsPayloadViewerOpen} payload={selectedEvent.payload_sent} response={selectedEvent.meta_response} />}
+        <PayloadViewer open={isPayloadViewerOpen} onOpenChange={setIsPayloadViewerOpen} event={selectedEvent} />
       </div>
     </Layout>
   );

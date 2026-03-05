@@ -22,7 +22,7 @@ serve(async (req) => {
     
     const configMap = configs?.reduce((acc, item) => ({...acc, [item.key]: item.value}), {});
     const apiKey = configMap['openai_api_key'];
-    const extractionPrompt = configMap['prompt_analista_datos'] || 'Extrae datos en JSON: {"nombre": "null", "ciudad": "null", "email": "null", "intent": "BAJO"}';
+    const extractionPrompt = configMap['prompt_analista_datos'] || 'Extrae datos en JSON...';
 
     if (!apiKey) throw new Error("OpenAI API Key faltante.");
 
@@ -35,7 +35,7 @@ serve(async (req) => {
 
     const transcript = messages?.map(m => `[${m.emisor}]: ${m.mensaje}`).join('\n') || '';
 
-    // IA EXTRAE DATOS USANDO EL PROMPT DINÁMICO DEL PANEL
+    // IA EXTRAE DATOS
     const response = await fetch(OPENAI_URL, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
@@ -46,7 +46,7 @@ serve(async (req) => {
                 { role: "user", content: `Analiza este chat y devuelve el JSON:\n\n${transcript}` }
             ],
             response_format: { type: "json_object" },
-            temperature: 0.1 // Baja temperatura para JSON predecible
+            temperature: 0.1
         })
     });
 
@@ -58,7 +58,6 @@ serve(async (req) => {
         perfil_psicologico: `MOTIVACIÓN: ${result.main_pain || 'N/A'}. PERFIL: ${result.psych_profile || 'N/A'}`
     };
     
-    // Mapeo seguro de datos extraídos a la BD
     if (result.nombre && result.nombre !== 'null') updates.nombre = result.nombre;
     if (result.apellido && result.apellido !== 'null') updates.apellido = result.apellido;
     if (result.email && result.email.includes('@')) updates.email = result.email;
@@ -75,6 +74,53 @@ serve(async (req) => {
     if (result.lead_score) updates.lead_score = parseInt(result.lead_score) || 0;
 
     const { data: updatedLead } = await supabaseClient.from('leads').update(updates).eq('id', lead_id).select().single();
+
+    // ============================================================================
+    // AUTO-DISPARADOR META CAPI (EVENTO: LEAD)
+    // ============================================================================
+    if (updatedLead.email && updatedLead.nombre && !updatedLead.capi_lead_event_sent_at && configMap['meta_pixel_id'] && configMap['meta_access_token']) {
+        console.log(`[analyze-leads] Lead maduro. Disparando Meta CAPI para ${updatedLead.email}`);
+        
+        const eventData = {
+            event_name: 'Lead',
+            lead_id: updatedLead.id,
+            user_data: {
+                em: updatedLead.email,
+                ph: updatedLead.telefono,
+                fn: updatedLead.nombre,
+                ln: updatedLead.apellido,
+                ct: updatedLead.ciudad,
+                st: updatedLead.estado,
+                zp: updatedLead.cp,
+                country: updatedLead.pais || 'mx',
+                external_id: updatedLead.id
+            },
+            custom_data: {
+                intention: updatedLead.buying_intent,
+                content_name: updatedLead.servicio_interes,
+                lead_source: updatedLead.origen_contacto,
+                main_pain: updatedLead.main_pain,
+                time_to_buy: updatedLead.tiempo_compra,
+                lead_score: updatedLead.lead_score
+            }
+        };
+
+        const capiRes = await supabaseClient.functions.invoke('meta-capi-sender', {
+            body: { 
+                eventData, 
+                config: { 
+                    pixel_id: configMap['meta_pixel_id'], 
+                    access_token: configMap['meta_access_token'],
+                    test_mode: configMap['meta_test_mode'] === 'true',
+                    test_event_code: configMap['meta_test_event_code']
+                } 
+            }
+        });
+
+        if (capiRes.data?.success) {
+            await supabaseClient.from('leads').update({ capi_lead_event_sent_at: new Date().toISOString() }).eq('id', lead_id);
+        }
+    }
 
     return new Response(JSON.stringify({ success: true, lead: updatedLead }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
