@@ -14,7 +14,6 @@ serve(async (req) => {
     const { data: config } = await supabaseClient.from('app_config').select('value').eq('key', 'openai_api_key').single();
     if (!config?.value) throw new Error("OpenAI API Key no configurada.");
 
-    // OBTENER VERDAD MAESTRA (SITIO WEB) PARA QUE EL TUNER TENGA DATOS REALES
     const { data: webContent } = await supabaseClient.from('main_website_content').select('title, content').eq('scrape_status', 'success');
     const masterTruth = webContent?.map(w => `[DATA WEB: ${w.title}]: ${w.content.substring(0, 500)}...`).join('\n') || "No hay datos web indexados.";
 
@@ -25,27 +24,27 @@ Tu misión es reescribir la configuración de la IA basándote en el feedback de
 VERDAD MAESTRA (Datos reales del negocio):
 ${masterTruth}
 
-CONFIGURACIÓN ACTUAL DE LOS PROMPTS QUE DEBES EDITAR:
-1. prompt_alma_samurai: ${currentPrompts.prompt_alma_samurai || 'Vacio'}
-2. prompt_adn_core: ${currentPrompts.prompt_adn_core || 'Vacio'}
-3. prompt_estrategia_cierre: ${currentPrompts.prompt_estrategia_cierre || 'Vacio'}
-4. prompt_vision_instrucciones: ${currentPrompts.prompt_vision_instrucciones || 'Vacio'} (ESTE CONTROLA EL 'OJO DE HALCÓN', ÚSALO SI EL USUARIO PIDE MEJORAR LA LECTURA DE IMÁGENES O COMPROBANTES DE PAGO).
+CONFIGURACIÓN ACTUAL QUE DEBES EDITAR:
+1. prompt_alma_samurai: ${currentPrompts.prompt_alma_samurai || ''}
+2. prompt_adn_core: ${currentPrompts.prompt_adn_core || ''}
+3. prompt_estrategia_cierre: ${currentPrompts.prompt_estrategia_cierre || ''}
+4. prompt_vision_instrucciones: ${currentPrompts.prompt_vision_instrucciones || ''} (Ojo de Halcón)
+5. prompt_analista_datos: ${currentPrompts.prompt_analista_datos || ''} (ESTE CONTROLA LA EXTRACCIÓN JSON PARA CAPI. Úsalo si el usuario pide mejorar la detección de emails, nombres o ciudades).
 
 TU TAREA:
 1. Identifica qué quiere corregir el usuario.
-2. Si el usuario habla de OCR, lectura de imágenes, o revisión de comprobantes, DEBES modificar 'prompt_vision_instrucciones'.
-3. Si habla de tono o personalidad, modifica 'prompt_adn_core'.
-4. Si habla de precios, procesos o ventas, modifica 'prompt_estrategia_cierre'.
-5. Devuelve TODO el JSON con los prompts mejorados. Los que no cambien, déjalos igual.
+2. Si el usuario pide que Sam "entienda mejor" o "saque mejor los datos", edita 'prompt_analista_datos'.
+3. Responde con la explicación y el JSON completo de prompts. Los que no cambien, déjalos igual.
 
-RESPONDE SOLO JSON, CON LA ESTRUCTURA EXACTA:
+RESPONDE SOLO JSON:
 {
-  "message": "Explicación del ajuste realizado.",
+  "message": "Explicación breve.",
   "prompts": { 
     "prompt_alma_samurai": "...", 
     "prompt_adn_core": "...", 
     "prompt_estrategia_cierre": "...", 
-    "prompt_vision_instrucciones": "..." 
+    "prompt_vision_instrucciones": "...",
+    "prompt_analista_datos": "..."
   }
 }
 `;

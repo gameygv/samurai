@@ -121,13 +121,11 @@ const AgentBrain = () => {
   };
 
   const handleRestoreSnapshot = (snapshot: any) => {
-    if (!confirm(`¿Restaurar "${snapshot.version_name}"? Esto reemplazará los prompts actuales (debes presionar "Aplicar Cambios" después).`)) return;
+    if (!confirm(`¿Restaurar "${snapshot.version_name}"? Esto reemplazará los prompts actuales.`)) return;
     setPrompts(snapshot.prompts_snapshot);
     toast.success("Snapshot cargado. Revisa las pestañas.");
-    setSearchParams({ tab: 'alma' }); 
   };
 
-  // LAB LOGIC
   const handleLabImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -171,7 +169,6 @@ const AgentBrain = () => {
      setPrompts(proposedPrompts);
      setProposedPrompts(null);
      toast.success("Propuesta aplicada. Pulsa 'Aplicar Cambios' para finalizar.");
-     setSearchParams({ tab: 'alma' });
   };
 
   const handleSimulate = async (e: React.FormEvent) => {
@@ -198,7 +195,7 @@ const AgentBrain = () => {
       setSimHistory(prev => [...prev, { role: 'bot', text: data.answer, explanation: data.explanation }]);
     } catch (err: any) {
       toast.error(err.message);
-      setSimHistory(prev => [...prev, { role: 'bot', text: "⚠ Fallo de conexión o API Key inválida." }]);
+      setSimHistory(prev => [...prev, { role: 'bot', text: "⚠ Fallo de conexión." }]);
     } finally {
       setSimulating(false);
     }
@@ -225,7 +222,7 @@ const AgentBrain = () => {
             </div>
             <div>
               <h1 className="text-3xl font-bold text-slate-50 tracking-tight">Cerebro Core</h1>
-              <p className="text-slate-400 text-sm">Control central de la consciencia y lógica de The Elephant Bowl.</p>
+              <p className="text-slate-400 text-sm">Configuración de la consciencia operativa.</p>
             </div>
           </div>
           <div className="flex gap-3">
@@ -244,6 +241,7 @@ const AgentBrain = () => {
              <TabsTrigger value="identidad" className="gap-2 px-4 py-2 data-[state=active]:bg-indigo-900/50 data-[state=active]:text-amber-500"><Fingerprint className="w-4 h-4"/> 2. ADN & Venta</TabsTrigger>
              <TabsTrigger value="vision" className="gap-2 px-4 py-2 data-[state=active]:bg-indigo-900/50 data-[state=active]:text-amber-500"><EyeIcon className="w-4 h-4"/> 3. Ojo Halcón</TabsTrigger>
              <TabsTrigger value="analista" className="gap-2 px-4 py-2 data-[state=active]:bg-indigo-900/50 data-[state=active]:text-amber-500"><BarChart3 className="w-4 h-4"/> 4. Analista CAPI</TabsTrigger>
+             <TabsTrigger value="debug" className="gap-2 px-4 py-2 data-[state=active]:bg-indigo-900/50 data-[state=active]:text-amber-500"><Terminal className="w-4 h-4"/> 5. Inspección</TabsTrigger>
              <TabsTrigger value="versiones" className="gap-2 px-4 py-2 data-[state=active]:bg-indigo-900/50 data-[state=active]:text-amber-500"><GitBranch className="w-4 h-4"/> Snapshots</TabsTrigger>
              <TabsTrigger value="simulador" className="gap-2 px-4 py-2 data-[state=active]:bg-indigo-900/50 data-[state=active]:text-amber-500"><MessageSquare className="w-4 h-4"/> Simulador</TabsTrigger>
              <TabsTrigger value="lab" className="gap-2 px-4 py-2 bg-indigo-900/20 text-slate-400 data-[state=active]:bg-amber-600 data-[state=active]:text-slate-950 ml-auto"><FlaskConical className="w-4 h-4"/> Laboratorio IA</TabsTrigger>
@@ -258,7 +256,7 @@ const AgentBrain = () => {
                          <CardHeader className="border-b border-slate-800 bg-slate-950/30 py-4 flex items-center justify-between shrink-0 px-6">
                             <div>
                                <CardTitle className="text-slate-50 text-xs flex items-center gap-2 uppercase tracking-widest font-bold"><FlaskConical className="w-4 h-4 text-amber-500" /> Arquitecto de Prompts</CardTitle>
-                               <CardDescription className="text-[10px] mt-1">Evolución asistida de la consciencia de la IA.</CardDescription>
+                               <CardDescription className="text-[10px] mt-1">Evolución asistida de la IA.</CardDescription>
                             </div>
                             <Button variant="ghost" size="sm" onClick={() => setLabMessages([])} className="h-8 text-[10px] text-slate-400 hover:text-amber-500"><RefreshCcw className="w-3 h-3 mr-2"/> Reiniciar</Button>
                          </CardHeader>
@@ -278,7 +276,7 @@ const AgentBrain = () => {
                                      </div>
                                   </div>
                                ))}
-                               {labProcessing && <div className="flex gap-2 items-center text-amber-500 text-xs animate-pulse"><Loader2 className="w-4 h-4 animate-spin"/> El Arquitecto está redactando los nuevos prompts...</div>}
+                               {labProcessing && <div className="flex gap-2 items-center text-amber-500 text-xs animate-pulse"><Loader2 className="w-4 h-4 animate-spin"/> El Arquitecto está redactando...</div>}
                             </div>
                          </ScrollArea>
                          
@@ -286,24 +284,18 @@ const AgentBrain = () => {
                             {labImage && (
                                <div className="flex items-center gap-4 bg-[#1A1714] p-2 rounded-lg border border-slate-800">
                                   <img src={labImage} className="w-12 h-12 rounded object-cover border border-slate-700" />
-                                  <span className="text-[10px] text-amber-500 flex-1">Captura lista para analizar</span>
-                                  <Button size="sm" variant="ghost" onClick={() => setLabImage(null)} className="text-red-400 hover:bg-red-900/20">Eliminar</Button>
+                                  <span className="text-[10px] text-amber-500 flex-1">Captura lista</span>
+                                  <Button size="sm" variant="ghost" onClick={() => setLabImage(null)} className="text-red-400">Eliminar</Button>
                                </div>
                             )}
                             <div className="flex gap-4">
                                <div className="relative shrink-0">
                                   <input type="file" id="lab-upload" className="hidden" accept="image/*" onChange={handleLabImageUpload} />
-                                  <label htmlFor="lab-upload" className="flex items-center justify-center w-12 h-12 rounded-xl bg-slate-800 border border-slate-700 cursor-pointer hover:bg-slate-700 transition-colors">
+                                  <label htmlFor="lab-upload" className="flex items-center justify-center w-12 h-12 rounded-xl bg-slate-800 border border-slate-700 cursor-pointer">
                                      <ImageIcon className="w-5 h-5 text-slate-300" />
                                   </label>
                                </div>
-                               <Input 
-                                 value={labInput} 
-                                 onChange={e => setLabInput(e.target.value)} 
-                                 placeholder="Dime qué corregir o sube una captura..." 
-                                 className="bg-[#1A1714] border-slate-800 text-slate-50 h-12 rounded-xl" 
-                                 disabled={labProcessing} 
-                               />
+                               <Input value={labInput} onChange={e => setLabInput(e.target.value)} placeholder="Dime qué corregir..." className="bg-[#1A1714] border-slate-800 text-slate-50 h-12 rounded-xl" disabled={labProcessing} />
                                <Button type="submit" disabled={labProcessing || (!labInput.trim() && !labImage)} className="bg-indigo-900 hover:bg-indigo-800 text-slate-50 h-12 px-6 rounded-xl">
                                   <Send className="w-5 h-5 text-amber-500" />
                                </Button>
@@ -317,16 +309,9 @@ const AgentBrain = () => {
                          <CardHeader><CardTitle className="text-xs uppercase tracking-widest text-amber-500 flex items-center gap-2"><Sparkles className="w-4 h-4"/> Propuesta de Mejora</CardTitle></CardHeader>
                          <CardContent className="space-y-4">
                             {!proposedPrompts ? (
-                               <div className="py-10 text-center text-slate-500 text-[10px] italic">No hay cambios propuestos aún.</div>
+                               <div className="py-10 text-center text-slate-500 text-[10px] italic">No hay cambios propuestos.</div>
                             ) : (
                                <div className="space-y-4">
-                                  <div className="p-4 bg-slate-950 rounded-xl border border-slate-800">
-                                     <p className="text-[10px] text-slate-400 uppercase font-bold mb-3 tracking-widest">Impacto Calculado:</p>
-                                     <ul className="text-[11px] text-slate-300 space-y-3">
-                                        <li className="flex items-center gap-3"><div className="w-1.5 h-1.5 rounded-full bg-amber-500"/> Se ajustó la personalidad.</li>
-                                        <li className="flex items-center gap-3"><div className="w-1.5 h-1.5 rounded-full bg-amber-500"/> Se optimizó la estrategia de venta.</li>
-                                     </ul>
-                                  </div>
                                   <Button onClick={applyProposedPrompts} className="w-full bg-amber-600 hover:bg-amber-500 text-slate-950 h-12 font-bold shadow-lg rounded-xl uppercase tracking-widest text-xs">
                                      <CheckCircle2 className="w-4 h-4 mr-2" /> APLICAR PROPUESTA
                                   </Button>
@@ -347,11 +332,10 @@ const AgentBrain = () => {
                     <CardHeader className="shrink-0 py-4 border-b border-slate-800 bg-slate-950/30"><CardTitle className="text-slate-50 text-xs uppercase tracking-widest flex items-center gap-2"><Layers className="w-4 h-4 text-amber-500" /> Jerarquía Técnica</CardTitle></CardHeader>
                     <ScrollArea className="flex-1 p-6">
                       <div className="space-y-4">
-                          <KernelStep num={1} title="Alma & ADN Core" desc="Define quién eres y cómo hablas." color="text-amber-500" icon={Bot}/>
-                          <KernelStep num={2} title="Estrategia de Cierre" desc="Protocolo táctico de ventas." color="text-indigo-300" icon={Target}/>
-                          <KernelStep num={3} title="Media Manager" desc="Envío inteligente de posters." color="text-slate-400" icon={ImageIcon}/>
-                          <KernelStep num={4} title="Verdad Maestra" desc="Datos oficiales del negocio." color="text-slate-300" icon={Database}/>
-                          <KernelStep num={5} title="Bitácora #CIA" desc="Correcciones críticas prioritarias." color="text-red-400" icon={AlertTriangle}/>
+                          <KernelStep num={1} title="Alma & ADN Core" desc="Personalidad y Tono." color="text-amber-500" icon={Bot}/>
+                          <KernelStep num={2} title="Analista Silencioso" desc="Extracción de datos para CAPI." color="text-emerald-400" icon={BarChart3}/>
+                          <KernelStep num={3} title="Estrategia de Cierre" desc="Protocolo táctico de ventas." color="text-indigo-300" icon={Target}/>
+                          <KernelStep num={4} title="Ojo de Halcón" desc="Auditoría visual de pagos." color="text-slate-400" icon={EyeIcon}/>
                       </div>
                     </ScrollArea>
                   </Card>
@@ -361,7 +345,7 @@ const AgentBrain = () => {
             <TabsContent value="identidad" className="m-0 h-full data-[state=inactive]:hidden">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 h-full min-h-0">
                    <div className="h-full min-h-0">
-                      <PromptEditor title="ADN Core (Personalidad)" icon={Fingerprint} value={prompts['prompt_adn_core']} onChange={v => handlePromptChange('prompt_adn_core', v)} color="text-amber-500" />
+                      <PromptEditor title="ADN Core" icon={Fingerprint} value={prompts['prompt_adn_core']} onChange={v => handlePromptChange('prompt_adn_core', v)} color="text-amber-500" />
                    </div>
                    <div className="h-full min-h-0">
                       <PromptEditor title="Estrategia de Cierre" icon={Target} value={prompts['prompt_estrategia_cierre']} onChange={v => handlePromptChange('prompt_estrategia_cierre', v)} color="text-indigo-300" />
@@ -370,99 +354,18 @@ const AgentBrain = () => {
             </TabsContent>
             
             <TabsContent value="vision" className="m-0 h-full data-[state=inactive]:hidden">
-                <PromptEditor title="Ojo de Halcón (Instrucciones OCR)" icon={EyeIcon} value={prompts['prompt_vision_instrucciones']} onChange={v => handlePromptChange('prompt_vision_instrucciones', v)} color="text-amber-500" />
+                <PromptEditor title="Ojo de Halcón" icon={EyeIcon} value={prompts['prompt_vision_instrucciones']} onChange={v => handlePromptChange('prompt_vision_instrucciones', v)} color="text-amber-500" />
             </TabsContent>
 
             <TabsContent value="analista" className="m-0 h-full data-[state=inactive]:hidden">
                 <PromptEditor 
-                  title="Analista Silencioso (Extracción JSON para Meta CAPI)" 
+                  title="Analista Silencioso (CAPI Data)" 
                   icon={BarChart3} 
                   value={prompts['prompt_analista_datos']} 
                   onChange={v => handlePromptChange('prompt_analista_datos', v)} 
                   color="text-emerald-500" 
-                  placeholder="Aquí va la estructura JSON que debe devolver el analista..."
+                  placeholder="Instrucciones de extracción JSON..."
                 />
-            </TabsContent>
-
-            <TabsContent value="versiones" className="m-0 h-full data-[state=inactive]:hidden flex flex-col">
-               <Card className="bg-slate-900 border-slate-800 flex-1 flex flex-col overflow-hidden shadow-2xl rounded-2xl">
-                  <CardHeader className="shrink-0 border-b border-slate-800 p-6 bg-slate-950/30"><CardTitle className="text-slate-50 text-sm flex items-center gap-2 uppercase tracking-widest font-bold"><History className="w-5 h-5 text-amber-500" /> Snapshots Guardados</CardTitle></CardHeader>
-                  <ScrollArea className="flex-1">
-                     <Table>
-                        <TableHeader><TableRow className="border-slate-800 bg-slate-950/50"><TableHead className="pl-6 text-[10px] uppercase font-bold text-slate-400">Nombre</TableHead><TableHead className="text-[10px] uppercase font-bold text-slate-400">Capturado el</TableHead><TableHead className="text-right pr-6 text-[10px] uppercase font-bold text-slate-400">Acción</TableHead></TableRow></TableHeader>
-                        <TableBody>
-                           {versions.length === 0 ? (
-                              <TableRow><TableCell colSpan={3} className="text-center py-20 text-slate-500 italic">No hay snapshots creados.</TableCell></TableRow>
-                           ) : versions.map(v => (
-                              <TableRow key={v.id} className="border-slate-800 hover:bg-slate-800/50 transition-colors group">
-                                 <TableCell className="font-mono text-amber-500 text-xs pl-6 font-medium">{v.version_name}</TableCell>
-                                 <TableCell className="text-slate-400 text-[10px] font-mono">{new Date(v.created_at).toLocaleString()}</TableCell>
-                                 <TableCell className="text-right pr-6">
-                                    <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                       <Button variant="ghost" size="sm" className="h-8 text-[10px] text-red-400 hover:bg-red-900/20" onClick={() => handleDeleteSnapshot(v.id)}>
-                                          <Trash2 className="w-3.5 h-3.5 mr-1" /> BORRAR
-                                       </Button>
-                                       <Button variant="secondary" size="sm" className="h-8 text-[10px] font-bold bg-slate-800 hover:bg-slate-700 text-slate-200" onClick={() => handleRestoreSnapshot(v)}>
-                                          RESTAURAR
-                                       </Button>
-                                    </div>
-                                 </TableCell>
-                              </TableRow>
-                           ))}
-                        </TableBody>
-                     </Table>
-                  </ScrollArea>
-               </Card>
-            </TabsContent>
-
-            <TabsContent value="simulador" className="m-0 h-full flex flex-col data-[state=inactive]:hidden">
-                <Card className="bg-[#1A1714] border-slate-800 flex-1 flex flex-col overflow-hidden shadow-2xl rounded-2xl">
-                    <CardHeader className="border-b border-slate-800 bg-slate-900/50 py-4 flex flex-row items-center justify-between shrink-0 px-6">
-                        <CardTitle className="text-slate-50 text-xs flex items-center gap-2 uppercase tracking-widest font-bold"><MessageSquare className="w-4 h-4 text-amber-500" /> Entorno de Pruebas</CardTitle>
-                        <div className="flex items-center gap-4">
-                           <Badge variant="outline" className="text-[9px] border-amber-500/30 text-amber-500 bg-amber-500/10 uppercase tracking-widest">Tiempo Real</Badge>
-                           <Button variant="ghost" size="sm" onClick={() => setSimHistory([])} className="h-8 text-[10px] text-slate-400 hover:text-amber-500"><RefreshCcw className="w-3 h-3 mr-2"/> Limpiar</Button>
-                        </div>
-                    </CardHeader>
-                    <ScrollArea className="flex-1 p-6">
-                       <div className="max-w-4xl mx-auto space-y-6 pb-4">
-                          {simHistory.length === 0 && (
-                            <div className="text-center py-20">
-                               <MessageSquare className="w-12 h-12 text-slate-700 mx-auto mb-4 opacity-50" />
-                               <p className="text-slate-400 italic text-sm">Prueba lo que acabas de escribir arriba antes de guardar.</p>
-                            </div>
-                          )}
-                          {simHistory.map((m, i) => (
-                             <div key={i} className={cn("flex flex-col gap-2", m.role === 'user' ? 'items-end' : 'items-start')}>
-                                <div className={cn("p-4 rounded-2xl text-sm max-w-[85%] border shadow-lg leading-relaxed", m.role === 'user' ? 'bg-indigo-900/40 border-indigo-900/60 text-slate-100' : 'bg-slate-900 border-slate-800 text-slate-200')}>
-                                   {m.text}
-                                </div>
-                                {m.explanation && (
-                                   <div className="bg-[#0D0B0A]/50 border border-slate-800/80 p-5 rounded-2xl w-full mt-2 shadow-inner">
-                                      <p className="text-[10px] text-amber-500 font-bold uppercase tracking-widest mb-4 flex items-center gap-2"><Zap className="w-3.5 h-3.5"/> Razonamiento Técnico:</p>
-                                      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                                         <div><p className="text-[9px] text-slate-500 uppercase font-bold mb-3 tracking-widest">Capas Usadas</p><div className="flex flex-wrap gap-2">{m.explanation.layers_used.map((l:any, idx:number)=>(<Badge key={idx} variant="outline" className="text-[9px] border-slate-700 text-slate-300 bg-slate-800/50 py-1">{l}</Badge>))}</div></div>
-                                         <div><p className="text-[9px] text-slate-500 uppercase font-bold mb-3 tracking-widest">Lógica Aplicada</p><p className="text-xs text-slate-300 leading-relaxed italic border-l-2 border-slate-700 pl-3">"{m.explanation.reasoning}"</p></div>
-                                      </div>
-                                   </div>
-                                )}
-                             </div>
-                          ))}
-                       </div>
-                    </ScrollArea>
-                    <form onSubmit={handleSimulate} className="p-4 bg-slate-900/50 border-t border-slate-800 shrink-0 flex gap-4">
-                       <Input 
-                         value={simQuestion} 
-                         onChange={e => setSimQuestion(e.target.value)} 
-                         placeholder="Escribe un mensaje de cliente..." 
-                         className="bg-slate-950 border-slate-800 text-slate-50 h-12 rounded-xl focus:border-amber-500" 
-                         disabled={simulating} 
-                       />
-                       <Button type="submit" disabled={simulating || !simQuestion.trim()} className="bg-indigo-900 hover:bg-indigo-800 shrink-0 h-12 px-6 rounded-xl shadow-lg">
-                          {simulating ? <Loader2 className="w-5 h-5 animate-spin text-amber-500" /> : <Send className="w-5 h-5 text-amber-500" />}
-                       </Button>
-                    </form>
-                </Card>
             </TabsContent>
 
             <TabsContent value="debug" className="m-0 h-full flex flex-col data-[state=inactive]:hidden">
@@ -478,6 +381,55 @@ const AgentBrain = () => {
                           {loadingMaster ? "Cargando constitución..." : masterPrompt || "Presiona Re-compilar para ver el prompt final."}
                        </pre>
                     </div>
+                </Card>
+            </TabsContent>
+
+            <TabsContent value="versiones" className="m-0 h-full data-[state=inactive]:hidden flex flex-col">
+               <Card className="bg-slate-900 border-slate-800 flex-1 flex flex-col overflow-hidden shadow-2xl rounded-2xl">
+                  <CardHeader className="shrink-0 border-b border-slate-800 p-6 bg-slate-950/30"><CardTitle className="text-slate-50 text-sm flex items-center gap-2 uppercase tracking-widest font-bold"><History className="w-5 h-5 text-amber-500" /> Snapshots</CardTitle></CardHeader>
+                  <ScrollArea className="flex-1">
+                     <Table>
+                        <TableHeader><TableRow className="border-slate-800 bg-slate-950/50"><TableHead className="pl-6 text-[10px] uppercase font-bold text-slate-400">Nombre</TableHead><TableHead className="text-right pr-6 text-[10px] uppercase font-bold text-slate-400">Acción</TableHead></TableRow></TableHeader>
+                        <TableBody>
+                           {versions.length === 0 ? (
+                              <TableRow><TableCell colSpan={2} className="text-center py-20 text-slate-500">No hay snapshots.</TableCell></TableRow>
+                           ) : versions.map(v => (
+                              <TableRow key={v.id} className="border-slate-800 hover:bg-slate-800/50">
+                                 <TableCell className="font-mono text-amber-500 text-xs pl-6">{v.version_name}</TableCell>
+                                 <TableCell className="text-right pr-6">
+                                    <Button variant="ghost" size="sm" onClick={() => handleRestoreSnapshot(v)}>RESTAURAR</Button>
+                                 </TableCell>
+                              </TableRow>
+                           ))}
+                        </TableBody>
+                     </Table>
+                  </ScrollArea>
+               </Card>
+            </TabsContent>
+
+            <TabsContent value="simulador" className="m-0 h-full flex flex-col data-[state=inactive]:hidden">
+                <Card className="bg-[#1A1714] border-slate-800 flex-1 flex flex-col overflow-hidden shadow-2xl rounded-2xl">
+                    <CardHeader className="border-b border-slate-800 bg-slate-900/50 py-4 flex flex-row items-center justify-between shrink-0 px-6">
+                        <CardTitle className="text-slate-50 text-xs flex items-center gap-2 uppercase tracking-widest font-bold"><MessageSquare className="w-4 h-4 text-amber-500" /> Entorno de Pruebas</CardTitle>
+                        <Button variant="ghost" size="sm" onClick={() => setSimHistory([])} className="h-8 text-[10px] text-slate-400 hover:text-amber-500"><RefreshCcw className="w-3 h-3 mr-2"/> Limpiar</Button>
+                    </CardHeader>
+                    <ScrollArea className="flex-1 p-6">
+                       <div className="max-w-4xl mx-auto space-y-6">
+                          {simHistory.map((m, i) => (
+                             <div key={i} className={cn("flex flex-col gap-2", m.role === 'user' ? 'items-end' : 'items-start')}>
+                                <div className={cn("p-4 rounded-2xl text-sm max-w-[85%] border shadow-lg", m.role === 'user' ? 'bg-indigo-900/40 border-indigo-900/60 text-slate-100' : 'bg-slate-900 border-slate-800 text-slate-200')}>
+                                   {m.text}
+                                </div>
+                             </div>
+                          ))}
+                       </div>
+                    </ScrollArea>
+                    <form onSubmit={handleSimulate} className="p-4 bg-slate-900/50 border-t border-slate-800 shrink-0 flex gap-4">
+                       <Input value={simQuestion} onChange={e => setSimQuestion(e.target.value)} placeholder="Simula un mensaje de cliente..." className="bg-slate-950 border-slate-800 text-slate-50 h-12 rounded-xl" disabled={simulating} />
+                       <Button type="submit" disabled={simulating || !simQuestion.trim()} className="bg-indigo-900 hover:bg-indigo-800 shrink-0 h-12 px-6 rounded-xl">
+                          <Send className="w-5 h-5 text-amber-500" />
+                       </Button>
+                    </form>
                 </Card>
             </TabsContent>
 
