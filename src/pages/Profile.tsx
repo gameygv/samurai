@@ -6,12 +6,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { UserCircle, Key, Loader2, Edit, Save, X } from 'lucide-react';
+import { UserCircle, Key, Loader2, Edit, Save, X, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import { logActivity } from '@/utils/logger';
 
 const Profile = () => {
-  const { profile, user, fetchProfile } = useAuth();
+  const { profile, user, fetchProfile, signOut } = useAuth();
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loadingPassword, setLoadingPassword] = useState(false);
@@ -33,13 +33,13 @@ const Profile = () => {
     e.preventDefault();
     setLoadingProfile(true);
     try {
-      // Actualizar email en Supabase Auth usando la Edge Function
-      if (form.email !== user?.email) {
+      const emailChanged = form.email !== user?.email;
+
+      if (emailChanged) {
         const { error: functionError } = await supabase.functions.invoke('update-user-email', {
           body: { newEmail: form.email }
         });
         if (functionError) throw functionError;
-        toast.info("Revisa tu nuevo email para confirmar el cambio. Puede que necesites volver a iniciar sesión.");
       }
 
       // Actualizar nombre en la tabla de perfiles
@@ -53,13 +53,18 @@ const Profile = () => {
       await logActivity({
         action: 'UPDATE',
         resource: 'USERS',
-        description: 'Usuario actualizó su perfil',
+        description: `Usuario actualizó perfil ${emailChanged ? '(Email cambiado)' : ''}`,
         status: 'OK'
       });
 
-      toast.success('Perfil actualizado correctamente');
-      setIsEditing(false);
-      if (fetchProfile && user) fetchProfile(user.id); // Refrescar datos del perfil
+      if (emailChanged) {
+          toast.success('¡Email actualizado al instante! Por seguridad, debes re-ingresar.');
+          setTimeout(() => signOut(), 2000);
+      } else {
+          toast.success('Perfil actualizado correctamente');
+          setIsEditing(false);
+          if (fetchProfile && user) fetchProfile(user.id);
+      }
     } catch (error: any) {
       toast.error(error.message);
     } finally {
@@ -130,14 +135,19 @@ const Profile = () => {
                    />
                  </div>
                  <div className="space-y-2">
-                   <Label className="text-slate-400">Email</Label>
+                   <Label className="text-slate-400">Email (ID de Acceso)</Label>
                    <Input 
                      type="email"
                      value={form.email}
                      onChange={(e) => setForm({...form, email: e.target.value})}
                      disabled={!isEditing}
-                     className="bg-slate-950 border-slate-800 text-white disabled:opacity-70"
+                     className="bg-slate-950 border-slate-800 text-white disabled:opacity-70 font-mono"
                    />
+                   {isEditing && (
+                       <p className="text-[10px] text-amber-500 flex items-center gap-1 mt-1">
+                           <AlertTriangle size={12} /> Al cambiar el email, se cerrará tu sesión actual.
+                       </p>
+                   )}
                  </div>
                  <div className="space-y-1">
                    <Label className="text-slate-400">Rol</Label>
@@ -150,7 +160,7 @@ const Profile = () => {
                  <CardFooter>
                    <Button type="submit" className="w-full bg-indigo-600" disabled={loadingProfile}>
                      {loadingProfile ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
-                     Guardar Cambios
+                     Guardar Cambios Instantáneos
                    </Button>
                  </CardFooter>
                )}
