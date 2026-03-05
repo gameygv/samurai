@@ -33,13 +33,8 @@ const ChatViewer = ({ lead: initialLead, open, onOpenChange }: ChatViewerProps) 
   const [sending, setSending] = useState(false);
   const [isEditingMemory, setIsEditingMemory] = useState(false);
   
-  // Mobile View State
   const [showMemoryMobile, setShowMemoryMobile] = useState(false);
-  
-  // Quick Actions Data
   const [quickActions, setQuickActions] = useState<any>({});
-
-  // AI Co-pilot state
   const [suggestions, setSuggestions] = useState<any[]>([]);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
   const [draftMessage, setDraftMessage] = useState('');
@@ -84,24 +79,13 @@ const ChatViewer = ({ lead: initialLead, open, onOpenChange }: ChatViewerProps) 
 
   const updateMemoryForm = (data: any) => {
      setMemoryForm({
-        nombre: data.nombre || '', 
-        apellido: data.apellido || '', 
-        email: data.email || '', 
-        summary: data.summary || '',
-        mood: data.estado_emocional_actual || 'NEUTRO', 
-        buying_intent: data.buying_intent || 'BAJO',
-        followup_stage: data.followup_stage || 0, 
-        next_followup_at: data.next_followup_at || null,
-        ciudad: data.ciudad || '', 
-        estado: data.estado || '', 
-        cp: data.cp || '', 
-        pais: data.pais || 'mx',
-        perfil_psicologico: data.perfil_psicologico || '',
-        main_pain: data.main_pain || '',
-        servicio_interes: data.servicio_interes || '',
-        origen_contacto: data.origen_contacto || '',
-        tiempo_compra: data.tiempo_compra || '',
-        lead_score: data.lead_score || 0
+        nombre: data.nombre || '', apellido: data.apellido || '', email: data.email || '', summary: data.summary || '',
+        mood: data.estado_emocional_actual || 'NEUTRO', buying_intent: data.buying_intent || 'BAJO',
+        followup_stage: data.followup_stage || 0, next_followup_at: data.next_followup_at || null,
+        ciudad: data.ciudad || '', estado: data.estado || '', cp: data.cp || '', pais: data.pais || 'mx',
+        perfil_psicologico: data.perfil_psicologico || '', main_pain: data.main_pain || '',
+        servicio_interes: data.servicio_interes || '', origen_contacto: data.origen_contacto || '',
+        tiempo_compra: data.tiempo_compra || '', lead_score: data.lead_score || 0
      });
   };
 
@@ -136,7 +120,6 @@ const ChatViewer = ({ lead: initialLead, open, onOpenChange }: ChatViewerProps) 
       if (!apiResponse) { setSending(false); return; }
 
       await supabase.from('conversaciones').insert({ lead_id: lead.id, mensaje: text, emisor: 'HUMANO', platform: 'PANEL' });
-      
       fetchMessages();
       setDraftMessage('');
       
@@ -152,26 +135,31 @@ const ChatViewer = ({ lead: initialLead, open, onOpenChange }: ChatViewerProps) 
   const saveMemory = async () => {
      setSending(true);
      try {
-        await supabase.from('leads').update({
-              nombre: memoryForm.nombre, 
-              apellido: memoryForm.apellido,
-              email: memoryForm.email, 
-              summary: memoryForm.summary,
-              estado_emocional_actual: memoryForm.mood, 
-              buying_intent: memoryForm.buying_intent,
-              ciudad: memoryForm.ciudad, 
-              estado: memoryForm.estado,
-              cp: memoryForm.cp,
-              pais: memoryForm.pais,
+        const { data: updatedLead, error } = await supabase.from('leads').update({
+              nombre: memoryForm.nombre, apellido: memoryForm.apellido,
+              email: memoryForm.email, summary: memoryForm.summary,
+              estado_emocional_actual: memoryForm.mood, buying_intent: memoryForm.buying_intent,
+              ciudad: memoryForm.ciudad, estado: memoryForm.estado,
+              cp: memoryForm.cp, pais: memoryForm.pais,
               perfil_psicologico: memoryForm.perfil_psicologico,
-              main_pain: memoryForm.main_pain,
-              servicio_interes: memoryForm.servicio_interes,
-              origen_contacto: memoryForm.origen_contacto,
-              tiempo_compra: memoryForm.tiempo_compra,
+              main_pain: memoryForm.main_pain, servicio_interes: memoryForm.servicio_interes,
+              origen_contacto: memoryForm.origen_contacto, tiempo_compra: memoryForm.tiempo_compra,
               lead_score: memoryForm.lead_score
-           }).eq('id', lead.id);
+           }).eq('id', lead.id).select().single();
+
+        if (error) throw error;
+
+        // --- GATILLO REACTIVO CAPI ---
+        // Si el humano completó el Email y antes no estaba disparado el evento Lead, forzamos análisis
+        if (updatedLead.email && !updatedLead.capi_lead_event_sent_at) {
+           console.log("[ChatViewer] Datos completados manualmente. Disparando análisis CAPI...");
+           supabase.functions.invoke('analyze-leads', { body: { lead_id: lead.id, force: true } });
+        }
+
         toast.success('Memoria del Samurai actualizada');
         setIsEditingMemory(false);
+     } catch (err: any) {
+        toast.error("Error al guardar: " + err.message);
      } finally {
         setSending(false);
      }
@@ -180,68 +168,35 @@ const ChatViewer = ({ lead: initialLead, open, onOpenChange }: ChatViewerProps) 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="w-full sm:max-w-6xl flex flex-col sm:flex-row bg-slate-950 border-l border-slate-800 text-white p-0 overflow-hidden">
-        
-        {/* CHAT AREA (Flexible) */}
         <div className={cn("flex-1 min-w-0 flex flex-col h-full bg-slate-950 transition-all", showMemoryMobile ? "hidden sm:flex" : "flex")}>
           <ChatHeader lead={lead} isAiPaused={lead.ai_paused} sending={sending} onSendCommand={handleSendMessage} />
-          
           <MessageList messages={messages} loading={loading} />
-          
           <div className="p-4 bg-slate-900/50 border-t border-slate-800 relative">
-            
-            {/* Quick Actions Toolbar */}
             <div className="absolute right-4 -top-12 flex gap-2">
                <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                     <Button size="sm" className="bg-indigo-600 hover:bg-indigo-700 h-8 w-8 p-0 rounded-full shadow-lg shadow-indigo-900/50 border border-indigo-500/50">
-                        <Zap className="w-4 h-4 text-white" />
-                     </Button>
+                     <Button size="sm" className="bg-indigo-600 hover:bg-indigo-700 h-8 w-8 p-0 rounded-full shadow-lg border border-indigo-500/50"><Zap className="w-4 h-4 text-white" /></Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="bg-slate-900 border-slate-800 text-white w-56">
                      <DropdownMenuLabel className="text-[10px] uppercase text-slate-500 font-bold">Scripts de Cierre</DropdownMenuLabel>
                      <DropdownMenuSeparator className="bg-slate-800"/>
-                     <DropdownMenuItem onClick={() => setDraftMessage(quickActions.paymentLink)} className="cursor-pointer hover:bg-indigo-600/20 text-xs">
-                        <LinkIcon className="w-3 h-3 mr-2 text-indigo-400" /> Link de Pago
-                     </DropdownMenuItem>
-                     <DropdownMenuItem onClick={() => setDraftMessage(quickActions.bankInfo)} className="cursor-pointer hover:bg-indigo-600/20 text-xs">
-                        <CreditCard className="w-3 h-3 mr-2 text-indigo-400" /> Datos Bancarios
-                     </DropdownMenuItem>
-                     <DropdownMenuItem onClick={() => setDraftMessage("Hola! Te comparto la información completa del taller...")} className="cursor-pointer hover:bg-indigo-600/20 text-xs">
-                        <FileText className="w-3 h-3 mr-2 text-indigo-400" /> Info General
-                     </DropdownMenuItem>
+                     <DropdownMenuItem onClick={() => setDraftMessage(quickActions.paymentLink)} className="cursor-pointer hover:bg-indigo-600/20 text-xs"><LinkIcon className="w-3 h-3 mr-2 text-indigo-400" /> Link de Pago</DropdownMenuItem>
+                     <DropdownMenuItem onClick={() => setDraftMessage(quickActions.bankInfo)} className="cursor-pointer hover:bg-indigo-600/20 text-xs"><CreditCard className="w-3 h-3 mr-2 text-indigo-400" /> Datos Bancarios</DropdownMenuItem>
                   </DropdownMenuContent>
                </DropdownMenu>
-               
-               {/* Mobile Toggle for Memory */}
-               <Button size="sm" variant="secondary" className="sm:hidden h-8 w-8 p-0 rounded-full border border-slate-700" onClick={() => setShowMemoryMobile(true)}>
-                  <Menu className="w-4 h-4" />
-               </Button>
+               <Button size="sm" variant="secondary" className="sm:hidden h-8 w-8 p-0 rounded-full border border-slate-700" onClick={() => setShowMemoryMobile(true)}><Menu className="w-4 h-4" /></Button>
             </div>
-
             <AiSuggestions suggestions={suggestions} loading={loadingSuggestions} onSelect={setDraftMessage} onRefresh={() => fetchAiSuggestions(messages)} />
             <MessageInput onSendMessage={handleSendMessage} sending={sending} isAiPaused={lead.ai_paused} initialValue={draftMessage} />
           </div>
         </div>
-
-        {/* MEMORY PANEL (Responsive) */}
-        <div className={cn(
-           "w-full sm:w-[380px] sm:min-w-[380px] flex-shrink-0 bg-slate-900/50 border-l border-slate-800 flex flex-col overflow-y-auto absolute sm:relative z-20 h-full transition-transform duration-300",
-           showMemoryMobile ? "translate-x-0" : "translate-x-full sm:translate-x-0"
-        )}>
-           {/* Mobile Header for Panel */}
+        <div className={cn("w-full sm:w-[380px] sm:min-w-[380px] flex-shrink-0 bg-slate-900/50 border-l border-slate-800 flex flex-col overflow-y-auto absolute sm:relative z-20 h-full transition-transform duration-300", showMemoryMobile ? "translate-x-0" : "translate-x-full sm:translate-x-0")}>
            <div className="sm:hidden p-4 border-b border-slate-800 flex justify-between items-center bg-slate-900">
               <span className="font-bold text-sm">Ficha Táctica</span>
               <Button variant="ghost" size="sm" onClick={() => setShowMemoryMobile(false)}><X className="w-4 h-4" /></Button>
            </div>
-
-           <MemoryPanel 
-             currentAnalysis={lead} isEditing={isEditingMemory} setIsEditing={setIsEditingMemory}
-             memoryForm={memoryForm} setMemoryForm={setMemoryForm} onSave={saveMemory} saving={sending}
-             onReset={() => {}} onToggleFollowup={() => handleSendMessage(lead.ai_paused ? '#START' : '#STOP')}
-             onAnalysisComplete={fetchMessages}
-           />
+           <MemoryPanel currentAnalysis={lead} isEditing={isEditingMemory} setIsEditing={setIsEditingMemory} memoryForm={memoryForm} setMemoryForm={setMemoryForm} onSave={saveMemory} saving={sending} onReset={() => {}} onToggleFollowup={() => handleSendMessage(lead.ai_paused ? '#START' : '#STOP')} onAnalysisComplete={fetchMessages} />
         </div>
-
       </SheetContent>
     </Sheet>
   );
