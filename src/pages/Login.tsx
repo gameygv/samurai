@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
-import { Loader2, ShieldCheck, AlertCircle, Mail, Wifi, WifiOff, RefreshCw } from 'lucide-react';
+import { Loader2, ShieldCheck, AlertCircle, Mail, Wifi, WifiOff, RefreshCw, Info } from 'lucide-react';
 import { toast } from 'sonner';
 
 const Login = () => {
@@ -39,7 +39,7 @@ const Login = () => {
 
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
-        email: email,
+        email: email.trim(),
         password,
       });
 
@@ -52,8 +52,15 @@ const Login = () => {
     } catch (error: any) {
       console.error("Login Error:", error);
       let msg = error.message;
-      if (msg.includes("Invalid login credentials")) msg = "Email o contraseña incorrectos";
-      toast.error(msg);
+      
+      // Manejo de errores específicos para ayudarte a entrar
+      if (msg.includes("Invalid login credentials")) {
+          msg = "Email o contraseña incorrectos. Si acabas de cambiar tu email, intenta ingresar con el ANTERIOR.";
+      } else if (msg.includes("Email not confirmed")) {
+          msg = "Email pendiente de confirmación. Revisa tu bandeja de entrada y haz clic en el enlace de validación.";
+      }
+      
+      toast.error(msg, { duration: 6000 });
     } finally {
       setLoading(false);
     }
@@ -90,7 +97,7 @@ const Login = () => {
 
           <form onSubmit={handleLogin} className="space-y-5">
             <div className="space-y-2">
-              <Label htmlFor="email" className="text-slate-300 font-medium">Email</Label>
+              <Label htmlFor="email" className="text-slate-300 font-medium">Email de Acceso</Label>
               <div className="relative group">
                 <Mail className="absolute left-3 top-3.5 h-4 w-4 text-slate-500 group-focus-within:text-amber-500 transition-colors" />
                 <Input
@@ -127,6 +134,14 @@ const Login = () => {
               {loading ? 'Autenticando...' : 'Acceder al Sistema'}
             </Button>
           </form>
+
+          <div className="mt-6 p-3 bg-amber-500/5 border border-amber-500/20 rounded-xl flex gap-3">
+             <Info className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+             <p className="text-[10px] text-slate-400 leading-relaxed">
+                <span className="text-amber-500 font-bold uppercase tracking-widest">Nota de Seguridad:</span><br/>
+                Si cambiaste tu correo recientemente, intenta con el original. El nuevo no se activará hasta que lo confirmes vía email.
+             </p>
+          </div>
         </CardContent>
 
         <CardFooter className="flex justify-between border-t border-slate-800/50 pt-5 mt-2 bg-slate-900/30">
