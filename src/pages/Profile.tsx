@@ -33,11 +33,13 @@ const Profile = () => {
     e.preventDefault();
     setLoadingProfile(true);
     try {
-      // Actualizar email en Supabase Auth
+      // Actualizar email en Supabase Auth usando la Edge Function
       if (form.email !== user?.email) {
-        const { error: authError } = await supabase.auth.updateUser({ email: form.email });
-        if (authError) throw authError;
-        toast.info("Revisa tu nuevo email para confirmar el cambio.");
+        const { error: functionError } = await supabase.functions.invoke('update-user-email', {
+          body: { newEmail: form.email }
+        });
+        if (functionError) throw functionError;
+        toast.info("Revisa tu nuevo email para confirmar el cambio. Puede que necesites volver a iniciar sesión.");
       }
 
       // Actualizar nombre en la tabla de perfiles
