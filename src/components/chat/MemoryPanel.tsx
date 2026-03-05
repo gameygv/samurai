@@ -3,10 +3,11 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
-import { BrainCircuit, Edit2, Save, Loader2, ShieldAlert, Zap, Fingerprint, Sparkles, Heart, ShieldX } from 'lucide-react';
+import { BrainCircuit, Edit2, Save, Loader2, ShieldAlert, Zap, Fingerprint, Sparkles, Heart, ShieldX, ShieldCheck, AlertTriangle, CreditCard } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { Badge } from '@/components/ui/badge';
 
 interface MemoryPanelProps {
   currentAnalysis: any;
@@ -30,6 +31,7 @@ export const MemoryPanel = ({
   const [correctionText, setCorrectionText] = useState('');
   const [isReporting, setIsReporting] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
+  const [updatingPayment, setUpdatingPayment] = useState(false);
 
   const hasName = currentAnalysis.nombre && !currentAnalysis.nombre.includes('Nuevo');
   const hasCity = currentAnalysis.ciudad && currentAnalysis.ciudad.length > 2;
@@ -71,6 +73,19 @@ export const MemoryPanel = ({
     }
   };
 
+  const handleUpdatePaymentStatus = async (status: string) => {
+    setUpdatingPayment(true);
+    try {
+      await supabase.from('leads').update({ payment_status: status }).eq('id', currentAnalysis.id);
+      toast.success(`Estatus de pago actualizado a ${status}`);
+      if (onAnalysisComplete) onAnalysisComplete(); // Refrescar los datos del lead en la vista superior
+    } catch (err: any) {
+      toast.error('Fallo al actualizar el pago: ' + err.message);
+    } finally {
+      setUpdatingPayment(false);
+    }
+  };
+
   return (
     <div className="w-[340px] min-w-[340px] flex-shrink-0 bg-slate-900/90 flex flex-col overflow-y-auto border-l border-slate-800">
       <div className="p-5 space-y-6">
@@ -83,6 +98,43 @@ export const MemoryPanel = ({
            </div>
            <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden flex">
               <div className={cn("h-full transition-all duration-1000", healthPercent > 60 ? 'bg-emerald-500' : 'bg-amber-500')} style={{ width: `${healthPercent}%` }} />
+           </div>
+        </div>
+
+        {/* FINANCIAL AUDIT - OJO DE HALCÓN */}
+        <div className="space-y-3 border-t border-slate-800/60 pt-6">
+           <h4 className="text-[10px] font-bold text-slate-300 uppercase tracking-widest flex items-center gap-2">
+              <CreditCard className="w-3.5 h-3.5 text-indigo-400" /> Auditoría de Pago
+           </h4>
+           <div className="bg-slate-950 border border-slate-800 p-3 rounded-xl shadow-inner space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-slate-500">Dictamen IA:</span>
+                {currentAnalysis.payment_status === 'VALID' && <Badge className="bg-emerald-900/30 text-emerald-400 border-emerald-500/30 text-[9px]"><ShieldCheck className="w-3 h-3 mr-1"/> APROBADO</Badge>}
+                {currentAnalysis.payment_status === 'INVALID' && <Badge className="bg-red-900/30 text-red-400 border-red-500/30 text-[9px]"><AlertTriangle className="w-3 h-3 mr-1"/> RECHAZADO</Badge>}
+                {currentAnalysis.payment_status === 'DOUBTFUL' && <Badge className="bg-amber-900/30 text-amber-400 border-amber-500/30 text-[9px]"><AlertTriangle className="w-3 h-3 mr-1"/> DUDOSO</Badge>}
+                {(!currentAnalysis.payment_status || currentAnalysis.payment_status === 'NONE') && <Badge variant="outline" className="text-[9px] border-slate-700 text-slate-500">SIN COMPROBANTE</Badge>}
+              </div>
+
+              <div className="flex gap-2 pt-2 border-t border-slate-800">
+                <Button 
+                  size="sm" 
+                  variant="outline" 
+                  className="flex-1 h-7 text-[9px] border-emerald-500/30 text-emerald-500 hover:bg-emerald-900/20"
+                  onClick={() => handleUpdatePaymentStatus('VALID')}
+                  disabled={updatingPayment}
+                >
+                  VALIDAR
+                </Button>
+                <Button 
+                  size="sm" 
+                  variant="outline" 
+                  className="flex-1 h-7 text-[9px] border-red-500/30 text-red-500 hover:bg-red-900/20"
+                  onClick={() => handleUpdatePaymentStatus('INVALID')}
+                  disabled={updatingPayment}
+                >
+                  DENEGAR
+                </Button>
+              </div>
            </div>
         </div>
 
