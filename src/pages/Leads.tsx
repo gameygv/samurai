@@ -59,55 +59,84 @@ const Leads = () => {
       <div className="max-w-7xl mx-auto space-y-6">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-             <h1 className="text-3xl font-bold text-white mb-2 flex items-center gap-2">Radar de Leads <Badge className="bg-green-500/20 text-green-500 border-green-500/20">LIVE</Badge></h1>
+             <h1 className="text-3xl font-bold text-slate-50 mb-2 flex items-center gap-2">
+                Radar de Leads 
+                <Badge className="bg-amber-500/20 text-amber-500 border-amber-500/30 ml-2 animate-pulse">LIVE</Badge>
+             </h1>
              <p className="text-slate-400">Vigila la salud de los datos y el cierre de ventas.</p>
           </div>
           <div className="flex gap-3 items-center">
-             <Button onClick={() => setIsCreateOpen(true)} className="bg-emerald-600 hover:bg-emerald-700"><UserPlus className="w-4 h-4 mr-2" /> Nuevo Lead</Button>
-             <Button variant="outline" onClick={handleRunAnalysis} disabled={analyzing} className="border-indigo-500/30 text-indigo-400">{analyzing ? <Loader2 className="animate-spin" /> : <Sparkles className="w-4 h-4" />}</Button>
+             <Button onClick={() => setIsCreateOpen(true)} className="bg-indigo-900 hover:bg-indigo-800 text-amber-500 shadow-lg">
+                <UserPlus className="w-4 h-4 mr-2" /> Nuevo Lead
+             </Button>
+             <Button variant="outline" onClick={handleRunAnalysis} disabled={analyzing} className="border-slate-700 text-slate-300 hover:bg-slate-800">
+                {analyzing ? <Loader2 className="animate-spin" /> : <Sparkles className="w-4 h-4" />}
+             </Button>
              <div className="relative w-64">
-               <Search className="absolute left-2 top-2.5 h-4 w-4 text-slate-500" />
-               <Input placeholder="Buscar..." className="pl-8 bg-slate-900 border-slate-800 text-slate-200" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+               <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-500" />
+               <Input 
+                  placeholder="Buscar..." 
+                  className="pl-10 bg-slate-900/50 border-slate-800 text-slate-200 rounded-full focus:border-amber-500" 
+                  value={searchTerm} 
+                  onChange={e => setSearchTerm(e.target.value)} 
+               />
              </div>
           </div>
         </div>
 
-        <Card className="bg-slate-900 border-slate-800">
-          <CardHeader className="border-b border-slate-800"><CardTitle className="text-white flex items-center gap-2 text-sm uppercase tracking-widest"><Target className="w-4 h-4 text-indigo-400" /> Prospectos en el Embudo</CardTitle></CardHeader>
+        <Card className="bg-slate-900 border-slate-800 shadow-2xl rounded-2xl overflow-hidden">
+          <CardHeader className="border-b border-slate-800 bg-slate-950/40">
+             <CardTitle className="text-slate-200 flex items-center gap-2 text-xs uppercase tracking-widest font-bold">
+                <Target className="w-4 h-4 text-amber-500" /> Prospectos en el Embudo
+             </CardTitle>
+          </CardHeader>
           <CardContent className="p-0">
             <Table>
               <TableHeader>
-                <TableRow className="border-slate-800">
-                  <TableHead className="text-slate-400 text-[10px] uppercase">Cliente</TableHead>
-                  <TableHead className="text-slate-400 text-[10px] uppercase">Calidad Datos (CAPI)</TableHead>
-                  <TableHead className="text-slate-400 text-[10px] uppercase text-center">IA Status</TableHead>
-                  <TableHead className="text-slate-400 text-[10px] uppercase">Intención</TableHead>
-                  <TableHead className="text-slate-400 text-[10px] uppercase text-right">Acción</TableHead>
+                <TableRow className="border-slate-800 bg-slate-900/20">
+                  <TableHead className="text-slate-500 text-[10px] uppercase font-bold tracking-wider">Cliente</TableHead>
+                  <TableHead className="text-slate-500 text-[10px] uppercase font-bold tracking-wider">Calidad Datos (CAPI)</TableHead>
+                  <TableHead className="text-slate-500 text-[10px] uppercase font-bold tracking-wider text-center">IA Status</TableHead>
+                  <TableHead className="text-slate-500 text-[10px] uppercase font-bold tracking-wider">Intención</TableHead>
+                  <TableHead className="text-slate-500 text-[10px] uppercase font-bold tracking-wider text-right">Acción</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {loading ? (
-                   <TableRow><TableCell colSpan={5} className="text-center h-32"><Loader2 className="w-6 h-6 animate-spin mx-auto text-indigo-600" /></TableCell></TableRow>
+                   <TableRow><TableCell colSpan={5} className="text-center h-32"><Loader2 className="w-6 h-6 animate-spin mx-auto text-amber-600" /></TableCell></TableRow>
                 ) : filteredLeads.map((lead) => {
                   const hasEmail = lead.email && lead.email.length > 5;
                   const hasCity = lead.ciudad && lead.ciudad.length > 2;
                   return (
-                  <TableRow key={lead.id} className="border-slate-800 hover:bg-slate-800/30 transition-colors">
-                    <TableCell><div className="flex flex-col"><span className="font-bold text-slate-200">{lead.nombre || 'Desconocido'}</span><span className="text-[10px] text-slate-500 font-mono">{lead.telefono}</span></div></TableCell>
-                    <TableCell><div className="flex gap-2">
-                       <DataBadge label="EMAIL" active={hasEmail} />
-                       <DataBadge label="CIUDAD" active={hasCity} />
-                    </div></TableCell>
-                    <TableCell className="text-center">{lead.summary ? <Brain className="w-4 h-4 text-indigo-400 mx-auto" /> : <Clock className="w-4 h-4 text-slate-700 mx-auto" />}</TableCell>
+                  <TableRow key={lead.id} className="border-slate-800 hover:bg-slate-800/40 transition-colors">
+                    <TableCell>
+                       <div className="flex flex-col">
+                          <span className="font-bold text-slate-100">{lead.nombre || 'Desconocido'}</span>
+                          <span className="text-[10px] text-slate-500 font-mono">{lead.telefono}</span>
+                       </div>
+                    </TableCell>
+                    <TableCell>
+                       <div className="flex gap-2">
+                          <DataBadge label="EMAIL" active={hasEmail} />
+                          <DataBadge label="CIUDAD" active={hasCity} />
+                       </div>
+                    </TableCell>
+                    <TableCell className="text-center">
+                       {lead.summary ? <Brain className="w-4 h-4 text-indigo-400 mx-auto" /> : <Clock className="w-4 h-4 text-slate-600 mx-auto" />}
+                    </TableCell>
                     <TableCell>
                        <div className="flex flex-col gap-1 w-[100px]">
-                          <span className="text-[8px] text-slate-500 font-bold">{lead.buying_intent || 'BAJO'}</span>
-                          <div className="h-1 bg-slate-800 rounded-full overflow-hidden">
-                             <div className={cn("h-full transition-all duration-500", lead.buying_intent === 'ALTO' ? 'bg-red-500' : lead.buying_intent === 'MEDIO' ? 'bg-yellow-500' : 'bg-blue-500')} style={{ width: lead.buying_intent === 'ALTO' ? '90%' : lead.buying_intent === 'MEDIO' ? '50%' : '15%' }} />
+                          <span className="text-[9px] text-slate-400 font-bold tracking-widest">{lead.buying_intent || 'BAJO'}</span>
+                          <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                             <div className={cn("h-full transition-all duration-500", lead.buying_intent === 'ALTO' ? 'bg-amber-500' : lead.buying_intent === 'MEDIO' ? 'bg-indigo-400' : 'bg-slate-600')} style={{ width: lead.buying_intent === 'ALTO' ? '90%' : lead.buying_intent === 'MEDIO' ? '50%' : '15%' }} />
                           </div>
                        </div>
                     </TableCell>
-                    <TableCell className="text-right"><Button size="sm" className="bg-indigo-600 h-8 text-[10px]" onClick={() => { setSelectedLead(lead); setIsChatOpen(true); }}>DETALLES</Button></TableCell>
+                    <TableCell className="text-right">
+                       <Button size="sm" variant="outline" className="border-slate-700 hover:bg-slate-800 h-8 text-[10px] uppercase font-bold tracking-widest text-amber-500" onClick={() => { setSelectedLead(lead); setIsChatOpen(true); }}>
+                          DETALLES
+                       </Button>
+                    </TableCell>
                   </TableRow>
                 )})}
               </TableBody>
@@ -122,7 +151,7 @@ const Leads = () => {
 };
 
 const DataBadge = ({ label, active }: { label: string, active: boolean }) => (
-   <Badge variant="outline" className={cn("text-[8px] h-5 font-bold", active ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/30" : "bg-slate-800 text-slate-600 border-slate-700")}>{label}</Badge>
+   <Badge variant="outline" className={cn("text-[9px] h-5 font-bold tracking-wider", active ? "bg-emerald-900/30 text-emerald-400 border-emerald-500/30" : "bg-slate-900 text-slate-600 border-slate-800")}>{label}</Badge>
 );
 
 export default Leads;
