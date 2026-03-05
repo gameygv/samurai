@@ -24,7 +24,7 @@ import {
 const Layout = ({ children }: { children: React.ReactNode }) => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, profile, signOut } = useAuth();
+  const { profile, signOut, isAdmin } = useAuth();
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [globalSearch, setGlobalSearch] = useState('');
 
@@ -33,45 +33,46 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
     navigate('/login');
   };
 
+  // Definición de grupos de menú con permisos
   const menuGroups = [
     {
       title: "PRINCIPAL",
       items: [
-        { icon: LayoutDashboard, label: 'Dashboard', path: '/' },
-        { icon: Activity, label: 'Monitor Live', path: '/activity' },
+        { icon: LayoutDashboard, label: 'Dashboard', path: '/', roles: ['any'] },
+        { icon: Activity, label: 'Monitor Live', path: '/activity', roles: ['any'] },
       ]
     },
     {
       title: "INTELIGENCIA",
       items: [
-        { icon: Brain, label: 'Cerebro Core', path: '/brain' },
-        { icon: Zap, label: 'Bitácora #CIA', path: '/learning' },
+        { icon: Brain, label: 'Cerebro Core', path: '/brain', roles: ['admin', 'dev'] },
+        { icon: Zap, label: 'Bitácora #CIA', path: '/learning', roles: ['admin', 'dev'] },
       ]
     },
     {
       title: "RECURSOS",
       items: [
-        { icon: Globe, label: 'Verdad Maestra', path: '/website-content' },
-        { icon: Database, label: 'Base Conocimiento', path: '/knowledge' },
-        { icon: Image, label: 'Media Manager', path: '/media' },
+        { icon: Globe, label: 'Verdad Maestra', path: '/website-content', roles: ['admin', 'dev'] },
+        { icon: Database, label: 'Base Conocimiento', path: '/knowledge', roles: ['admin', 'dev'] },
+        { icon: Image, label: 'Media Manager', path: '/media', roles: ['admin', 'dev'] },
       ]
     },
     {
       title: "GESTIÓN",
       items: [
-        { icon: Trello, label: 'Pipeline Ventas', path: '/pipeline' },
-        { icon: MessageSquare, label: 'Radar de Leads', path: '/leads' },
-        { icon: CreditCard, label: 'Pagos & Ventas', path: '/payments' },
-        { icon: Archive, label: 'Archivo de Chats', path: '/archive' },
+        { icon: Trello, label: 'Pipeline Ventas', path: '/pipeline', roles: ['any'] },
+        { icon: MessageSquare, label: 'Radar de Leads', path: '/leads', roles: ['any'] },
+        { icon: CreditCard, label: 'Pagos & Ventas', path: '/payments', roles: ['any'] },
+        { icon: Archive, label: 'Archivo de Chats', path: '/archive', roles: ['any'] },
       ]
     },
     {
       title: "SISTEMA",
       items: [
-        { icon: Users, label: 'Usuarios', path: '/users' },
-        { icon: BarChart3, label: 'Meta CAPI', path: '/meta-capi' },
-        { icon: BookOpen, label: 'Manual de Ayuda', path: '/manual' },
-        { icon: SettingsIcon, label: 'Ajustes', path: '/settings' },
+        { icon: Users, label: 'Usuarios', path: '/users', roles: ['admin', 'dev'] },
+        { icon: BarChart3, label: 'Meta CAPI', path: '/meta-capi', roles: ['admin', 'dev'] },
+        { icon: BookOpen, label: 'Manual de Ayuda', path: '/manual', roles: ['any'] },
+        { icon: SettingsIcon, label: 'Ajustes', path: '/settings', roles: ['admin', 'dev'] },
       ]
     }
   ];
@@ -89,36 +90,45 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
 
       <ScrollArea className="flex-1 px-4">
         <div className="space-y-6 py-2">
-          {menuGroups.map((group, i) => (
-            <div key={i}>
-              <h4 className="mb-2 px-2 text-[10px] font-bold text-slate-400/80 uppercase tracking-widest">
-                {group.title}
-              </h4>
-              <div className="space-y-1">
-                {group.items.map((item) => {
-                  const Icon = item.icon;
-                  const isActive = location.pathname === item.path;
-                  
-                  return (
-                    <Link
-                      key={item.path}
-                      to={item.path}
-                      onClick={() => setIsMobileOpen(false)}
-                      className={cn(
-                        "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all duration-200",
-                        isActive 
-                          ? "bg-indigo-900/80 text-amber-500 font-medium shadow-md shadow-black/10" 
-                          : "text-slate-400 hover:bg-slate-800/50 hover:text-slate-200"
-                      )}
-                    >
-                      <Icon className="w-4 h-4" />
-                      <span>{item.label}</span>
-                    </Link>
-                  );
-                })}
+          {menuGroups.map((group, i) => {
+            // Filtrar items del grupo según el rol
+            const filteredItems = group.items.filter(item => 
+              item.roles.includes('any') || (profile?.role && item.roles.includes(profile.role.toLowerCase()))
+            );
+
+            if (filteredItems.length === 0) return null;
+
+            return (
+              <div key={i}>
+                <h4 className="mb-2 px-2 text-[10px] font-bold text-slate-400/80 uppercase tracking-widest">
+                  {group.title}
+                </h4>
+                <div className="space-y-1">
+                  {filteredItems.map((item) => {
+                    const Icon = item.icon;
+                    const isActive = location.pathname === item.path;
+                    
+                    return (
+                      <Link
+                        key={item.path}
+                        to={item.path}
+                        onClick={() => setIsMobileOpen(false)}
+                        className={cn(
+                          "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all duration-200",
+                          isActive 
+                            ? "bg-indigo-900/80 text-amber-500 font-medium shadow-md shadow-black/10" 
+                            : "text-slate-400 hover:bg-slate-800/50 hover:text-slate-200"
+                        )}
+                      >
+                        <Icon className="w-4 h-4" />
+                        <span>{item.label}</span>
+                      </Link>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </ScrollArea>
     </div>

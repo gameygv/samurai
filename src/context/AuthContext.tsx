@@ -9,6 +9,9 @@ interface AuthContextType {
   profile: any | null;
   loading: boolean;
   isAdmin: boolean;
+  isDev: boolean;
+  isAgent: boolean;
+  role: string | null;
   signOut: () => Promise<void>;
   fetchProfile: (userId: string) => Promise<void>;
 }
@@ -19,6 +22,9 @@ const AuthContext = createContext<AuthContextType>({
   profile: null,
   loading: true,
   isAdmin: false,
+  isDev: false,
+  isAgent: false,
+  role: null,
   signOut: async () => {},
   fetchProfile: async () => {},
 });
@@ -48,7 +54,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   };
 
   useEffect(() => {
-    // Check active session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
@@ -56,7 +61,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       else setLoading(false);
     });
 
-    // Listen for changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
       setUser(session?.user ?? null);
@@ -80,12 +84,17 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     await supabase.auth.signOut();
   };
 
+  const userRole = profile?.role?.toLowerCase() || 'agent';
+
   const value = {
     session,
     user,
     profile,
     loading,
-    isAdmin: profile?.role === 'admin' || profile?.role === 'dev',
+    role: userRole,
+    isAdmin: userRole === 'admin' || userRole === 'dev',
+    isDev: userRole === 'dev',
+    isAgent: userRole === 'agent',
     signOut,
     fetchProfile,
   };

@@ -22,7 +22,7 @@ import Manual from "./pages/Manual";
 import WebsiteContent from "./pages/WebsiteContent";
 import Payments from "./pages/Payments";
 import MetaCapi from "./pages/MetaCapi";
-import Pipeline from "./pages/Pipeline"; // Importar Pipeline
+import Pipeline from "./pages/Pipeline";
 import { Loader2 } from "lucide-react";
 
 const queryClient = new QueryClient();
@@ -34,7 +34,7 @@ const PrivateRoute = ({ children }: { children: React.ReactNode }) => {
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center">
-        <Loader2 className="w-8 h-8 text-red-600 animate-spin" />
+        <Loader2 className="w-8 h-8 text-amber-600 animate-spin" />
       </div>
     );
   }
@@ -44,6 +44,19 @@ const PrivateRoute = ({ children }: { children: React.ReactNode }) => {
   }
 
   return <>{children}</>;
+};
+
+// Nueva protección para páginas de administrador
+const AdminRoute = ({ children }: { children: React.ReactNode }) => {
+    const { isAdmin, loading } = useAuth();
+  
+    if (loading) return null;
+    
+    if (!isAdmin) {
+      return <Navigate to="/" replace />;
+    }
+  
+    return <>{children}</>;
 };
 
 const App = () => (
@@ -57,22 +70,24 @@ const App = () => (
             <Route path="/login" element={<Login />} />
             
             <Route path="/" element={<PrivateRoute><Index /></PrivateRoute>} />
-            <Route path="/brain" element={<PrivateRoute><AgentBrain /></PrivateRoute>} />
-            <Route path="/learning" element={<PrivateRoute><LearningLog /></PrivateRoute>} />
-            <Route path="/knowledge" element={<PrivateRoute><KnowledgeBase /></PrivateRoute>} />
-            <Route path="/media" element={<PrivateRoute><MediaManager /></PrivateRoute>} />
-            <Route path="/website-content" element={<PrivateRoute><WebsiteContent /></PrivateRoute>} />
-            <Route path="/activity" element={<PrivateRoute><Activity /></PrivateRoute>} />
-            <Route path="/users" element={<PrivateRoute><UsersPage /></PrivateRoute>} />
-            <Route path="/logs" element={<PrivateRoute><Logs /></PrivateRoute>} />
             <Route path="/profile" element={<PrivateRoute><Profile /></PrivateRoute>} />
-            <Route path="/settings" element={<PrivateRoute><Settings /></PrivateRoute>} />
+            <Route path="/activity" element={<PrivateRoute><Activity /></PrivateRoute>} />
             <Route path="/leads" element={<PrivateRoute><Leads /></PrivateRoute>} />
-            <Route path="/pipeline" element={<PrivateRoute><Pipeline /></PrivateRoute>} /> {/* Nueva ruta */}
+            <Route path="/pipeline" element={<PrivateRoute><Pipeline /></PrivateRoute>} />
             <Route path="/archive" element={<PrivateRoute><Archive /></PrivateRoute>} />
             <Route path="/manual" element={<PrivateRoute><Manual /></PrivateRoute>} /> 
             <Route path="/payments" element={<PrivateRoute><Payments /></PrivateRoute>} />
-            <Route path="/meta-capi" element={<PrivateRoute><MetaCapi /></PrivateRoute>} />
+            
+            {/* RUTAS PROTEGIDAS PARA ADMIN/DEV */}
+            <Route path="/brain" element={<PrivateRoute><AdminRoute><AgentBrain /></AdminRoute></PrivateRoute>} />
+            <Route path="/learning" element={<PrivateRoute><AdminRoute><LearningLog /></AdminRoute></PrivateRoute>} />
+            <Route path="/knowledge" element={<PrivateRoute><AdminRoute><KnowledgeBase /></AdminRoute></PrivateRoute>} />
+            <Route path="/media" element={<PrivateRoute><AdminRoute><MediaManager /></AdminRoute></PrivateRoute>} />
+            <Route path="/website-content" element={<PrivateRoute><AdminRoute><WebsiteContent /></AdminRoute></PrivateRoute>} />
+            <Route path="/users" element={<PrivateRoute><AdminRoute><UsersPage /></AdminRoute></PrivateRoute>} />
+            <Route path="/logs" element={<PrivateRoute><AdminRoute><Logs /></AdminRoute></PrivateRoute>} />
+            <Route path="/settings" element={<PrivateRoute><AdminRoute><Settings /></AdminRoute></PrivateRoute>} />
+            <Route path="/meta-capi" element={<PrivateRoute><AdminRoute><MetaCapi /></AdminRoute></PrivateRoute>} />
             
             <Route path="*" element={<NotFound />} />
           </Routes>
