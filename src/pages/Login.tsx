@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
-import { Loader2, ShieldCheck, AlertCircle, Mail, Wifi, WifiOff, RefreshCw, Info, LifeBuoy, CheckCircle2 } from 'lucide-react';
+import { Loader2, ShieldCheck, AlertCircle, Mail, Wifi, WifiOff, RefreshCw, Info, LifeBuoy, CheckCircle2, Key } from 'lucide-react';
 import { toast } from 'sonner';
 
 const Login = () => {
@@ -47,7 +47,7 @@ const Login = () => {
     } catch (error: any) {
       let msg = error.message;
       if (msg.includes("Invalid login credentials")) {
-          msg = "Email o contraseña incorrectos. Si acabas de cambiar tu email, prueba el botón de REPARAR abajo.";
+          msg = "Email o contraseña incorrectos. Si el problema persiste, usa el reseteo de emergencia.";
       } else if (msg.includes("Email not confirmed")) {
           msg = "Email pendiente de confirmación. Usa el botón de REPARAR abajo para forzar la activación.";
       }
@@ -72,6 +72,30 @@ const Login = () => {
         toast.success(data.message, { id: tid, duration: 5000 });
     } catch (err: any) {
         toast.error("Fallo de rescate: " + err.message, { id: tid });
+    } finally {
+        setRepairing(false);
+    }
+  };
+
+  const handleEmergencyPasswordReset = async () => {
+    if (!email.includes('@')) {
+        toast.error("Ingresa tu email completo (gameygv@gmail.com) para el reseteo.");
+        return;
+    }
+    if (!confirm("Esto restablecerá tu contraseña a una temporal. ¿Continuar?")) {
+        return;
+    }
+    setRepairing(true);
+    const tid = toast.loading("Iniciando protocolo de recuperación de acceso...");
+    try {
+        const tempPassword = "password123";
+        const { data, error } = await supabase.functions.invoke('admin-reset-password', {
+            body: { email: email.trim(), newPassword: tempPassword }
+        });
+        if (error) throw error;
+        toast.success(`¡Acceso recuperado! Tu contraseña temporal es: ${tempPassword}. Inicia sesión y cámbiala inmediatamente.`, { id: tid, duration: 10000 });
+    } catch (err: any) {
+        toast.error("Fallo de reseteo: " + err.message, { id: tid });
     } finally {
         setRepairing(false);
     }
@@ -129,9 +153,9 @@ const Login = () => {
             </Button>
           </form>
 
-          <div className="pt-4 border-t border-slate-800">
-             <div className="flex flex-col items-center gap-3">
-                <p className="text-[10px] text-slate-500 uppercase font-bold tracking-widest">¿Problemas tras cambiar email?</p>
+          <div className="pt-4 border-t border-slate-800 space-y-3">
+             <div className="flex flex-col items-center gap-2">
+                <p className="text-[10px] text-slate-500 uppercase font-bold tracking-widest">¿Email no confirmado?</p>
                 <Button 
                     variant="outline" 
                     size="sm" 
@@ -141,6 +165,19 @@ const Login = () => {
                 >
                     {repairing ? <Loader2 className="w-4 h-4 animate-spin mr-2"/> : <LifeBuoy className="w-4 h-4 mr-2" />}
                     FORZAR REPARACIÓN DE CUENTA
+                </Button>
+             </div>
+             <div className="flex flex-col items-center gap-2 pt-2">
+                <p className="text-[10px] text-slate-500 uppercase font-bold tracking-widest">¿Contraseña olvidada o bloqueada?</p>
+                <Button 
+                    variant="destructive" 
+                    size="sm" 
+                    className="w-full h-10 rounded-xl font-bold"
+                    onClick={handleEmergencyPasswordReset}
+                    disabled={repairing}
+                >
+                    {repairing ? <Loader2 className="w-4 h-4 animate-spin mr-2"/> : <Key className="w-4 h-4 mr-2" />}
+                    RESETEO DE EMERGENCIA
                 </Button>
              </div>
           </div>
