@@ -7,8 +7,8 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
-  MessageSquare, Search, Loader2, Zap, BrainCircuit,
-  Clock, CheckCircle2, AlertCircle, TrendingUp, Target, Mail, UserPlus, Sparkles, Brain
+  MessageSquare, Search, Loader2, BrainCircuit,
+  Clock, CheckCircle2, AlertTriangle, ShieldCheck, Target, UserPlus, Sparkles, Brain
 } from 'lucide-react';
 import { toast } from 'sonner';
 import ChatViewer from '@/components/ChatViewer';
@@ -95,7 +95,7 @@ const Leads = () => {
               <TableHeader>
                 <TableRow className="border-slate-800 bg-slate-900/20">
                   <TableHead className="text-slate-500 text-[10px] uppercase font-bold tracking-wider">Cliente</TableHead>
-                  <TableHead className="text-slate-500 text-[10px] uppercase font-bold tracking-wider">Calidad Datos (CAPI)</TableHead>
+                  <TableHead className="text-slate-500 text-[10px] uppercase font-bold tracking-wider">Calidad y Pagos</TableHead>
                   <TableHead className="text-slate-500 text-[10px] uppercase font-bold tracking-wider text-center">IA Status</TableHead>
                   <TableHead className="text-slate-500 text-[10px] uppercase font-bold tracking-wider">Intención</TableHead>
                   <TableHead className="text-slate-500 text-[10px] uppercase font-bold tracking-wider text-right">Acción</TableHead>
@@ -116,9 +116,12 @@ const Leads = () => {
                        </div>
                     </TableCell>
                     <TableCell>
-                       <div className="flex gap-2">
+                       <div className="flex gap-2 flex-wrap max-w-[200px]">
                           <DataBadge label="EMAIL" active={hasEmail} />
                           <DataBadge label="CIUDAD" active={hasCity} />
+                          {lead.payment_status === 'VALID' && <Badge variant="outline" className="text-[9px] h-5 px-1.5 border-emerald-500 bg-emerald-900/30 text-emerald-400 font-bold">PAGO OK</Badge>}
+                          {lead.payment_status === 'INVALID' && <Badge variant="outline" className="text-[9px] h-5 px-1.5 border-red-500 bg-red-900/30 text-red-400 font-bold">PAGO FALSO</Badge>}
+                          {lead.payment_status === 'DOUBTFUL' && <Badge variant="outline" className="text-[9px] h-5 px-1.5 border-amber-500 bg-amber-900/30 text-amber-400 font-bold">DUDOSO</Badge>}
                        </div>
                     </TableCell>
                     <TableCell className="text-center">

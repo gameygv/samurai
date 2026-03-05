@@ -5,7 +5,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { 
-  Trello, Loader2, TrendingUp, User, Fingerprint, Image, Target, DollarSign, UserPlus, Mail, ShieldCheck, MapPin, Clock, AlertTriangle, GripVertical
+  Trello, Loader2, User, Fingerprint, Image, Target, DollarSign, UserPlus, Mail, ShieldCheck, MapPin, AlertTriangle, GripVertical
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import ChatViewer from '@/components/ChatViewer';
@@ -23,7 +23,6 @@ const Pipeline = () => {
 
   const TICKET_PRICE = 1500;
 
-  // Tonos dorados / tierra en lugar de los colores de semáforo genéricos
   const columns = [
     { id: 'BAJO', title: '1. DATA HUNTING', icon: Fingerprint, color: 'border-slate-700 bg-slate-800/30', desc: 'Faltan Nombre/Ciudad' },
     { id: 'MEDIO', title: '2. SEDUCCIÓN', icon: Image, color: 'border-indigo-900/50 bg-indigo-900/10', desc: 'Enviando Posters' },
@@ -96,17 +95,22 @@ const Pipeline = () => {
                 </div>
                 <div className="flex-1 overflow-y-auto p-3 space-y-3 custom-scrollbar bg-slate-950/20">
                   {leadsInCol.map((lead) => (
-                    <div key={lead.id} draggable onDragStart={(e) => handleDragStart(e, lead.id)} className="cursor-move">
-                       <Card className="bg-slate-900 border-slate-800 hover:border-slate-600 transition-all group relative overflow-hidden shadow-md">
+                    <div key={lead.id} draggable onDragStart={(e) => handleDragStart(e, lead.id)} className="cursor-move" onClick={() => { setSelectedLead(lead); setIsChatOpen(true); }}>
+                       <Card className="bg-slate-900 border-slate-800 hover:border-slate-600 transition-all group relative overflow-hidden shadow-md cursor-pointer">
                          <div className={cn("absolute left-0 top-0 bottom-0 w-1", lead.ai_paused ? "bg-red-900" : "bg-amber-600")} />
                          <CardContent className="p-3 pl-5 space-y-3">
                             <div className="flex justify-between items-start">
                                <div><p className="text-xs font-bold text-slate-100 group-hover:text-amber-400 transition-colors truncate max-w-[150px]">{lead.nombre || lead.telefono}</p></div>
                                <GripVertical className="w-3 h-3 text-slate-600 opacity-0 group-hover:opacity-100 transition-opacity" />
                             </div>
-                            <div className="flex gap-1.5 flex-wrap">
+                            <div className="flex gap-1.5 flex-wrap mt-1">
                                {lead.ciudad && <Badge variant="outline" className="text-[8px] h-4 px-1.5 border-slate-700 text-slate-400 font-medium"><MapPin className="w-2 h-2 mr-1"/>{lead.ciudad}</Badge>}
                                {lead.email && <Badge variant="outline" className="text-[8px] h-4 px-1.5 border-indigo-900/50 text-indigo-300 font-medium"><Mail className="w-2 h-2 mr-1"/> OK</Badge>}
+                               
+                               {/* Etiquetas de Ojo de Halcón (Validación de Comprobantes) */}
+                               {lead.payment_status === 'VALID' && <Badge variant="outline" className="text-[8px] h-4 px-1.5 border-emerald-900/50 bg-emerald-900/20 text-emerald-400 font-bold"><ShieldCheck className="w-2 h-2 mr-1"/>PAGO VÁLIDO</Badge>}
+                               {lead.payment_status === 'INVALID' && <Badge variant="outline" className="text-[8px] h-4 px-1.5 border-red-900/50 bg-red-900/20 text-red-400 font-bold"><AlertTriangle className="w-2 h-2 mr-1"/>PAGO RECHAZADO</Badge>}
+                               {lead.payment_status === 'DOUBTFUL' && <Badge variant="outline" className="text-[8px] h-4 px-1.5 border-amber-900/50 bg-amber-900/20 text-amber-400 font-bold"><AlertTriangle className="w-2 h-2 mr-1"/>PAGO DUDOSO</Badge>}
                             </div>
                          </CardContent>
                        </Card>
