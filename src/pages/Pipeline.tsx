@@ -65,7 +65,6 @@ const Pipeline = () => {
     <Layout>
       <div className="max-w-[1800px] mx-auto space-y-6 h-[calc(100vh-140px)] flex flex-col">
         
-        {/* HEADER TÁCTICO FINANCIERO */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
            <Card className="bg-slate-900 border-slate-800 p-4 flex items-center gap-4 rounded-2xl shadow-lg">
               <div className="p-3 rounded-xl bg-slate-800 text-slate-300"><Trello className="w-6 h-6" /></div>
@@ -107,7 +106,7 @@ const Pipeline = () => {
                                {lead.ciudad && <Badge variant="outline" className="text-[8px] h-4 px-1.5 border-slate-700 text-slate-400 font-medium"><MapPin className="w-2 h-2 mr-1"/>{lead.ciudad}</Badge>}
                                {lead.email && <Badge variant="outline" className="text-[8px] h-4 px-1.5 border-indigo-900/50 text-indigo-300 font-medium"><Mail className="w-2 h-2 mr-1"/> OK</Badge>}
                                
-                               {/* Etiquetas de Ojo de Halcón (Validación de Comprobantes) */}
+                               {/* Etiquetas de Ojo de Halcón */}
                                {lead.payment_status === 'VALID' && <Badge variant="outline" className="text-[8px] h-4 px-1.5 border-emerald-900/50 bg-emerald-900/20 text-emerald-400 font-bold"><ShieldCheck className="w-2 h-2 mr-1"/>PAGO VÁLIDO</Badge>}
                                {lead.payment_status === 'INVALID' && <Badge variant="outline" className="text-[8px] h-4 px-1.5 border-red-900/50 bg-red-900/20 text-red-400 font-bold"><AlertTriangle className="w-2 h-2 mr-1"/>PAGO RECHAZADO</Badge>}
                                {lead.payment_status === 'DOUBTFUL' && <Badge variant="outline" className="text-[8px] h-4 px-1.5 border-amber-900/50 bg-amber-900/20 text-amber-400 font-bold"><AlertTriangle className="w-2 h-2 mr-1"/>PAGO DUDOSO</Badge>}

@@ -59,7 +59,7 @@ const Leads = () => {
       <div className="max-w-7xl mx-auto space-y-6">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-             <h1 className="text-3xl font-bold text-slate-50 mb-2 flex items-center gap-2">
+             <h1 className="text-3xl font-bold text-white mb-2 flex items-center gap-2">
                 Radar de Leads 
                 <Badge className="bg-amber-500/20 text-amber-500 border-amber-500/30 ml-2 animate-pulse">LIVE</Badge>
              </h1>
