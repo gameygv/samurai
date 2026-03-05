@@ -11,7 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { 
   BarChart3, Settings, BookOpen, CheckCircle2, AlertCircle, Loader2, 
-  Send, Eye, Save, Link, ArrowRight, XCircle, Map, GitMerge, RefreshCw, Briefcase, Activity, Fingerprint, Database, ShieldCheck, FlaskConical
+  Send, Eye, Save, Link, ArrowRight, XCircle, Map, GitMerge, RefreshCw, Briefcase, Activity, Fingerprint, Database, ShieldCheck, FlaskConical, TrendingUp, Zap
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { SendEventDialog } from '@/components/meta/SendEventDialog';
@@ -21,6 +21,7 @@ import { cn } from '@/lib/utils';
 const MetaCapi = () => {
   const [config, setConfig] = useState({ pixel_id: '', access_token: '', account_id: '', test_mode: false, test_event_code: '' });
   const [events, setEvents] = useState<any[]>([]);
+  const [stats, setStats] = useState({ successRate: 0, avgEmq: 0, total24h: 0 });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   
@@ -56,7 +57,20 @@ const MetaCapi = () => {
         });
         setConfig(newConfig);
       }
-      if (eventsData) setEvents(eventsData);
+      
+      if (eventsData) {
+        setEvents(eventsData);
+        // Calcular estadísticas básicas
+        const successCount = eventsData.filter(e => e.status === 'OK').length;
+        const total = eventsData.length;
+        const totalEmq = eventsData.reduce((acc, e) => acc + calculateEMQ(e), 0);
+        
+        setStats({
+           successRate: total > 0 ? Math.round((successCount / total) * 100) : 0,
+           avgEmq: total > 0 ? Number((totalEmq / total).toFixed(1)) : 0,
+           total24h: total
+        });
+      }
     } finally {
       setLoading(false);
     }
@@ -90,7 +104,7 @@ const MetaCapi = () => {
       <div className="max-w-7xl mx-auto space-y-6 pb-12">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
-             <div className="p-3 bg-indigo-900/30 rounded-xl border border-indigo-500/20">
+             <div className="p-3 bg-indigo-900/30 rounded-xl border border-indigo-900/50">
                 <BarChart3 className="w-8 h-8 text-indigo-400" />
              </div>
              <div>
@@ -102,6 +116,52 @@ const MetaCapi = () => {
              <Button variant="outline" onClick={fetchData} className="border-slate-800 text-slate-400 hover:bg-slate-800"><RefreshCw className={cn("w-4 h-4 mr-2", loading && "animate-spin")} /> Actualizar</Button>
              <Button onClick={handleSaveConfig} disabled={saving} className="bg-indigo-600 hover:bg-indigo-700 shadow-lg shadow-indigo-900/20"><Save className="w-4 h-4 mr-2" /> Guardar Cambios</Button>
           </div>
+        </div>
+
+        {/* CAPI HEALTH CARDS */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+           <Card className="bg-slate-900 border-slate-800 p-6 border-l-4 border-l-emerald-500 shadow-xl rounded-2xl">
+              <div className="flex justify-between items-start">
+                 <div>
+                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Tasa de Éxito</p>
+                    <h3 className="text-3xl font-bold text-slate-50 mt-1">{stats.successRate}%</h3>
+                 </div>
+                 <div className="p-3 rounded-xl bg-emerald-900/30 text-emerald-500">
+                    <CheckCircle2 className="w-6 h-6" />
+                 </div>
+              </div>
+              <p className="text-[9px] text-slate-500 mt-4 uppercase font-mono">Últimos 50 eventos procesados</p>
+           </Card>
+           
+           <Card className="bg-slate-900 border-slate-800 p-6 border-l-4 border-l-amber-500 shadow-xl rounded-2xl">
+              <div className="flex justify-between items-start">
+                 <div>
+                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Calidad Match (EMQ)</p>
+                    <h3 className="text-3xl font-bold text-slate-50 mt-1">{stats.avgEmq}/7</h3>
+                 </div>
+                 <div className="p-3 rounded-xl bg-amber-900/30 text-amber-500">
+                    <TrendingUp className="w-6 h-6" />
+                 </div>
+              </div>
+              <div className="flex gap-1 mt-4">
+                 {[1,2,3,4,5,6,7].map(n => (
+                    <div key={n} className={cn("flex-1 h-1.5 rounded-full", n <= Math.round(stats.avgEmq) ? "bg-amber-500" : "bg-slate-800")} />
+                 ))}
+              </div>
+           </Card>
+
+           <Card className="bg-slate-900 border-slate-800 p-6 border-l-4 border-l-indigo-500 shadow-xl rounded-2xl">
+              <div className="flex justify-between items-start">
+                 <div>
+                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Estado Servidor</p>
+                    <h3 className="text-3xl font-bold text-slate-50 mt-1">NOMINAL</h3>
+                 </div>
+                 <div className="p-3 rounded-xl bg-indigo-900/30 text-indigo-400">
+                    <Zap className="w-6 h-6" />
+                 </div>
+              </div>
+              <p className="text-[9px] text-slate-500 mt-4 uppercase font-mono">Kernel CAPI v2.1 Active</p>
+           </Card>
         </div>
 
         <Tabs defaultValue="bitacora" className="w-full">

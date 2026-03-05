@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { 
   BrainCircuit, Edit2, Save, Loader2, ShieldAlert, Zap, 
   Fingerprint, Sparkles, Heart, ShieldX, ShieldCheck, AlertTriangle, 
-  CreditCard, MapPin, Navigation, TrendingUp, BarChart3, Database
+  CreditCard, MapPin, Navigation, TrendingUp, BarChart3, Database, History, Activity, ExternalLink
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -37,9 +37,10 @@ export const MemoryPanel = ({
   const [isReporting, setIsReporting] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [updatingPayment, setUpdatingPayment] = useState(false);
+  const [capiHistory, setCapiHistory] = useState<any[]>([]);
+  const [loadingCapi, setLoadingCapi] = useState(false);
 
   // Advanced CAPI Health Calculation (7 Key Meta Identifiers)
-  // Phone is assumed always present if they are in WA
   const capiFields = [
      true, // Phone
      !!(currentAnalysis.email && currentAnalysis.email.includes('@')),
@@ -52,6 +53,21 @@ export const MemoryPanel = ({
   
   const healthScore = capiFields.filter(Boolean).length;
   const healthPercent = Math.round((healthScore / 7) * 100);
+
+  useEffect(() => {
+     if (currentAnalysis?.id) fetchCapiHistory();
+  }, [currentAnalysis?.id]);
+
+  const fetchCapiHistory = async () => {
+     setLoadingCapi(true);
+     const { data } = await supabase
+        .from('meta_capi_events')
+        .select('*')
+        .eq('lead_id', currentAnalysis.id)
+        .order('created_at', { ascending: false });
+     if (data) setCapiHistory(data);
+     setLoadingCapi(false);
+  };
 
   const handleRunAnalysis = async () => {
      setAnalyzing(true);
@@ -164,16 +180,6 @@ export const MemoryPanel = ({
                     <div className="space-y-1"><Label className="text-[9px] text-slate-500">Ciudad</Label><Input value={memoryForm.ciudad} onChange={e => setMemoryForm({...memoryForm, ciudad: e.target.value})} className="h-8 text-xs bg-slate-900 border-slate-700" /></div>
                     <div className="space-y-1"><Label className="text-[9px] text-slate-500">Estado</Label><Input value={memoryForm.estado} onChange={e => setMemoryForm({...memoryForm, estado: e.target.value})} className="h-8 text-xs bg-slate-900 border-slate-700" placeholder="nl, jalisco..." /></div>
                  </div>
-                 <div className="grid grid-cols-2 gap-2">
-                    <div className="space-y-1"><Label className="text-[9px] text-slate-500">CP</Label><Input value={memoryForm.cp} onChange={e => setMemoryForm({...memoryForm, cp: e.target.value})} className="h-8 text-xs bg-slate-900 border-slate-700" /></div>
-                    <div className="space-y-1"><Label className="text-[9px] text-slate-500">País</Label><Input value={memoryForm.pais} onChange={e => setMemoryForm({...memoryForm, pais: e.target.value})} className="h-8 text-xs bg-slate-900 border-slate-700" placeholder="mx" /></div>
-                 </div>
-
-                 <div className="pt-2 border-t border-slate-800 space-y-2">
-                    <div className="space-y-1"><Label className="text-[9px] text-slate-500">Servicio de Interés</Label><Input value={memoryForm.servicio_interes} onChange={e => setMemoryForm({...memoryForm, servicio_interes: e.target.value})} className="h-8 text-xs bg-slate-900 border-slate-700" /></div>
-                    <div className="space-y-1"><Label className="text-[9px] text-slate-500">Dolor Principal</Label><Input value={memoryForm.main_pain} onChange={e => setMemoryForm({...memoryForm, main_pain: e.target.value})} className="h-8 text-xs bg-slate-900 border-slate-700" /></div>
-                    <div className="space-y-1"><Label className="text-[9px] text-slate-500">Score Calidad (1-100)</Label><Input type="number" value={memoryForm.lead_score} onChange={e => setMemoryForm({...memoryForm, lead_score: parseInt(e.target.value)})} className="h-8 text-xs bg-slate-900 border-slate-700" /></div>
-                 </div>
                  
                  <Button onClick={onSave} disabled={saving} className="w-full bg-amber-600 hover:bg-amber-500 text-slate-900 h-9 text-xs font-bold shadow-lg rounded-lg mt-2"><Save className="w-3.5 h-3.5 mr-2" /> Guardar Todos</Button>
               </div>
@@ -193,32 +199,46 @@ export const MemoryPanel = ({
                   </AccordionContent>
                 </AccordionItem>
 
-                <AccordionItem value="ubicacion" className="border-b border-slate-800">
-                  <AccordionTrigger className="px-4 py-3 text-xs font-bold hover:no-underline">Ubicación Geo</AccordionTrigger>
-                  <AccordionContent className="px-4 pb-4">
-                     <div className="grid grid-cols-2 gap-3">
-                        <div className="flex flex-col"><span className="text-[9px] text-slate-500 uppercase">Ciudad</span><span className="text-xs text-slate-200 truncate">{currentAnalysis.ciudad || '-'}</span></div>
-                        <div className="flex flex-col"><span className="text-[9px] text-slate-500 uppercase">Estado</span><span className="text-xs text-slate-200 truncate">{currentAnalysis.estado || '-'}</span></div>
-                        <div className="flex flex-col"><span className="text-[9px] text-slate-500 uppercase">CP</span><span className="text-xs text-slate-200 font-mono">{currentAnalysis.cp || '-'}</span></div>
-                        <div className="flex flex-col"><span className="text-[9px] text-slate-500 uppercase">País</span><span className="text-xs text-slate-200 uppercase">{currentAnalysis.pais || 'MX'}</span></div>
-                     </div>
+                <AccordionItem value="capi_history" className="border-b border-slate-800">
+                  <AccordionTrigger className="px-4 py-3 text-xs font-bold hover:no-underline flex items-center gap-2">
+                     <BarChart3 className="w-3 h-3 text-indigo-400" /> Historial CAPI
+                  </AccordionTrigger>
+                  <AccordionContent className="px-4 pb-4 space-y-2">
+                     {loadingCapi ? (
+                        <div className="flex justify-center py-2"><Loader2 className="w-4 h-4 animate-spin text-slate-700"/></div>
+                     ) : capiHistory.length === 0 ? (
+                        <p className="text-[10px] text-slate-600 italic">No se han disparado eventos aún.</p>
+                     ) : (
+                        <div className="space-y-2">
+                           {capiHistory.map((ev, i) => (
+                              <div key={i} className="flex items-center justify-between p-2 rounded bg-slate-900 border border-slate-800 group">
+                                 <div className="flex flex-col">
+                                    <span className="text-[9px] font-bold text-indigo-300">{ev.event_name}</span>
+                                    <span className="text-[8px] text-slate-500">{new Date(ev.created_at).toLocaleDateString()}</span>
+                                 </div>
+                                 <div className="flex items-center gap-2">
+                                    <Badge className={cn("text-[8px] h-4 px-1", ev.status === 'OK' ? 'bg-emerald-900/50 text-emerald-400' : 'bg-red-900/50 text-red-400')}>
+                                       {ev.status}
+                                    </Badge>
+                                    <button onClick={() => window.location.href='/meta-capi'} className="opacity-0 group-hover:opacity-100 transition-opacity"><ExternalLink className="w-3 h-3 text-slate-600 hover:text-amber-500"/></button>
+                                 </div>
+                              </div>
+                           ))}
+                        </div>
+                     )}
                   </AccordionContent>
                 </AccordionItem>
 
                 <AccordionItem value="contexto">
-                  <AccordionTrigger className="px-4 py-3 text-xs font-bold hover:no-underline">Segmentación & Scoring</AccordionTrigger>
+                  <AccordionTrigger className="px-4 py-3 text-xs font-bold hover:no-underline">Segmentación</AccordionTrigger>
                   <AccordionContent className="px-4 pb-4 space-y-3">
                      <div className="flex items-center justify-between p-2 bg-slate-900 rounded border border-slate-800">
                         <span className="text-[10px] text-slate-400 uppercase tracking-widest">Lead Score</span>
                         <Badge variant="outline" className="bg-indigo-900/30 text-indigo-300 border-indigo-500/30">{currentAnalysis.lead_score || 0}/100</Badge>
                      </div>
                      <div className="flex flex-col gap-1">
-                        <span className="text-[9px] text-slate-500 uppercase tracking-widest">Servicio Deseado</span>
-                        <span className="text-xs text-slate-200">{currentAnalysis.servicio_interes || 'Por definir'}</span>
-                     </div>
-                     <div className="flex flex-col gap-1">
                         <span className="text-[9px] text-slate-500 uppercase tracking-widest">Dolor Principal</span>
-                        <span className="text-xs text-slate-200 italic">{currentAnalysis.main_pain || currentAnalysis.perfil_psicologico?.split('OBJECIÓN:')[0].replace('MOTIVACIÓN:', '').trim() || 'No detectado'}</span>
+                        <span className="text-xs text-slate-200 italic">{currentAnalysis.main_pain || 'No detectado'}</span>
                      </div>
                   </AccordionContent>
                 </AccordionItem>
