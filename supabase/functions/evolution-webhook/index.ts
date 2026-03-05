@@ -142,7 +142,8 @@ serve(async (req) => {
             model: "gpt-4o",
             messages: [
                 { role: "system", content: finalSystemPrompt },
-                ...historyMsgs.map(m => ({ role: (m.emisor === 'IA' ? 'assistant' : 'user'), content: m.mensaje })),
+                // Asegurarnos de que mapea tanto 'IA' como 'SAMURAI' al rol 'assistant' para que recuerde sus mensajes
+                ...historyMsgs.map(m => ({ role: (m.emisor === 'IA' || m.emisor === 'SAMURAI' ? 'assistant' : 'user'), content: m.mensaje })),
                 { role: "user", content: userMessageContent } 
             ],
             temperature: 0.3
@@ -198,7 +199,9 @@ serve(async (req) => {
             method: 'POST', headers: { 'Content-Type': 'application/json', 'apikey': evoKey }, body: JSON.stringify(payload)
         });
 
+        // Aquí es donde se guarda [IMG: url] en la base de datos
         const messageToLog = mediaUrl ? `[IMG: ${mediaUrl}] ${textToSend}` : textToSend;
+        
         if (!response.ok) {
             const errText = await response.text();
             console.error("[Webhook] Evolution API Rechazó el mensaje:", errText);

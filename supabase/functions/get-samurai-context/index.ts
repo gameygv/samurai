@@ -56,9 +56,8 @@ serve(async (req) => {
     let mediaContext = "\n=== BÓVEDA DE POSTERS (MEDIA MANAGER) ===\n";
     if (mediaAssets && mediaAssets.length > 0) {
         mediaContext += `INSTRUCCIÓN CRÍTICA DE VISUALES: 
-Cuando el cliente pida información o cuando ya hayas identificado su CIUDAD, DEBES adjuntar el poster correspondiente de esa ciudad AUTOMÁTICAMENTE en tu respuesta. 
-NO le preguntes si quiere ver la imagen, envíala directamente de forma proactiva. 
-REGLA DE ORO: NUNCA uses enlaces markdown como ![imagen](url). Para enviar una imagen, SIMPLEMENTE PEGA la etiqueta exacta <<MEDIA:URL>> en cualquier parte de tu mensaje (al final es ideal).
+Cuando identifiques la CIUDAD del cliente, adjunta el poster correspondiente pegando la etiqueta <<MEDIA:URL>> en tu respuesta. 
+REGLA DE MEMORIA (ANTI-SPAM): Revisa cuidadosamente el historial de chat. Si en tus mensajes pasados ya existe la marca "[IMG: ...]", SIGNIFICA QUE YA ENVIASTE EL POSTER. ESTÁ ESTRICTAMENTE PROHIBIDO volver a enviarlo o volver a usar la etiqueta <<MEDIA:URL>> en toda esta conversación. Envíalo solo UNA vez.
 
 CATÁLOGO DISPONIBLE:\n`;
         mediaAssets.forEach(m => {
@@ -72,9 +71,9 @@ CATÁLOGO DISPONIBLE:\n`;
     const { data: webPages } = await supabaseClient.from('main_website_content').select('title, content').eq('scrape_status', 'success');
     let masterTruth = "\n=== VERDAD MAESTRA (SITIO WEB OFICIAL) ===\n";
     if (webPages && webPages.length > 0) {
-        masterTruth += "Esta es la información OFICIAL e innegable de la academia. Usa esto para responder sobre fechas, profesores, precios y detalles. NUNCA inventes nombres ni datos que no estén aquí.\n";
+        masterTruth += "Esta es la información OFICIAL e innegable de la academia. Usa esto para responder sobre fechas, profesores, precios y detalles.\n";
         webPages.forEach(p => {
-            if(p.content) masterTruth += `\n[PÁGINA: ${p.title}]\n${p.content.substring(0, 2000)}\n`; // Reducido a 2000 caracteres por página para foco
+            if(p.content) masterTruth += `\n[PÁGINA: ${p.title}]\n${p.content.substring(0, 2000)}\n`; 
         });
     }
 
@@ -83,7 +82,7 @@ CATÁLOGO DISPONIBLE:\n`;
     let kbContext = "\n=== BASE DE CONOCIMIENTO TÉCNICO ===\n";
     if (kbDocs && kbDocs.length > 0) {
         kbDocs.forEach(d => {
-            if(d.content) kbContext += `\n[RECURSO: ${d.title} | CAT: ${d.category}]\nInstrucción: ${d.description || 'N/A'}\nContenido: ${d.content.substring(0, 1500)}\n`; // Reducido a 1500 caracteres
+            if(d.content) kbContext += `\n[RECURSO: ${d.title} | CAT: ${d.category}]\nInstrucción: ${d.description || 'N/A'}\nContenido: ${d.content.substring(0, 1500)}\n`;
         });
     }
 
@@ -99,6 +98,11 @@ ${pAlma}
 ${pAdn}
 ${pEstrategia}
 
+=== REGLAS DE CONDUCTA ANTI-ROBOT (PRIORIDAD MÁXIMA) ===
+1. MEMORIA DE SALUDOS: Lee el historial. Si ya saludaste ("Hola", "Buen día") en mensajes anteriores, NO vuelvas a saludar. Responde directamente y con naturalidad.
+2. NO REPETIR INFORMACIÓN: Si ya enviaste los detalles del taller (fechas, precios, ubicación, horarios) en el historial, ESTÁ PROHIBIDO volver a escribirlos completos en el siguiente mensaje. Avanza de inmediato a la siguiente fase de la venta (pedir email o dar link).
+3. CONTEXTO CONTINUO: Compórtate como un humano que sigue el hilo de la plática. Nunca repitas pasos que ya completaste.
+
 ${pRelearning && pRelearning.trim() !== '' && pRelearning !== '# Aún no hay lecciones inyectadas.' ? `\n=== REGLAS #CIA (PRIORIDAD ABSOLUTA) ===\nEstas reglas corrigen comportamientos pasados. Síguelas por encima de todo lo demás:\n${pRelearning}\n` : ''}
 
 ${masterTruth}
@@ -108,7 +112,7 @@ ${kbContext}
 ${mediaContext}
 
 === LINK DE PAGO (MAPEO FUNNELKIT OK) ===
-Usa este link exacto. Ya tiene los campos wffn_billing_ mapeados dinámicamente:
+Usa este link exacto. Ya tiene los campos mapeados:
 ${paymentLink}
 
 === DATOS PARA TRANSFERENCIA ===
