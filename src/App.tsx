@@ -18,7 +18,6 @@ import Settings from "./pages/Settings";
 import Leads from "./pages/Leads";
 import Archive from "./pages/Archive";
 import MediaManager from "./pages/MediaManager";
-import Manual from "./pages/Manual";
 import WebsiteContent from "./pages/WebsiteContent";
 import Payments from "./pages/Payments";
 import MetaCapi from "./pages/MetaCapi";
@@ -75,7 +74,6 @@ const App = () => (
             <Route path="/leads" element={<PrivateRoute><Leads /></PrivateRoute>} />
             <Route path="/pipeline" element={<PrivateRoute><Pipeline /></PrivateRoute>} />
             <Route path="/archive" element={<PrivateRoute><Archive /></PrivateRoute>} />
-            <Route path="/manual" element={<PrivateRoute><Manual /></PrivateRoute>} /> 
             <Route path="/payments" element={<PrivateRoute><Payments /></PrivateRoute>} />
             
             {/* RUTAS PROTEGIDAS PARA ADMIN/DEV */}
