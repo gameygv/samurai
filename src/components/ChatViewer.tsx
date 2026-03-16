@@ -125,6 +125,24 @@ const ChatViewer = ({ lead: initialLead, open, onOpenChange }: ChatViewerProps) 
   const handleSendMessage = async (text: string, file?: File, isInternalNote: boolean = false) => {
     setSending(true);
     try {
+      // 1. Intercepción de Comandos del Sistema
+      if (text.trim() === '#STOP' || text.trim() === '#START') {
+         const isPaused = text.trim() === '#STOP';
+         await supabase.from('leads').update({ ai_paused: isPaused }).eq('id', lead.id);
+         
+         await supabase.from('conversaciones').insert({ 
+           lead_id: lead.id, 
+           mensaje: `IA ${isPaused ? 'Pausada' : 'Activada'} manualmente.`, 
+           emisor: 'NOTA', 
+           platform: 'PANEL_INTERNO' 
+         });
+         
+         toast.success(`Samurai ${isPaused ? 'Pausado' : 'Activado'}`);
+         fetchMessages();
+         setDraftMessage('');
+         return;
+      }
+
       if (isInternalNote) {
          await supabase.from('conversaciones').insert({ 
            lead_id: lead.id, 
@@ -170,11 +188,6 @@ const ChatViewer = ({ lead: initialLead, open, onOpenChange }: ChatViewerProps) 
 
       fetchMessages();
       setDraftMessage('');
-      
-      if (text.includes('#STOP') || text.includes('#START')) {
-         const isPaused = text.includes('#STOP');
-         await supabase.from('leads').update({ ai_paused: isPaused }).eq('id', lead.id);
-      }
     } catch (err: any) {
       toast.error('Error: ' + err.message);
     } finally {
@@ -255,7 +268,7 @@ const ChatViewer = ({ lead: initialLead, open, onOpenChange }: ChatViewerProps) 
               <span className="font-bold text-sm">Ficha Táctica</span>
               <Button variant="ghost" size="sm" onClick={() => setShowMemoryMobile(false)}><X className="w-4 h-4" /></Button>
            </div>
-           <MemoryPanel currentAnalysis={lead} isEditing={isEditingMemory} setIsEditing={setIsEditingMemory} memoryForm={memoryForm} setMemoryForm={setMemoryForm} onSave={saveMemory} saving={sending} onReset={() => {}} onToggleFollowup={() => handleSendMessage(lead.ai_paused ? '#START' : '#STOP')} onAnalysisComplete={fetchMessages} />
+           <MemoryPanel currentAnalysis={lead} isEditing={isEditingMemory} setIsEditing={setIsEditingMemory} memoryForm={memoryForm} setMemoryForm={setMemoryForm} onSave={saveMemory} saving={sending} onReset={() => {}} onToggleFollowup={() => handleSendMessage(lead.ai_paused ? '#START' : '#STOP')} onAnalysisComplete={() => fetchMessages()} />
         </div>
       </SheetContent>
     </Sheet>

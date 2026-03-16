@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { 
   Search, Loader2, MessageCircle, Bot, Filter, Zap, 
-  CreditCard, Link as LinkIcon, MessageSquarePlus, Play, Pause, X, Menu 
+  CreditCard, Link as LinkIcon, MessageSquarePlus, Play, Pause, X, Menu, ShieldAlert
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -50,10 +50,10 @@ const Inbox = () => {
     fetchLeads();
     fetchQuickActions();
 
-    // Suscripción a cambios en leads (para reordenar la lista)
+    // Suscripción a cambios en leads (para reordenar la lista y actualizar status)
     const leadsChannel = supabase.channel('inbox-leads')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'leads' }, () => {
-         fetchLeads(false); // Refrescar en background
+         fetchLeads(false); 
       }).subscribe();
 
     return () => { supabase.removeChannel(leadsChannel); };
@@ -64,7 +64,7 @@ const Inbox = () => {
        fetchMessages(activeLead.id);
        updateMemoryForm(activeLead);
        
-       // Suscripción a nuevos mensajes del lead activo
+       // Suscripción a nuevos mensajes del lead activo (Chat en vivo)
        const msgChannel = supabase.channel(`inbox-msgs-${activeLead.id}`)
          .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'conversaciones', filter: `lead_id=eq.${activeLead.id}` }, (payload) => {
             setMessages(prev => [...prev, payload.new]);
@@ -91,7 +91,6 @@ const Inbox = () => {
     const { data } = await query;
     if (data) {
        setLeads(data);
-       // Actualizar el activeLead si se modificó en background
        if (activeLead) {
           const updatedActive = data.find(l => l.id === activeLead.id);
           if (updatedActive) setActiveLead(updatedActive);
@@ -145,17 +144,58 @@ const Inbox = () => {
     });
   };
 
+  // Función para pausar/activar globalmente
+  const handleGlobalAiToggle = async (pause: boolean) => {
+    if (!confirm(`¿Estás seguro de ${pause ? 'PAUSAR' : 'ACTIVAR'} la IA para TODOS tus leads?`)) return;
+    setLoadingLeads(true);
+    try {
+        let query = supabase.from('leads').update({ ai_paused: pause });
+        if (!isAdmin) {
+            query = query.eq('assigned_to', user?.id);
+        } else {
+            query = query.neq('id', '00000000-0000-0000-0000-000000000000');
+        }
+        await query;
+        toast.success(`IA ${pause ? 'Pausada' : 'Activada'} masivamente.`);
+        fetchLeads();
+    } catch (err) {
+        toast.error("Error ejecutando acción masiva.");
+        setLoadingLeads(false);
+    }
+  };
+
   const handleSendMessage = async (text: string, file?: File, isInternalNote: boolean = false) => {
     if (!activeLead) return;
     setSending(true);
     try {
+      // 1. Intercepción de Comandos del Sistema (Evita enviarlos al cliente)
+      if (text.trim() === '#STOP' || text.trim() === '#START') {
+         const isPaused = text.trim() === '#STOP';
+         await supabase.from('leads').update({ ai_paused: isPaused }).eq('id', activeLead.id);
+         
+         await supabase.from('conversaciones').insert({ 
+           lead_id: activeLead.id, 
+           mensaje: `IA ${isPaused ? 'Pausada' : 'Activada'} manualmente.`, 
+           emisor: 'NOTA', 
+           platform: 'PANEL_INTERNO' 
+         });
+         
+         toast.success(`Samurai ${isPaused ? 'Pausado' : 'Activado'}`);
+         fetchMessages(activeLead.id);
+         setDraftMessage('');
+         return;
+      }
+
+      // 2. Manejo de Notas Internas regulares
       if (isInternalNote) {
          await supabase.from('conversaciones').insert({ lead_id: activeLead.id, mensaje: text, emisor: 'NOTA', platform: 'PANEL_INTERNO' });
          toast.success("Nota guardada.");
+         fetchMessages(activeLead.id);
          setDraftMessage('');
          return; 
       }
 
+      // 3. Envío al cliente por Evolution API
       let mediaData = undefined;
       if (file) {
         const ext = file.name.split('.').pop();
@@ -181,11 +221,6 @@ const Inbox = () => {
       });
 
       setDraftMessage('');
-      
-      if (text.includes('#STOP') || text.includes('#START')) {
-         const isPaused = text.includes('#STOP');
-         await supabase.from('leads').update({ ai_paused: isPaused }).eq('id', activeLead.id);
-      }
     } catch (err: any) {
       toast.error('Error: ' + err.message);
     } finally {
@@ -239,7 +274,28 @@ const Inbox = () => {
             activeLead ? "hidden md:flex" : "flex"
         )}>
            <div className="p-4 border-b border-slate-800 bg-slate-900/50 shrink-0">
-               <h2 className="text-sm font-bold text-white uppercase tracking-widest mb-3 flex items-center gap-2"><MessageCircle className="w-4 h-4 text-indigo-400"/> Bandeja de Entrada</h2>
+               <div className="flex items-center justify-between mb-3">
+                  <h2 className="text-sm font-bold text-white uppercase tracking-widest flex items-center gap-2"><MessageCircle className="w-4 h-4 text-indigo-400"/> Bandeja</h2>
+                  
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                       <Button variant="outline" size="icon" className="h-7 w-7 border-slate-700 bg-slate-950 text-slate-400 hover:text-indigo-400">
+                          <Bot className="w-3.5 h-3.5"/>
+                       </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent className="bg-slate-900 border-slate-800 text-white" align="end">
+                       <DropdownMenuLabel className="text-[10px] text-slate-500 uppercase">Control de IA General</DropdownMenuLabel>
+                       <DropdownMenuSeparator className="bg-slate-800" />
+                       <DropdownMenuItem onClick={() => handleGlobalAiToggle(false)} className="text-emerald-400 focus:bg-emerald-900/20 focus:text-emerald-300 cursor-pointer text-xs">
+                          <Play className="w-3.5 h-3.5 mr-2"/> Activar a Todos
+                       </DropdownMenuItem>
+                       <DropdownMenuItem onClick={() => handleGlobalAiToggle(true)} className="text-red-400 focus:bg-red-900/20 focus:text-red-300 cursor-pointer text-xs">
+                          <Pause className="w-3.5 h-3.5 mr-2"/> Pausar a Todos
+                       </DropdownMenuItem>
+                    </DropdownMenuContent>
+                 </DropdownMenu>
+
+               </div>
                <div className="relative">
                   <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-500" />
                   <Input 
@@ -270,16 +326,21 @@ const Inbox = () => {
                           {activeLead?.id === lead.id && <div className="absolute left-0 top-0 bottom-0 w-1 bg-indigo-500" />}
                           <div className="relative">
                              <Avatar className="h-10 w-10 border border-slate-700">
-                               <AvatarFallback className="bg-slate-800 text-slate-300 text-xs font-bold">{lead.nombre?.substring(0,2).toUpperCase() || 'CL'}</AvatarFallback>
+                               <AvatarFallback className={cn("text-xs font-bold", lead.ai_paused ? "bg-red-950/50 text-red-500" : "bg-slate-800 text-slate-300")}>
+                                  {lead.nombre?.substring(0,2).toUpperCase() || 'CL'}
+                               </AvatarFallback>
                              </Avatar>
                              <div className={cn("absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-[#0d0a08]", getIntentColor(lead.buying_intent))} />
                           </div>
                           <div className="flex-1 min-w-0">
                              <div className="flex justify-between items-baseline mb-0.5">
-                                <span className={cn("font-bold truncate text-sm", activeLead?.id === lead.id ? "text-indigo-400" : "text-slate-200")}>{lead.nombre || lead.telefono}</span>
-                                <span className="text-[9px] text-slate-500 font-mono">{new Date(lead.last_message_at).toLocaleDateString(undefined, { day: '2-digit', month: 'short' })}</span>
+                                <span className={cn("font-bold truncate text-sm flex-1", activeLead?.id === lead.id ? "text-indigo-400" : "text-slate-200")}>{lead.nombre || lead.telefono}</span>
+                                <span className="text-[9px] text-slate-500 font-mono pl-2 shrink-0">{new Date(lead.last_message_at).toLocaleDateString(undefined, { day: '2-digit', month: 'short' })}</span>
                              </div>
-                             <p className="text-[11px] text-slate-400 line-clamp-1">{lead.summary || 'Sin interacción reciente...'}</p>
+                             <p className={cn("text-[11px] line-clamp-1", lead.ai_paused ? "text-red-400/80" : "text-slate-400")}>
+                                {lead.ai_paused && <span className="font-bold mr-1">[PAUSADA]</span>}
+                                {lead.summary || 'Sin interacción reciente...'}
+                             </p>
                           </div>
                        </button>
                     ))}
@@ -312,8 +373,8 @@ const Inbox = () => {
                        </div>
                     </div>
                     <div className="flex items-center gap-2">
-                       <Button variant="outline" size="sm" className="hidden lg:flex h-8 bg-slate-900 border-slate-700 text-xs" onClick={() => handleSendMessage(activeLead.ai_paused ? '#START' : '#STOP')}>
-                          {activeLead.ai_paused ? <><Play className="w-3 h-3 mr-2 text-emerald-500"/> Activar IA</> : <><Pause className="w-3 h-3 mr-2 text-amber-500"/> Pausar IA</>}
+                       <Button variant="outline" size="sm" className={cn("hidden lg:flex h-8 text-xs border", activeLead.ai_paused ? "bg-emerald-500/10 border-emerald-500/50 text-emerald-500 hover:bg-emerald-500/20" : "bg-red-500/10 border-red-500/50 text-red-500 hover:bg-red-500/20")} onClick={() => handleSendMessage(activeLead.ai_paused ? '#START' : '#STOP')}>
+                          {activeLead.ai_paused ? <><Play className="w-3 h-3 mr-2"/> Activar IA</> : <><Pause className="w-3 h-3 mr-2"/> Pausar IA</>}
                        </Button>
                        <Button variant="ghost" size="icon" className="xl:hidden text-slate-400" onClick={() => setShowMemoryMobile(!showMemoryMobile)}>
                           <Menu className="w-5 h-5" />
