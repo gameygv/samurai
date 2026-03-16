@@ -27,7 +27,7 @@ interface MemoryPanelProps {
   onReset: () => void;
   onToggleFollowup?: () => void;
   onAnalysisComplete?: () => void;
-  onDeleteLead?: () => void; // NUEVO PROP PARA ELIMINAR
+  onDeleteLead?: () => void;
 }
 
 export const MemoryPanel = ({
@@ -150,7 +150,6 @@ export const MemoryPanel = ({
 
   const currentAgentName = agents.find(a => a.id === currentAnalysis.assigned_to)?.full_name || 'Bot Global (Sin Asignar)';
   
-  // Format datetime for input
   const formatDateTimeForInput = (dateString: string | null) => {
      if (!dateString) return '';
      const date = new Date(dateString);
@@ -159,20 +158,23 @@ export const MemoryPanel = ({
 
   return (
     <div className="w-full flex-shrink-0 bg-slate-900/90 flex flex-col h-full">
-      <div className="p-4 bg-slate-950/50 border-b border-slate-800 flex justify-between items-center shrink-0">
-         <div className="flex flex-col">
-            <span className="text-[10px] text-slate-500 uppercase tracking-widest font-bold">Event Match Quality</span>
-            <div className="flex items-center gap-2 mt-1">
-               <div className="w-24 h-1.5 bg-slate-800 rounded-full overflow-hidden">
-                  <div className={cn("h-full transition-all duration-1000", healthPercent > 70 ? 'bg-emerald-500' : healthPercent > 40 ? 'bg-amber-500' : 'bg-red-500')} style={{ width: `${healthPercent}%` }} />
-               </div>
-               <span className="text-[10px] font-mono font-bold text-amber-500">{healthScore}/7</span>
-            </div>
-         </div>
-         <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-amber-500 bg-slate-900 border border-slate-800 shadow-sm rounded-lg" onClick={handleRunAnalysis} disabled={analyzing} title="Forzar Análisis IA">
-            {analyzing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Database className="w-4 h-4" />}
-         </Button>
-      </div>
+      {/* SOLO LOS ADMINS/DEV VEN LA CALIDAD DEL MATCH Y EL BOTÓN DE EXTRACCIÓN MANUAL */}
+      {isAdmin && (
+        <div className="p-4 bg-slate-950/50 border-b border-slate-800 flex justify-between items-center shrink-0">
+           <div className="flex flex-col">
+              <span className="text-[10px] text-slate-500 uppercase tracking-widest font-bold">Event Match Quality</span>
+              <div className="flex items-center gap-2 mt-1">
+                 <div className="w-24 h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                    <div className={cn("h-full transition-all duration-1000", healthPercent > 70 ? 'bg-emerald-500' : healthPercent > 40 ? 'bg-amber-500' : 'bg-red-500')} style={{ width: `${healthPercent}%` }} />
+                 </div>
+                 <span className="text-[10px] font-mono font-bold text-amber-500">{healthScore}/7</span>
+              </div>
+           </div>
+           <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-amber-500 bg-slate-900 border border-slate-800 shadow-sm rounded-lg" onClick={handleRunAnalysis} disabled={analyzing} title="Forzar Análisis IA">
+              {analyzing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Database className="w-4 h-4" />}
+           </Button>
+        </div>
+      )}
 
       <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-5">
 
@@ -206,6 +208,7 @@ export const MemoryPanel = ({
            <div className="flex justify-between items-center mb-1">
               <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2"><Fingerprint className="w-3.5 h-3.5" /> Identidad & CRM</h4>
               <div className="flex items-center gap-1">
+                 {/* ELIMINAR SOLO PARA ADMINS */}
                  {isAdmin && onDeleteLead && (
                     <Button variant="ghost" size="icon" className="h-6 w-6 text-slate-500 hover:text-red-500 hover:bg-red-500/10" onClick={() => {
                        if(confirm('¿Eliminar prospecto y TODO su historial de chat de forma permanente?')) onDeleteLead();
@@ -260,7 +263,6 @@ export const MemoryPanel = ({
                     <div className="space-y-1"><Label className="text-[9px] text-slate-500">Estado</Label><Input value={memoryForm.estado} onChange={e => setMemoryForm({...memoryForm, estado: e.target.value})} className="h-8 text-xs bg-slate-900 border-slate-700" placeholder="nl, jalisco..." /></div>
                  </div>
 
-                 {/* Sección de Etiquetas en Edición */}
                  <div className="pt-2 border-t border-slate-800 space-y-2">
                     <Label className="text-[9px] text-slate-500 uppercase tracking-widest flex items-center gap-1"><Tag className="w-3 h-3"/> Etiquetas</Label>
                     <Input 
@@ -347,42 +349,45 @@ export const MemoryPanel = ({
                   </AccordionContent>
                 </AccordionItem>
 
-                <AccordionItem value="capi_history" className="border-b border-slate-800">
-                  <AccordionTrigger className="px-4 py-3 text-xs font-bold hover:no-underline flex items-center gap-2">
-                     <BarChart3 className="w-3 h-3 text-indigo-400" /> Historial CAPI
-                  </AccordionTrigger>
-                  <AccordionContent className="px-4 pb-4 space-y-2">
-                     {loadingCapi ? (
-                        <div className="flex justify-center py-2"><Loader2 className="w-4 h-4 animate-spin text-slate-700"/></div>
-                     ) : capiHistory.length === 0 ? (
-                        <div className="text-center py-2">
-                           <p className="text-[10px] text-slate-500 italic mb-2">No se han disparado eventos aún.</p>
-                           {healthPercent >= 28 && ( // Al menos 2/7 (ej. Email + Ciudad)
-                              <Button variant="outline" size="sm" className="h-7 text-[9px] border-indigo-500/30 text-indigo-400 hover:bg-indigo-900/20" onClick={handleRunAnalysis} disabled={analyzing}>
-                                 {analyzing ? <Loader2 className="w-3 h-3 animate-spin mr-1"/> : <Zap className="w-3 h-3 mr-1"/>} Forzar Sincronización
-                              </Button>
-                           )}
-                        </div>
-                     ) : (
-                        <div className="space-y-2">
-                           {capiHistory.map((ev, i) => (
-                              <div key={i} className="flex items-center justify-between p-2 rounded bg-slate-900 border border-slate-800 group">
-                                 <div className="flex flex-col">
-                                    <span className="text-[9px] font-bold text-indigo-300">{ev.event_name}</span>
-                                    <span className="text-[8px] text-slate-500">{new Date(ev.created_at).toLocaleDateString()}</span>
-                                 </div>
-                                 <div className="flex items-center gap-2">
-                                    <Badge className={cn("text-[8px] h-4 px-1", ev.status === 'OK' ? 'bg-emerald-900/50 text-emerald-400' : 'bg-red-900/50 text-red-400')}>
-                                       {ev.status}
-                                    </Badge>
-                                    <button onClick={() => window.location.href='/meta-capi'} className="opacity-0 group-hover:opacity-100 transition-opacity"><ExternalLink className="w-3 h-3 text-slate-600 hover:text-amber-500"/></button>
-                                 </div>
-                              </div>
-                           ))}
-                        </div>
-                     )}
-                  </AccordionContent>
-                </AccordionItem>
+                {/* HISTORIAL CAPI OCULTO PARA VENDEDORES */}
+                {isAdmin && (
+                  <AccordionItem value="capi_history" className="border-b border-slate-800">
+                    <AccordionTrigger className="px-4 py-3 text-xs font-bold hover:no-underline flex items-center gap-2">
+                       <BarChart3 className="w-3 h-3 text-indigo-400" /> Historial CAPI
+                    </AccordionTrigger>
+                    <AccordionContent className="px-4 pb-4 space-y-2">
+                       {loadingCapi ? (
+                          <div className="flex justify-center py-2"><Loader2 className="w-4 h-4 animate-spin text-slate-700"/></div>
+                       ) : capiHistory.length === 0 ? (
+                          <div className="text-center py-2">
+                             <p className="text-[10px] text-slate-600 italic mb-2">No se han disparado eventos aún.</p>
+                             {healthPercent >= 28 && ( // Al menos 2/7 (ej. Email + Ciudad)
+                                <Button variant="outline" size="sm" className="h-7 text-[9px] border-indigo-500/30 text-indigo-400 hover:bg-indigo-900/20" onClick={handleRunAnalysis} disabled={analyzing}>
+                                   {analyzing ? <Loader2 className="w-3 h-3 animate-spin mr-1"/> : <Zap className="w-3 h-3 mr-1"/>} Forzar Sincronización
+                                </Button>
+                             )}
+                          </div>
+                       ) : (
+                          <div className="space-y-2">
+                             {capiHistory.map((ev, i) => (
+                                <div key={i} className="flex items-center justify-between p-2 rounded bg-slate-900 border border-slate-800 group">
+                                   <div className="flex flex-col">
+                                      <span className="text-[9px] font-bold text-indigo-300">{ev.event_name}</span>
+                                      <span className="text-[8px] text-slate-500">{new Date(ev.created_at).toLocaleDateString()}</span>
+                                   </div>
+                                   <div className="flex items-center gap-2">
+                                      <Badge className={cn("text-[8px] h-4 px-1", ev.status === 'OK' ? 'bg-emerald-900/50 text-emerald-400' : 'bg-red-900/50 text-red-400')}>
+                                         {ev.status}
+                                      </Badge>
+                                      <button onClick={() => window.location.href='/meta-capi'} className="opacity-0 group-hover:opacity-100 transition-opacity"><ExternalLink className="w-3 h-3 text-slate-600 hover:text-amber-500"/></button>
+                                   </div>
+                                </div>
+                             ))}
+                          </div>
+                       )}
+                    </AccordionContent>
+                  </AccordionItem>
+                )}
 
                 <AccordionItem value="contexto">
                   <AccordionTrigger className="px-4 py-3 text-xs font-bold hover:no-underline">Segmentación</AccordionTrigger>
@@ -401,7 +406,6 @@ export const MemoryPanel = ({
            )}
         </div>
 
-        {/* BITÁCORA #CIA QUICK (Visible para todos los agentes) */}
         <div className="space-y-3 border-t border-slate-800/60 pt-6">
            <div className="flex flex-col">
              <h4 className="text-[10px] font-bold text-amber-500 uppercase tracking-widest flex items-center gap-2">
