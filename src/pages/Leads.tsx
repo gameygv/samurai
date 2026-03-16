@@ -6,9 +6,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
-  MessageSquare, Search, Loader2, BrainCircuit,
-  Clock, CheckCircle2, AlertTriangle, ShieldCheck, Target, UserPlus, Sparkles, Brain, BarChart3
+  Search, Loader2, Target, UserPlus, Sparkles, MapPin, Mail, ShieldCheck, AlertTriangle
 } from 'lucide-react';
 import { toast } from 'sonner';
 import ChatViewer from '@/components/ChatViewer';
@@ -54,6 +54,15 @@ const Leads = () => {
     return matchesSearch && matchesIntent;
   });
 
+  const getIntentUI = (intent: string) => {
+     const i = (intent || 'BAJO').toUpperCase();
+     if (i === 'COMPRADO') return { color: 'bg-emerald-500', width: '100%', label: 'GANADO', textColor: 'text-emerald-400' };
+     if (i === 'PERDIDO') return { color: 'bg-red-500', width: '100%', label: 'PERDIDO', textColor: 'text-red-400' };
+     if (i === 'ALTO') return { color: 'bg-amber-500', width: '90%', label: 'CIERRE', textColor: 'text-amber-400' };
+     if (i === 'MEDIO') return { color: 'bg-indigo-400', width: '50%', label: 'SEDUCCIÓN', textColor: 'text-indigo-400' };
+     return { color: 'bg-slate-500', width: '20%', label: 'DATA HUNTING', textColor: 'text-slate-400' };
+  };
+
   return (
     <Layout>
       <div className="max-w-7xl mx-auto space-y-6">
@@ -65,18 +74,33 @@ const Leads = () => {
              </h1>
              <p className="text-slate-400">Vigila la salud de los datos y el cierre de ventas.</p>
           </div>
-          <div className="flex gap-3 items-center">
+          <div className="flex gap-3 items-center flex-wrap">
              <Button onClick={() => setIsCreateOpen(true)} className="bg-indigo-900 hover:bg-indigo-800 text-amber-500 shadow-lg">
                 <UserPlus className="w-4 h-4 mr-2" /> Nuevo Lead
              </Button>
              <Button variant="outline" onClick={handleRunAnalysis} disabled={analyzing} className="border-slate-700 text-slate-300 hover:bg-slate-800" title="Forzar extracción de datos">
                 {analyzing ? <Loader2 className="animate-spin" /> : <Sparkles className="w-4 h-4" />}
              </Button>
-             <div className="relative w-64">
+             
+             <Select value={filterIntent} onValueChange={setFilterIntent}>
+                <SelectTrigger className="w-[140px] bg-slate-900/50 border-slate-800 rounded-full text-xs h-9">
+                   <SelectValue placeholder="Filtrar Embudo" />
+                </SelectTrigger>
+                <SelectContent className="bg-slate-900 border-slate-800 text-white">
+                   <SelectItem value="ALL">Todo el Embudo</SelectItem>
+                   <SelectItem value="BAJO">1. Data Hunting</SelectItem>
+                   <SelectItem value="MEDIO">2. Seducción</SelectItem>
+                   <SelectItem value="ALTO">3. Cierre (Hot)</SelectItem>
+                   <SelectItem value="COMPRADO">4. Ganados</SelectItem>
+                   <SelectItem value="PERDIDO">5. Perdidos</SelectItem>
+                </SelectContent>
+             </Select>
+
+             <div className="relative w-full md:w-64">
                <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-500" />
                <Input 
                   placeholder="Buscar nombre o tel..." 
-                  className="pl-10 bg-slate-900/50 border-slate-800 text-slate-200 rounded-full focus:border-amber-500" 
+                  className="pl-10 bg-slate-900/50 border-slate-800 text-slate-200 rounded-full focus:border-amber-500 h-9 text-xs" 
                   value={searchTerm} 
                   onChange={e => setSearchTerm(e.target.value)} 
                />
@@ -86,8 +110,8 @@ const Leads = () => {
 
         <Card className="bg-slate-900 border-slate-800 shadow-2xl rounded-2xl overflow-hidden">
           <CardHeader className="border-b border-slate-800 bg-slate-950/40">
-             <CardTitle className="text-slate-200 flex items-center gap-2 text-xs uppercase tracking-widest font-bold">
-                <Target className="w-4 h-4 text-amber-500" /> Prospectos en el Embudo
+             <CardTitle className="text-slate-200 text-xs flex items-center gap-2 uppercase tracking-widest font-bold">
+                <Target className="w-4 h-4 text-amber-500" /> Prospectos Listados ({filteredLeads.length})
              </CardTitle>
           </CardHeader>
           <CardContent className="p-0">
@@ -97,7 +121,7 @@ const Leads = () => {
                   <TableHead className="text-slate-500 text-[10px] uppercase font-bold tracking-wider">Cliente</TableHead>
                   <TableHead className="text-slate-500 text-[10px] uppercase font-bold tracking-wider">Data CAPI & Pagos</TableHead>
                   <TableHead className="text-slate-500 text-[10px] uppercase font-bold tracking-wider text-center">Score IA</TableHead>
-                  <TableHead className="text-slate-500 text-[10px] uppercase font-bold tracking-wider">Intención</TableHead>
+                  <TableHead className="text-slate-500 text-[10px] uppercase font-bold tracking-wider">Etapa</TableHead>
                   <TableHead className="text-slate-500 text-[10px] uppercase font-bold tracking-wider text-right">Acción</TableHead>
                 </TableRow>
               </TableHeader>
@@ -107,6 +131,8 @@ const Leads = () => {
                 ) : filteredLeads.map((lead) => {
                   const hasEmail = lead.email && lead.email.length > 5;
                   const hasCity = lead.ciudad && lead.ciudad.length > 2;
+                  const ui = getIntentUI(lead.buying_intent);
+                  
                   return (
                   <TableRow key={lead.id} className="border-slate-800 hover:bg-slate-800/40 transition-colors">
                     <TableCell>
@@ -122,6 +148,7 @@ const Leads = () => {
                           {lead.payment_status === 'VALID' && <Badge variant="outline" className="text-[9px] h-5 px-1.5 border-emerald-500 bg-emerald-900/30 text-emerald-400 font-bold">PAGO OK</Badge>}
                           {lead.payment_status === 'INVALID' && <Badge variant="outline" className="text-[9px] h-5 px-1.5 border-red-500 bg-red-900/30 text-red-400 font-bold">PAGO FALSO</Badge>}
                           {lead.payment_status === 'DOUBTFUL' && <Badge variant="outline" className="text-[9px] h-5 px-1.5 border-amber-500 bg-amber-900/30 text-amber-400 font-bold">DUDOSO</Badge>}
+                          {(!lead.payment_status || lead.payment_status === 'NONE') && <Badge variant="outline" className="text-[9px] h-5 px-1.5 border-slate-700 text-slate-500">S/PAGO</Badge>}
                        </div>
                     </TableCell>
                     <TableCell className="text-center">
@@ -132,15 +159,15 @@ const Leads = () => {
                     </TableCell>
                     <TableCell>
                        <div className="flex flex-col gap-1 w-[100px]">
-                          <span className="text-[9px] text-slate-400 font-bold tracking-widest">{lead.buying_intent || 'BAJO'}</span>
+                          <span className={cn("text-[9px] font-bold tracking-widest", ui.textColor)}>{ui.label}</span>
                           <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
-                             <div className={cn("h-full transition-all duration-500", lead.buying_intent === 'ALTO' ? 'bg-amber-500' : lead.buying_intent === 'MEDIO' ? 'bg-indigo-400' : 'bg-slate-600')} style={{ width: lead.buying_intent === 'ALTO' ? '90%' : lead.buying_intent === 'MEDIO' ? '50%' : '15%' }} />
+                             <div className={cn("h-full transition-all duration-500", ui.color)} style={{ width: ui.width }} />
                           </div>
                        </div>
                     </TableCell>
                     <TableCell className="text-right">
                        <Button size="sm" variant="outline" className="border-slate-700 hover:bg-slate-800 h-8 text-[10px] uppercase font-bold tracking-widest text-amber-500" onClick={() => { setSelectedLead(lead); setIsChatOpen(true); }}>
-                          DETALLES
+                          REVISAR
                        </Button>
                     </TableCell>
                   </TableRow>

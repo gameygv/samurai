@@ -4,8 +4,10 @@ import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { 
-  Trello, Loader2, User, Fingerprint, Image, Target, DollarSign, UserPlus, Mail, ShieldCheck, MapPin, AlertTriangle, GripVertical
+  Trello, Loader2, Fingerprint, Image, Target, DollarSign, UserPlus, 
+  Mail, ShieldCheck, MapPin, AlertTriangle, GripVertical, CheckCircle2, XCircle
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import ChatViewer from '@/components/ChatViewer';
@@ -25,8 +27,10 @@ const Pipeline = () => {
 
   const columns = [
     { id: 'BAJO', title: '1. DATA HUNTING', icon: Fingerprint, color: 'border-slate-700 bg-slate-800/30', desc: 'Faltan Nombre/Ciudad' },
-    { id: 'MEDIO', title: '2. SEDUCCIÓN', icon: Image, color: 'border-indigo-900/50 bg-indigo-900/10', desc: 'Enviando Posters' },
-    { id: 'ALTO', title: '3. CIERRE ($)', icon: Target, color: 'border-amber-700/50 bg-amber-900/10', desc: 'Link Enviado' }
+    { id: 'MEDIO', title: '2. SEDUCCIÓN', icon: Image, color: 'border-indigo-900/50 bg-indigo-900/10', desc: 'Enviando Info/Posters' },
+    { id: 'ALTO', title: '3. CIERRE ($)', icon: Target, color: 'border-amber-700/50 bg-amber-900/10', desc: 'Link de Pago Enviado' },
+    { id: 'COMPRADO', title: '4. GANADO', icon: CheckCircle2, color: 'border-emerald-700/50 bg-emerald-900/10', desc: 'Pago Confirmado' },
+    { id: 'PERDIDO', title: '5. PERDIDO', icon: XCircle, color: 'border-red-900/50 bg-red-900/10', desc: 'Lead abandonado/frío' }
   ];
 
   useEffect(() => {
@@ -37,70 +41,94 @@ const Pipeline = () => {
 
   const fetchLeads = async () => {
     setLoading(true);
-    const { data } = await supabase.from('leads').select('*').neq('buying_intent', 'COMPRADO').order('last_message_at', { ascending: false });
+    // Removemos el filtro de exclusión de COMPRADO para traer a todos al board
+    const { data } = await supabase.from('leads').select('*').order('last_message_at', { ascending: false });
     if (data) setLeads(data);
     setLoading(false);
   };
 
-  const handleDragStart = (e: React.DragEvent, leadId: string) => { setDraggedLeadId(leadId); e.dataTransfer.effectAllowed = 'move'; };
+  const handleDragStart = (e: React.DragEvent, leadId: string) => { 
+     setDraggedLeadId(leadId); 
+     e.dataTransfer.effectAllowed = 'move'; 
+  };
 
   const handleDrop = async (e: React.DragEvent, targetIntent: string) => {
      e.preventDefault();
      if (!draggedLeadId) return;
      const leadId = draggedLeadId;
+     
+     // Actualización optimista
      setLeads(prev => prev.map(l => l.id === leadId ? { ...l, buying_intent: targetIntent } : l));
      setDraggedLeadId(null);
+     
      try {
-        await supabase.from('leads').update({ buying_intent: targetIntent }).eq('id', leadId);
-        toast.success(`Lead movido a ${targetIntent}`);
-     } catch (err) { fetchLeads(); }
+        const { error } = await supabase.from('leads').update({ buying_intent: targetIntent }).eq('id', leadId);
+        if (error) throw error;
+        toast.success(`Lead movido a la etapa: ${targetIntent}`);
+     } catch (err) { 
+        toast.error("Error al mover el lead.");
+        fetchLeads(); // Revertir en caso de error
+     }
   };
 
   const getLeadsByIntent = (intent: string) => leads.filter(l => (l.buying_intent || 'BAJO').toUpperCase() === intent);
   
-  const totalValue = leads.filter(l => l.buying_intent === 'ALTO').length * TICKET_PRICE;
+  const totalPotential = leads.filter(l => l.buying_intent === 'ALTO').length * TICKET_PRICE;
+  const totalWon = leads.filter(l => l.buying_intent === 'COMPRADO').length * TICKET_PRICE;
   const capiReadyCount = leads.filter(l => l.email && l.email.length > 5).length;
 
   return (
     <Layout>
       <div className="max-w-[1800px] mx-auto space-y-6 h-[calc(100vh-140px)] flex flex-col">
         
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {/* TOP STATS */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
            <Card className="bg-slate-900 border-slate-800 p-4 flex items-center gap-4 rounded-2xl shadow-lg">
               <div className="p-3 rounded-xl bg-slate-800 text-slate-300"><Trello className="w-6 h-6" /></div>
-              <div><h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest">Total en Embudo</h3><p className="text-2xl font-bold text-slate-50">{leads.length} Leads</p></div>
+              <div><h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest">Total Embudo</h3><p className="text-xl font-bold text-slate-50">{leads.length} Leads</p></div>
            </Card>
            <Card className="bg-slate-900 border-slate-800 p-4 flex items-center gap-4 rounded-2xl shadow-lg">
               <div className="p-3 rounded-xl bg-indigo-900/30 text-indigo-300 border border-indigo-900/50"><ShieldCheck className="w-6 h-6" /></div>
-              <div><h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest">Salud Meta CAPI</h3><p className="text-2xl font-bold text-slate-50">{capiReadyCount} <span className="text-xs text-slate-500 font-normal">Listos</span></p></div>
+              <div><h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest">Listos CAPI</h3><p className="text-xl font-bold text-slate-50">{capiReadyCount}</p></div>
            </Card>
-           <Card className="bg-slate-900 border-amber-600/30 p-4 flex items-center justify-between border-l-4 border-l-amber-500 rounded-2xl shadow-xl">
+           <Card className="bg-slate-900 border-slate-800 p-4 flex items-center gap-4 rounded-2xl shadow-lg">
+              <div className="p-3 rounded-xl bg-amber-900/30 text-amber-500 border border-amber-900/50"><Target className="w-6 h-6" /></div>
+              <div><h3 className="text-xs font-bold text-amber-600/80 uppercase tracking-widest">Potencial (Alto)</h3><p className="text-xl font-bold text-slate-50">${totalPotential.toLocaleString()}</p></div>
+           </Card>
+           <Card className="bg-slate-900 border-emerald-600/30 p-4 flex items-center justify-between border-l-4 border-l-emerald-500 rounded-2xl shadow-xl">
               <div className="flex items-center gap-4">
-                 <div className="p-3 rounded-xl bg-amber-900/30 text-amber-500"><DollarSign className="w-6 h-6" /></div>
-                 <div><h3 className="text-xs font-bold text-amber-600/80 uppercase tracking-widest">Potencial Cierre</h3><p className="text-2xl font-bold text-slate-50">${totalValue.toLocaleString()}</p></div>
+                 <div className="p-3 rounded-xl bg-emerald-900/30 text-emerald-500"><DollarSign className="w-6 h-6" /></div>
+                 <div><h3 className="text-xs font-bold text-emerald-600/80 uppercase tracking-widest">Ingresos Ganados</h3><p className="text-xl font-bold text-slate-50">${totalWon.toLocaleString()}</p></div>
               </div>
-              <Button className="bg-indigo-900 hover:bg-indigo-800 text-slate-50 h-11 px-5 rounded-xl shadow-lg" onClick={() => setIsCreateOpen(true)}><UserPlus className="w-4 h-4 mr-2" /> Nuevo</Button>
+              <Button className="bg-indigo-900 hover:bg-indigo-800 text-slate-50 h-10 w-10 p-0 rounded-xl shadow-lg shrink-0" onClick={() => setIsCreateOpen(true)} title="Nuevo Lead"><UserPlus className="w-4 h-4" /></Button>
            </Card>
         </div>
 
-        <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-6 min-h-0">
+        {/* PIPELINE BOARD */}
+        <div className="flex-1 flex gap-4 min-h-0 overflow-x-auto custom-scrollbar pb-4">
           {columns.map((col) => {
             const leadsInCol = getLeadsByIntent(col.id);
             return (
-              <div key={col.id} className={cn("rounded-2xl border flex flex-col min-h-0 shadow-2xl overflow-hidden", col.color)} onDragOver={(e) => e.preventDefault()} onDrop={(e) => handleDrop(e, col.id)}>
-                <div className="p-4 border-b border-slate-800/50 bg-slate-900/60 flex justify-between items-center backdrop-blur-sm">
-                   <div><h3 className="font-bold text-xs text-slate-200 uppercase tracking-widest flex items-center gap-2"><col.icon className="w-4 h-4 text-slate-400" /> {col.title}</h3><p className="text-[9px] text-slate-500 mt-1">{col.desc}</p></div>
+              <div key={col.id} className={cn("rounded-2xl border flex flex-col min-h-0 shadow-2xl overflow-hidden min-w-[280px] w-full max-w-[350px] shrink-0", col.color)} onDragOver={(e) => e.preventDefault()} onDrop={(e) => handleDrop(e, col.id)}>
+                <div className="p-4 border-b border-slate-800/50 bg-slate-900/60 flex justify-between items-center backdrop-blur-sm shrink-0">
+                   <div>
+                      <h3 className="font-bold text-xs text-slate-200 uppercase tracking-widest flex items-center gap-2"><col.icon className="w-4 h-4 text-slate-400" /> {col.title}</h3>
+                      <p className="text-[9px] text-slate-500 mt-1">{col.desc}</p>
+                   </div>
                    <Badge className="bg-slate-950 text-slate-300 border-slate-700 shadow-inner">{leadsInCol.length}</Badge>
                 </div>
+                
                 <div className="flex-1 overflow-y-auto p-3 space-y-3 custom-scrollbar bg-slate-950/20">
-                  {leadsInCol.map((lead) => (
+                  {loading ? (
+                     <div className="flex justify-center py-10"><Loader2 className="w-5 h-5 animate-spin text-slate-600" /></div>
+                  ) : leadsInCol.map((lead) => (
                     <div key={lead.id} draggable onDragStart={(e) => handleDragStart(e, lead.id)} className="cursor-move" onClick={() => { setSelectedLead(lead); setIsChatOpen(true); }}>
                        <Card className="bg-slate-900 border-slate-800 hover:border-slate-600 transition-all group relative overflow-hidden shadow-md cursor-pointer">
                          <div className={cn("absolute left-0 top-0 bottom-0 w-1", lead.ai_paused ? "bg-red-900" : "bg-amber-600")} />
                          <CardContent className="p-3 pl-5 space-y-3">
                             <div className="flex justify-between items-start">
-                               <div><p className="text-xs font-bold text-slate-100 group-hover:text-amber-400 transition-colors truncate max-w-[150px]">{lead.nombre || lead.telefono}</p></div>
-                               <GripVertical className="w-3 h-3 text-slate-600 opacity-0 group-hover:opacity-100 transition-opacity" />
+                               <div><p className="text-xs font-bold text-slate-100 group-hover:text-amber-400 transition-colors truncate max-w-[180px]">{lead.nombre || lead.telefono}</p></div>
+                               <GripVertical className="w-3 h-3 text-slate-600 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
                             </div>
                             <div className="flex gap-1.5 flex-wrap mt-1">
                                {lead.ciudad && <Badge variant="outline" className="text-[8px] h-4 px-1.5 border-slate-700 text-slate-400 font-medium"><MapPin className="w-2 h-2 mr-1"/>{lead.ciudad}</Badge>}
@@ -120,6 +148,7 @@ const Pipeline = () => {
             );
           })}
         </div>
+        
         {selectedLead && <ChatViewer lead={selectedLead} open={isChatOpen} onOpenChange={setIsChatOpen} />}
         {isCreateOpen && <CreateLeadDialog open={isCreateOpen} onOpenChange={setIsCreateOpen} onSuccess={fetchLeads} />}
       </div>
