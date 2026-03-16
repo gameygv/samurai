@@ -60,7 +60,6 @@ const AgentBrain = () => {
   const handleSaveAll = async () => {
     setSaving(true);
     try {
-      // 1. Crear Snapshot de respaldo antes de guardar
       const { data: { user } } = await supabase.auth.getUser();
       await supabase.from('prompt_versions').insert({
           version_name: `Manual - ${new Date().toLocaleString()}`,
@@ -69,7 +68,6 @@ const AgentBrain = () => {
           notes: 'Respaldo manual desde el panel de control.'
       });
 
-      // 2. Actualizar configuración activa
       const updates = Object.entries(prompts).map(([key, value]) => ({
         key, value, category: 'PROMPT', updated_at: new Date().toISOString()
       }));
@@ -125,7 +123,6 @@ const AgentBrain = () => {
           </TabsList>
 
           <div className="flex-1 flex flex-col min-h-0">
-            {/* PESTAÑA 1: ALMA */}
             <TabsContent value="alma" className="m-0 h-full">
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-full">
                   <PromptEditor title="Alma Samurai (Tono y Estilo)" icon={Bot} value={prompts['prompt_alma_samurai']} onChange={v => handlePromptChange('prompt_alma_samurai', v)} color="text-amber-500" />
@@ -143,7 +140,6 @@ const AgentBrain = () => {
                 </div>
             </TabsContent>
 
-            {/* PESTAÑA 2: ADN TÁCTICO */}
             <TabsContent value="identidad" className="m-0 h-full">
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-full">
                    <PromptEditor title="ADN Core (Estrategia de Ventas)" icon={Fingerprint} value={prompts['prompt_adn_core']} onChange={v => handlePromptChange('prompt_adn_core', v)} color="text-indigo-400" />
@@ -151,27 +147,22 @@ const AgentBrain = () => {
                 </div>
             </TabsContent>
 
-            {/* PESTAÑA 3: VISIÓN */}
             <TabsContent value="vision" className="m-0 h-full">
                 <PromptEditor title="Instrucciones Ojo de Halcón (Visión)" icon={EyeIcon} value={prompts['prompt_vision_instrucciones']} onChange={v => handlePromptChange('prompt_vision_instrucciones', v)} color="text-slate-400" placeholder="Define cómo Sam debe leer comprobantes de pago..." />
             </TabsContent>
 
-            {/* PESTAÑA 4: ANALISTA */}
             <TabsContent value="analista" className="m-0 h-full">
                 <PromptEditor title="Analista de Datos (Extracción CAPI)" icon={BarChart3} value={prompts['prompt_analista_datos']} onChange={v => handlePromptChange('prompt_analista_datos', v)} color="text-emerald-500" placeholder="Define las reglas para extraer Emails, Nombres y Ciudades..." />
             </TabsContent>
 
-            {/* PESTAÑA 5: SNAPSHOTS */}
             <TabsContent value="versiones" className="m-0 h-full">
                 <VersionsTab versions={versions} onRefresh={fetchVersions} onRestore={handleRestoreSnapshot} />
             </TabsContent>
 
-            {/* PESTAÑA 6: KERNEL VIEW */}
             <TabsContent value="debug" className="m-0 h-full">
                 <DebugTab isActive={activeTab === 'debug'} />
             </TabsContent>
 
-            {/* PESTAÑA 7: LABORATORIO */}
             <TabsContent value="lab" className="m-0 h-full">
                 <LabTab currentPrompts={prompts} onApplyPrompts={p => setPrompts(p)} />
             </TabsContent>
