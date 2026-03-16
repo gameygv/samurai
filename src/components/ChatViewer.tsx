@@ -191,11 +191,18 @@ const ChatViewer = ({ lead: initialLead, open, onOpenChange }: ChatViewerProps) 
       }
 
       const apiResponse = await sendEvolutionMessage(lead.telefono, text, mediaData);
-      if (!apiResponse) { setSending(false); return; }
+      
+      // Permitimos guardar el mensaje en la BD aunque la API falle (Modo Prueba / Simulación)
+      if (!apiResponse) {
+          toast.warning("Modo Prueba: Mensaje guardado en el CRM pero WhatsApp no está conectado.", { duration: 5000 });
+      }
+
+      const textToSave = text || (file ? `[ARCHIVO ENVIADO: ${file.name}]` : '');
+      const finalMessage = apiResponse ? textToSave : `[PRUEBA / WA DESCONECTADO] ${textToSave}`;
 
       await supabase.from('conversaciones').insert({ 
         lead_id: lead.id, 
-        mensaje: text || (file ? `[ARCHIVO ENVIADO: ${file.name}]` : ''), 
+        mensaje: finalMessage, 
         emisor: 'HUMANO', 
         platform: 'PANEL',
         metadata: mediaData ? { mediaUrl: mediaData.url, mediaType: mediaData.type, fileName: mediaData.name } : {}

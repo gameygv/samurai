@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 const Inbox = () => {
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin, profile } = useAuth();
   const [leads, setLeads] = useState<any[]>([]);
   const [filteredLeads, setFilteredLeads] = useState<any[]>([]);
   const [activeLead, setActiveLead] = useState<any>(null);
@@ -213,12 +213,20 @@ const Inbox = () => {
       }
 
       const apiResponse = await sendEvolutionMessage(activeLead.telefono, text, mediaData);
-      if (!apiResponse) { setSending(false); return; }
+      
+      // Permitimos guardar el mensaje en la BD aunque la API falle (Modo Prueba / Simulación)
+      if (!apiResponse) {
+          toast.warning("Modo Prueba: Mensaje guardado en el CRM pero WhatsApp no está conectado.", { duration: 5000 });
+      }
+
+      const textToSave = text || (file ? `[ARCHIVO ENVIADO: ${file.name}]` : '');
+      const finalMessage = apiResponse ? textToSave : `[PRUEBA / WA DESCONECTADO] ${textToSave}`;
 
       await supabase.from('conversaciones').insert({ 
         lead_id: activeLead.id, 
-        mensaje: text || (file ? `[ARCHIVO ENVIADO: ${file.name}]` : ''), 
-        emisor: 'HUMANO', platform: 'PANEL',
+        mensaje: finalMessage, 
+        emisor: 'HUMANO', 
+        platform: 'PANEL',
         metadata: mediaData ? { mediaUrl: mediaData.url, mediaType: mediaData.type, fileName: mediaData.name } : {}
       });
 
