@@ -8,6 +8,7 @@ const corsHeaders = {
 }
 
 serve(async (req) => {
+  // Manejo de sub-rutas (por si Webhook by Events sigue encendido)
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders })
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
@@ -16,23 +17,25 @@ serve(async (req) => {
 
   try {
     const payload = await req.json();
-    console.log("[evolution-webhook] Payload recibido:", JSON.stringify(payload));
+    console.log("[evolution-webhook] Evento detectado:", payload?.event || payload?.type);
 
-    // 1. DETERMINAR SI ES UN MENSAJE ENTRANTE
-    const eventType = payload?.event || payload?.type || '';
-    const isMessage = eventType.toLowerCase().includes('messages') || eventType.toLowerCase().includes('upsert');
+    // 1. FILTRAR SOLO MENSAJES ENTRANTE
+    const eventType = (payload?.event || payload?.type || '').toLowerCase();
     
-    if (!isMessage) {
+    // Solo procesamos si el evento es de mensajes
+    if (!eventType.includes('messages') && !eventType.includes('upsert') && !eventType.includes('chat')) {
         return new Response(JSON.stringify({ status: 'ignored', event: eventType }), { headers: corsHeaders });
     }
 
     const msgData = payload?.data || payload?.body || payload;
     const msg = Array.isArray(msgData) ? msgData[0] : msgData;
 
-    // Ignorar si el mensaje lo enviamos nosotros
-    if (msg?.key?.fromMe) return new Response(JSON.stringify({ status: 'ignored', reason: 'fromMe' }), { headers: corsHeaders });
+    // Ignorar si lo enviamos nosotros
+    if (msg?.key?.fromMe === true || msg?.fromMe === true) {
+        return new Response(JSON.stringify({ status: 'ignored', reason: 'fromMe' }), { headers: corsHeaders });
+    }
 
-    // Extraer datos básicos
+    // Extraer Teléfono y Texto de forma agresiva
     const phone = msg?.key?.remoteJid?.split('@')[0] || msg?.from?.split('@')[0] || msg?.remoteJid?.split('@')[0];
     const text = msg?.message?.conversation || 
                  msg?.message?.extendedTextMessage?.text || 
@@ -66,7 +69,7 @@ serve(async (req) => {
     });
     await supabaseClient.from('leads').update({ last_message_at: new Date().toISOString() }).eq('id', lead.id);
 
-    // 4. LOGICA DE IA
+    // 4. LOGICA DE IA (Kill Switches)
     if (lead.ai_paused) return new Response(JSON.stringify({ status: 'success', ai: 'paused' }), { headers: corsHeaders });
 
     const { data: configs } = await supabaseClient.from('app_config').select('key, value');
@@ -74,30 +77,18 @@ serve(async (req) => {
     
     if (configMap['global_bot_paused'] === 'true') return new Response(JSON.stringify({ status: 'success', ai: 'global_paused' }), { headers: corsHeaders });
 
+    // 5. PROCESAR RESPUESTA
     const openaiKey = configMap['openai_api_key'];
     const evolutionUrl = configMap['evolution_api_url'];
     const evolutionKey = configMap['evolution_api_key'];
 
-    if (!openaiKey || !evolutionUrl || !evolutionKey) {
-        throw new Error("Faltan credenciales en Ajustes (OpenAI o Evolution)");
-    }
-
-    // Armar Contexto
     const bankData = `Banco: ${configMap['bank_name']}\nCuenta: ${configMap['bank_account']}\nCLABE: ${configMap['bank_clabe']}\nTitular: ${configMap['bank_holder']}`;
-    const systemPrompt = `
-        ${configMap['prompt_alma_samurai']}
-        ${configMap['prompt_adn_core']}
-        ${configMap['prompt_behavior_rules']}
-        ${configMap['prompt_human_handoff']}
-        ### [DATOS BANCARIOS OFICIALES]
-        ${bankData}
-    `;
+    const systemPrompt = `${configMap['prompt_alma_samurai']}\n${configMap['prompt_adn_core']}\n${configMap['prompt_behavior_rules']}\n### [PAGOS]\n${bankData}`;
 
     const { data: history } = await supabaseClient.from('conversaciones').select('emisor, mensaje').eq('lead_id', lead.id).order('created_at', { ascending: true }).limit(10);
     const messages = [{ role: 'system', content: systemPrompt }];
     history?.forEach(h => messages.push({ role: h.emisor === 'CLIENTE' ? 'user' : 'assistant', content: h.mensaje }));
 
-    // Llamar OpenAI
     const aiRes = await fetch("https://api.openai.com/v1/chat/completions", {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${openaiKey}`, 'Content-Type': 'application/json' },
@@ -107,22 +98,18 @@ serve(async (req) => {
     const aiData = await aiRes.json();
     let aiText = aiData.choices?.[0]?.message?.content || '';
 
-    // Enviar a WhatsApp
-    const evoRes = await fetch(evolutionUrl, {
+    // Enviar y Guardar
+    await fetch(evolutionUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'apikey': evolutionKey },
         body: JSON.stringify({ number: cleanPhone, text: aiText })
     });
 
-    if (!evoRes.ok) throw new Error("Fallo al enviar mensaje por Evolution API");
-
-    // Guardar respuesta de IA
     await supabaseClient.from('conversaciones').insert({ lead_id: lead.id, emisor: 'IA', mensaje: aiText, platform: 'WHATSAPP' });
 
     return new Response(JSON.stringify({ status: 'success' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
   } catch (err) {
-    console.error("[evolution-webhook] Error Crítico:", err.message);
     return new Response(JSON.stringify({ error: err.message }), { status: 500, headers: corsHeaders });
   }
 });
