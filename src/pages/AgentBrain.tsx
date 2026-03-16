@@ -113,7 +113,24 @@ ESTRUCTURA JSON OBLIGATORIA:
       const { error } = await supabase.from('app_config').upsert(updates, { onConflict: 'key' });
       if (error) throw error;
       
-      toast.success("Cerebro actualizado correctamente");
+      // Generar snapshot automático
+      const { data: { session } } = await supabase.auth.getSession();
+      const autoVersionName = `Auto-Save v${versions.length + 1}.0`;
+      
+      const { error: snapError } = await supabase.from('prompt_versions').insert({
+         version_name: autoVersionName,
+         prompts_snapshot: prompts,
+         created_by: session?.user?.id || null,
+         notes: 'Guardado automático por modificación de prompts'
+      });
+
+      if (snapError) {
+          console.error("Error creando auto-snapshot:", snapError);
+          toast.success("Cerebro actualizado, pero no se pudo generar el snapshot automático.");
+      } else {
+          toast.success("Cerebro actualizado y Snapshot automático creado.");
+      }
+
       fetchVersions();
     } catch (err: any) {
       toast.error("Error al guardar: " + err.message);
@@ -128,14 +145,23 @@ ESTRUCTURA JSON OBLIGATORIA:
      
      setSaving(true);
      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        
         const { error } = await supabase.from('prompt_versions').insert({
            version_name: name,
-           prompts_snapshot: prompts
+           prompts_snapshot: prompts,
+           created_by: session?.user?.id || null
         });
+        
         if (error) throw error;
-        toast.success("Snapshot creado.");
+        toast.success("Snapshot manual creado correctamente.");
         fetchVersions();
-     } finally { setSaving(false); }
+     } catch (err: any) {
+        console.error("Error Snapshot:", err);
+        toast.error("Error al guardar: " + err.message);
+     } finally { 
+        setSaving(false); 
+     }
   };
 
   const handleDeleteSnapshot = async (id: string) => {
@@ -155,7 +181,7 @@ ESTRUCTURA JSON OBLIGATORIA:
   const handleRestoreSnapshot = (snapshot: any) => {
     if (!confirm(`¿Restaurar "${snapshot.version_name}"? Esto reemplazará los prompts actuales.`)) return;
     setPrompts(snapshot.prompts_snapshot);
-    toast.success("Snapshot cargado. Revisa las pestañas.");
+    toast.success("Snapshot cargado. Pulsa 'Aplicar Cambios' para hacerlo definitivo.");
   };
 
   const handleLabImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -430,6 +456,7 @@ ESTRUCTURA JSON OBLIGATORIA:
                                  <TableCell className="font-mono text-amber-500 text-xs pl-6">{v.version_name}</TableCell>
                                  <TableCell className="text-right pr-6">
                                     <Button variant="ghost" size="sm" onClick={() => handleRestoreSnapshot(v)}>RESTAURAR</Button>
+                                    <Button variant="ghost" size="sm" className="text-red-400 hover:text-red-500 ml-2" onClick={() => handleDeleteSnapshot(v.id)}><Trash2 className="w-4 h-4" /></Button>
                                  </TableCell>
                               </TableRow>
                            ))}
