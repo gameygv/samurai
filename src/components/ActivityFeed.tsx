@@ -2,8 +2,9 @@ import React from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { 
   Activity as ActivityIcon, MessageSquare, 
-  UserPlus, AlertCircle, CheckCircle2, Terminal 
+  UserPlus, AlertCircle, CheckCircle2, Terminal, Cpu, Database, Zap
 } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 interface ActivityFeedProps {
   activities: any[];
@@ -13,49 +14,56 @@ interface ActivityFeedProps {
 const ActivityFeed = ({ activities, loading }: ActivityFeedProps) => {
   const getIcon = (action: string) => {
     switch (action) {
-      case 'LOGIN': return <UserPlus className="w-5 h-5" />;
-      case 'CHAT': return <MessageSquare className="w-5 h-5" />;
-      case 'ERROR': return <AlertCircle className="w-5 h-5" />;
-      case 'CREATE': return <CheckCircle2 className="w-5 h-5" />;
-      case 'UPDATE': return <Terminal className="w-5 h-5" />;
-      default: return <ActivityIcon className="w-5 h-5" />;
+      case 'LOGIN': return <Zap className="w-4 h-4" />;
+      case 'CHAT': return <MessageSquare className="w-4 h-4" />;
+      case 'ERROR': return <AlertCircle className="w-4 h-4" />;
+      case 'CREATE': return <Cpu className="w-4 h-4" />;
+      case 'UPDATE': return <Terminal className="w-4 h-4" />;
+      default: return <ActivityIcon className="w-4 h-4" />;
     }
   };
 
-  const getColor = (action: string) => {
-    switch (action) {
-      case 'ERROR': return 'bg-red-500/10 text-red-500';
-      case 'LOGIN': return 'bg-green-500/10 text-green-500';
-      case 'CHAT': return 'bg-blue-500/10 text-blue-500';
-      default: return 'bg-slate-800 text-slate-400';
-    }
+  const getStatusColor = (status: string, action: string) => {
+    if (status === 'ERROR' || action === 'ERROR') return 'text-red-500 border-red-500/20 bg-red-500/5';
+    if (action === 'LOGIN') return 'text-emerald-500 border-emerald-500/20 bg-emerald-500/5';
+    if (action === 'CHAT') return 'text-indigo-400 border-indigo-500/20 bg-indigo-500/5';
+    return 'text-slate-400 border-slate-800 bg-slate-900/50';
   };
 
-  if (loading) return <div className="text-center py-10 text-slate-500">Cargando actividad...</div>;
-  if (activities.length === 0) return <div className="text-center py-10 text-slate-500">No hay actividad reciente.</div>;
+  if (loading) return <div className="text-center py-20 text-indigo-500 font-mono text-xs animate-pulse uppercase tracking-widest">Interceptando Transmisiones...</div>;
+  if (activities.length === 0) return <div className="text-center py-20 text-slate-600 italic uppercase text-[10px] tracking-widest">No mission data available.</div>;
 
   return (
-    <div className="relative border-l border-slate-800 ml-4 space-y-8 py-4">
+    <div className="space-y-3">
       {activities.map((item) => (
-        <div key={item.id} className="relative pl-8 group animate-in slide-in-from-left-2 duration-300">
-          <div className={`absolute left-[-5px] top-1 w-2.5 h-2.5 rounded-full border border-slate-950 ${item.action === 'ERROR' ? 'bg-red-500' : 'bg-indigo-500'}`}></div>
-          <Card className="bg-slate-900 border-slate-800 hover:border-slate-700 transition-colors">
-            <CardContent className="p-4 flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center">
-              <div className="flex items-start gap-4">
-                <div className={`p-2 rounded-lg ${getColor(item.action)}`}>
-                  {getIcon(item.action)}
-                </div>
-                <div>
-                  <h4 className="text-white font-medium">{item.description}</h4>
-                  <p className="text-slate-500 text-xs mt-1 font-mono uppercase">{item.resource} | STATUS: {item.status}</p>
-                </div>
+        <div key={item.id} className="animate-in fade-in slide-in-from-left-2 duration-300">
+          <div className={cn(
+            "border rounded-xl p-3 flex items-start gap-4 transition-all hover:bg-slate-900/80 group",
+            getStatusColor(item.status, item.action)
+          )}>
+            <div className="p-2 rounded-lg bg-slate-950 border border-inherit shrink-0">
+              {getIcon(item.action)}
+            </div>
+            
+            <div className="flex-1 min-w-0">
+              <div className="flex justify-between items-start">
+                <h4 className="text-xs font-bold text-slate-200 truncate pr-4">{item.description}</h4>
+                <span className="text-[9px] font-mono text-slate-500 whitespace-nowrap">{new Date(item.created_at).toLocaleTimeString()}</span>
               </div>
-              <div className="text-right">
-                <p className="text-sm font-medium text-slate-300">{new Date(item.created_at).toLocaleTimeString()}</p>
-                <p className="text-xs text-slate-500">por {item.username}</p>
+              <div className="flex items-center gap-3 mt-1.5">
+                <span className="text-[9px] font-mono uppercase tracking-tighter bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800 text-slate-500">
+                  SRC: {item.resource}
+                </span>
+                <span className="text-[9px] text-slate-600 truncate">
+                  BY: <span className="text-slate-400">{item.username || 'System'}</span>
+                </span>
               </div>
-            </CardContent>
-          </Card>
+            </div>
+
+            {item.status === 'ERROR' && (
+               <div className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.6)] mt-1.5" />
+            )}
+          </div>
         </div>
       ))}
     </div>
