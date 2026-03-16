@@ -1,6 +1,6 @@
 import React, { useRef, useEffect } from 'react';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Loader2, Bot, User, MessageCircle, AlertCircle, StickyNote } from 'lucide-react';
+import { Loader2, Bot, User, MessageCircle, AlertCircle, StickyNote, FileText } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface MessageListProps {
@@ -12,109 +12,131 @@ export const MessageList = ({ messages, loading }: MessageListProps) => {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollIntoView({ behavior: 'smooth' });
+    if (scrollRef.current) scrollRef.current.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  // Función para procesar y separar imágenes/documentos del texto
+  const renderMessageContent = (msg: any) => {
+    let text = msg.mensaje || '';
+    let imageUrl = null;
+    let docUrl = null;
+    let docName = null;
+
+    // 1. Detectar patrón de imagen enviado por el Bot: [IMG: url]
+    const imgMatch = text.match(/\[IMG:\s*(.+?)\]/i);
+    if (imgMatch) {
+      imageUrl = imgMatch[1];
+      text = text.replace(imgMatch[0], '').trim();
+    } 
+    // 2. Detectar metadatos si fue enviado por un humano desde el panel
+    else if (msg.metadata?.mediaUrl) {
+      if (msg.metadata.mediaType === 'image') {
+        imageUrl = msg.metadata.mediaUrl;
+      } else {
+        docUrl = msg.metadata.mediaUrl;
+        docName = msg.metadata.fileName || 'Documento adjunto';
+      }
+      // Limpiar texto de etiquetas [ARCHIVO: ...]
+      text = text.replace(/\[ARCHIVO:\s*.*?\]/i, '').trim();
     }
-  }, [messages.length]);
 
-  if (loading) {
     return (
-      <div className="flex-1 flex items-center justify-center text-slate-500 text-xs gap-2 bg-slate-950">
-        <Loader2 className="w-4 h-4 animate-spin text-indigo-500" /> Cargando conversación...
+      <div className="flex flex-col gap-2">
+        {imageUrl && (
+          <a href={imageUrl} target="_blank" rel="noopener noreferrer" className="block overflow-hidden rounded-lg">
+            <img 
+              src={imageUrl} 
+              alt="Imagen adjunta" 
+              className="w-full max-w-[240px] sm:max-w-[300px] h-auto max-h-64 object-cover rounded-lg border border-white/10 hover:opacity-80 transition-opacity" 
+              loading="lazy"
+            />
+          </a>
+        )}
+        
+        {docUrl && (
+          <a href={docUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 p-2.5 bg-slate-950/30 rounded-lg border border-white/10 hover:bg-slate-950/60 transition-colors">
+            <FileText className="w-5 h-5 text-amber-500 shrink-0" />
+            <span className="text-xs truncate font-medium underline underline-offset-2">{docName}</span>
+          </a>
+        )}
+
+        {text && <p className="whitespace-pre-wrap leading-relaxed break-words">{text}</p>}
       </div>
     );
-  }
-
-  if (messages.length === 0) {
-    return (
-      <div className="flex-1 flex items-center justify-center bg-slate-950">
-        <div className="text-center text-slate-600">
-          <MessageCircle className="w-10 h-10 mx-auto mb-2 opacity-20" />
-          <p className="text-xs uppercase tracking-widest">Sin mensajes aún</p>
-        </div>
-      </div>
-    );
-  }
+  };
 
   return (
-    <ScrollArea className="flex-1 bg-slate-950">
-      <div className="p-4 space-y-3 pb-6">
-        {messages.map((msg) => {
-          const emisor = (msg.emisor || '').toUpperCase();
-          const isClient = emisor === 'CLIENTE';
-          const isAI = emisor === 'IA' || emisor === 'SAMURAI';
-          const isHuman = emisor === 'HUMANO';
-          const isNote = emisor === 'NOTA';
-          const isError = msg.platform === 'ERROR';
+    <ScrollArea className="flex-1 p-4 bg-slate-950">
+      {loading ? (
+        <div className="flex h-full items-center justify-center text-slate-500 text-xs gap-2">
+           <Loader2 className="w-4 h-4 animate-spin text-indigo-500" /> Sincronizando...
+        </div>
+      ) : messages.length === 0 ? (
+        <div className="flex h-full items-center justify-center text-center text-slate-600 flex-col gap-2">
+           <MessageCircle className="w-10 h-10 opacity-20" />
+           <p className="text-xs uppercase tracking-widest font-bold">Sin mensajes aún</p>
+        </div>
+      ) : (
+        <div className="space-y-6 pb-4">
+          {messages.map((msg) => {
+             const emisor = (msg.emisor || '').toUpperCase();
+             const isClient = emisor === 'CLIENTE';
+             const isAI = emisor === 'IA' || emisor === 'SAMURAI';
+             const isHuman = emisor === 'HUMANO';
+             const isNote = emisor === 'NOTA';
+             const isError = msg.platform === 'ERROR';
 
-          // Notas internas - centradas
-          if (isNote) {
-            return (
-              <div key={msg.id} className="flex justify-center animate-in fade-in duration-200">
-                <div className="flex items-center gap-2 bg-amber-900/20 border border-amber-500/20 text-amber-400 text-[10px] px-3 py-1.5 rounded-full max-w-[80%]">
-                  <StickyNote className="w-3 h-3 shrink-0" />
-                  <span className="italic">{msg.mensaje}</span>
+             // Notas internas (Centradas)
+             if (isNote) {
+               return (
+                 <div key={msg.id} className="flex justify-center animate-in fade-in duration-300">
+                   <div className="flex items-center gap-2 bg-amber-900/20 border border-amber-500/20 text-amber-400 text-[10px] px-3 py-1.5 rounded-full max-w-[80%] shadow-sm">
+                     <StickyNote className="w-3 h-3 shrink-0" />
+                     <span className="italic">{msg.mensaje}</span>
+                   </div>
+                 </div>
+               );
+             }
+
+             // Errores (Centrados)
+             if (isError) {
+               return (
+                 <div key={msg.id} className="flex justify-center animate-in fade-in duration-300">
+                   <div className="flex items-start gap-2 bg-red-900/20 border border-red-500/30 text-red-400 text-[10px] px-3 py-2 rounded-lg max-w-[90%] shadow-sm">
+                     <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                     <span className="font-mono leading-relaxed">{msg.mensaje}</span>
+                   </div>
+                 </div>
+               );
+             }
+
+             // Mensajes de Chat (Derecha / Izquierda)
+             const align = isClient ? 'justify-start' : 'justify-end';
+             
+             return (
+              <div key={msg.id} className={cn("flex w-full animate-in fade-in duration-300", align)}>
+                <div className={cn("max-w-[85%] flex flex-col", isClient ? "items-start" : "items-end")}>
+                   <div className={cn(
+                      "p-3.5 rounded-2xl text-sm border shadow-sm",
+                      isClient ? "bg-slate-900 border-slate-800 text-slate-200 rounded-bl-none" : 
+                      isAI ? "bg-indigo-600/10 border-indigo-500/30 text-indigo-100 rounded-br-none" : 
+                      "bg-emerald-600/10 border-emerald-500/30 text-emerald-100 rounded-br-none"
+                   )}>
+                      {renderMessageContent(msg)}
+                   </div>
+                   <div className="flex items-center gap-1.5 mt-1.5 px-1 opacity-50">
+                      {isAI && <Bot className="w-3 h-3 text-indigo-400" />}
+                      {isHuman && <User className="w-3 h-3 text-emerald-400" />}
+                      <span className="text-[9px] font-mono uppercase tracking-widest">
+                         {isAI ? 'Samurai AI' : isHuman ? 'Vendedor' : 'Cliente'} • {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                   </div>
                 </div>
               </div>
-            );
-          }
-
-          // Errores - centrados en rojo
-          if (isError) {
-            return (
-              <div key={msg.id} className="flex justify-center animate-in fade-in duration-200">
-                <div className="flex items-center gap-2 bg-red-900/20 border border-red-500/30 text-red-400 text-[10px] px-3 py-1.5 rounded-lg max-w-[90%]">
-                  <AlertCircle className="w-3 h-3 shrink-0" />
-                  <span className="font-mono">{msg.mensaje}</span>
-                </div>
-              </div>
-            );
-          }
-
-          // Mensajes normales
-          const isRight = isAI || isHuman;
-
-          return (
-            <div
-              key={msg.id}
-              className={cn(
-                "flex w-full animate-in fade-in slide-in-from-bottom-1 duration-200",
-                isRight ? "justify-end" : "justify-start"
-              )}
-            >
-              <div className={cn("max-w-[80%] flex flex-col gap-1", isRight ? "items-end" : "items-start")}>
-                {/* Burbuja del mensaje */}
-                <div className={cn(
-                  "px-4 py-2.5 rounded-2xl text-sm leading-relaxed shadow-sm",
-                  isClient && "bg-slate-800 text-slate-100 rounded-bl-sm",
-                  isAI && "bg-indigo-600 text-white rounded-br-sm",
-                  isHuman && "bg-emerald-700 text-white rounded-br-sm",
-                )}>
-                  <p className="whitespace-pre-wrap break-words">{msg.mensaje}</p>
-                </div>
-
-                {/* Etiqueta de emisor */}
-                <div className={cn(
-                  "flex items-center gap-1 px-1",
-                  isRight ? "flex-row-reverse" : "flex-row"
-                )}>
-                  {isAI && <Bot className="w-3 h-3 text-indigo-400" />}
-                  {isHuman && <User className="w-3 h-3 text-emerald-400" />}
-                  <span className={cn(
-                    "text-[9px] font-mono uppercase tracking-wider",
-                    isAI ? "text-indigo-400" : isHuman ? "text-emerald-400" : "text-slate-500"
-                  )}>
-                    {isAI ? 'Samurai IA' : isHuman ? 'Vendedor' : 'Cliente'}
-                    {' · '}
-                    {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  </span>
-                </div>
-              </div>
-            </div>
-          );
-        })}
-        <div ref={scrollRef} />
-      </div>
+          )})}
+          <div ref={scrollRef} />
+        </div>
+      )}
     </ScrollArea>
   );
 };
