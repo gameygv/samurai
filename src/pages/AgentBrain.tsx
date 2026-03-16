@@ -41,18 +41,18 @@ const AgentBrain = () => {
             const p: any = {};
             data.forEach(item => p[item.key] = item.value);
             
-            // Si el analista está vacío, inyectar el prompt maestro inicial mejorado
+            // Si el analista está vacío, inyectar el prompt maestro inicial genérico
             if (!p['prompt_analista_datos']) {
-                p['prompt_analista_datos'] = `Eres el "Data Extractor" de The Elephant Bowl. Tu única misión es analizar la conversación y devolver un objeto JSON estricto con los datos del prospecto. No escribas texto adicional, solo el JSON.
+                p['prompt_analista_datos'] = `Eres el "Data Extractor" del CRM. Tu única misión es analizar la conversación y devolver un objeto JSON estricto con los datos del prospecto. No escribas texto adicional, solo el JSON.
 
 REGLAS DE EXTRACCIÓN (ANTI-ALUCINACIÓN):
 1. Identifica datos de contacto para Meta CAPI (Nombre, Apellido, Email, Ciudad, Estado, CP).
 2. Si el cliente NO HA ESCRITO SU CORREO explícitamente, o dice "no tengo", debes devolver "email": "null". NUNCA inventes un correo.
 3. Determina el 'intent' (Intención de Compra):
    - BAJO: Preguntas genéricas, saludo inicial.
-   - MEDIO: Pide detalles de fechas, pregunta por el profesor, ha visto posters.
-   - ALTO: Pide link de pago, pide cuenta bancaria, confirma que va a asistir.
-4. 'main_pain': Identifica qué quiere sanar o aprender el cliente (ej: estrés, aprender técnica, sanación sonora).
+   - MEDIO: Pide detalles técnicos, fechas, ha visto catálogos/posters.
+   - ALTO: Pide link de pago, pide cuenta bancaria, confirma que va a comprar.
+4. 'main_pain': Identifica qué necesidad o problema busca resolver el cliente.
 5. 'lead_score': Del 1 al 100. Sube el score por cada dato obtenido (Email +20, Ciudad +20, Intención Alta +40).
 
 ESTRUCTURA JSON OBLIGATORIA:
@@ -67,7 +67,7 @@ ESTRUCTURA JSON OBLIGATORIA:
   "intent": "BAJO | MEDIO | ALTO",
   "summary": "Resumen de 1 oración del estado actual",
   "origen_contacto": "WhatsApp",
-  "servicio_interes": "Taller Cuencos / Certificación / etc",
+  "servicio_interes": "Producto A / Servicio B / etc",
   "tiempo_compra": "Urgencia detectada o null",
   "main_pain": "string o null",
   "lead_score": number
@@ -97,7 +97,6 @@ ESTRUCTURA JSON OBLIGATORIA:
       const { data: { session } } = await supabase.auth.getSession();
 
       // 1. REGLA ESTRICTA: BACKUP FIRST
-      // Antes de escribir los nuevos prompts, tomamos una foto de cómo está la base de datos AHORA MISMO
       const { data: currentDbData } = await supabase.from('app_config').select('key, value').eq('category', 'PROMPT');
       if (currentDbData && currentDbData.length > 0) {
          const oldPrompts: any = {};
@@ -115,7 +114,7 @@ ESTRUCTURA JSON OBLIGATORIA:
          }
       }
 
-      // 2. APLICAR CAMBIOS (Nuevos Prompts)
+      // 2. APLICAR CAMBIOS
       const updates = Object.entries(prompts).map(([key, value]) => ({
         key,
         value,
@@ -167,7 +166,6 @@ ESTRUCTURA JSON OBLIGATORIA:
     <Layout>
       <div className="max-w-[1600px] mx-auto flex flex-col h-[calc(100vh-140px)] gap-6 overflow-hidden">
         
-        {/* Header Superior */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 shrink-0 bg-slate-900 p-5 rounded-2xl border border-slate-800 shadow-xl">
           <div className="flex items-center gap-4">
             <div className="p-3 bg-indigo-900/30 rounded-xl border border-indigo-900/50">
@@ -218,7 +216,7 @@ ESTRUCTURA JSON OBLIGATORIA:
             <TabsContent value="alma" className="m-0 h-full flex flex-col data-[state=inactive]:hidden">
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 flex-1 min-h-0">
                   <div className="h-full min-h-0">
-                     <PromptEditor readOnly={!isDev} title="Alma de The Elephant Bowl" icon={Bot} value={prompts['prompt_alma_samurai']} onChange={v => handlePromptChange('prompt_alma_samurai', v)} color="text-amber-500" />
+                     <PromptEditor readOnly={!isDev} title="Alma Operativa" icon={Bot} value={prompts['prompt_alma_samurai']} onChange={v => handlePromptChange('prompt_alma_samurai', v)} color="text-amber-500" />
                   </div>
                   <Card className="bg-slate-900 border-slate-800 flex flex-col h-full overflow-hidden shadow-2xl rounded-2xl">
                     <CardHeader className="shrink-0 py-4 border-b border-slate-800 bg-slate-950/30"><CardTitle className="text-slate-50 text-xs uppercase tracking-widest flex items-center gap-2"><Layers className="w-4 h-4 text-amber-500" /> Jerarquía Técnica</CardTitle></CardHeader>
@@ -246,7 +244,7 @@ ESTRUCTURA JSON OBLIGATORIA:
             </TabsContent>
             
             <TabsContent value="vision" className="m-0 h-full data-[state=inactive]:hidden">
-                <PromptEditor readOnly={!isDev} title="Ojo de Halcón" icon={EyeIcon} value={prompts['prompt_vision_instrucciones']} onChange={v => handlePromptChange('prompt_vision_instrucciones', v)} color="text-amber-500" />
+                <PromptEditor readOnly={!isDev} title="Ojo de Halcón (Validación de Pagos)" icon={EyeIcon} value={prompts['prompt_vision_instrucciones']} onChange={v => handlePromptChange('prompt_vision_instrucciones', v)} color="text-amber-500" />
             </TabsContent>
 
             <TabsContent value="analista" className="m-0 h-full data-[state=inactive]:hidden">

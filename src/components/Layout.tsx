@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { supabase } from '@/integrations/supabase/client';
 import { 
   LayoutDashboard, Brain, Settings as SettingsIcon, Database, LogOut, 
   Users, FileText, UserCircle, MessageSquare, Contact,
@@ -16,7 +17,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -27,13 +27,19 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
   const { profile, signOut, isAdmin } = useAuth();
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [globalSearch, setGlobalSearch] = useState('');
+  const [brandName, setBrandName] = useState('Samurai Workspace');
+
+  useEffect(() => {
+    supabase.from('app_config').select('value').eq('key', 'brand_name').maybeSingle().then(({ data }) => {
+       if (data?.value) setBrandName(data.value);
+    });
+  }, []);
 
   const handleLogout = async () => {
     await signOut();
     navigate('/login');
   };
 
-  // Definición de grupos de menú con permisos
   const menuGroups = [
     {
       title: "PRINCIPAL",
@@ -84,15 +90,14 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
     <div className="flex flex-col h-full">
       <div className="p-6 flex items-center gap-3">
         <div className="w-10 h-10 flex items-center justify-center shrink-0">
-          <img src="/logo.png" alt="The Elephant Bowl Logo" className="w-full h-full object-contain drop-shadow-md" />
+          <img src="/logo.png" alt="Brand Logo" className="w-full h-full object-contain drop-shadow-md" />
         </div>
-        <span className="font-bold text-[15px] tracking-tight uppercase text-slate-50 leading-tight">The Elephant Bowl</span>
+        <span className="font-bold text-[15px] tracking-tight uppercase text-slate-50 leading-tight">{brandName}</span>
       </div>
 
       <ScrollArea className="flex-1 px-4">
         <div className="space-y-6 py-2">
           {menuGroups.map((group, i) => {
-            // Filtrar items del grupo según el rol
             const filteredItems = group.items.filter(item => 
               item.roles.includes('any') || (profile?.role && item.roles.includes(profile.role.toLowerCase()))
             );

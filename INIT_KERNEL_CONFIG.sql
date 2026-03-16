@@ -37,7 +37,9 @@ Reglas:
 4. ANOMALY_DETAILS: Explica la anomalía si existe, si no, null.
 Responde ÚNICAMENTE con JSON: {"score": 85, "tone_analysis": "Amable", "anomaly_detected": false, "anomaly_details": null}', 'KERNEL', 'Reglas para que la IA evalúe la calidad de respuesta de los humanos'),
 
-('brand_name', 'The Elephant Bowl', 'SYSTEM', 'Nombre del proyecto/empresa para White-Label')
+('prompt_vision_poster', 'Eres un asistente experto en extracción de datos. Analiza esta imagen promocional y extrae textualmente TODA la información comercial que contiene: Título, Fechas, Ubicación, Precios y cualquier otro dato visible. No inventes datos.', 'KERNEL', 'Instrucción para leer posters'),
+
+('brand_name', 'Samurai CRM Workspace', 'SYSTEM', 'Nombre del proyecto/empresa para White-Label')
 
 ON CONFLICT (key) DO UPDATE SET 
 value = EXCLUDED.value,

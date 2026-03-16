@@ -114,7 +114,7 @@ const KnowledgeBase = () => {
               <Globe className="w-6 h-6 text-indigo-400" />
             </div>
             <div className="flex-1">
-              <h3 className="text-white font-bold text-sm">Sincronización con theelephantbowl.com</h3>
+              <h3 className="text-white font-bold text-sm">Sincronización con Sitio Web Oficial</h3>
               <p className="text-xs text-slate-400">La IA utiliza el contenido indexado del sitio oficial como su verdad absoluta. Aquí puedes añadir recursos adicionales.</p>
             </div>
             <Button variant="outline" size="sm" className="border-indigo-500/30 text-indigo-400" onClick={() => window.location.href='/website-content'}>
@@ -129,7 +129,7 @@ const KnowledgeBase = () => {
               <BookOpen className="w-8 h-8 text-indigo-500" />
               Base de Conocimiento
             </h1>
-            <p className="text-slate-400">Archivos técnicos, biografías de maestros y detalles de talleres.</p>
+            <p className="text-slate-400">Archivos técnicos, detalles de productos y documentación en PDF.</p>
           </div>
           <Button className="bg-indigo-600 hover:bg-indigo-700 shadow-lg shadow-indigo-900/20" onClick={() => setIsDialogOpen(true)}>
             <Upload className="w-4 h-4 mr-2" />

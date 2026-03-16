@@ -27,10 +27,12 @@ serve(async (req) => {
        
        let customVisionPrompt = "";
 
-       // AISLAMIENTO: Si es Poster, usamos un prompt exhaustivo de extracción comercial.
-       // Si es Payment, usamos Ojo de Halcón (Auditoría Financiera).
+       // AISLAMIENTO AGNÓSTICO: Leemos las instrucciones de visión desde la base de datos
        if (assetCategory === 'POSTER') {
-          customVisionPrompt = "Eres un asistente experto en extracción de datos. Analiza este póster promocional y extrae textualmente TODA la información comercial que contiene: Título del Taller, Fechas exactas, Ciudad/Ubicación, Precios (Preventa y Regular), Horarios desglosados, el NOMBRE DEL PROFESOR o maestro que lo imparte (dato crucial), Dirección completa y cualquier otro dato visible. Tu respuesta debe ser clara, estructurada y basada 100% en lo que ves en la imagen. No inventes datos.";
+          customVisionPrompt = configs?.find(c => c.key === 'prompt_vision_poster')?.value;
+          if (!customVisionPrompt) {
+             customVisionPrompt = "Eres un asistente experto en extracción de datos. Analiza esta imagen promocional y extrae textualmente TODA la información comercial que contiene: Título, Fechas, Ubicación, Precios y cualquier otro dato visible. No inventes datos.";
+          }
        } else {
           customVisionPrompt = configs?.find(c => c.key === 'prompt_vision_instrucciones')?.value;
           // Fallback de seguridad estricto para pagos
@@ -59,7 +61,7 @@ serve(async (req) => {
               }
             ],
             max_tokens: 800,
-            temperature: 0.1 // Baja temperatura para precisión matemática
+            temperature: 0.1 // Baja temperatura para precisión
           })
        });
 

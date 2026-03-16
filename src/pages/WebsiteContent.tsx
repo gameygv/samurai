@@ -131,7 +131,7 @@ const WebsiteContent = () => {
               <Globe className="w-8 h-8 text-indigo-500" />
               Auditor de Verdad Maestra
             </h1>
-            <p className="text-slate-400">Control de indexación y visión de theelephantbowl.com</p>
+            <p className="text-slate-400">Control de indexación y lectura del Sitio Web Oficial.</p>
           </div>
           <div className="flex gap-3">
             <Button onClick={() => setIsSettingsOpen(true)} variant="outline" className="border-slate-800 text-slate-400">
@@ -180,7 +180,7 @@ const WebsiteContent = () => {
                             <p className={`text-[11px] font-bold truncate ${selectedPage?.id === page.id ? 'text-white' : 'text-slate-400'}`}>{page.title}</p>
                             <div className="flex items-center gap-2 mt-1">
                                 <div className={`w-1.5 h-1.5 rounded-full ${page.scrape_status === 'success' ? 'bg-green-500' : 'bg-red-500'}`} />
-                                <span className="text-[9px] text-slate-600 font-mono truncate">{page.url.replace('https://theelephantbowl.com', '')}</span>
+                                <span className="text-[9px] text-slate-600 font-mono truncate" title={page.url}>{page.url}</span>
                             </div>
                           </button>
                           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">

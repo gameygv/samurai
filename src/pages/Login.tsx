@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
-import { Loader2, ShieldCheck, Mail, Wifi, WifiOff } from 'lucide-react';
+import { Loader2, ShieldCheck, Wifi, WifiOff } from 'lucide-react';
 import { toast } from 'sonner';
 
 const Login = () => {
@@ -13,10 +13,14 @@ const Login = () => {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [dbStatus, setDbStatus] = useState<'checking' | 'ok' | 'error'>('checking');
+  const [brandName, setBrandName] = useState('Samurai Workspace');
   const navigate = useNavigate();
 
   useEffect(() => {
     checkDbConnection();
+    supabase.from('app_config').select('value').eq('key', 'brand_name').maybeSingle().then(({ data }) => {
+       if (data?.value) setBrandName(data.value);
+    });
   }, []);
 
   const checkDbConnection = async () => {
@@ -65,9 +69,9 @@ const Login = () => {
           <div className="mx-auto w-28 h-28 flex items-center justify-center mb-2">
             <img src="/logo.png" alt="Logo" className="w-full h-full object-contain" />
           </div>
-          <CardTitle className="text-3xl font-bold text-slate-50">The Elephant Bowl</CardTitle>
+          <CardTitle className="text-3xl font-bold text-slate-50">{brandName}</CardTitle>
           <CardDescription className="text-slate-400 uppercase text-[10px] tracking-widest font-bold">
-            Intelligent CRM & Protocol
+            Samurai Kernel AI System
           </CardDescription>
         </CardHeader>
 

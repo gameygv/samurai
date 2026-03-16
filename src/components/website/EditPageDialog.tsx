@@ -62,7 +62,7 @@ export const EditPageDialog = ({ open, onOpenChange, page, onSuccess }: EditPage
             {page ? 'Editar Fuente de Verdad' : 'Nueva Fuente de Verdad'}
           </DialogTitle>
           <DialogDescription>
-            Configura la URL de theelephantbowl.com que Samurai debe indexar.
+            Configura la URL principal que el Samurai debe indexar para aprender sobre la empresa.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4 pt-4">
@@ -71,7 +71,7 @@ export const EditPageDialog = ({ open, onOpenChange, page, onSuccess }: EditPage
             <Input 
               value={formData.title} 
               onChange={e => setFormData({...formData, title: e.target.value})}
-              placeholder="Ej: Curso de Cuencos Nivel 1"
+              placeholder="Ej: Inicio / Producto A"
               className="bg-slate-950 border-slate-800"
               required
             />
@@ -81,7 +81,7 @@ export const EditPageDialog = ({ open, onOpenChange, page, onSuccess }: EditPage
             <Input 
               value={formData.url} 
               onChange={e => setFormData({...formData, url: e.target.value})}
-              placeholder="https://theelephantbowl.com/pagina"
+              placeholder="https://midominio.com/pagina"
               className="bg-slate-950 border-slate-800 font-mono"
               required
             />
