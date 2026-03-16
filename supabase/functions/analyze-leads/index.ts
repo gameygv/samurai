@@ -22,9 +22,29 @@ serve(async (req) => {
     
     const configMap = configs?.reduce((acc, item) => ({...acc, [item.key]: item.value}), {});
     const apiKey = configMap['openai_api_key'];
-    const extractionPrompt = configMap['prompt_analista_datos'] || 'Extrae datos en JSON...';
+    let extractionPrompt = configMap['prompt_analista_datos'] || 'Extrae datos en JSON...';
 
     if (!apiKey) throw new Error("OpenAI API Key faltante.");
+
+    // --- NUEVO: OBTENER AGENTES Y SUS TERRITORIOS ---
+    const { data: agents } = await supabaseClient
+        .from('profiles')
+        .select('id, full_name, territories')
+        .in('role', ['sales', 'agent', 'admin'])
+        .not('territories', 'is', null);
+
+    if (agents && agents.length > 0 && !lead.assigned_to) {
+        extractionPrompt += `\n\n=== ASIGNACIÓN GEOGRÁFICA DE LEADS ===
+Agentes disponibles y sus zonas:
+${agents.map(a => `- ID: ${a.id} | Nombre: ${a.full_name} | Zonas: ${(a.territories || []).join(', ')}`).join('\n')}
+
+REGLA DE ASIGNACIÓN:
+Analiza la ciudad, estado o país del lead en la conversación. Busca qué agente cubre esa zona. 
+- Si ningún agente la cubre exactamente, usa lógica geográfica estricta para encontrar al agente con la zona más cercana (Ej: Si el lead es de Irapuato y nadie lo cubre, pero alguien tiene Guadalajara, asígnalo a él).
+- Si hay varios agentes empatados en zona o cercanía, devuelve los IDs de todos ellos.
+- Si el lead no dice su ubicación, devuelve un array vacío [].
+Debes agregar obligatoriamente al JSON principal el campo "assigned_agent_ids": ["id1", "id2"]`;
+    }
 
     const { data: messages } = await supabaseClient
         .from('conversaciones')
@@ -35,7 +55,7 @@ serve(async (req) => {
 
     const transcript = messages?.map(m => `[${m.emisor}]: ${m.mensaje}`).join('\n') || '';
 
-    // IA EXTRAE DATOS
+    // IA EXTRAE DATOS Y DECIDE RUTEO
     const response = await fetch(OPENAI_URL, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
@@ -72,6 +92,14 @@ serve(async (req) => {
     if (result.tiempo_compra && result.tiempo_compra !== 'null') updates.tiempo_compra = result.tiempo_compra;
     if (result.main_pain && result.main_pain !== 'null') updates.main_pain = result.main_pain;
     if (result.lead_score) updates.lead_score = parseInt(result.lead_score) || 0;
+
+    // --- PROCESAR LA ASIGNACIÓN DE AGENTE (ROUND ROBIN INTELIGENTE) ---
+    if (!lead.assigned_to && result.assigned_agent_ids && Array.isArray(result.assigned_agent_ids) && result.assigned_agent_ids.length > 0) {
+        // Seleccionar aleatoriamente si hay múltiples opciones (empate geográfico)
+        const randomIndex = Math.floor(Math.random() * result.assigned_agent_ids.length);
+        updates.assigned_to = result.assigned_agent_ids[randomIndex];
+        console.log(`[analyze-leads] Lead ${lead_id} asignado automáticamente al agente ${updates.assigned_to} basado en ubicación.`);
+    }
 
     const { data: updatedLead } = await supabaseClient.from('leads').update(updates).eq('id', lead_id).select().single();
 

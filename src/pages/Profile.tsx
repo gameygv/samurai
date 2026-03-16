@@ -6,7 +6,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { UserCircle, Key, Loader2, Edit, Save, X, AlertTriangle } from 'lucide-react';
+import { UserCircle, Key, Loader2, Edit, Save, X, AlertTriangle, MapPin, Phone } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { logActivity } from '@/utils/logger';
 
@@ -18,13 +19,14 @@ const Profile = () => {
   const [loadingProfile, setLoadingProfile] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
 
-  const [form, setForm] = useState({ fullName: '', email: '' });
+  const [form, setForm] = useState({ fullName: '', email: '', phone: '' });
 
   useEffect(() => {
     if (profile && user) {
       setForm({
         fullName: profile.full_name || '',
-        email: user.email || ''
+        email: user.email || '',
+        phone: profile.phone || ''
       });
     }
   }, [profile, user]);
@@ -42,10 +44,10 @@ const Profile = () => {
         if (functionError) throw functionError;
       }
 
-      // Actualizar nombre en la tabla de perfiles
+      // Actualizar nombre y teléfono
       const { error: profileError } = await supabase
         .from('profiles')
-        .update({ full_name: form.fullName })
+        .update({ full_name: form.fullName, phone: form.phone })
         .eq('id', user?.id);
       
       if (profileError) throw profileError;
@@ -108,7 +110,7 @@ const Profile = () => {
   return (
     <Layout>
       <div className="max-w-4xl mx-auto space-y-6">
-        <h1 className="text-3xl font-bold text-white mb-2">Mi Perfil</h1>
+        <h1 className="text-3xl font-bold text-white mb-2">Mi Perfil Operativo</h1>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
            <Card className="bg-slate-900 border-slate-800">
@@ -134,7 +136,40 @@ const Profile = () => {
                      className="bg-slate-950 border-slate-800 text-white disabled:opacity-70"
                    />
                  </div>
-                 <div className="space-y-2">
+                 
+                 <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label className="text-slate-400">WhatsApp de Contacto</Label>
+                      <Input 
+                        value={form.phone}
+                        onChange={(e) => setForm({...form, phone: e.target.value})}
+                        disabled={!isEditing}
+                        placeholder="Ej: 52155..."
+                        className="bg-slate-950 border-slate-800 text-white disabled:opacity-70 font-mono"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-slate-400">Rol del Sistema</Label>
+                      <div className="p-2 h-10 flex items-center bg-slate-950 rounded-md border border-slate-800 text-indigo-400 uppercase font-bold tracking-widest text-xs">
+                        {profile?.role || 'User'}
+                      </div>
+                    </div>
+                 </div>
+
+                 <div className="space-y-2 pt-2 border-t border-slate-800">
+                   <Label className="text-slate-400 flex items-center gap-2"><MapPin className="w-3.5 h-3.5"/> Zonas Asignadas (Routing IA)</Label>
+                   <div className="flex flex-wrap gap-1.5 p-2 bg-slate-950 border border-slate-800 rounded-md min-h-[40px]">
+                      {profile?.territories && profile.territories.length > 0 ? (
+                         profile.territories.map((t: string, i: number) => (
+                            <Badge key={i} variant="outline" className="bg-slate-900 border-slate-700 text-slate-300">{t}</Badge>
+                         ))
+                      ) : (
+                         <span className="text-xs text-slate-500 italic mt-1">Recibes todo el tráfico (Global) o no tienes zonas. Contacta a un administrador para modificaciones.</span>
+                      )}
+                   </div>
+                 </div>
+
+                 <div className="space-y-2 pt-2 border-t border-slate-800">
                    <Label className="text-slate-400">Email (ID de Acceso)</Label>
                    <Input 
                      type="email"
@@ -148,12 +183,6 @@ const Profile = () => {
                            <AlertTriangle size={12} /> Al cambiar el email, se cerrará tu sesión actual.
                        </p>
                    )}
-                 </div>
-                 <div className="space-y-1">
-                   <Label className="text-slate-400">Rol</Label>
-                   <div className="p-2 h-10 flex items-center bg-slate-950 rounded border border-slate-800 text-white uppercase font-mono text-sm">
-                     {profile?.role || 'User'}
-                   </div>
                  </div>
                </CardContent>
                {isEditing && (
