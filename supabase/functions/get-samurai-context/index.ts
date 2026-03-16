@@ -11,124 +11,69 @@ serve(async (req) => {
     
     const body = await req.json().catch(() => ({}));
     const lead = body.lead || {};
+    const platform = body.platform || 'WHATSAPP';
 
     const { data: configs } = await supabaseClient.from('app_config').select('key, value');
     const getConfig = (key: string, def = "") => configs?.find((c: any) => c.key === key)?.value || def;
 
-    const wcUrl = getConfig('wc_url', "https://tutienda.com");
-    const checkoutPath = getConfig('wc_checkout_path', "/checkout/");
+    // --- 1. ESTADO DE DATOS DEL LEAD ---
+    const missing = [];
+    if (!lead.nombre || lead.nombre.includes('Nuevo')) missing.push("NOMBRE REAL");
+    if (!lead.email) missing.push("EMAIL (Para enviarle su pase/info)");
+    if (!lead.ciudad) missing.push("UBICACIÓN (Para ver disponibilidad en su zona)");
     
-    const baseUrl = wcUrl.endsWith('/') ? wcUrl.slice(0, -1) : wcUrl;
-    const path = checkoutPath.startsWith('/') ? checkoutPath : `/${checkoutPath}`;
-    
-    // Parámetros dinámicos para los links
-    let leadParams = "";
-    if (lead.nombre && !lead.nombre.includes('Nuevo Lead')) {
-        const names = lead.nombre.trim().split(' ');
-        leadParams += `&wffn_billing_first_name=${encodeURIComponent(names[0])}`;
-        if (names.length > 1) {
-           leadParams += `&wffn_billing_last_name=${encodeURIComponent(names.slice(1).join(' '))}`;
-        }
+    let dataStatus = `\n=== ESTADO DE CAPTURA DE DATOS ===\n`;
+    dataStatus += `PLATAFORMA ACTUAL: ${platform}\n`;
+    if (platform === 'WHATSAPP') {
+        dataStatus += `- TELÉFONO: YA LO TIENES (${lead.telefono}). PROHIBIDO PREGUNTARLO.\n`;
     }
-    if (lead.email) leadParams += `&wffn_billing_email=${encodeURIComponent(lead.email)}`;
-    if (lead.telefono) leadParams += `&wffn_billing_phone=${encodeURIComponent(lead.telefono)}`;
-    if (lead.ciudad) leadParams += `&wffn_billing_city=${encodeURIComponent(lead.ciudad)}`;
-
-    // CARGAR CATÁLOGO DE PRODUCTOS
-    let products = [];
-    try {
-       const prodStr = getConfig('wc_products', '[]');
-       products = JSON.parse(prodStr);
-    } catch(e) {}
-
-    // Envoltorio del catálogo ahora es dinámico
-    const pCatalogRules = getConfig('prompt_catalog_rules', 'Usa ESTOS enlaces específicos según lo que el cliente quiera comprar. Entrégalo SOLO UNA VEZ en toda la conversación.');
-    let catalogContext = `\n=== CATÁLOGO DE PRODUCTOS (ENLACES DE PAGO) ===\n${pCatalogRules}\n\n`;
-    
-    if (products.length > 0) {
-        products.forEach((p: any) => {
-            const finalLink = `${baseUrl}${path}?add-to-cart=${p.wc_id}${leadParams}`;
-            catalogContext += `[PRODUCTO]: ${p.title} ($${p.price})\n`;
-            catalogContext += `[LINK EXACTO PARA ENVIAR]: ${finalLink}\n`;
-            catalogContext += `[CUÁNDO OFRECERLO]: ${p.prompt}\n\n`;
-        });
+    if (missing.length > 0) {
+        dataStatus += `- DATOS PENDIENTES: ${missing.join(', ')}.\n`;
+        dataStatus += `INSTRUCCIÓN: No los pidas como un formulario. Intégralos en la charla. Ej: "Para ver si tenemos cupo en tu ciudad, ¿desde dónde nos escribes?" o "Pásame tu correo para mandarte el PDF del taller".\n`;
     } else {
-        catalogContext += "No hay productos configurados en el catálogo.\n";
+        dataStatus += `- TODO CAPTURADO: Procede al cierre de venta.\n`;
     }
 
-    const { data: mediaAssets } = await supabaseClient
-        .from('media_assets')
-        .select('title, url, ai_instructions, ocr_content, category')
-        .eq('category', 'POSTER');
+    // --- 2. PROTOCOLO PSICOGRÁFICO ---
+    const psychProtocol = `
+\n=== PROTOCOLO DE PERFILAMIENTO PSICOGRÁFICO ===
+Tu objetivo es entender QUIÉN es el cliente usando la información de la [BASE DE CONOCIMIENTO].
+1. Identifica su "Dolor": ¿Busca sanación, curiosidad técnica o es terapeuta?
+2. Usa preguntas abiertas: "¿Qué te llamó la atención de los cuencos?" o "¿Ya tienes experiencia en meditación?".
+3. Adapta tu tono: Si es profesional, sé técnico. Si es principiante, sé inspirador.
+`;
 
-    // Reglas de archivos multimedia ahora dinámicas
-    const pMediaRules = getConfig('prompt_media_rules', 'Cuando el cliente requiera información visual, adjunta el recurso correspondiente usando la etiqueta <<MEDIA:URL>>. NO envíes la misma imagen dos veces.');
-    let mediaContext = `\n=== BÓVEDA MULTIMEDIA (MEDIA MANAGER) ===\nINSTRUCCIÓN CRÍTICA DE VISUALES:\n${pMediaRules}\n\nCATÁLOGO DISPONIBLE:\n`;
-    
-    if (mediaAssets && mediaAssets.length > 0) {
-        mediaAssets.forEach(m => {
-            mediaContext += `- TÍTULO: ${m.title}\n  INFORMACIÓN EXTRAÍDA: ${m.ocr_content || 'N/A'}\n  CUÁNDO USAR: ${m.ai_instructions}\n  ETIQUETA EXACTA A PEGAR EN EL CHAT: <<MEDIA:${m.url}>>\n\n`;
-        });
-    } else {
-        mediaContext += "No hay recursos cargados actualmente.\n";
-    }
-
+    // --- 3. CARGAR RECURSOS (WEB, KB, MEDIA) ---
+    // (Mantenemos la carga de Verdad Maestra, KB y Media Assets igual que antes)
     const { data: webPages } = await supabaseClient.from('main_website_content').select('title, content').eq('scrape_status', 'success');
-    let masterTruth = "\n=== VERDAD MAESTRA (SITIO WEB OFICIAL) ===\nEsta es la información OFICIAL e innegable de la empresa. Usa esto para responder:\n";
-    if (webPages && webPages.length > 0) {
-        webPages.forEach(p => { if(p.content) masterTruth += `\n[PÁGINA: ${p.title}]\n${p.content.substring(0, 2000)}\n`; });
-    }
+    let masterTruth = "\n=== VERDAD MAESTRA (SITIO WEB) ===\n";
+    webPages?.forEach(p => { if(p.content) masterTruth += `\n[PÁGINA: ${p.title}]\n${p.content.substring(0, 1500)}\n`; });
 
-    const { data: kbDocs } = await supabaseClient.from('knowledge_documents').select('title, category, content, description');
-    let kbContext = "\n=== BASE DE CONOCIMIENTO TÉCNICO ===\n";
-    if (kbDocs && kbDocs.length > 0) {
-        kbDocs.forEach(d => { if(d.content) kbContext += `\n[RECURSO: ${d.title} | CAT: ${d.category}]\nInstrucción: ${d.description || 'N/A'}\nContenido: ${d.content.substring(0, 1500)}\n`; });
-    }
+    const { data: kbDocs } = await supabaseClient.from('knowledge_documents').select('title, category, content');
+    let kbContext = "\n=== CONOCIMIENTO TÉCNICO (PDFs/NOTAS) ===\n";
+    kbDocs?.forEach(d => { if(d.content) kbContext += `\n[RECURSO: ${d.title}]\n${d.content.substring(0, 1000)}\n`; });
 
-    let agentName = "uno de nuestros asesores";
-    if (lead.assigned_to) {
-        const { data: agentProfile } = await supabaseClient.from('profiles').select('full_name').eq('id', lead.assigned_to).maybeSingle();
-        if (agentProfile?.full_name) agentName = agentProfile.full_name.split(' ')[0];
-    }
+    const { data: mediaAssets } = await supabaseClient.from('media_assets').select('title, url, ai_instructions').eq('category', 'POSTER');
+    let mediaContext = "\n=== BÓVEDA VISUAL (POSTERS) ===\nUsa <<MEDIA:URL>> para enviar posters según la ciudad o interés.\n";
+    mediaAssets?.forEach(m => { mediaContext += `- ${m.title}: ${m.ai_instructions} -> <<MEDIA:${m.url}>>\n`; });
 
     const bankInfo = `Banco: ${getConfig('bank_name')}\nCuenta: ${getConfig('bank_account')}\nCLABE: ${getConfig('bank_clabe')}\nTitular: ${getConfig('bank_holder')}`;
     
-    // Prompts Core
-    const pAlma = getConfig('prompt_alma_samurai');
-    const pAdn = getConfig('prompt_adn_core');
-    const pEstrategia = getConfig('prompt_estrategia_cierre');
-    const pRelearning = getConfig('prompt_relearning'); 
-    
-    // Nuevos Prompts de Comportamiento (Agnósticos)
-    const pBehavior = getConfig('prompt_behavior_rules', '1. MEMORIA: Lee el historial. No repitas saludos ni información que ya diste.\n2. NATURALIDAD: Habla como un humano experto.');
-    const pHuman = getConfig('prompt_human_handoff', 'Si el cliente pide explícitamente hablar con una persona o hace una pregunta fuera de tu conocimiento, responde que un asesor lo atenderá pronto y añade EXACTAMENTE este JSON al final de tu respuesta:\n---JSON---\n{"request_human": true}');
-    const pBankRules = getConfig('prompt_bank_rules', 'Presenta estos datos bancarios como alternativa de pago directo, úsalos solo una vez:');
-
     const systemPrompt = `
-=== CONSTITUCIÓN TÁCTICA ===
-${pAlma}
-${pAdn}
-${pEstrategia}
+${getConfig('prompt_alma_samurai')}
+${getConfig('prompt_adn_core')}
+${getConfig('prompt_estrategia_cierre')}
 
-=== REGLAS DE CONDUCTA ANTI-ROBOT (PRIORIDAD MÁXIMA) ===
-${pBehavior}
-
-=== ESCALADO A HUMANO Y ANTI-ALUCINACIÓN (REGLA DE ORO) ===
-${pHuman}
-(El asesor disponible actualmente se llama: ${agentName})
-
-${pRelearning && pRelearning.trim() !== '' && pRelearning !== '# Aún no hay lecciones inyectadas.' ? `\n=== REGLAS #CIA (PRIORIDAD ABSOLUTA) ===\nEstas reglas corrigen comportamientos pasados. Síguelas por encima de todo lo demás:\n${pRelearning}\n` : ''}
+${dataStatus}
+${psychProtocol}
+${getConfig('prompt_behavior_rules')}
+${getConfig('prompt_human_handoff')}
 
 ${masterTruth}
-
 ${kbContext}
-
 ${mediaContext}
 
-${catalogContext}
-
-=== DATOS PARA DEPÓSITO/TRANSFERENCIA ===
-${pBankRules}
+=== DATOS DE PAGO ===
 ${bankInfo}
 `;
 

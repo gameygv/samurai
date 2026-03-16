@@ -9,45 +9,43 @@ serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders })
 
   try {
-    const supabaseClient = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-    );
-
-    const { lead_id } = await req.json();
-    if (!lead_id) throw new Error("Lead ID requerido.");
+    const supabaseClient = createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '');
+    const { lead_id, force } = await req.json();
 
     const { data: lead } = await supabaseClient.from('leads').select('*').eq('id', lead_id).single();
     const { data: configs } = await supabaseClient.from('app_config').select('key, value');
     const configMap = configs?.reduce((acc, item) => ({...acc, [item.key]: item.value}), {});
     const apiKey = configMap['openai_api_key'];
 
-    if (!apiKey) throw new Error("OpenAI API Key faltante.");
+    // Obtener agentes y sus territorios para el Routing
+    const { data: agents } = await supabaseClient.from('profiles').select('id, full_name, territories').in('role', ['admin', 'dev', 'sales']);
+    const agentsContext = agents?.map(a => `ID: ${a.id}, Nombre: ${a.full_name}, Zonas: ${a.territories?.join(', ') || 'Global'}`).join('\n');
 
-    const { data: messages } = await supabaseClient
-        .from('conversaciones')
-        .select('emisor, mensaje')
-        .eq('lead_id', lead_id)
-        .order('created_at', { ascending: true }) 
-        .limit(20);
-
+    const { data: messages } = await supabaseClient.from('conversaciones').select('emisor, mensaje').eq('lead_id', lead_id).order('created_at', { ascending: true }).limit(25);
     const transcript = messages?.map(m => `[${m.emisor}]: ${m.mensaje}`).join('\n') || '';
 
     const systemPrompt = `
-Eres un Analista de Datos experto. Tu misión es extraer información crítica de este chat para un CRM.
-REGLAS DE EXTRACCIÓN:
-1. NOMBRE: Extrae el nombre propio. Si dice "Soy Vajra Tay", el nombre es "Vajra" y apellido "Tay".
-2. CIUDAD: Extrae la ubicación mencionada.
-3. INTENT: BAJO (curioso), MEDIO (pide info), ALTO (pide cuenta/link), COMPRADO (envió comprobante).
-4. SUMMARY: Un resumen de 10 palabras de la situación actual.
+Eres el Analista Táctico de Samurai CRM. Tu misión es extraer datos y tomar decisiones de asignación.
 
-RESPONDE ÚNICAMENTE EN JSON:
+=== REGLAS DE EXTRACCIÓN ===
+1. NOMBRE/APELLIDO: Extrae nombres reales.
+2. CIUDAD: Ubicación actual.
+3. PERFIL PSICOGRÁFICO: Resume en 20 palabras sus miedos, deseos y por qué le interesan los cuencos.
+4. INTENT: BAJO, MEDIO, ALTO, COMPRADO.
+
+=== REGLAS DE ASIGNACIÓN (ROUTING) ===
+Compara la CIUDAD del cliente con esta lista de agentes y sus zonas:
+${agentsContext}
+
+Si la ciudad coincide con una zona, asigna ese ID. 
+Si NO hay coincidencia exacta, usa tu conocimiento geográfico para asignar al agente de la zona más cercana o al que tenga 'Global'.
+
+RESPONDE SOLO JSON:
 {
-  "nombre": "string o null",
-  "apellido": "string o null",
-  "ciudad": "string o null",
-  "intent": "BAJO | MEDIO | ALTO",
-  "summary": "string"
+  "nombre": "string", "apellido": "string", "ciudad": "string",
+  "intent": "string", "summary": "string",
+  "perfil_psicologico": "string",
+  "suggested_agent_id": "uuid o null"
 }
 `;
 
@@ -56,10 +54,7 @@ RESPONDE ÚNICAMENTE EN JSON:
         headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
             model: "gpt-4o",
-            messages: [
-                { role: "system", content: systemPrompt },
-                { role: "user", content: `Analiza este chat reciente:\n\n${transcript}` }
-            ],
+            messages: [{ role: "system", content: systemPrompt }, { role: "user", content: `Analiza este chat:\n\n${transcript}` }],
             response_format: { type: "json_object" },
             temperature: 0
         })
@@ -74,10 +69,36 @@ RESPONDE ÚNICAMENTE EN JSON:
     if (result.ciudad) updates.ciudad = result.ciudad;
     if (result.intent) updates.buying_intent = result.intent;
     if (result.summary) updates.summary = result.summary;
+    if (result.perfil_psicologico) updates.perfil_psicologico = result.perfil_psicologico;
+    if (result.suggested_agent_id && !lead.assigned_to) updates.assigned_to = result.suggested_agent_id;
 
     await supabaseClient.from('leads').update(updates).eq('id', lead_id);
 
-    return new Response(JSON.stringify({ success: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    // --- DISPARO META CAPI (Si hay email nuevo) ---
+    if (updates.email && !lead.capi_lead_event_sent_at) {
+        console.log("[analyze-leads] Disparando Meta CAPI Lead Event...");
+        // Aquí llamamos a la función de CAPI que ya tenemos
+        fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/meta-capi-sender`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${Deno.env.get('SUPABASE_ANON_KEY')}` },
+            body: JSON.stringify({
+                eventData: {
+                    event_name: 'Lead',
+                    lead_id: lead_id,
+                    user_data: { em: updates.email, ph: lead.telefono, fn: updates.nombre, ct: updates.ciudad }
+                },
+                config: { 
+                    pixel_id: configMap['meta_pixel_id'], 
+                    access_token: configMap['meta_access_token'],
+                    test_event_code: configMap['meta_test_event_code']
+                }
+            })
+        }).catch(e => console.error("CAPI Error:", e));
+        
+        await supabaseClient.from('leads').update({ capi_lead_event_sent_at: new Date().toISOString() }).eq('id', lead_id);
+    }
+
+    return new Response(JSON.stringify({ success: true, result }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
   } catch (error) {
     return new Response(JSON.stringify({ success: false, error: error.message }), { status: 200, headers: corsHeaders });
