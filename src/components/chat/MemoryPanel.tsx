@@ -35,7 +35,7 @@ export const MemoryPanel = ({
   onToggleFollowup, onAnalysisComplete
 }: MemoryPanelProps) => {
 
-  const { isAdmin } = useAuth();
+  const { user, isAdmin, profile } = useAuth();
   const [correctionText, setCorrectionText] = useState('');
   const [isReporting, setIsReporting] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
@@ -102,13 +102,17 @@ export const MemoryPanel = ({
     try {
       await supabase.from('errores_ia').insert({
         cliente_id: currentAnalysis.id,
-        mensaje_cliente: 'Corrección manual',
+        mensaje_cliente: 'Reporte preventivo de agente',
         respuesta_ia: 'N/A',
         correccion_sugerida: correctionText,
-        categoria: 'CONDUCTA'
+        categoria: 'CONDUCTA',
+        usuario_id: user?.id,
+        created_by: profile?.full_name || profile?.username || user?.email || 'Agente'
       });
-      toast.success('Lección guardada en Bitácora');
+      toast.success('Lección enviada a Bitácora para revisión del Administrador');
       setCorrectionText('');
+    } catch (err: any) {
+      toast.error('Error al reportar: ' + err.message);
     } finally {
       setIsReporting(false);
     }
@@ -353,18 +357,19 @@ export const MemoryPanel = ({
            )}
         </div>
 
-        {/* BITÁCORA #CIA QUICK (Solamente visible para Admin/Dev si se desea, pero lo dejamos por si los vendedores pueden sugerir) */}
-        {isAdmin && (
-           <div className="space-y-3 border-t border-slate-800/60 pt-6">
-              <h4 className="text-[10px] font-bold text-amber-500 uppercase tracking-widest flex items-center gap-2">
-                 <ShieldAlert className="w-3 h-3" /> #CorregirIA
-              </h4>
-              <Textarea value={correctionText} onChange={e => setCorrectionText(e.target.value)} placeholder="Instrucción de conducta..." className="bg-slate-950 border-slate-800 text-xs min-h-[60px] focus:border-amber-500 rounded-xl" />
-              <Button onClick={handleSaveCorrection} disabled={isReporting || !correctionText.trim()} className="w-full h-9 text-[10px] border-amber-500/50 text-amber-500 bg-amber-500/10 hover:bg-amber-500/20 font-bold uppercase tracking-widest rounded-xl">
-                {isReporting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Zap className="w-3 h-3 mr-2" />} Inyectar Lección
-              </Button>
+        {/* BITÁCORA #CIA QUICK (Visible para todos los agentes) */}
+        <div className="space-y-3 border-t border-slate-800/60 pt-6">
+           <div className="flex flex-col">
+             <h4 className="text-[10px] font-bold text-amber-500 uppercase tracking-widest flex items-center gap-2">
+                <ShieldAlert className="w-3 h-3" /> Reportar a Bitácora #CIA
+             </h4>
+             <p className="text-[9px] text-slate-500 mt-1">Sugiere una corrección o regla. El Administrador la validará antes de inyectarla a la IA.</p>
            </div>
-        )}
+           <Textarea value={correctionText} onChange={e => setCorrectionText(e.target.value)} placeholder="Ej: La IA no debe dar precio sin preguntar la ciudad..." className="bg-slate-950 border-slate-800 text-xs min-h-[60px] focus:border-amber-500 rounded-xl" />
+           <Button onClick={handleSaveCorrection} disabled={isReporting || !correctionText.trim()} className="w-full h-9 text-[10px] border-amber-500/50 text-amber-500 bg-amber-500/10 hover:bg-amber-500/20 font-bold uppercase tracking-widest rounded-xl">
+             {isReporting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Zap className="w-3 h-3 mr-2" />} Enviar a Revisión
+           </Button>
+        </div>
 
       </div>
       

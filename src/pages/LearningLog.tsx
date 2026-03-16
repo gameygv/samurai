@@ -242,6 +242,7 @@ const LearningLog = () => {
                   <TableHeader>
                      <TableRow className="border-slate-800 bg-slate-950/50">
                         <TableHead className="text-slate-500 text-[10px] uppercase font-bold">Timestamp</TableHead>
+                        <TableHead className="text-slate-500 text-[10px] uppercase font-bold">Agente</TableHead>
                         <TableHead className="text-slate-500 text-[10px] uppercase font-bold">Categoría</TableHead>
                         <TableHead className="text-slate-500 text-[10px] uppercase font-bold">Instrucción #CIA</TableHead>
                         <TableHead className="text-slate-500 text-[10px] uppercase font-bold">Estado</TableHead>
@@ -250,14 +251,17 @@ const LearningLog = () => {
                   </TableHeader>
                   <TableBody>
                      {loading ? (
-                        <TableRow><TableCell colSpan={5} className="text-center h-32"><Loader2 className="w-8 h-8 animate-spin mx-auto text-amber-500" /></TableCell></TableRow>
+                        <TableRow><TableCell colSpan={6} className="text-center h-32"><Loader2 className="w-8 h-8 animate-spin mx-auto text-amber-500" /></TableCell></TableRow>
                      ) : filteredErrors.length === 0 ? (
-                        <TableRow><TableCell colSpan={5} className="text-center h-32 text-slate-500 italic uppercase text-[10px] tracking-widest">No hay reportes que coincidan</TableCell></TableRow>
+                        <TableRow><TableCell colSpan={6} className="text-center h-32 text-slate-500 italic uppercase text-[10px] tracking-widest">No hay reportes que coincidan</TableCell></TableRow>
                      ) : (
                         filteredErrors.map(err => (
                            <TableRow key={err.error_id || Math.random()} className="border-slate-800 hover:bg-slate-800/30 transition-colors">
                               <TableCell className="text-[10px] text-slate-500 font-mono">
                                  {err.reported_at ? new Date(err.reported_at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : 'N/A'}
+                              </TableCell>
+                              <TableCell className="text-[10px] text-slate-300 font-medium">
+                                 {err.created_by || 'Sistema / Auto'}
                               </TableCell>
                               <TableCell>
                                  <Badge variant="outline" className="text-[9px] border-indigo-500/30 text-indigo-400 font-bold tracking-widest">
