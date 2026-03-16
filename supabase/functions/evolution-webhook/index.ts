@@ -12,50 +12,56 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders })
   }
 
+  let lead_id_for_error = null;
+  const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
+  const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+  const supabaseClient = createClient(supabaseUrl, supabaseKey);
+
   try {
     const payload = await req.json();
     console.log("[Webhook] Payload recibido:", JSON.stringify(payload).substring(0, 300));
 
-    // 1. Extraer datos (Evolution API format)
+    // 1. EXTRAER DATOS (Parseo Universal)
     let phone = '';
     let text = '';
     let pushName = 'Nuevo Lead WhatsApp';
 
-    // Manejar diferentes formatos de payload de Evolution API / WABA
-    const msgData = payload?.data || payload?.body || payload;
-    
-    // Ignorar mensajes enviados por nosotros mismos (para evitar bucles)
-    if (msgData?.key?.fromMe) {
+    // Evoluton API suele enviar en payload.data, pero a veces en payload directo
+    const msgData = payload?.data && !Array.isArray(payload.data) ? payload.data : 
+                    (Array.isArray(payload?.data) ? payload.data[0] : payload);
+
+    // Si es un mensaje enviado por nosotros (del bot o vendedor), ignorar
+    if (msgData?.key?.fromMe === true || msgData?.fromMe === true) {
         return new Response(JSON.stringify({ status: 'ignored', reason: 'fromMe' }), { headers: corsHeaders });
     }
 
+    // Extraer Teléfono
     if (msgData?.key?.remoteJid) {
         phone = msgData.key.remoteJid.split('@')[0];
     } else if (msgData?.from) {
-        phone = msgData.from;
+        phone = msgData.from.split('@')[0];
+    } else if (msgData?.remoteJid) {
+        phone = msgData.remoteJid.split('@')[0];
     }
 
     if (msgData?.pushName) pushName = msgData.pushName;
     
+    // Extraer Texto
     text = msgData?.message?.conversation || 
            msgData?.message?.extendedTextMessage?.text || 
            msgData?.text?.body || 
-           msgData?.text || '';
+           msgData?.text || 
+           msgData?.message?.imageMessage?.caption ||
+           '';
 
     if (!phone || !text) {
-        console.log("[Webhook] Sin texto o teléfono válido.");
+        console.log("[Webhook] Ignorado: Sin texto o teléfono válido.");
         return new Response(JSON.stringify({ status: 'ignored', reason: 'no_text_or_phone' }), { headers: corsHeaders });
     }
 
-    // 2. Setup Supabase
-    const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
-    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
-    const supabaseClient = createClient(supabaseUrl, supabaseKey);
-
-    // Limpiar teléfono
     const cleanPhone = phone.replace(/\D/g, '');
 
-    // 3. Buscar o crear Lead
+    // 2. BUSCAR O CREAR LEAD
     let { data: lead } = await supabaseClient.from('leads').select('*').or(`telefono.ilike.%${cleanPhone}%`).limit(1).maybeSingle();
 
     if (!lead) {
@@ -64,12 +70,13 @@ serve(async (req) => {
             telefono: cleanPhone,
             platform: 'WHATSAPP'
         }).select().single();
-        if (insertError) throw insertError;
+        if (insertError) throw new Error("Error creando lead: " + insertError.message);
         lead = newLead;
-        console.log(`[Webhook] Nuevo lead creado: ${lead.id}`);
     }
+    
+    lead_id_for_error = lead.id;
 
-    // 4. Guardar mensaje del cliente
+    // 3. GUARDAR MENSAJE DEL CLIENTE
     await supabaseClient.from('conversaciones').insert({
         lead_id: lead.id,
         emisor: 'CLIENTE',
@@ -78,13 +85,12 @@ serve(async (req) => {
     });
     await supabaseClient.from('leads').update({ last_message_at: new Date().toISOString() }).eq('id', lead.id);
 
-    // 5. Verificar si el bot está pausado (Kill Switch Individual)
+    // 4. VERIFICAR KILL SWITCHES
     if (lead.ai_paused) {
         console.log(`[Webhook] IA pausada para el lead: ${lead.id}`);
         return new Response(JSON.stringify({ status: 'success', ai_status: 'paused' }), { headers: corsHeaders });
     }
 
-    // Verificar Kill Switch Global
     const { data: configs } = await supabaseClient.from('app_config').select('key, value');
     const configMap = configs?.reduce((acc, item) => ({...acc, [item.key]: item.value}), {}) || {};
     
@@ -93,15 +99,28 @@ serve(async (req) => {
         return new Response(JSON.stringify({ status: 'success', ai_status: 'global_paused' }), { headers: corsHeaders });
     }
 
-    // 6. Obtener Contexto del Cerebro Core (Pasando 'platform' para frenar pedir teléfonos)
-    const contextRes = await fetch(`${supabaseUrl}/functions/v1/get-samurai-context`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${Deno.env.get('SUPABASE_ANON_KEY')}` },
-        body: JSON.stringify({ lead, platform: 'WHATSAPP', has_phone: true })
-    });
-    const { system_prompt } = await contextRes.json();
+    // 5. OBTENER CONTEXTO DIRECTAMENTE (Sin llamar a get-samurai-context para evitar timeouts)
+    const getConfig = (key, def = "") => configMap[key] || def;
+    
+    const bankData = `Banco: ${getConfig('bank_name')}\nCuenta: ${getConfig('bank_account')}\nCLABE: ${getConfig('bank_clabe')}\nTitular: ${getConfig('bank_holder')}`;
+    
+    const system_prompt = `
+    ### ESTRATEGIA DE PERFILAMIENTO PSICOGRÁFICO:
+    Usa la información técnica que tienes para educar y preguntar:
+    1. Si el cliente pregunta por el sonido, menciona la "Psicoacústica" y pregunta: "¿Te interesa para uso personal o para integrarlo en alguna terapia que ya realices?"
+    2. Usa datos del Cerebro Core para demostrar autoridad antes de pedir datos.
+    3. REGLA WHATSAPP: Estás en WHATSAPP. Ya tienes su teléfono (${lead.telefono}). NO lo pidas.
 
-    // 7. Obtener Historial de Mensajes (Últimos 15)
+    ${getConfig('prompt_alma_samurai')}
+    ${getConfig('prompt_adn_core')}
+    ${getConfig('prompt_behavior_rules')}
+    ${getConfig('prompt_human_handoff')}
+
+    ### [DATOS DE PAGO - VERDAD ABSOLUTA]
+    ${bankData}
+    `;
+
+    // 6. OBTENER HISTORIAL
     const { data: messages } = await supabaseClient.from('conversaciones')
         .select('emisor, mensaje, platform')
         .eq('lead_id', lead.id)
@@ -116,9 +135,9 @@ serve(async (req) => {
         openAiMessages.push({ role, content: m.mensaje });
     });
 
-    // 8. Llamar a OpenAI
+    // 7. LLAMAR A OPENAI
     const openaiKey = configMap['openai_api_key'];
-    if (!openaiKey) throw new Error("Falta OpenAI API Key");
+    if (!openaiKey) throw new Error("Falta OpenAI API Key en la configuración del sistema.");
 
     console.log(`[Webhook] Consultando OpenAI para lead ${lead.id}...`);
     const aiRes = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -131,21 +150,29 @@ serve(async (req) => {
         })
     });
 
+    if (!aiRes.ok) {
+        const errText = await aiRes.text();
+        throw new Error(`OpenAI API falló: ${errText}`);
+    }
+
     const aiData = await aiRes.json();
     let aiResponseText = aiData.choices?.[0]?.message?.content || '';
 
-    // 9. Detección de Handoff (Petición de Humano)
+    if (!aiResponseText) throw new Error("OpenAI devolvió una respuesta vacía.");
+
+    // 8. DETECCIÓN DE HANDOFF
     if (aiResponseText.includes('{"request_human"')) {
          aiResponseText = aiResponseText.split('---')[0].trim() || "En un momento te atiende un asesor humano.";
          await supabaseClient.from('leads').update({ ai_paused: true }).eq('id', lead.id);
          await supabaseClient.from('conversaciones').insert({ lead_id: lead.id, mensaje: "IA Pausada automáticamente por solicitud de humano.", emisor: 'NOTA', platform: 'SYSTEM' });
     }
 
-    // 10. Enviar mensaje por Evolution API
+    // 9. ENVIAR MENSAJE VÍA EVOLUTION API
     const evolutionUrl = configMap['evolution_api_url'];
     const evolutionKey = configMap['evolution_api_key'];
 
-    if (evolutionUrl && evolutionKey && aiResponseText) {
+    if (evolutionUrl && evolutionKey) {
+         console.log(`[Webhook] Enviando a Evolution API: ${evolutionUrl}`);
          const evoRes = await fetch(evolutionUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'apikey': evolutionKey },
@@ -154,18 +181,17 @@ serve(async (req) => {
          
          if (!evoRes.ok) {
              const errText = await evoRes.text();
-             console.error("[Webhook] Error Evolution API:", errText);
-             await supabaseClient.from('conversaciones').insert({ lead_id: lead.id, mensaje: `Error enviando a WhatsApp: ${errText}`, emisor: 'IA', platform: 'ERROR' });
+             throw new Error(`Evolution API falló HTTP ${evoRes.status}: ${errText}`);
          }
+    } else {
+         throw new Error("Credenciales de Evolution API incompletas. Configura URL y API Key en los ajustes.");
     }
 
-    // 11. Guardar mensaje de la IA
-    if (aiResponseText) {
-         await supabaseClient.from('conversaciones').insert({ lead_id: lead.id, emisor: 'IA', mensaje: aiResponseText, platform: 'WHATSAPP' });
-         await supabaseClient.from('leads').update({ last_message_at: new Date().toISOString() }).eq('id', lead.id);
-    }
+    // 10. GUARDAR MENSAJE DEL BOT
+    await supabaseClient.from('conversaciones').insert({ lead_id: lead.id, emisor: 'IA', mensaje: aiResponseText, platform: 'WHATSAPP' });
+    await supabaseClient.from('leads').update({ last_message_at: new Date().toISOString() }).eq('id', lead.id);
 
-    // 12. Trigger Analista en Background (Para perfilar y Meta CAPI)
+    // 11. TRIGGER ANALISTA (Background)
     fetch(`${supabaseUrl}/functions/v1/analyze-leads`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${Deno.env.get('SUPABASE_ANON_KEY')}` },
@@ -176,6 +202,17 @@ serve(async (req) => {
 
   } catch (err: any) {
     console.error("[Webhook] CRITICAL ERROR:", err);
+    
+    // Auto-reporte de error en el chat
+    if (lead_id_for_error && supabaseClient) {
+        await supabaseClient.from('conversaciones').insert({ 
+            lead_id: lead_id_for_error, 
+            mensaje: `[CRASH REPORT]: ${err.message}`, 
+            emisor: 'IA', 
+            platform: 'ERROR' 
+        }).catch(console.error);
+    }
+
     return new Response(JSON.stringify({ error: err.message }), { status: 500, headers: corsHeaders });
   }
 })
