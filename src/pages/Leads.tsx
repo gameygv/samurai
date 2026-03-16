@@ -8,15 +8,21 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
-  Search, Loader2, Target, UserPlus, Sparkles, MapPin, Mail, ShieldCheck, AlertTriangle
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  Search, Loader2, Target, UserPlus, Sparkles, MapPin, Mail, ShieldCheck, AlertTriangle, Bot, Play, Pause
 } from 'lucide-react';
 import { toast } from 'sonner';
 import ChatViewer from '@/components/ChatViewer';
 import { CreateLeadDialog } from '@/components/leads/CreateLeadDialog';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/context/AuthContext';
 
 const Leads = () => {
+  const { user, isAdmin } = useAuth();
   const [leads, setLeads] = useState<any[]>([]);
+  const [agentsMap, setAgentsMap] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [analyzing, setAnalyzing] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -28,13 +34,25 @@ const Leads = () => {
 
   useEffect(() => {
     fetchLeads();
+    supabase.from('profiles').select('id, full_name').then(({data}) => {
+       if (data) {
+          const map: any = {};
+          data.forEach(d => map[d.id] = d.full_name);
+          setAgentsMap(map);
+       }
+    });
+
     const channel = supabase.channel('leads-realtime').on('postgres_changes', { event: '*', schema: 'public', table: 'leads' }, () => fetchLeads()).subscribe();
     return () => { supabase.removeChannel(channel); };
   }, []);
 
   const fetchLeads = async () => {
     setLoading(true);
-    const { data } = await supabase.from('leads').select('*').order('last_message_at', { ascending: false });
+    let query = supabase.from('leads').select('*').order('last_message_at', { ascending: false });
+    if (!isAdmin) {
+       query = query.eq('assigned_to', user?.id);
+    }
+    const { data } = await query;
     if (data) setLeads(data);
     setLoading(false);
   };
@@ -46,6 +64,24 @@ const Leads = () => {
         toast.success("Análisis completo.");
         fetchLeads();
      } catch (err) { toast.error("Error en análisis"); } finally { setAnalyzing(false); }
+  };
+
+  const handleGlobalAiToggle = async (pause: boolean) => {
+    if (!confirm(`¿Estás seguro de ${pause ? 'PAUSAR' : 'ACTIVAR'} la IA para TODOS tus leads mostrados?`)) return;
+    setLoading(true);
+    try {
+        let query = supabase.from('leads').update({ ai_paused: pause });
+        if (!isAdmin) {
+            query = query.eq('assigned_to', user?.id);
+        } else {
+            query = query.neq('id', '00000000-0000-0000-0000-000000000000');
+        }
+        await query;
+        toast.success(`IA ${pause ? 'Pausada' : 'Activada'} masivamente.`);
+        fetchLeads();
+    } catch (err) {
+        toast.error("Error ejecutando acción masiva.");
+    }
   };
 
   const filteredLeads = leads.filter(l => {
@@ -75,10 +111,30 @@ const Leads = () => {
              <p className="text-slate-400">Vigila la salud de los datos y el cierre de ventas.</p>
           </div>
           <div className="flex gap-3 items-center flex-wrap">
-             <Button onClick={() => setIsCreateOpen(true)} className="bg-indigo-900 hover:bg-indigo-800 text-amber-500 shadow-lg">
+             
+             <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                   <Button variant="outline" className="border-indigo-500/30 text-indigo-400 bg-indigo-900/10 hover:bg-indigo-900/30 rounded-full h-9">
+                      <Bot className="w-4 h-4 mr-2"/> IA Global
+                   </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent className="bg-slate-900 border-slate-800 text-white">
+                   <DropdownMenuLabel className="text-[10px] text-slate-500 uppercase">Control Masivo</DropdownMenuLabel>
+                   <DropdownMenuSeparator className="bg-slate-800" />
+                   <DropdownMenuItem onClick={() => handleGlobalAiToggle(false)} className="text-emerald-400 focus:bg-emerald-900/20 focus:text-emerald-300 cursor-pointer">
+                      <Play className="w-4 h-4 mr-2"/> Activar a Todos
+                   </DropdownMenuItem>
+                   <DropdownMenuItem onClick={() => handleGlobalAiToggle(true)} className="text-red-400 focus:bg-red-900/20 focus:text-red-300 cursor-pointer">
+                      <Pause className="w-4 h-4 mr-2"/> Pausar a Todos
+                   </DropdownMenuItem>
+                </DropdownMenuContent>
+             </DropdownMenu>
+
+             <Button onClick={() => setIsCreateOpen(true)} className="bg-indigo-900 hover:bg-indigo-800 text-amber-500 shadow-lg rounded-full h-9">
                 <UserPlus className="w-4 h-4 mr-2" /> Nuevo Lead
              </Button>
-             <Button variant="outline" onClick={handleRunAnalysis} disabled={analyzing} className="border-slate-700 text-slate-300 hover:bg-slate-800" title="Forzar extracción de datos">
+
+             <Button variant="outline" onClick={handleRunAnalysis} disabled={analyzing} className="border-slate-700 text-slate-300 hover:bg-slate-800 rounded-full h-9" title="Forzar extracción de datos">
                 {analyzing ? <Loader2 className="animate-spin" /> : <Sparkles className="w-4 h-4" />}
              </Button>
              
@@ -136,9 +192,14 @@ const Leads = () => {
                   return (
                   <TableRow key={lead.id} className="border-slate-800 hover:bg-slate-800/40 transition-colors">
                     <TableCell>
-                       <div className="flex flex-col">
+                       <div className="flex flex-col gap-1">
                           <span className="font-bold text-slate-100">{lead.nombre || 'Desconocido'} {lead.apellido || ''}</span>
-                          <span className="text-[10px] text-slate-500 font-mono">{lead.telefono}</span>
+                          <div className="flex items-center gap-2">
+                             <span className="text-[10px] text-slate-500 font-mono">{lead.telefono}</span>
+                             {lead.assigned_to && agentsMap[lead.assigned_to] && isAdmin && (
+                                <Badge variant="outline" className="text-[8px] h-4 px-1 border-purple-900/50 bg-purple-900/20 text-purple-400 font-medium">Resp: {agentsMap[lead.assigned_to].split(' ')[0]}</Badge>
+                             )}
+                          </div>
                        </div>
                     </TableCell>
                     <TableCell>

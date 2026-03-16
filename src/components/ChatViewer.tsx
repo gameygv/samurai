@@ -42,7 +42,7 @@ const ChatViewer = ({ lead: initialLead, open, onOpenChange }: ChatViewerProps) 
   const [memoryForm, setMemoryForm] = useState({
     nombre: '', apellido: '', email: '', summary: '', mood: 'NEUTRO', buying_intent: 'BAJO',
     followup_stage: 0, next_followup_at: null, ciudad: '', estado: '', cp: '', pais: 'mx',
-    perfil_psicologico: '', main_pain: '', servicio_interes: '', origen_contacto: '', tiempo_compra: '', lead_score: 0
+    perfil_psicologico: '', main_pain: '', servicio_interes: '', origen_contacto: '', tiempo_compra: '', lead_score: 0, assigned_to: ''
   });
 
   useEffect(() => {
@@ -85,7 +85,7 @@ const ChatViewer = ({ lead: initialLead, open, onOpenChange }: ChatViewerProps) 
         ciudad: data.ciudad || '', estado: data.estado || '', cp: data.cp || '', pais: data.pais || 'mx',
         perfil_psicologico: data.perfil_psicologico || '', main_pain: data.main_pain || '',
         servicio_interes: data.servicio_interes || '', origen_contacto: data.origen_contacto || '',
-        tiempo_compra: data.tiempo_compra || '', lead_score: data.lead_score || 0
+        tiempo_compra: data.tiempo_compra || '', lead_score: data.lead_score || 0, assigned_to: data.assigned_to || ''
      });
   };
 
@@ -144,15 +144,12 @@ const ChatViewer = ({ lead: initialLead, open, onOpenChange }: ChatViewerProps) 
               perfil_psicologico: memoryForm.perfil_psicologico,
               main_pain: memoryForm.main_pain, servicio_interes: memoryForm.servicio_interes,
               origen_contacto: memoryForm.origen_contacto, tiempo_compra: memoryForm.tiempo_compra,
-              lead_score: memoryForm.lead_score
+              lead_score: memoryForm.lead_score, assigned_to: memoryForm.assigned_to || null
            }).eq('id', lead.id).select().single();
 
         if (error) throw error;
 
-        // --- GATILLO REACTIVO CAPI ---
-        // Si el humano completó el Email y antes no estaba disparado el evento Lead, forzamos análisis
         if (updatedLead.email && !updatedLead.capi_lead_event_sent_at) {
-           console.log("[ChatViewer] Datos completados manualmente. Disparando análisis CAPI...");
            supabase.functions.invoke('analyze-leads', { body: { lead_id: lead.id, force: true } });
         }
 

@@ -10,6 +10,7 @@ interface AuthContextType {
   loading: boolean;
   isAdmin: boolean;
   isDev: boolean;
+  isSales: boolean;
   isAgent: boolean;
   role: string | null;
   signOut: () => Promise<void>;
@@ -23,6 +24,7 @@ const AuthContext = createContext<AuthContextType>({
   loading: true,
   isAdmin: false,
   isDev: false,
+  isSales: false,
   isAgent: false,
   role: null,
   signOut: async () => {},
@@ -94,6 +96,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     role: userRole,
     isAdmin: userRole === 'admin' || userRole === 'dev',
     isDev: userRole === 'dev',
+    isSales: userRole === 'sales',
     isAgent: userRole === 'agent',
     signOut,
     fetchProfile,

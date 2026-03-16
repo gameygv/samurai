@@ -114,7 +114,7 @@ const UsersPage = () => {
                   users.map((u) => (
                   <TableRow key={u.id} className="border-slate-800 hover:bg-slate-800/50 transition-colors">
                     <TableCell><div className="flex flex-col"><span className="font-bold text-slate-200">{u.full_name || 'Sin nombre'} {u.id === currentUser?.id && <Badge variant="secondary" className="ml-2 text-[8px] bg-indigo-900/50 text-indigo-300">TÚ</Badge>}</span><span className="text-[10px] text-slate-500 font-mono">UID: {u.id.substring(0,8)}</span></div></TableCell>
-                    <TableCell><Badge variant="outline" className={cn("text-[10px] font-bold uppercase tracking-wider", u.role === 'admin' ? 'border-purple-500 text-purple-500 bg-purple-500/5' : u.role === 'dev' ? 'border-blue-500 text-blue-500 bg-blue-500/5' : 'border-slate-500 text-slate-400')}>{u.role}</Badge></TableCell>
+                    <TableCell><Badge variant="outline" className={cn("text-[10px] font-bold uppercase tracking-wider", u.role === 'admin' ? 'border-purple-500 text-purple-500 bg-purple-500/5' : u.role === 'dev' ? 'border-blue-500 text-blue-500 bg-blue-500/5' : u.role === 'sales' ? 'border-emerald-500 text-emerald-500 bg-emerald-500/5' : 'border-slate-500 text-slate-400')}>{u.role}</Badge></TableCell>
                     <TableCell className="text-xs text-slate-400 font-mono">{u.username}@...</TableCell>
                     <TableCell>{u.is_active ? (<span className="text-emerald-500 text-[10px] flex items-center gap-1.5 font-bold uppercase tracking-widest"><div className="w-2 h-2 rounded-full bg-emerald-500"></div> AUTORIZADO</span>) : (<Badge variant="destructive" className="text-[9px]">SUSPENDIDO</Badge>)}</TableCell>
                     <TableCell className="text-right"><Button variant="ghost" size="sm" className="text-amber-500 hover:bg-amber-500/10" onClick={() => { setSelectedUser(u); setIsEditOpen(true); }}><Edit3 className="w-4 h-4 mr-2" /> GESTIONAR</Button></TableCell>
@@ -142,7 +142,8 @@ const UsersPage = () => {
                 <SelectContent className="bg-slate-900 border-slate-800 text-white">
                    <SelectItem value="admin">Administrador</SelectItem>
                    <SelectItem value="dev">Developer</SelectItem>
-                   <SelectItem value="agent">Agente (Acceso Limitado)</SelectItem>
+                   <SelectItem value="sales">Ventas (CRM Completo)</SelectItem>
+                   <SelectItem value="agent">Agente (Limitado)</SelectItem>
                 </SelectContent>
               </Select>
               {selectedUser.id === currentUser?.id && <p className="text-[10px] text-slate-500 italic mt-1">No puedes cambiar tu propio rol para evitar bloqueos.</p>}

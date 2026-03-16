@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { UserPlus, Loader2, Info } from 'lucide-react';
 import { toast } from 'sonner';
+import { useAuth } from '@/context/AuthContext';
 
 interface CreateLeadDialogProps {
   open: boolean;
@@ -16,6 +17,7 @@ interface CreateLeadDialogProps {
 }
 
 export const CreateLeadDialog = ({ open, onOpenChange, onSuccess }: CreateLeadDialogProps) => {
+  const { user, isAdmin } = useAuth();
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
     nombre: '',
@@ -42,7 +44,8 @@ export const CreateLeadDialog = ({ open, onOpenChange, onSuccess }: CreateLeadDi
           email: formData.email || null,
           summary: formData.nota || 'Registro manual.',
           buying_intent: 'BAJO',
-          ai_paused: true 
+          ai_paused: true,
+          assigned_to: isAdmin ? null : user?.id // Si es ventas, se auto-asigna
         })
         .select().single();
 

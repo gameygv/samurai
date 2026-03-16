@@ -3,16 +3,18 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { 
   BrainCircuit, Edit2, Save, Loader2, ShieldAlert, Zap, 
   Fingerprint, Sparkles, Heart, ShieldX, ShieldCheck, AlertTriangle, 
-  CreditCard, MapPin, Navigation, TrendingUp, BarChart3, Database, History, Activity, ExternalLink
+  CreditCard, MapPin, Navigation, TrendingUp, BarChart3, Database, History, Activity, ExternalLink, User
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import { useAuth } from '@/context/AuthContext';
 
 interface MemoryPanelProps {
   currentAnalysis: any;
@@ -33,12 +35,14 @@ export const MemoryPanel = ({
   onToggleFollowup, onAnalysisComplete
 }: MemoryPanelProps) => {
 
+  const { isAdmin } = useAuth();
   const [correctionText, setCorrectionText] = useState('');
   const [isReporting, setIsReporting] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [updatingPayment, setUpdatingPayment] = useState(false);
   const [capiHistory, setCapiHistory] = useState<any[]>([]);
   const [loadingCapi, setLoadingCapi] = useState(false);
+  const [agents, setAgents] = useState<any[]>([]);
 
   // Advanced CAPI Health Calculation (7 Key Meta Identifiers)
   const capiFields = [
@@ -56,7 +60,13 @@ export const MemoryPanel = ({
 
   useEffect(() => {
      if (currentAnalysis?.id) fetchCapiHistory();
+     fetchAgents();
   }, [currentAnalysis?.id]);
+
+  const fetchAgents = async () => {
+      const { data } = await supabase.from('profiles').select('id, full_name, role').in('role', ['admin', 'dev', 'sales']);
+      if (data) setAgents(data);
+  };
 
   const fetchCapiHistory = async () => {
      setLoadingCapi(true);
@@ -117,6 +127,8 @@ export const MemoryPanel = ({
     }
   };
 
+  const currentAgentName = agents.find(a => a.id === currentAnalysis.assigned_to)?.full_name || 'Bot Global (Sin Asignar)';
+
   return (
     <div className="w-full flex-shrink-0 bg-slate-900/90 flex flex-col h-full">
       <div className="p-4 bg-slate-950/50 border-b border-slate-800 flex justify-between items-center shrink-0">
@@ -170,6 +182,25 @@ export const MemoryPanel = ({
 
            {isEditing ? (
               <div className="space-y-3 bg-slate-950 p-4 rounded-xl border border-indigo-500/50 shadow-inner">
+                 
+                 {isAdmin && (
+                    <div className="space-y-1 mb-3">
+                       <Label className="text-[9px] text-slate-500 uppercase tracking-widest">Asignado A (Vendedor)</Label>
+                       <Select 
+                          value={memoryForm.assigned_to || "unassigned"} 
+                          onValueChange={v => setMemoryForm({...memoryForm, assigned_to: v === "unassigned" ? null : v})}
+                       >
+                          <SelectTrigger className="h-8 text-xs bg-slate-900 border-slate-700">
+                             <SelectValue placeholder="Seleccionar Agente" />
+                          </SelectTrigger>
+                          <SelectContent className="bg-slate-900 border-slate-800 text-white">
+                             <SelectItem value="unassigned">Bot Global (Sin Asignar)</SelectItem>
+                             {agents.map(a => <SelectItem key={a.id} value={a.id}>{a.full_name}</SelectItem>)}
+                          </SelectContent>
+                       </Select>
+                    </div>
+                 )}
+
                  <div className="grid grid-cols-2 gap-2">
                     <div className="space-y-1"><Label className="text-[9px] text-slate-500">Nombre</Label><Input value={memoryForm.nombre} onChange={e => setMemoryForm({...memoryForm, nombre: e.target.value})} className="h-8 text-xs bg-slate-900 border-slate-700" /></div>
                     <div className="space-y-1"><Label className="text-[9px] text-slate-500">Apellido</Label><Input value={memoryForm.apellido} onChange={e => setMemoryForm({...memoryForm, apellido: e.target.value})} className="h-8 text-xs bg-slate-900 border-slate-700" /></div>
@@ -195,6 +226,10 @@ export const MemoryPanel = ({
                      <div className="flex flex-col gap-1 mt-2">
                         <span className="text-[9px] text-slate-500 uppercase tracking-widest">Email</span>
                         <span className="text-xs text-emerald-400 font-mono">{currentAnalysis.email || 'Falta Correo'}</span>
+                     </div>
+                     <div className="flex flex-col gap-1 mt-2 pt-2 border-t border-slate-800">
+                        <span className="text-[9px] text-slate-500 uppercase tracking-widest flex items-center gap-1"><User className="w-3 h-3"/> Responsable</span>
+                        <span className="text-xs text-indigo-300">{currentAgentName}</span>
                      </div>
                   </AccordionContent>
                 </AccordionItem>

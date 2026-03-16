@@ -8,13 +8,15 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { 
   Archive as ArchiveIcon, Search, Loader2, MessageSquare, 
-  Calendar, User, Bot, ArrowRight, Filter, RefreshCw, Trash2, Sparkles, Mail
+  ArrowRight, RefreshCw, Trash2, Sparkles, Mail
 } from 'lucide-react';
 import { toast } from 'sonner';
 import ChatViewer from '@/components/ChatViewer';
 import { logActivity } from '@/utils/logger';
+import { useAuth } from '@/context/AuthContext';
 
 const Archive = () => {
+  const { user, isAdmin } = useAuth();
   const [conversations, setConversations] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -30,14 +32,14 @@ const Archive = () => {
   const fetchArchive = async () => {
     if (!refreshing) setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('leads')
-        .select('*, conversaciones(id)')
-        .order('last_message_at', { ascending: false });
+      let query = supabase.from('leads').select('*, conversaciones(id)').order('last_message_at', { ascending: false });
+      if (!isAdmin) {
+          query = query.eq('assigned_to', user?.id);
+      }
+      const { data, error } = await query;
 
       if (error) throw error;
       
-      // Mostrar leads que tengan nombre real O mensajes
       const validLeads = (data || []).filter(l => (l.nombre && l.nombre !== 'Nuevo Lead WhatsApp') || (l.conversaciones && l.conversaciones.length > 0));
       setConversations(validLeads);
     } catch (err: any) {
@@ -53,7 +55,7 @@ const Archive = () => {
      toast.info("Forzando extracción de datos (Emails/Nombres)...");
      try {
         const { data, error } = await supabase.functions.invoke('analyze-leads', {
-           body: { force: true } // FORCE MODE
+           body: { force: true }
         });
         
         if (error) {
@@ -123,15 +125,17 @@ const Archive = () => {
             <p className="text-slate-400">Historial completo de interacciones archivadas.</p>
           </div>
           <div className="flex gap-3 items-center">
-            <Button 
-              variant="outline" 
-              className="border-indigo-500/30 text-indigo-400 hover:bg-indigo-500/10"
-              onClick={handleRunAnalysis}
-              disabled={analyzing}
-            >
-              {analyzing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Sparkles className="w-4 h-4 mr-2" />}
-              Forzar Análisis
-            </Button>
+            {isAdmin && (
+              <Button 
+                variant="outline" 
+                className="border-indigo-500/30 text-indigo-400 hover:bg-indigo-500/10"
+                onClick={handleRunAnalysis}
+                disabled={analyzing}
+              >
+                {analyzing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Sparkles className="w-4 h-4 mr-2" />}
+                Forzar Análisis
+              </Button>
+            )}
             <div className="relative w-full md:w-80">
               <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-500" />
               <Input 
@@ -179,9 +183,11 @@ const Archive = () => {
                     </TableCell>
                     <TableCell className="text-right">
                        <div className="flex justify-end gap-2">
-                          <Button variant="ghost" size="icon" className="text-red-500/50 hover:text-red-500" onClick={() => handleDeleteLead(lead.id, lead.nombre)}>
-                             <Trash2 className="w-4 h-4" />
-                          </Button>
+                          {isAdmin && (
+                            <Button variant="ghost" size="icon" className="text-red-500/50 hover:text-red-500" onClick={() => handleDeleteLead(lead.id, lead.nombre)}>
+                               <Trash2 className="w-4 h-4" />
+                            </Button>
+                          )}
                           <Button size="sm" variant="secondary" className="text-[10px] font-bold" onClick={() => handleOpenChat(lead)}>
                              REVISAR <ArrowRight className="w-3 h-3 ml-2" />
                           </Button>
