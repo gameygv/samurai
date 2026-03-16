@@ -18,7 +18,6 @@ serve(async (req) => {
 
     const { lead_id, transcript } = await req.json();
 
-    // 1. Obtener Datos del Lead para saber qué falta
     const { data: lead } = await supabaseClient.from('leads').select('*').eq('id', lead_id).single();
     
     const missingData = [];
@@ -26,15 +25,28 @@ serve(async (req) => {
     if (!lead?.ciudad) missingData.push("CIUDAD");
     if (!lead?.nombre || lead.nombre.includes('Nuevo')) missingData.push("NOMBRE");
 
-    // 2. Obtener Contexto Maestro (IA Persona)
     const { data: kernelData } = await supabaseClient.functions.invoke('get-samurai-context', {
        body: { lead: lead }
     });
 
     const { data: configs } = await supabaseClient.from('app_config').select('key, value');
-    const apiKey = configs?.find(c => c.key === 'openai_api_key')?.value;
-
+    const getConfig = (key: string) => configs?.find((c: any) => c.key === key)?.value || "";
+    
+    const apiKey = getConfig('openai_api_key');
     if (!apiKey) throw new Error("OpenAI API Key no configurada.");
+
+    const pSuggestions = getConfig('prompt_ai_suggestions', `
+Eres el Co-piloto de la IA. Genera 3 opciones de respuesta CORTAS (max 30 palabras) para que el humano las use.
+Deben sonar exactamente como la IA. NUNCA uses la etiqueta <<MEDIA:URL>> en las sugerencias.
+RESPONDE SOLO EN JSON:
+{
+  "suggestions": [
+    {"type": "EMPATIA", "text": "Frase conectando con el cliente..."},
+    {"type": "VENTA", "text": "Frase para avanzar en la venta..."},
+    {"type": "TECNICA", "text": "Dato específico sobre el producto..."}
+  ]
+}
+    `);
 
     const prompt = `
       ${kernelData?.system_prompt}
@@ -48,22 +60,7 @@ serve(async (req) => {
       ${transcript}
 
       TU TAREA:
-      Eres el Co-piloto de la IA. Genera 3 opciones de respuesta CORTAS (max 30 palabras) para que el humano las use.
-      Deben sonar exactamente como la IA. NUNCA uses la etiqueta <<MEDIA:URL>> en las sugerencias.
-      
-      ESTRATEGIA:
-      - Si faltan datos, la opción [VENTA] DEBE pedirlos estratégicamente.
-      - Si ya tenemos todo, la opción [VENTA] debe dar el link de pago que tienes en tu contexto.
-      - La opción [EMPATIA] debe conectar con el sentimiento del cliente.
-
-      RESPONDE SOLO EN JSON:
-      {
-        "suggestions": [
-          {"type": "EMPATIA", "text": "Frase conectando espiritualmente..."},
-          {"type": "VENTA", "text": "Frase para avanzar en el embudo o cerrar..."},
-          {"type": "TECNICA", "text": "Dato específico sobre el taller o cuencos..."}
-        ]
-      }
+      ${pSuggestions}
     `;
 
     const response = await fetch(OPENAI_URL, {

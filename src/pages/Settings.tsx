@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import Layout from '@/components/Layout';
 import { supabase } from '@/integrations/supabase/client';
@@ -9,36 +9,48 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
-import { Webhook, Key, Save, Loader2, ShoppingCart, Target, Building2, Store, Hash, Send, Clock, Play, DollarSign, MessageSquarePlus, Trash2, Plus, Sparkles } from 'lucide-react';
+import { Webhook, Key, Save, Loader2, ShoppingCart, Target, Building2, Store, Hash, Send, Clock, Play, DollarSign, MessageSquarePlus, Trash2, Plus, Sparkles, TerminalSquare, Download, Upload } from 'lucide-react';
 import { toast } from 'sonner';
 import { sendEvolutionMessage } from '@/utils/messagingService';
+import { useAuth } from '@/context/AuthContext';
 
 const Settings = () => {
+  const { isDev } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const activeTab = searchParams.get('tab') || 'mensajeria';
   
   const [configs, setConfigs] = useState<any[]>([]);
   const [quickReplies, setQuickReplies] = useState<{id: string, title: string, text: string}[]>([]);
   
-  // Catálogo de Productos WooCommerce
   const [wcProducts, setWcProducts] = useState<any[]>([]);
   
-  // Follow-up de Exploración
   const [followupConfig, setFollowupConfig] = useState<any>({
       enabled: false, stage_1_delay: 15, stage_2_delay: 60, stage_3_delay: 1440,
       start_hour: 9, end_hour: 20, stage_1_message: '', stage_2_message: '', stage_3_message: ''
   });
 
-  // Follow-up de Ventas
   const [salesConfig, setSalesConfig] = useState({
       enabled: false, stage_1_delay: 60, stage_2_delay: 1440, stage_3_delay: 2880,
       stage_1_message: '', stage_2_message: '', stage_3_message: ''
+  });
+
+  // KERNEL DEV (Agnostic Core Prompts)
+  const [kernelConfig, setKernelConfig] = useState({
+      prompt_catalog_rules: '',
+      prompt_media_rules: '',
+      prompt_behavior_rules: '',
+      prompt_human_handoff: '',
+      prompt_bank_rules: '',
+      prompt_ai_suggestions: '',
+      prompt_qa_auditor: ''
   });
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testPhone, setTestPhone] = useState('');
+  
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { fetchAllData(); }, []);
 
@@ -58,23 +70,22 @@ const Settings = () => {
             stage_2_message: getC('sales_stage_2_message', 'Tu lugar sigue pre-reservado, pero necesitamos confirmar el pago para asegurarlo.'),
             stage_3_message: getC('sales_stage_3_message', 'Liberaremos tu lugar en unas horas si no recibimos el comprobante. ¿Te ayudo con algo?')
         });
+
+        setKernelConfig({
+            prompt_catalog_rules: getC('prompt_catalog_rules', 'Usa el siguiente catálogo de productos para ofrecer enlaces de pago. Envía el enlace correspondiente según el interés del cliente, y hazlo de forma natural.'),
+            prompt_media_rules: getC('prompt_media_rules', 'Cuando sea pertinente o el cliente pregunte por información visual, adjunta el recurso correspondiente usando la etiqueta <<MEDIA:URL>>. No repitas imágenes.'),
+            prompt_behavior_rules: getC('prompt_behavior_rules', '1. No repitas información que ya diste.\n2. Mantén un tono humano y conversacional.\n3. Lee el historial para no preguntar cosas que ya sabes.'),
+            prompt_human_handoff: getC('prompt_human_handoff', 'Si el cliente pide hablar con un humano o hace preguntas fuera de tu conocimiento, responde que un asesor lo atenderá y pausa tu operación con:\n---\n{"request_human": true}'),
+            prompt_bank_rules: getC('prompt_bank_rules', 'Presenta estos datos bancarios como alternativa de pago directo, solo cuando el cliente lo solicite:'),
+            prompt_ai_suggestions: getC('prompt_ai_suggestions', 'Eres el Co-piloto de la IA. Genera 3 opciones de respuesta CORTAS (max 30 palabras) para que el humano las use. NUNCA uses la etiqueta <<MEDIA:URL>>.\nRESPONDE SOLO EN JSON:\n{\n  "suggestions": [\n    {"type": "EMPATIA", "text": "..."},\n    {"type": "VENTA", "text": "..."},\n    {"type": "TECNICA", "text": "..."}\n  ]\n}'),
+            prompt_qa_auditor: getC('prompt_qa_auditor', 'Eres el Auditor de Calidad (QA). Evalúa este mensaje enviado por un VENDEDOR HUMANO a un cliente.\nReglas:\n1. SCORE (0-100): Evalúa ortografía y persuasión.\n2. TONE_ANALYSIS: Describe en 5 palabras el tono.\n3. ANOMALY_DETECTED (CRÍTICO): PON TRUE SI da cuenta bancaria o precios falsos, o es grosero. Si no, false.\n4. ANOMALY_DETAILS: Explica la anomalía si existe, si no, null.\nResponde ÚNICAMENTE con JSON: {"score": 85, "tone_analysis": "Amable", "anomaly_detected": false, "anomaly_details": null}')
+        });
         
         try { setQuickReplies(JSON.parse(getC('quick_replies', '[]'))); } catch(e) { setQuickReplies([]); }
 
-        // Cargar Catálogo de Productos
         const productsStr = getC('wc_products', '');
         if (productsStr) {
            try { setWcProducts(JSON.parse(productsStr)); } catch(e) { setWcProducts([]); }
-        } else {
-           // Generar el primer producto por defecto si no existe (Migración)
-           const oldId = getC('wc_product_id', '1483');
-           setWcProducts([{
-              id: Date.now().toString(),
-              wc_id: oldId,
-              title: 'Inscripción / Anticipo Taller',
-              price: '1500',
-              prompt: 'Ofrecer este enlace exclusivamente cuando el cliente confirme que desea asegurar su lugar o apartar su cupo en el Taller/Certificación. Este producto corresponde a la INSCRIPCIÓN O ANTICIPO de $1,500 MXN. IMPORTANTE: Entregar el enlace solo después de haber obtenido el email y la ciudad del cliente en la fase de cierre.'
-           }]);
         }
     }
 
@@ -91,34 +102,29 @@ const Settings = () => {
       return [...prev, { key, value, category }];
     });
   };
-
-  const handleAddProduct = () => {
-     setWcProducts([...wcProducts, { id: Date.now().toString(), wc_id: '', title: '', price: '', prompt: '' }]);
+  
+  const handleKernelChange = (key: string, value: string) => {
+      setKernelConfig(prev => ({ ...prev, [key]: value }));
   };
 
-  const handleUpdateProduct = (id: string, field: string, value: string) => {
-     setWcProducts(prev => prev.map(p => p.id === id ? { ...p, [field]: value } : p));
-  };
+  const handleAddProduct = () => setWcProducts([...wcProducts, { id: Date.now().toString(), wc_id: '', title: '', price: '', prompt: '' }]);
+  const handleUpdateProduct = (id: string, field: string, value: string) => setWcProducts(prev => prev.map(p => p.id === id ? { ...p, [field]: value } : p));
 
-  const handleAddQuickReply = () => {
-    setQuickReplies([...quickReplies, { id: Date.now().toString(), title: '', text: '' }]);
-  };
-
-  const handleUpdateQuickReply = (id: string, field: string, value: string) => {
-    setQuickReplies(prev => prev.map(qr => qr.id === id ? { ...qr, [field]: value } : qr));
-  };
+  const handleAddQuickReply = () => setQuickReplies([...quickReplies, { id: Date.now().toString(), title: '', text: '' }]);
+  const handleUpdateQuickReply = (id: string, field: string, value: string) => setQuickReplies(prev => prev.map(qr => qr.id === id ? { ...qr, [field]: value } : qr));
 
   const handleSaveAll = async () => {
     setSaving(true);
     try {
-      const salesKeys = [
-          'sales_followup_enabled', 'sales_stage_1_delay', 'sales_stage_2_delay', 
-          'sales_stage_3_delay', 'sales_stage_1_message', 'sales_stage_2_message', 
-          'sales_stage_3_message', 'quick_replies', 'wc_products'
+      const excludedKeys = [
+          'sales_followup_enabled', 'sales_stage_1_delay', 'sales_stage_2_delay', 'sales_stage_3_delay', 
+          'sales_stage_1_message', 'sales_stage_2_message', 'sales_stage_3_message', 
+          'quick_replies', 'wc_products',
+          'prompt_catalog_rules', 'prompt_media_rules', 'prompt_behavior_rules', 'prompt_human_handoff', 'prompt_bank_rules', 'prompt_ai_suggestions', 'prompt_qa_auditor'
       ];
       
       const cleanConfigs = configs
-          .filter(c => !salesKeys.includes(c.key))
+          .filter(c => !excludedKeys.includes(c.key))
           .map(c => ({ key: c.key, value: c.value, category: c.category || 'SYSTEM' }));
 
       const newConfigs = [
@@ -131,7 +137,16 @@ const Settings = () => {
         { key: 'sales_stage_2_message', value: salesConfig.stage_2_message, category: 'FOLLOWUP' },
         { key: 'sales_stage_3_message', value: salesConfig.stage_3_message, category: 'FOLLOWUP' },
         { key: 'quick_replies', value: JSON.stringify(quickReplies), category: 'SYSTEM' },
-        { key: 'wc_products', value: JSON.stringify(wcProducts), category: 'WOOCOMMERCE' }
+        { key: 'wc_products', value: JSON.stringify(wcProducts), category: 'WOOCOMMERCE' },
+        
+        // KERNEL CONFIGS
+        { key: 'prompt_catalog_rules', value: kernelConfig.prompt_catalog_rules, category: 'KERNEL' },
+        { key: 'prompt_media_rules', value: kernelConfig.prompt_media_rules, category: 'KERNEL' },
+        { key: 'prompt_behavior_rules', value: kernelConfig.prompt_behavior_rules, category: 'KERNEL' },
+        { key: 'prompt_human_handoff', value: kernelConfig.prompt_human_handoff, category: 'KERNEL' },
+        { key: 'prompt_bank_rules', value: kernelConfig.prompt_bank_rules, category: 'KERNEL' },
+        { key: 'prompt_ai_suggestions', value: kernelConfig.prompt_ai_suggestions, category: 'KERNEL' },
+        { key: 'prompt_qa_auditor', value: kernelConfig.prompt_qa_auditor, category: 'KERNEL' },
       ];
       
       const { error } = await supabase.from('app_config').upsert(newConfigs, { onConflict: 'key' });
@@ -154,10 +169,55 @@ const Settings = () => {
     }
   };
 
+  const handleExportConfig = async () => {
+     try {
+         const { data: allConfigs } = await supabase.from('app_config').select('key, value, category, description');
+         const exportData = {
+            metadata: { exported_at: new Date().toISOString(), version: '1.0' },
+            app_config: allConfigs,
+            followup_config: followupConfig
+         };
+         const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" });
+         const url = URL.createObjectURL(blob);
+         const link = document.createElement("a");
+         link.href = url;
+         link.download = `samurai_kernel_backup_${Date.now()}.json`;
+         document.body.appendChild(link);
+         link.click();
+         document.body.removeChild(link);
+         toast.success("Respaldo Total Descargado");
+     } catch (e) {
+         toast.error("Error al exportar");
+     }
+  };
+
+  const handleImportConfig = (e: React.ChangeEvent<HTMLInputElement>) => {
+     const file = e.target.files?.[0];
+     if (!file) return;
+
+     const reader = new FileReader();
+     reader.onload = async (event) => {
+         try {
+             const json = JSON.parse(event.target?.result as string);
+             if (!json.app_config) throw new Error("Formato inválido");
+             
+             // Insertar configuraciones masivamente
+             const { error } = await supabase.from('app_config').upsert(json.app_config, { onConflict: 'key' });
+             if (error) throw error;
+             
+             toast.success("Configuración inyectada. Recargando...");
+             setTimeout(() => window.location.reload(), 1500);
+         } catch (err: any) {
+             toast.error("Error al importar: " + err.message);
+         }
+     };
+     reader.readAsText(file);
+  };
+
   const handleTestMessage = async () => {
     if (!testPhone) return toast.error("Ingresa un número de teléfono.");
     setTesting(true);
-    const res = await sendEvolutionMessage(testPhone, "Hola, prueba de The Elephant Bowl CRM.");
+    const res = await sendEvolutionMessage(testPhone, "Hola, prueba de Samurai Kernel.");
     if (res) toast.success("Mensaje enviado.");
     setTesting(false);
   };
@@ -167,9 +227,9 @@ const Settings = () => {
   return (
     <Layout>
       <div className="max-w-5xl mx-auto space-y-8 pb-12">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div><h1 className="text-3xl font-bold text-white">Configuración del Sistema</h1><p className="text-slate-400">Parámetros tácticos de la IA.</p></div>
-          <Button onClick={handleSaveAll} disabled={saving} className="bg-indigo-600 shadow-lg">
+          <Button onClick={handleSaveAll} disabled={saving} className="bg-indigo-600 shadow-lg shrink-0">
             {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />} Guardar Todo
           </Button>
         </div>
@@ -178,12 +238,60 @@ const Settings = () => {
           <TabsList className="bg-slate-900 border border-slate-800 p-1 flex-wrap h-auto">
             <TabsTrigger value="mensajeria" className="gap-2"><Send className="w-4 h-4"/> Mensajería</TabsTrigger>
             <TabsTrigger value="plantillas" className="gap-2"><MessageSquarePlus className="w-4 h-4"/> Plantillas</TabsTrigger>
-            <TabsTrigger value="followup" className="gap-2"><Clock className="w-4 h-4"/> Retargeting IA</TabsTrigger>
+            <TabsTrigger value="followup" className="gap-2"><Clock className="w-4 h-4"/> Retargeting</TabsTrigger>
             <TabsTrigger value="woocommerce" className="gap-2"><Store className="w-4 h-4"/> WooCommerce</TabsTrigger>
-            <TabsTrigger value="pago_directo" className="gap-2"><Building2 className="w-4 h-4"/> Depósito Directo</TabsTrigger>
+            <TabsTrigger value="pago_directo" className="gap-2"><Building2 className="w-4 h-4"/> Depósito</TabsTrigger>
             <TabsTrigger value="secrets" className="gap-2"><Key className="w-4 h-4"/> API Keys</TabsTrigger>
+            {isDev && <TabsTrigger value="kernel" className="gap-2 bg-indigo-900/20 text-indigo-400 data-[state=active]:bg-indigo-600 data-[state=active]:text-white ml-auto"><TerminalSquare className="w-4 h-4"/> Kernel Dev</TabsTrigger>}
           </TabsList>
 
+          {isDev && (
+             <TabsContent value="kernel" className="mt-6 space-y-6">
+                <Card className="bg-[#0D0B0A] border-slate-800 shadow-2xl rounded-2xl overflow-hidden border-l-4 border-l-indigo-500">
+                   <CardHeader className="border-b border-slate-800 bg-slate-900/50 flex flex-row items-center justify-between">
+                      <div>
+                         <CardTitle className="text-indigo-400 flex items-center gap-2 text-sm uppercase tracking-widest font-bold">
+                            <TerminalSquare className="w-5 h-5" /> Samurai Kernel (Agnostic Core)
+                         </CardTitle>
+                         <CardDescription className="text-[10px] mt-1">Configura las instrucciones envolventes que rigen al bot para adaptarlo a cualquier otro giro de negocio.</CardDescription>
+                      </div>
+                      <div className="flex gap-2">
+                         <input type="file" ref={fileInputRef} className="hidden" accept=".json" onChange={handleImportConfig} />
+                         <Button onClick={() => fileInputRef.current?.click()} variant="outline" className="h-9 text-[10px] bg-slate-900 border-slate-700 hover:text-indigo-400"><Upload className="w-3.5 h-3.5 mr-2" /> Importar Backup</Button>
+                         <Button onClick={handleExportConfig} className="bg-indigo-900 hover:bg-indigo-800 text-indigo-200 h-9 text-[10px]"><Download className="w-3.5 h-3.5 mr-2" /> Backup Total (JSON)</Button>
+                      </div>
+                   </CardHeader>
+                   <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6 p-6">
+                      <div className="space-y-2">
+                         <Label className="text-[10px] text-indigo-400 uppercase font-bold tracking-widest">Reglas del Catálogo (Tienda)</Label>
+                         <Textarea value={kernelConfig.prompt_catalog_rules} onChange={e => handleKernelChange('prompt_catalog_rules', e.target.value)} className="bg-black border-slate-800 text-xs h-24 font-mono text-slate-300" />
+                      </div>
+                      <div className="space-y-2">
+                         <Label className="text-[10px] text-indigo-400 uppercase font-bold tracking-widest">Reglas Multimedia (Posters)</Label>
+                         <Textarea value={kernelConfig.prompt_media_rules} onChange={e => handleKernelChange('prompt_media_rules', e.target.value)} className="bg-black border-slate-800 text-xs h-24 font-mono text-slate-300" />
+                      </div>
+                      <div className="space-y-2">
+                         <Label className="text-[10px] text-indigo-400 uppercase font-bold tracking-widest">Reglas de Comportamiento (Anti-Robot)</Label>
+                         <Textarea value={kernelConfig.prompt_behavior_rules} onChange={e => handleKernelChange('prompt_behavior_rules', e.target.value)} className="bg-black border-slate-800 text-xs h-32 font-mono text-slate-300" />
+                      </div>
+                      <div className="space-y-2">
+                         <Label className="text-[10px] text-indigo-400 uppercase font-bold tracking-widest">Escalado a Humano (Handoff)</Label>
+                         <Textarea value={kernelConfig.prompt_human_handoff} onChange={e => handleKernelChange('prompt_human_handoff', e.target.value)} className="bg-black border-slate-800 text-xs h-32 font-mono text-slate-300" />
+                      </div>
+                      <div className="space-y-2">
+                         <Label className="text-[10px] text-amber-500 uppercase font-bold tracking-widest">Prompt Co-Piloto (Botones Chat)</Label>
+                         <Textarea value={kernelConfig.prompt_ai_suggestions} onChange={e => handleKernelChange('prompt_ai_suggestions', e.target.value)} className="bg-black border-slate-800 text-[10px] h-40 font-mono text-amber-500/80" />
+                      </div>
+                      <div className="space-y-2">
+                         <Label className="text-[10px] text-red-500 uppercase font-bold tracking-widest">Prompt Auditor de Agentes (QA)</Label>
+                         <Textarea value={kernelConfig.prompt_qa_auditor} onChange={e => handleKernelChange('prompt_qa_auditor', e.target.value)} className="bg-black border-slate-800 text-[10px] h-40 font-mono text-red-400/80" />
+                      </div>
+                   </CardContent>
+                </Card>
+             </TabsContent>
+          )}
+
+          {/* MANTENER LOS OTROS TABS EXACTAMENTE IGUAL */}
           <TabsContent value="plantillas" className="mt-6 space-y-6">
              <Card className="bg-slate-900 border-slate-800 border-l-4 border-l-indigo-500">
                 <CardHeader className="flex flex-row items-center justify-between">
