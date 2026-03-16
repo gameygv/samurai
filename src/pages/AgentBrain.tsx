@@ -39,18 +39,19 @@ const AgentBrain = () => {
             const p: any = {};
             data.forEach(item => p[item.key] = item.value);
             
-            // Si el analista está vacío, inyectar el prompt maestro inicial
+            // Si el analista está vacío, inyectar el prompt maestro inicial mejorado
             if (!p['prompt_analista_datos']) {
                 p['prompt_analista_datos'] = `Eres el "Data Extractor" de The Elephant Bowl. Tu única misión es analizar la conversación y devolver un objeto JSON estricto con los datos del prospecto. No escribas texto adicional, solo el JSON.
 
-REGLAS DE EXTRACCIÓN:
+REGLAS DE EXTRACCIÓN (ANTI-ALUCINACIÓN):
 1. Identifica datos de contacto para Meta CAPI (Nombre, Apellido, Email, Ciudad, Estado, CP).
-2. Determina el 'intent' (Intención de Compra):
+2. Si el cliente NO HA ESCRITO SU CORREO explícitamente, o dice "no tengo", debes devolver "email": "null". NUNCA inventes un correo.
+3. Determina el 'intent' (Intención de Compra):
    - BAJO: Preguntas genéricas, saludo inicial.
    - MEDIO: Pide detalles de fechas, pregunta por el profesor, ha visto posters.
    - ALTO: Pide link de pago, pide cuenta bancaria, confirma que va a asistir.
-3. 'main_pain': Identifica qué quiere sanar o aprender el cliente (ej: estrés, aprender técnica, sanación sonora).
-4. 'lead_score': Del 1 al 100. Sube el score por cada dato obtenido (Email +20, Ciudad +20, Intención Alta +40).
+4. 'main_pain': Identifica qué quiere sanar o aprender el cliente (ej: estrés, aprender técnica, sanación sonora).
+5. 'lead_score': Del 1 al 100. Sube el score por cada dato obtenido (Email +20, Ciudad +20, Intención Alta +40).
 
 ESTRUCTURA JSON OBLIGATORIA:
 {
@@ -101,7 +102,6 @@ ESTRUCTURA JSON OBLIGATORIA:
       const { error } = await supabase.from('app_config').upsert(updates, { onConflict: 'key' });
       if (error) throw error;
       
-      // Generar snapshot automático
       const { data: { session } } = await supabase.auth.getSession();
       const autoVersionName = `Auto-Save v${versions.length + 1}.0`;
       

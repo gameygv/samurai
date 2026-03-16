@@ -47,7 +47,6 @@ serve(async (req) => {
     if (lead.telefono) addParam('wffn_billing_phone', encodeURIComponent(lead.telefono));
     if (lead.ciudad) addParam('wffn_billing_city', encodeURIComponent(lead.ciudad));
 
-    // CARGAR POSTERS DESDE MEDIA MANAGER (OCR)
     const { data: mediaAssets } = await supabaseClient
         .from('media_assets')
         .select('title, url, ai_instructions, ocr_content, category')
@@ -67,7 +66,6 @@ CATÁLOGO DISPONIBLE:\n`;
         mediaContext += "No hay posters cargados actualmente.\n";
     }
 
-    // CARGAR VERDAD MAESTRA (SITIO WEB) - CON LÍMITE DE TOKENS DE SEGURIDAD
     const { data: webPages } = await supabaseClient.from('main_website_content').select('title, content').eq('scrape_status', 'success');
     let masterTruth = "\n=== VERDAD MAESTRA (SITIO WEB OFICIAL) ===\n";
     if (webPages && webPages.length > 0) {
@@ -77,7 +75,6 @@ CATÁLOGO DISPONIBLE:\n`;
         });
     }
 
-    // CARGAR BASE DE CONOCIMIENTO (DOCUMENTOS Y TALLERES EXTRAS)
     const { data: kbDocs } = await supabaseClient.from('knowledge_documents').select('title, category, content, description');
     let kbContext = "\n=== BASE DE CONOCIMIENTO TÉCNICO ===\n";
     if (kbDocs && kbDocs.length > 0) {
@@ -86,7 +83,6 @@ CATÁLOGO DISPONIBLE:\n`;
         });
     }
 
-    // EXTRAER NOMBRE DEL AGENTE ASIGNADO
     let agentName = "uno de nuestros asesores";
     if (lead.assigned_to) {
         const { data: agentProfile } = await supabaseClient.from('profiles').select('full_name').eq('id', lead.assigned_to).maybeSingle();
@@ -97,7 +93,7 @@ CATÁLOGO DISPONIBLE:\n`;
     const pAlma = getConfig('prompt_alma_samurai');
     const pAdn = getConfig('prompt_adn_core');
     const pEstrategia = getConfig('prompt_estrategia_cierre');
-    const pRelearning = getConfig('prompt_relearning'); // REGLAS #CIA
+    const pRelearning = getConfig('prompt_relearning'); 
 
     const systemPrompt = `
 === CONSTITUCIÓN TÁCTICA ===
@@ -112,9 +108,10 @@ ${pEstrategia}
 4. NO REPETIR CUESTIONARIOS: Si el cliente ya te respondió algo sobre su alimentación o motivación, solo haz un comentario cálido y natural. No vuelvas a hacer la pregunta ni a repetir la cuenta bancaria. Solo dile que quedas atento a su comprobante.
 5. CONTEXTO CONTINUO: Compórtate como un humano. Si ya te dijeron que sí a algo, pasa a lo siguiente.
 
-=== ESCALADO A HUMANO (MUY IMPORTANTE) ===
-Si el cliente pide explícitamente hablar con una persona, asesor o humano, O BIEN te hace preguntas complejas que no puedes responder basándote en tu Verdad Maestra o Base de Conocimiento, DEBES:
-1. Responderle al cliente de forma natural diciendo que en breve será atendido por ${agentName}.
+=== ESCALADO A HUMANO Y ANTI-ALUCINACIÓN (REGLA DE ORO) ===
+Si el cliente hace una pregunta específica sobre temarios, logística, profesores o descuentos que NO se encuentra textualmente en tu Verdad Maestra o Base de Conocimiento, ESTÁ ESTRICTAMENTE PROHIBIDO INVENTAR LA RESPUESTA.
+O bien, si el cliente pide explícitamente hablar con una persona, asesor o humano, DEBES:
+1. Responderle al cliente de forma natural y cálida diciendo que en breve será atendido por ${agentName} para resolver esa duda específica.
 2. PAUSAR tu operación añadiendo obligatoriamente este bloque JSON EXACTO al final de tu respuesta:
 ---JSON---
 {"request_human": true}

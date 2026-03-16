@@ -26,7 +26,6 @@ serve(async (req) => {
 
     if (!apiKey) throw new Error("OpenAI API Key faltante.");
 
-    // --- NUEVO: OBTENER AGENTES Y SUS TERRITORIOS ---
     const { data: agents } = await supabaseClient
         .from('profiles')
         .select('id, full_name, territories')
@@ -55,7 +54,6 @@ Debes agregar obligatoriamente al JSON principal el campo "assigned_agent_ids": 
 
     const transcript = messages?.map(m => `[${m.emisor}]: ${m.mensaje}`).join('\n') || '';
 
-    // IA EXTRAE DATOS Y DECIDE RUTEO
     const response = await fetch(OPENAI_URL, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
@@ -78,9 +76,9 @@ Debes agregar obligatoriamente al JSON principal el campo "assigned_agent_ids": 
         perfil_psicologico: `MOTIVACIÓN: ${result.main_pain || 'N/A'}. PERFIL: ${result.psych_profile || 'N/A'}`
     };
     
+    // --- SANITIZACIÓN ESTRICTA ---
     if (result.nombre && result.nombre !== 'null') updates.nombre = result.nombre;
     if (result.apellido && result.apellido !== 'null') updates.apellido = result.apellido;
-    if (result.email && result.email.includes('@')) updates.email = result.email;
     if (result.ciudad && result.ciudad !== 'null') updates.ciudad = result.ciudad;
     if (result.estado && result.estado !== 'null') updates.estado = result.estado;
     if (result.cp && result.cp !== 'null') updates.cp = result.cp;
@@ -93,12 +91,18 @@ Debes agregar obligatoriamente al JSON principal el campo "assigned_agent_ids": 
     if (result.main_pain && result.main_pain !== 'null') updates.main_pain = result.main_pain;
     if (result.lead_score) updates.lead_score = parseInt(result.lead_score) || 0;
 
-    // --- PROCESAR LA ASIGNACIÓN DE AGENTE (ROUND ROBIN INTELIGENTE) ---
+    // Validación Anti-Basura para Emails
+    if (result.email && result.email !== 'null') {
+        const cleanEmail = result.email.trim().toLowerCase();
+        // Solo aceptamos emails que tengan formato válido para no ensuciar Meta CAPI
+        if (cleanEmail.includes('@') && cleanEmail.includes('.') && cleanEmail.length > 5 && !cleanEmail.includes('no') && !cleanEmail.includes('nada')) {
+            updates.email = cleanEmail;
+        }
+    }
+
     if (!lead.assigned_to && result.assigned_agent_ids && Array.isArray(result.assigned_agent_ids) && result.assigned_agent_ids.length > 0) {
-        // Seleccionar aleatoriamente si hay múltiples opciones (empate geográfico)
         const randomIndex = Math.floor(Math.random() * result.assigned_agent_ids.length);
         updates.assigned_to = result.assigned_agent_ids[randomIndex];
-        console.log(`[analyze-leads] Lead ${lead_id} asignado automáticamente al agente ${updates.assigned_to} basado en ubicación.`);
     }
 
     const { data: updatedLead } = await supabaseClient.from('leads').update(updates).eq('id', lead_id).select().single();
@@ -106,8 +110,8 @@ Debes agregar obligatoriamente al JSON principal el campo "assigned_agent_ids": 
     // ============================================================================
     // AUTO-DISPARADOR META CAPI (EVENTO: LEAD)
     // ============================================================================
-    if (updatedLead.email && updatedLead.nombre && !updatedLead.capi_lead_event_sent_at && configMap['meta_pixel_id'] && configMap['meta_access_token']) {
-        console.log(`[analyze-leads] Lead maduro. Disparando Meta CAPI para ${updatedLead.email}`);
+    // Nos aseguramos nuevamente de que el email sea válido y no alucinado antes de disparar CAPI
+    if (updatedLead.email && updatedLead.email.includes('@') && updatedLead.nombre && !updatedLead.capi_lead_event_sent_at && configMap['meta_pixel_id'] && configMap['meta_access_token']) {
         
         const eventData = {
             event_name: 'Lead',

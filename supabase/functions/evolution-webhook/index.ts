@@ -7,7 +7,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-// Búsqueda Profunda Recursiva (Deep Search) para localizar multimedia
+// Búsqueda Profunda Recursiva
 function findValue(obj: any, keyToFind: string): any {
   if (!obj || typeof obj !== 'object') return null;
   if (keyToFind in obj) return obj[keyToFind];
@@ -43,20 +43,19 @@ serve(async (req) => {
 
     let messageText = findValue(messageData, 'conversation') || findValue(messageData, 'text') || findValue(messageData, 'caption') || "";
 
-    // --- NUEVA LÓGICA DE CONTROL PARA AGENTES ---
+    // --- LÓGICA UNIFICADA PARA MENSAJES MANUALES (AGENTES DESDE WHATSAPP MOVIL/WEB) ---
     if (fromMe) {
         const { data: lead } = await supabaseClient.from('leads').select('id, nombre').or(`telefono.ilike.%${phone}%`).maybeSingle();
         if (!lead) return new Response('Ignored: Lead not found for agent message');
 
-        // Guardar el mensaje del agente para tener el historial completo
         await supabaseClient.from('conversaciones').insert({ lead_id: lead.id, emisor: 'HUMANO', mensaje: messageText, platform: 'WHATSAPP_MANUAL' });
 
-        if (messageText.includes('#AI_OFF')) {
+        if (messageText.includes('#STOP') || messageText.includes('#AI_OFF')) {
             await supabaseClient.from('leads').update({ ai_paused: true }).eq('id', lead.id);
-            await supabaseClient.from('activity_logs').insert({ action: 'UPDATE', resource: 'LEADS', description: `IA PAUSADA manualmente para ${lead.nombre}`, status: 'OK' });
-        } else if (messageText.includes('#AI_ON')) {
+            await supabaseClient.from('activity_logs').insert({ action: 'UPDATE', resource: 'LEADS', description: `IA PAUSADA por agente desde WA (${lead.nombre})`, status: 'OK' });
+        } else if (messageText.includes('#START') || messageText.includes('#AI_ON')) {
             await supabaseClient.from('leads').update({ ai_paused: false }).eq('id', lead.id);
-            await supabaseClient.from('activity_logs').insert({ action: 'UPDATE', resource: 'LEADS', description: `IA ACTIVADA manualmente para ${lead.nombre}`, status: 'OK' });
+            await supabaseClient.from('activity_logs').insert({ action: 'UPDATE', resource: 'LEADS', description: `IA ACTIVADA por agente desde WA (${lead.nombre})`, status: 'OK' });
         }
         
         return new Response('Agent message processed');
@@ -80,7 +79,7 @@ serve(async (req) => {
                 body: JSON.stringify({ message: body.data || body })
             });
             if (mediaRes.ok) base64 = (await mediaRes.json()).base64;
-        } catch (e) { console.error("[Webhook] Búsqueda externa de base64 falló:", e); }
+        } catch (e) { console.error("[Webhook] Búsqueda de base64 falló:", e); }
     }
 
     let bytes = null;
@@ -119,7 +118,6 @@ serve(async (req) => {
 
     if (lead.ai_paused) return new Response('Paused');
 
-    // AL RECIBIR MENSAJE DEL CLIENTE: RESETEAR EL RELOJ Y LA FASE DE FOLLOWUP A CERO
     await supabaseClient.from('leads').update({ 
         last_message_at: new Date().toISOString(),
         followup_stage: 0 
@@ -157,7 +155,6 @@ serve(async (req) => {
     const aiData = await aiRes.json();
     let rawAnswer = aiData.choices?.[0]?.message?.content || "";
     
-    // --- NUEVO: INTERCEPCIÓN JSON DUAL (Pagos y Petición de Humano) ---
     let paymentStatusToUpdate = null;
     let requestHumanToUpdate = false;
 
@@ -165,9 +162,7 @@ serve(async (req) => {
         const parts = rawAnswer.split('---JSON---');
         rawAnswer = parts[0].trim();
         try {
-            let jsonStr = parts[1].trim();
-            // Limpiar block quotes por si GPT agrega markdown
-            jsonStr = jsonStr.replace(/```json/g, '').replace(/```/g, '').trim();
+            let jsonStr = parts[1].trim().replace(/```json/g, '').replace(/```/g, '').trim();
             const parsedJson = JSON.parse(jsonStr);
             if (parsedJson.payment_status) paymentStatusToUpdate = parsedJson.payment_status;
             if (parsedJson.request_human) requestHumanToUpdate = true;
@@ -188,9 +183,7 @@ serve(async (req) => {
             }
         }
         await supabaseClient.from('activity_logs').insert({
-            action: 'UPDATE', resource: 'LEADS',
-            description: `Comprobante evaluado para ${lead.nombre}. Estatus Ojo de Halcón: ${paymentStatusToUpdate}`,
-            status: paymentStatusToUpdate === 'VALID' ? 'OK' : 'ERROR'
+            action: 'UPDATE', resource: 'LEADS', description: `Comprobante evaluado. Ojo de Halcón: ${paymentStatusToUpdate}`, status: paymentStatusToUpdate === 'VALID' ? 'OK' : 'ERROR'
         });
     }
 
@@ -214,54 +207,28 @@ serve(async (req) => {
         
         if (!response.ok) {
             const errText = await response.text();
-            console.error("[Webhook] Evolution API Rechazó el mensaje:", errText);
-            await supabaseClient.from('activity_logs').insert({
-                action: 'ERROR', resource: 'SYSTEM', description: `Evolution API falló enviando a ${phone}: ${errText.substring(0, 150)}`, status: 'ERROR'
-            });
+            await supabaseClient.from('activity_logs').insert({ action: 'ERROR', resource: 'SYSTEM', description: `Evolution API falló: ${errText.substring(0, 150)}`, status: 'ERROR' });
             await supabaseClient.from('conversaciones').insert({ lead_id: lead.id, emisor: 'IA', mensaje: `[ERROR WA] ${messageToLog}`, platform: 'ERROR' });
         } else {
             await supabaseClient.from('conversaciones').insert({ lead_id: lead.id, emisor: 'IA', mensaje: messageToLog, platform: 'WHATSAPP_AUTO' });
         }
     }
 
-    // --- ACCIÓN POST-ENVÍO: ESCALADO A HUMANO ---
     if (requestHumanToUpdate) {
-        // Pausar bot
         await supabaseClient.from('leads').update({ ai_paused: true }).eq('id', lead.id);
-        
-        // Notificar al Vendedor por WhatsApp
         if (lead.assigned_to && evoUrl && evoKey) {
             const { data: agentProfile } = await supabaseClient.from('profiles').select('full_name, phone').eq('id', lead.assigned_to).maybeSingle();
-            
             if (agentProfile?.phone) {
-                const agentAlertMsg = `🚨 *ATENCIÓN REQUERIDA* 🚨\n\nEl cliente *${lead.nombre || lead.telefono}* ha solicitado asistencia humana o hizo una pregunta que la IA no pudo responder.\n\nEl Bot ha sido pausado automáticamente para este chat.\n👉 Ingresa al CRM para atenderlo.`;
-                
-                await fetch(evoUrl, {
-                    method: 'POST', 
-                    headers: { 'Content-Type': 'application/json', 'apikey': evoKey }, 
-                    body: JSON.stringify({ number: agentProfile.phone.replace(/\D/g, ''), text: agentAlertMsg })
-                });
+                const agentAlertMsg = `🚨 *ATENCIÓN REQUERIDA* 🚨\n\nEl cliente *${lead.nombre || lead.telefono}* requiere asistencia humana (o hizo una pregunta fuera del manual).\n\nEl Bot se ha pausado.\n👉 Atiéndelo en el CRM.`;
+                await fetch(evoUrl, { method: 'POST', headers: { 'Content-Type': 'application/json', 'apikey': evoKey }, body: JSON.stringify({ number: agentProfile.phone.replace(/\D/g, ''), text: agentAlertMsg }) });
             }
         }
-        
-        // Logs Internos
-        await supabaseClient.from('activity_logs').insert({
-            action: 'UPDATE', resource: 'LEADS',
-            description: `IA pausada y agente notificado para ${lead.nombre}`,
-            status: 'OK'
-        });
-        
-        await supabaseClient.from('conversaciones').insert({ 
-            lead_id: lead.id, 
-            mensaje: `IA Pausada automáticamente porque el cliente solicitó asistencia humana o hizo una pregunta sin respuesta en KB.`, 
-            emisor: 'NOTA', 
-            platform: 'PANEL_INTERNO' 
-        });
+        await supabaseClient.from('activity_logs').insert({ action: 'UPDATE', resource: 'LEADS', description: `IA pausada (Escalado a Humano) para ${lead.nombre}`, status: 'OK' });
+        await supabaseClient.from('conversaciones').insert({ lead_id: lead.id, mensaje: `IA Pausada automáticamente porque el cliente solicitó asistencia humana o hizo una pregunta sin respuesta en la Base de Conocimiento.`, emisor: 'NOTA', platform: 'PANEL_INTERNO' });
     }
 
     return new Response(JSON.stringify({ success: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   } catch (error: any) {
-    console.error("[Webhook] Error Crítico:", error);
     return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: corsHeaders });
   }
 })
