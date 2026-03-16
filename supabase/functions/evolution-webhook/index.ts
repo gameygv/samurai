@@ -8,8 +8,8 @@ const corsHeaders = {
 }
 
 serve(async (req) => {
-  // Manejo de sub-rutas (por si Webhook by Events sigue encendido)
-  if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders })
+  // 1. Manejo de CORS Pre-flight
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
   const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
@@ -17,16 +17,11 @@ serve(async (req) => {
 
   try {
     const payload = await req.json();
-    console.log("[evolution-webhook] Evento detectado:", payload?.event || payload?.type);
-
-    // 1. FILTRAR SOLO MENSAJES ENTRANTE
-    const eventType = (payload?.event || payload?.type || '').toLowerCase();
     
-    // Solo procesamos si el evento es de mensajes
-    if (!eventType.includes('messages') && !eventType.includes('upsert') && !eventType.includes('chat')) {
-        return new Response(JSON.stringify({ status: 'ignored', event: eventType }), { headers: corsHeaders });
-    }
+    // LOG DE EMERGENCIA: Esto aparecerá en los logs de Supabase si la función se ejecuta
+    console.log("[Webhook] Petición recibida con éxito. Evento:", payload?.event || payload?.type || 'unknown');
 
+    // 2. FILTRAR MENSAJES (Búsqueda agresiva de texto y teléfono)
     const msgData = payload?.data || payload?.body || payload;
     const msg = Array.isArray(msgData) ? msgData[0] : msgData;
 
@@ -35,7 +30,6 @@ serve(async (req) => {
         return new Response(JSON.stringify({ status: 'ignored', reason: 'fromMe' }), { headers: corsHeaders });
     }
 
-    // Extraer Teléfono y Texto de forma agresiva
     const phone = msg?.key?.remoteJid?.split('@')[0] || msg?.from?.split('@')[0] || msg?.remoteJid?.split('@')[0];
     const text = msg?.message?.conversation || 
                  msg?.message?.extendedTextMessage?.text || 
@@ -44,12 +38,13 @@ serve(async (req) => {
                  msg?.message?.imageMessage?.caption || '';
 
     if (!phone || !text) {
-        return new Response(JSON.stringify({ status: 'ignored', reason: 'no_data' }), { headers: corsHeaders });
+        // Si no hay texto, tal vez es un evento de conexión, lo ignoramos pero respondemos OK
+        return new Response(JSON.stringify({ status: 'heartbeat_received' }), { headers: corsHeaders });
     }
 
     const cleanPhone = phone.replace(/\D/g, '');
 
-    // 2. BUSCAR O CREAR LEAD
+    // 3. BUSCAR O CREAR LEAD (Con política de bypass)
     let { data: lead } = await supabaseClient.from('leads').select('*').or(`telefono.ilike.%${cleanPhone}%`).limit(1).maybeSingle();
     if (!lead) {
         const { data: newLead } = await supabaseClient.from('leads').insert({
@@ -60,7 +55,7 @@ serve(async (req) => {
         lead = newLead;
     }
 
-    // 3. GUARDAR MENSAJE
+    // 4. GUARDAR MENSAJE
     await supabaseClient.from('conversaciones').insert({
         lead_id: lead.id,
         emisor: 'CLIENTE',
@@ -69,19 +64,23 @@ serve(async (req) => {
     });
     await supabaseClient.from('leads').update({ last_message_at: new Date().toISOString() }).eq('id', lead.id);
 
-    // 4. LOGICA DE IA (Kill Switches)
-    if (lead.ai_paused) return new Response(JSON.stringify({ status: 'success', ai: 'paused' }), { headers: corsHeaders });
+    // 5. RESPUESTA DE IA (Solo si no está pausado)
+    if (lead.ai_paused) return new Response(JSON.stringify({ status: 'ai_paused' }), { headers: corsHeaders });
 
     const { data: configs } = await supabaseClient.from('app_config').select('key, value');
     const configMap = configs?.reduce((acc, item) => ({...acc, [item.key]: item.value}), {}) || {};
     
-    if (configMap['global_bot_paused'] === 'true') return new Response(JSON.stringify({ status: 'success', ai: 'global_paused' }), { headers: corsHeaders });
+    if (configMap['global_bot_paused'] === 'true') return new Response(JSON.stringify({ status: 'global_paused' }), { headers: corsHeaders });
 
-    // 5. PROCESAR RESPUESTA
     const openaiKey = configMap['openai_api_key'];
     const evolutionUrl = configMap['evolution_api_url'];
     const evolutionKey = configMap['evolution_api_key'];
 
+    if (!openaiKey || !evolutionUrl || !evolutionKey) {
+        return new Response(JSON.stringify({ status: 'missing_config' }), { headers: corsHeaders });
+    }
+
+    // Armar Prompt
     const bankData = `Banco: ${configMap['bank_name']}\nCuenta: ${configMap['bank_account']}\nCLABE: ${configMap['bank_clabe']}\nTitular: ${configMap['bank_holder']}`;
     const systemPrompt = `${configMap['prompt_alma_samurai']}\n${configMap['prompt_adn_core']}\n${configMap['prompt_behavior_rules']}\n### [PAGOS]\n${bankData}`;
 
@@ -89,6 +88,7 @@ serve(async (req) => {
     const messages = [{ role: 'system', content: systemPrompt }];
     history?.forEach(h => messages.push({ role: h.emisor === 'CLIENTE' ? 'user' : 'assistant', content: h.mensaje }));
 
+    // IA Request
     const aiRes = await fetch("https://api.openai.com/v1/chat/completions", {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${openaiKey}`, 'Content-Type': 'application/json' },
@@ -99,13 +99,14 @@ serve(async (req) => {
     let aiText = aiData.choices?.[0]?.message?.content || '';
 
     // Enviar y Guardar
-    await fetch(evolutionUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'apikey': evolutionKey },
-        body: JSON.stringify({ number: cleanPhone, text: aiText })
-    });
-
-    await supabaseClient.from('conversaciones').insert({ lead_id: lead.id, emisor: 'IA', mensaje: aiText, platform: 'WHATSAPP' });
+    if (aiText) {
+        await fetch(evolutionUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'apikey': evolutionKey },
+            body: JSON.stringify({ number: cleanPhone, text: aiText })
+        });
+        await supabaseClient.from('conversaciones').insert({ lead_id: lead.id, emisor: 'IA', mensaje: aiText, platform: 'WHATSAPP' });
+    }
 
     return new Response(JSON.stringify({ status: 'success' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
