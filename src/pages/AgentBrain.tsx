@@ -4,13 +4,14 @@ import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import Layout from '@/components/Layout';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/context/AuthContext';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { 
   Bot, Eye as EyeIcon, Loader2, Terminal, BrainCircuit, Target, 
-  GitBranch, Layers, Fingerprint, MessageSquare, FlaskConical, Save, BarChart3
+  GitBranch, Layers, Fingerprint, MessageSquare, FlaskConical, Save, BarChart3, ShieldAlert
 } from 'lucide-react';
 import { PromptEditor } from '@/components/brain/PromptEditor';
 import { KernelStep } from '@/components/brain/KernelStep';
@@ -21,6 +22,7 @@ import { VersionsTab } from '@/components/brain/VersionsTab';
 import { toast } from 'sonner';
 
 const AgentBrain = () => {
+  const { isDev } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const activeTab = searchParams.get('tab') || 'alma';
   
@@ -92,6 +94,28 @@ ESTRUCTURA JSON OBLIGATORIA:
   const handleSaveAll = async () => {
     setSaving(true);
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+
+      // 1. REGLA ESTRICTA: BACKUP FIRST
+      // Antes de escribir los nuevos prompts, tomamos una foto de cómo está la base de datos AHORA MISMO
+      const { data: currentDbData } = await supabase.from('app_config').select('key, value').eq('category', 'PROMPT');
+      if (currentDbData && currentDbData.length > 0) {
+         const oldPrompts: any = {};
+         currentDbData.forEach(item => oldPrompts[item.key] = item.value);
+         
+         if (Object.keys(oldPrompts).length > 0) {
+            const backupName = `Respaldo de Seguridad - ${new Date().toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}`;
+            const { error: backupError } = await supabase.from('prompt_versions').insert({
+               version_name: backupName,
+               prompts_snapshot: oldPrompts,
+               created_by: session?.user?.id || null,
+               notes: 'Copia de seguridad automática del estado previo (Rollback Point) generada antes de una modificación.'
+            });
+            if (backupError) console.error("Error al crear respaldo previo:", backupError);
+         }
+      }
+
+      // 2. APLICAR CAMBIOS (Nuevos Prompts)
       const updates = Object.entries(prompts).map(([key, value]) => ({
         key,
         value,
@@ -102,23 +126,7 @@ ESTRUCTURA JSON OBLIGATORIA:
       const { error } = await supabase.from('app_config').upsert(updates, { onConflict: 'key' });
       if (error) throw error;
       
-      const { data: { session } } = await supabase.auth.getSession();
-      const autoVersionName = `Auto-Save v${versions.length + 1}.0`;
-      
-      const { error: snapError } = await supabase.from('prompt_versions').insert({
-         version_name: autoVersionName,
-         prompts_snapshot: prompts,
-         created_by: session?.user?.id || null,
-         notes: 'Guardado automático por modificación de prompts'
-      });
-
-      if (snapError) {
-          console.error("Error creando auto-snapshot:", snapError);
-          toast.success("Cerebro actualizado, pero no se pudo generar el snapshot automático.");
-      } else {
-          toast.success("Cerebro actualizado y Snapshot automático creado.");
-      }
-
+      toast.success("Cerebro actualizado. Se ha generado un Snapshot de respaldo del estado anterior.");
       fetchVersions();
     } catch (err: any) {
       toast.error("Error al guardar: " + err.message);
@@ -128,7 +136,7 @@ ESTRUCTURA JSON OBLIGATORIA:
   };
 
   const handleCreateSnapshot = async () => {
-     const name = prompt("Nombre del Snapshot:", `v${versions.length + 1}.0 - Manual`);
+     const name = prompt("Nombre del Snapshot (Tomará la configuración actual visible):", `v${versions.length + 1}.0 - Manual`);
      if (!name) return;
      
      setSaving(true);
@@ -138,7 +146,8 @@ ESTRUCTURA JSON OBLIGATORIA:
         const { error } = await supabase.from('prompt_versions').insert({
            version_name: name,
            prompts_snapshot: prompts,
-           created_by: session?.user?.id || null
+           created_by: session?.user?.id || null,
+           notes: 'Snapshot creado manualmente por el usuario.'
         });
         
         if (error) throw error;
@@ -179,6 +188,15 @@ ESTRUCTURA JSON OBLIGATORIA:
           </div>
         </div>
 
+        {!isDev && (
+           <div className="bg-amber-900/20 border border-amber-500/30 p-3 rounded-xl flex items-center gap-3 text-amber-400 shrink-0 shadow-inner">
+              <ShieldAlert className="w-5 h-5 shrink-0" />
+              <p className="text-xs font-medium">
+                 <strong>Modo Administrador:</strong> La edición manual de Prompts está protegida por seguridad. Para evolucionar el sistema, utiliza el <strong className="text-amber-300">Laboratorio IA</strong> para generar una propuesta y luego aplícala. Todo cambio generará un Rollback automático.
+              </p>
+           </div>
+        )}
+
         <Tabs value={activeTab} onValueChange={v => setSearchParams({ tab: v })} className="flex-1 flex flex-col min-h-0">
           <TabsList className="bg-slate-900 border border-slate-800 p-1 mb-4 shrink-0 h-auto flex-wrap justify-start gap-1 rounded-xl">
              <TabsTrigger value="alma" className="gap-2 px-4 py-2 data-[state=active]:bg-indigo-900/50 data-[state=active]:text-amber-500"><Bot className="w-4 h-4"/> 1. Alma</TabsTrigger>
@@ -200,7 +218,7 @@ ESTRUCTURA JSON OBLIGATORIA:
             <TabsContent value="alma" className="m-0 h-full flex flex-col data-[state=inactive]:hidden">
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 flex-1 min-h-0">
                   <div className="h-full min-h-0">
-                     <PromptEditor title="Alma de The Elephant Bowl" icon={Bot} value={prompts['prompt_alma_samurai']} onChange={v => handlePromptChange('prompt_alma_samurai', v)} color="text-amber-500" />
+                     <PromptEditor readOnly={!isDev} title="Alma de The Elephant Bowl" icon={Bot} value={prompts['prompt_alma_samurai']} onChange={v => handlePromptChange('prompt_alma_samurai', v)} color="text-amber-500" />
                   </div>
                   <Card className="bg-slate-900 border-slate-800 flex flex-col h-full overflow-hidden shadow-2xl rounded-2xl">
                     <CardHeader className="shrink-0 py-4 border-b border-slate-800 bg-slate-950/30"><CardTitle className="text-slate-50 text-xs uppercase tracking-widest flex items-center gap-2"><Layers className="w-4 h-4 text-amber-500" /> Jerarquía Técnica</CardTitle></CardHeader>
@@ -219,20 +237,21 @@ ESTRUCTURA JSON OBLIGATORIA:
             <TabsContent value="identidad" className="m-0 h-full data-[state=inactive]:hidden">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 h-full min-h-0">
                    <div className="h-full min-h-0">
-                      <PromptEditor title="ADN Core" icon={Fingerprint} value={prompts['prompt_adn_core']} onChange={v => handlePromptChange('prompt_adn_core', v)} color="text-amber-500" />
+                      <PromptEditor readOnly={!isDev} title="ADN Core" icon={Fingerprint} value={prompts['prompt_adn_core']} onChange={v => handlePromptChange('prompt_adn_core', v)} color="text-amber-500" />
                    </div>
                    <div className="h-full min-h-0">
-                      <PromptEditor title="Estrategia de Cierre" icon={Target} value={prompts['prompt_estrategia_cierre']} onChange={v => handlePromptChange('prompt_estrategia_cierre', v)} color="text-indigo-300" />
+                      <PromptEditor readOnly={!isDev} title="Estrategia de Cierre" icon={Target} value={prompts['prompt_estrategia_cierre']} onChange={v => handlePromptChange('prompt_estrategia_cierre', v)} color="text-indigo-300" />
                    </div>
                 </div>
             </TabsContent>
             
             <TabsContent value="vision" className="m-0 h-full data-[state=inactive]:hidden">
-                <PromptEditor title="Ojo de Halcón" icon={EyeIcon} value={prompts['prompt_vision_instrucciones']} onChange={v => handlePromptChange('prompt_vision_instrucciones', v)} color="text-amber-500" />
+                <PromptEditor readOnly={!isDev} title="Ojo de Halcón" icon={EyeIcon} value={prompts['prompt_vision_instrucciones']} onChange={v => handlePromptChange('prompt_vision_instrucciones', v)} color="text-amber-500" />
             </TabsContent>
 
             <TabsContent value="analista" className="m-0 h-full data-[state=inactive]:hidden">
                 <PromptEditor 
+                  readOnly={!isDev}
                   title="Analista Silencioso (CAPI Data)" 
                   icon={BarChart3} 
                   value={prompts['prompt_analista_datos']} 
