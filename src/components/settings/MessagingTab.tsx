@@ -19,7 +19,8 @@ export const MessagingTab = ({ getValue, onChange }: MessagingTabProps) => {
   const handleTestMessage = async () => {
     if (!testPhone) return toast.error("Ingresa un número de teléfono.");
     setTesting(true);
-    const res = await sendEvolutionMessage(testPhone, "Hola, prueba de Samurai Kernel.");
+    // Pasamos un string vacío como leadId para usar el canal por defecto en la prueba
+    const res = await sendEvolutionMessage(testPhone, "Hola, prueba de Samurai Kernel.", "");
     if (res) toast.success("Mensaje enviado.");
     setTesting(false);
   };
@@ -28,7 +29,7 @@ export const MessagingTab = ({ getValue, onChange }: MessagingTabProps) => {
     <Card className="bg-slate-900 border-slate-800 border-l-4 border-l-green-600">
       <CardHeader>
         <CardTitle className="text-white flex items-center gap-2">
-          <Webhook className="w-5 h-5 text-green-600" /> Conexión Evolution API
+          <Webhook className="w-5 h-5 text-green-600" /> Conexión Evolution API (Legacy)
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">

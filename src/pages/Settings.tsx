@@ -6,23 +6,23 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Switch } from '@/components/ui/switch';
-import { Key, Save, Loader2, Store, Send, Clock, Building2, MessageSquarePlus, TerminalSquare, ShieldAlert } from 'lucide-react';
+import { Key, Save, Loader2, Store, Send, Clock, Building2, MessageSquarePlus, TerminalSquare, ShieldAlert, Smartphone } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/context/AuthContext';
 import { cn } from '@/lib/utils';
 
 // Import Modulares
-import { MessagingTab } from '@/components/settings/MessagingTab';
 import { BankTab, SecretsTab } from '@/components/settings/BankAndSecretsTabs';
 import { TemplatesTab } from '@/components/settings/TemplatesTab';
 import { FollowupTab } from '@/components/settings/FollowupTab';
 import { WooCommerceTab } from '@/components/settings/WooCommerceTab';
 import { KernelTab } from '@/components/settings/KernelTab';
+import { ChannelsTab } from '@/components/settings/ChannelsTab';
 
 const Settings = () => {
   const { isAdmin, isDev } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
-  const activeTab = searchParams.get('tab') || 'mensajeria';
+  const activeTab = searchParams.get('tab') || 'canales';
   
   const [configs, setConfigs] = useState<any[]>([]);
   const [quickReplies, setQuickReplies] = useState<{id: string, title: string, text: string}[]>([]);
@@ -70,13 +70,13 @@ const Settings = () => {
         });
 
         setKernelConfig({
-            prompt_catalog_rules: getC('prompt_catalog_rules', 'Usa el siguiente catálogo de productos para ofrecer enlaces de pago. Envía el enlace correspondiente según el interés del cliente, y hazlo de forma natural.'),
-            prompt_media_rules: getC('prompt_media_rules', 'Cuando sea pertinente o el cliente pregunte por información visual, adjunta el recurso correspondiente usando la etiqueta <<MEDIA:URL>>. No repitas imágenes.'),
-            prompt_behavior_rules: getC('prompt_behavior_rules', '1. No repitas información que ya diste.\n2. Mantén un tono humano y conversacional.\n3. Lee el historial para no preguntar cosas que ya sabes.'),
-            prompt_human_handoff: getC('prompt_human_handoff', 'Si el cliente pide hablar con un humano o hace preguntas fuera de tu conocimiento, responde que un asesor lo atenderá y pausa tu operación con:\n---\n{"request_human": true}'),
-            prompt_bank_rules: getC('prompt_bank_rules', 'Presenta estos datos bancarios como alternativa de pago directo, solo cuando el cliente lo solicite:'),
-            prompt_ai_suggestions: getC('prompt_ai_suggestions', 'Eres el Co-piloto de la IA. Genera 3 opciones de respuesta CORTAS (max 30 palabras) para que el humano las use. NUNCA uses la etiqueta <<MEDIA:URL>>.\nRESPONDE SOLO EN JSON:\n{\n  "suggestions": [\n    {"type": "EMPATIA", "text": "..."},\n    {"type": "VENTA", "text": "..."},\n    {"type": "TECNICA", "text": "..."}\n  ]\n}'),
-            prompt_qa_auditor: getC('prompt_qa_auditor', 'Eres el Auditor de Calidad (QA). Evalúa este mensaje enviado por un VENDEDOR HUMANO a un cliente.\nReglas:\n1. SCORE (0-100): Evalúa ortografía y persuasión.\n2. TONE_ANALYSIS: Describe en 5 palabras el tono.\n3. ANOMALY_DETECTED (CRÍTICO): PON TRUE SI da cuenta bancaria o precios falsos, o es grosero. Si no, false.\n4. ANOMALY_DETAILS: Explica la anomalía si existe, si no, null.\nResponde ÚNICAMENTE con JSON: {"score": 85, "tone_analysis": "Amable", "anomaly_detected": false, "anomaly_details": null}')
+            prompt_catalog_rules: getC('prompt_catalog_rules', ''),
+            prompt_media_rules: getC('prompt_media_rules', ''),
+            prompt_behavior_rules: getC('prompt_behavior_rules', ''),
+            prompt_human_handoff: getC('prompt_human_handoff', ''),
+            prompt_bank_rules: getC('prompt_bank_rules', ''),
+            prompt_ai_suggestions: getC('prompt_ai_suggestions', ''),
+            prompt_qa_auditor: getC('prompt_qa_auditor', '')
         });
         
         try { setQuickReplies(JSON.parse(getC('quick_replies', '[]'))); } catch(e) { setQuickReplies([]); }
@@ -106,27 +106,13 @@ const Settings = () => {
       setKernelConfig(prev => ({ ...prev, [key]: value }));
   };
 
-  // Funciones de productos y plantillas
-  const handleAddProduct = () => setWcProducts([...wcProducts, { id: Date.now().toString(), wc_id: '', title: '', price: '', prompt: '' }]);
-  const handleUpdateProduct = (id: string, field: string, value: string) => setWcProducts(prev => prev.map(p => p.id === id ? { ...p, [field]: value } : p));
-  const handleRemoveProduct = (id: string) => setWcProducts(prev => prev.filter(p => p.id !== id));
-
-  const handleAddQuickReply = () => setQuickReplies([...quickReplies, { id: Date.now().toString(), title: '', text: '' }]);
-  const handleUpdateQuickReply = (id: string, field: string, value: string) => setQuickReplies(prev => prev.map(qr => qr.id === id ? { ...qr, [field]: value } : qr));
-  const handleRemoveQuickReply = (id: string) => setQuickReplies(prev => prev.filter(qr => qr.id !== id));
-
-  const handleAddTag = () => setGlobalTags([...globalTags, { id: Date.now().toString(), text: '', color: '#8b5cf6' }]);
-  const handleUpdateTag = (id: string, field: string, value: string) => setGlobalTags(prev => prev.map(tag => tag.id === id ? { ...tag, [field]: value } : tag));
-  const handleRemoveTag = (id: string) => setGlobalTags(prev => prev.filter(tag => tag.id !== id));
-
   const handleSaveAll = async () => {
     setSaving(true);
     try {
       const excludedKeys = [
-          'global_bot_paused', 'global_tags',
+          'global_bot_paused', 'global_tags', 'quick_replies', 'wc_products',
           'sales_followup_enabled', 'sales_stage_1_delay', 'sales_stage_2_delay', 'sales_stage_3_delay', 
           'sales_stage_1_message', 'sales_stage_2_message', 'sales_stage_3_message', 
-          'quick_replies', 'wc_products',
           'prompt_catalog_rules', 'prompt_media_rules', 'prompt_behavior_rules', 'prompt_human_handoff', 'prompt_bank_rules', 'prompt_ai_suggestions', 'prompt_qa_auditor'
       ];
       
@@ -183,7 +169,7 @@ const Settings = () => {
     <Layout>
       <div className="max-w-5xl mx-auto space-y-8 pb-12">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div><h1 className="text-3xl font-bold text-white">Configuración del Sistema</h1><p className="text-slate-400">Parámetros tácticos de la IA.</p></div>
+          <div><h1 className="text-3xl font-bold text-white">Configuración del Sistema</h1><p className="text-slate-400">Canales e Inteligencia Operativa.</p></div>
           <Button onClick={handleSaveAll} disabled={saving} className="bg-indigo-600 shadow-lg shrink-0">
             {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />} Guardar Todo
           </Button>
@@ -199,18 +185,14 @@ const Settings = () => {
                </CardTitle>
              </CardHeader>
              <CardContent className="pt-4">
-               <p className="text-xs text-slate-400">
-                  <strong className={globalBotPaused ? "text-red-400" : "text-emerald-400"}>
-                     {globalBotPaused ? "EL BOT ESTÁ APAGADO." : "EL BOT ESTÁ EN LÍNEA."}
-                  </strong> Al activar esta opción, la Inteligencia Artificial dejará de responder a <strong>cualquier cliente de la base de datos</strong> instantáneamente. Úsalo solo para mantenimientos de emergencia.
-               </p>
+               <p className="text-xs text-slate-400">Al activar esta opción, Sam dejará de responder en <strong>todos</strong> los canales registrados.</p>
              </CardContent>
            </Card>
         )}
 
         <Tabs value={activeTab} onValueChange={v => setSearchParams({ tab: v })}>
           <TabsList className="bg-slate-900 border border-slate-800 p-1 flex-wrap h-auto">
-            <TabsTrigger value="mensajeria" className="gap-2"><Send className="w-4 h-4"/> Mensajería</TabsTrigger>
+            <TabsTrigger value="canales" className="gap-2"><Smartphone className="w-4 h-4"/> Canales</TabsTrigger>
             <TabsTrigger value="plantillas" className="gap-2"><MessageSquarePlus className="w-4 h-4"/> Componentes UI</TabsTrigger>
             <TabsTrigger value="followup" className="gap-2"><Clock className="w-4 h-4"/> Retargeting</TabsTrigger>
             <TabsTrigger value="woocommerce" className="gap-2"><Store className="w-4 h-4"/> WooCommerce</TabsTrigger>
@@ -219,14 +201,18 @@ const Settings = () => {
             {isDev && <TabsTrigger value="kernel" className="gap-2 bg-indigo-900/20 text-indigo-400 data-[state=active]:bg-indigo-600 data-[state=active]:text-white ml-auto"><TerminalSquare className="w-4 h-4"/> Kernel Dev</TabsTrigger>}
           </TabsList>
 
-          <TabsContent value="mensajeria" className="mt-6 space-y-6">
-             <MessagingTab getValue={getValue} onChange={handleInputChange} />
+          <TabsContent value="canales" className="mt-6 space-y-6">
+             <ChannelsTab />
           </TabsContent>
 
           <TabsContent value="plantillas" className="mt-6 space-y-6">
              <TemplatesTab 
-                globalTags={globalTags} onAddTag={handleAddTag} onUpdateTag={handleUpdateTag} onRemoveTag={handleRemoveTag}
-                quickReplies={quickReplies} onAddQuickReply={handleAddQuickReply} onUpdateQuickReply={handleUpdateQuickReply} onRemoveQuickReply={handleRemoveQuickReply}
+                globalTags={globalTags} onAddTag={() => setGlobalTags([...globalTags, { id: Date.now().toString(), text: '', color: '#8b5cf6' }])} 
+                onUpdateTag={(id, f, v) => setGlobalTags(globalTags.map(t => t.id === id ? {...t, [f]: v} : t))} 
+                onRemoveTag={(id) => setGlobalTags(globalTags.filter(t => t.id !== id))}
+                quickReplies={quickReplies} onAddQuickReply={() => setQuickReplies([...quickReplies, { id: Date.now().toString(), title: '', text: '' }])} 
+                onUpdateQuickReply={(id, f, v) => setQuickReplies(quickReplies.map(q => q.id === id ? {...q, [f]: v} : q))} 
+                onRemoveQuickReply={(id) => setQuickReplies(quickReplies.filter(q => q.id !== id))}
              />
           </TabsContent>
 
@@ -240,7 +226,9 @@ const Settings = () => {
           <TabsContent value="woocommerce" className="mt-6 space-y-6">
              <WooCommerceTab 
                 getValue={getValue} onChange={handleInputChange} 
-                wcProducts={wcProducts} onAddProduct={handleAddProduct} onUpdateProduct={handleUpdateProduct} onRemoveProduct={handleRemoveProduct} 
+                wcProducts={wcProducts} onAddProduct={() => setWcProducts([...wcProducts, { id: Date.now().toString(), wc_id: '', title: '', price: '', prompt: '' }])} 
+                onUpdateProduct={(id, f, v) => setWcProducts(wcProducts.map(p => p.id === id ? {...p, [f]: v} : p))} 
+                onRemoveProduct={(id) => setWcProducts(wcProducts.filter(p => p.id !== id))} 
              />
           </TabsContent>
           

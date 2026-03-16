@@ -1,72 +1,104 @@
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
-const getConfig = async (keys: string[]): Promise<Record<string, string | null>> => {
-  const { data, error } = await supabase.from('app_config').select('key, value').in('key', keys);
-  if (error) throw new Error('No se pudo obtener la configuración de la API.');
-  return data.reduce((acc, item) => ({ ...acc, [item.key]: item.value }), {} as Record<string, string | null>);
-};
-
-export const sendEvolutionMessage = async (
+export const sendMessage = async (
   phone: string, 
   message: string, 
+  leadId: string,
   mediaFile?: { url: string; type: string; mimetype: string; name: string }
 ) => {
   try {
-    const { evolution_api_url, evolution_api_key } = await getConfig(['evolution_api_url', 'evolution_api_key']);
-    
-    if (!evolution_api_url || !evolution_api_key) {
-      throw new Error('Configuración incompleta en Ajustes.');
+    // 1. Obtener el lead para saber su canal
+    const { data: lead } = await supabase
+      .from('leads')
+      .select('channel_id')
+      .eq('id', leadId)
+      .single();
+
+    let channel;
+    if (!lead?.channel_id) {
+       // Fallback: usar el primer canal activo si no tiene uno asignado
+       const { data: firstChannel } = await supabase.from('whatsapp_channels').select('*').eq('is_active', true).limit(1).single();
+       channel = firstChannel;
+    } else {
+       const { data: leadChannel } = await supabase.from('whatsapp_channels').select('*').eq('id', lead.channel_id).single();
+       channel = leadChannel;
     }
 
-    let endpoint = evolution_api_url;
-    let payload: any = {
-      number: phone.replace(/\D/g, ''),
-    };
+    if (!channel) throw new Error('No hay canales de WhatsApp activos vinculados.');
 
-    if (mediaFile) {
-      // Cambiar el endpoint para envío de multimedia
-      endpoint = evolution_api_url.replace('sendText', 'sendMedia');
+    const cleanPhone = phone.replace(/\D/g, '');
+    let endpoint = channel.api_url;
+    let payload: any = {};
+    let headers: any = { 'Content-Type': 'application/json' };
+
+    // ==========================================
+    // LÓGICA EVOLUTION API
+    // ==========================================
+    if (channel.provider === 'evolution') {
+      headers['apikey'] = channel.api_key;
       
-      // Payload compatible con Evolution API v1 y v2
-      payload = {
-        ...payload,
-        mediatype: mediaFile.type,
-        mimetype: mediaFile.mimetype,
-        caption: message || "",
-        media: mediaFile.url,
-        fileName: mediaFile.name,
-        mediaMessage: {
+      if (mediaFile) {
+        endpoint = `${channel.api_url}/message/sendMedia/${channel.instance_id}`;
+        payload = {
+          number: cleanPhone,
           mediatype: mediaFile.type,
+          mimetype: mediaFile.mimetype,
           caption: message || "",
           media: mediaFile.url,
           fileName: mediaFile.name
-        }
-      };
-    } else {
-      payload.text = message;
+        };
+      } else {
+        endpoint = `${channel.api_url}/message/sendText/${channel.instance_id}`;
+        payload = {
+          number: cleanPhone,
+          text: message,
+          linkPreview: true
+        };
+      }
+    } 
+    // ==========================================
+    // LÓGICA GOWA (Go-WhatsApp)
+    // ==========================================
+    else if (channel.provider === 'gowa') {
+      headers['Authorization'] = `Bearer ${channel.api_key}`;
+      
+      if (mediaFile) {
+        endpoint = `${channel.api_url}/send-media`;
+        payload = {
+          phone: cleanPhone,
+          media_url: mediaFile.url,
+          caption: message,
+          type: mediaFile.type
+        };
+      } else {
+        endpoint = `${channel.api_url}/send-message`;
+        payload = {
+          phone: cleanPhone,
+          message: message
+        };
+      }
     }
 
     const response = await fetch(endpoint, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'apikey': evolution_api_key,
-      },
+      headers,
       body: JSON.stringify(payload),
     });
 
-    const responseData = await response.json().catch(() => ({}));
-
     if (!response.ok) {
-      throw new Error(responseData.message || `Error ${response.status}: ${response.statusText}`);
+      const errData = await response.json().catch(() => ({}));
+      throw new Error(errData.message || `Error ${response.status} en ${channel.provider}`);
     }
     
-    return responseData;
+    return await response.json();
 
   } catch (error: any) {
-    console.error('Evolution Error:', error);
-    toast.error(`Fallo de conexión: ${error.message}`);
+    console.error('Messaging Error:', error);
+    toast.error(`Fallo Multicanal: ${error.message}`);
     return null;
   }
 };
+
+// Deprecated: maintain for compatibility during migration if needed
+export const sendEvolutionMessage = sendMessage;
