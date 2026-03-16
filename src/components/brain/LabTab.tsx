@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Bot, RefreshCcw, Loader2, ImageIcon, Send, FlaskConical, Sparkles, CheckCircle2 } from 'lucide-react';
+import { Bot, RefreshCcw, Loader2, ImageIcon, Send, FlaskConical, Sparkles, CheckCircle2, X, ShieldCheck } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
@@ -45,14 +45,17 @@ export const LabTab = ({ currentPrompts, onApplyPrompts }: LabTabProps) => {
 
     try {
       const { data, error } = await supabase.functions.invoke('tune-samurai-prompts', {
-        body: { messages: [...labMessages, { role: 'user', text: currentInput, image: currentImage }], currentPrompts }
+        body: { 
+            messages: [...labMessages, { role: 'user', text: currentInput, image: currentImage }], 
+            currentPrompts 
+        }
       });
       
       if (error) throw error;
       
       setLabMessages(prev => [...prev, { role: 'assistant', text: data.result.message }]);
       setProposedPrompts(data.result.prompts);
-      toast.info("El Arquitecto ha propuesto mejoras.");
+      toast.info("El Arquitecto ha redactado una propuesta de mejora.");
     } catch (err: any) {
       toast.error("Error en Laboratorio: " + err.message);
     } finally {
@@ -64,7 +67,7 @@ export const LabTab = ({ currentPrompts, onApplyPrompts }: LabTabProps) => {
     if (!proposedPrompts) return;
     onApplyPrompts(proposedPrompts);
     setProposedPrompts(null);
-    toast.success("Propuesta aplicada. Pulsa 'Aplicar Cambios' para finalizar.");
+    toast.success("Propuesta inyectada en los editores. Pulsa 'Aplicar Cambios' para finalizar.");
   };
 
   return (
@@ -76,49 +79,67 @@ export const LabTab = ({ currentPrompts, onApplyPrompts }: LabTabProps) => {
               <CardTitle className="text-slate-50 text-xs flex items-center gap-2 uppercase tracking-widest font-bold">
                 <FlaskConical className="w-4 h-4 text-amber-500" /> Arquitecto de Prompts
               </CardTitle>
-              <CardDescription className="text-[10px] mt-1">Evolución asistida de la IA.</CardDescription>
+              <CardDescription className="text-[10px] mt-1">Evolución asistida: sube capturas o describe errores.</CardDescription>
             </div>
-            <Button variant="ghost" size="sm" onClick={() => setLabMessages([])} className="h-8 text-[10px] text-slate-400 hover:text-amber-500">
-              <RefreshCcw className="w-3 h-3 mr-2"/> Reiniciar
+            <Button variant="ghost" size="sm" onClick={() => { setLabMessages([]); setProposedPrompts(null); }} className="h-8 text-[10px] text-slate-400 hover:text-amber-500">
+              <RefreshCcw className="w-3 h-3 mr-2"/> Reiniciar Sesión
             </Button>
           </CardHeader>
+          
           <ScrollArea className="flex-1 p-6">
             <div className="space-y-6">
               {labMessages.length === 0 && (
                 <div className="text-center py-20">
-                  <Bot className="w-12 h-12 text-slate-700 mx-auto mb-4 opacity-50" />
-                  <p className="text-slate-400 italic text-sm">"Hola, soy el Arquitecto. ¿Qué quieres que aprenda la IA hoy?"</p>
+                  <div className="w-16 h-16 bg-amber-500/10 rounded-full flex items-center justify-center mx-auto mb-4 border border-amber-500/20">
+                     <Bot className="w-8 h-8 text-amber-500" />
+                  </div>
+                  <p className="text-slate-400 italic text-sm max-w-md mx-auto">
+                    "Hola, soy el Arquitecto. Muéstrame un chat donde Sam falló o dime qué quieres que aprenda, y yo reescribiré su ADN por ti."
+                  </p>
                 </div>
               )}
               {labMessages.map((m, i) => (
                 <div key={i} className={cn("flex flex-col gap-2", m.role === 'user' ? 'items-end' : 'items-start')}>
-                  <div className={cn("p-4 rounded-2xl text-sm max-w-[85%] border shadow-lg", m.role === 'user' ? 'bg-indigo-900/40 border-indigo-900/60 text-slate-100' : 'bg-slate-950 border-slate-800 text-slate-300')}>
+                  <div className={cn(
+                    "p-4 rounded-2xl text-sm max-w-[85%] border shadow-lg", 
+                    m.role === 'user' ? 'bg-indigo-900/40 border-indigo-900/60 text-slate-100' : 'bg-slate-950 border-slate-800 text-slate-300'
+                  )}>
                     {m.image && <img src={m.image} className="w-full max-w-[300px] rounded-lg mb-3 border border-white/10" alt="Uploaded" />}
                     {m.text}
                   </div>
                 </div>
               ))}
-              {labProcessing && <div className="flex gap-2 items-center text-amber-500 text-xs animate-pulse"><Loader2 className="w-4 h-4 animate-spin"/> El Arquitecto está redactando...</div>}
+              {labProcessing && (
+                <div className="flex gap-2 items-center text-amber-500 text-xs animate-pulse font-bold">
+                   <Loader2 className="w-4 h-4 animate-spin"/> EL ARQUITECTO ESTÁ REDACTANDO...
+                </div>
+              )}
             </div>
           </ScrollArea>
           
           <form onSubmit={handleLabSubmit} className="p-4 bg-slate-950/50 border-t border-slate-800 shrink-0 space-y-4">
             {labImage && (
-              <div className="flex items-center gap-4 bg-[#1A1714] p-2 rounded-lg border border-slate-800">
-                <img src={labImage} className="w-12 h-12 rounded object-cover border border-slate-700" alt="Preview" />
-                <span className="text-[10px] text-amber-500 flex-1">Captura lista</span>
-                <Button size="sm" variant="ghost" onClick={() => setLabImage(null)} className="text-red-400">Eliminar</Button>
+              <div className="flex items-center gap-4 bg-slate-900 p-2 rounded-xl border border-slate-800 animate-in slide-in-from-bottom-2">
+                <img src={labImage} className="w-12 h-12 rounded-lg object-cover border border-slate-700" alt="Preview" />
+                <span className="text-[10px] text-amber-500 font-bold uppercase tracking-widest flex-1">Captura de error lista</span>
+                <Button size="sm" variant="ghost" onClick={() => setLabImage(null)} className="text-red-400 hover:bg-red-900/20"><X className="w-4 h-4"/></Button>
               </div>
             )}
             <div className="flex gap-4">
               <div className="relative shrink-0">
                 <input type="file" id="lab-upload" className="hidden" accept="image/*" onChange={handleLabImageUpload} />
-                <label htmlFor="lab-upload" className="flex items-center justify-center w-12 h-12 rounded-xl bg-slate-800 border border-slate-700 cursor-pointer">
+                <label htmlFor="lab-upload" className="flex items-center justify-center w-12 h-12 rounded-xl bg-slate-800 border border-slate-700 cursor-pointer hover:bg-slate-700 transition-colors">
                   <ImageIcon className="w-5 h-5 text-slate-300" />
                 </label>
               </div>
-              <Input value={labInput} onChange={e => setLabInput(e.target.value)} placeholder="Dime qué corregir..." className="bg-[#1A1714] border-slate-800 text-slate-50 h-12 rounded-xl" disabled={labProcessing} />
-              <Button type="submit" disabled={labProcessing || (!labInput.trim() && !labImage)} className="bg-indigo-900 hover:bg-indigo-800 text-slate-50 h-12 px-6 rounded-xl">
+              <Input 
+                value={labInput} 
+                onChange={e => setLabInput(e.target.value)} 
+                placeholder="Ej: Sam fue muy agresivo en este chat, suaviza su tono..." 
+                className="bg-slate-950 border-slate-800 text-slate-50 h-12 rounded-xl focus:border-amber-500" 
+                disabled={labProcessing} 
+              />
+              <Button type="submit" disabled={labProcessing || (!labInput.trim() && !labImage)} className="bg-indigo-900 hover:bg-indigo-800 text-slate-50 h-12 px-6 rounded-xl shadow-lg">
                 <Send className="w-5 h-5 text-amber-500" />
               </Button>
             </div>
@@ -127,20 +148,41 @@ export const LabTab = ({ currentPrompts, onApplyPrompts }: LabTabProps) => {
       </div>
 
       <div className="lg:col-span-4 flex flex-col gap-6">
-        <Card className="bg-slate-900 border-slate-800 border-l-4 border-l-amber-600 shadow-xl rounded-2xl">
-          <CardHeader><CardTitle className="text-xs uppercase tracking-widest text-amber-500 flex items-center gap-2"><Sparkles className="w-4 h-4"/> Propuesta de Mejora</CardTitle></CardHeader>
-          <CardContent className="space-y-4">
+        <Card className="bg-slate-900 border-slate-800 border-l-4 border-l-amber-600 shadow-xl rounded-2xl overflow-hidden">
+          <CardHeader className="bg-slate-950/30 border-b border-slate-800">
+             <CardTitle className="text-xs uppercase tracking-widest text-amber-500 flex items-center gap-2">
+                <Sparkles className="w-4 h-4"/> Propuesta de Mejora
+             </CardTitle>
+          </CardHeader>
+          <CardContent className="p-6 space-y-4">
             {!proposedPrompts ? (
-              <div className="py-10 text-center text-slate-500 text-[10px] italic">No hay cambios propuestos.</div>
+              <div className="py-10 text-center text-slate-600 text-[10px] uppercase tracking-widest font-bold leading-relaxed">
+                No hay cambios propuestos.<br/>Habla con el Arquitecto para generar una versión.
+              </div>
             ) : (
-              <div className="space-y-4">
-                <Button onClick={applyProposedPrompts} className="w-full bg-amber-600 hover:bg-amber-500 text-slate-950 h-12 font-bold shadow-lg rounded-xl uppercase tracking-widest text-xs">
-                  <CheckCircle2 className="w-4 h-4 mr-2" /> APLICAR PROPUESTA
+              <div className="space-y-6 animate-in fade-in zoom-in-95">
+                <div className="p-4 bg-amber-900/10 border border-amber-500/20 rounded-xl">
+                   <p className="text-[11px] text-amber-200 leading-relaxed italic">
+                      "He optimizado los prompts para corregir el comportamiento detectado. Pulsa el botón de abajo para cargar esta configuración en los editores."
+                   </p>
+                </div>
+                <Button onClick={applyProposedPrompts} className="w-full bg-amber-600 hover:bg-amber-500 text-slate-950 h-14 font-bold shadow-lg rounded-xl uppercase tracking-widest text-xs flex flex-col gap-1">
+                  <div className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4" /> CARGAR PROPUESTA</div>
+                  <span className="text-[8px] opacity-70">(Sobrescribirá los editores actuales)</span>
                 </Button>
               </div>
             )}
           </CardContent>
         </Card>
+
+        <div className="bg-indigo-900/10 border border-indigo-500/20 p-5 rounded-2xl">
+           <h4 className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest mb-3 flex items-center gap-2">
+              <ShieldCheck className="w-4 h-4" /> Seguridad del Kernel
+           </h4>
+           <p className="text-[11px] text-slate-400 leading-relaxed">
+              El Arquitecto tiene acceso a la <strong>Verdad Maestra</strong> y a la <strong>Base de Conocimiento</strong> para asegurar que sus propuestas sean técnicamente correctas.
+           </p>
+        </div>
       </div>
     </div>
   );

@@ -117,8 +117,9 @@ const AgentBrain = () => {
              <TabsTrigger value="identidad" className="gap-2 px-4 py-2 data-[state=active]:bg-indigo-900/50 data-[state=active]:text-amber-500"><Fingerprint className="w-4 h-4"/> 2. ADN Táctico</TabsTrigger>
              <TabsTrigger value="vision" className="gap-2 px-4 py-2 data-[state=active]:bg-indigo-900/50 data-[state=active]:text-amber-500"><EyeIcon className="w-4 h-4"/> 3. Ojo de Halcón</TabsTrigger>
              <TabsTrigger value="analista" className="gap-2 px-4 py-2 data-[state=active]:bg-indigo-900/50 data-[state=active]:text-amber-500"><BarChart3 className="w-4 h-4"/> 4. Analista CAPI</TabsTrigger>
-             <TabsTrigger value="versiones" className="gap-2 px-4 py-2 data-[state=active]:bg-indigo-900/50 data-[state=active]:text-amber-500"><History className="w-4 h-4"/> 5. Snapshots</TabsTrigger>
-             <TabsTrigger value="debug" className="gap-2 px-4 py-2 data-[state=active]:bg-indigo-900/50 data-[state=active]:text-amber-500"><Terminal className="w-4 h-4"/> 6. Kernel View</TabsTrigger>
+             <TabsTrigger value="simulador" className="gap-2 px-4 py-2 data-[state=active]:bg-indigo-900/50 data-[state=active]:text-amber-500"><MessageSquare className="w-4 h-4"/> 5. Simulador</TabsTrigger>
+             <TabsTrigger value="versiones" className="gap-2 px-4 py-2 data-[state=active]:bg-indigo-900/50 data-[state=active]:text-amber-500"><History className="w-4 h-4"/> 6. Snapshots</TabsTrigger>
+             <TabsTrigger value="debug" className="gap-2 px-4 py-2 data-[state=active]:bg-indigo-900/50 data-[state=active]:text-amber-500"><Terminal className="w-4 h-4"/> 7. Kernel View</TabsTrigger>
              <TabsTrigger value="lab" className="gap-2 px-4 py-2 bg-amber-500/10 text-amber-500 data-[state=active]:bg-amber-500 data-[state=active]:text-slate-950 ml-auto"><FlaskConical className="w-4 h-4"/> Laboratorio IA</TabsTrigger>
           </TabsList>
 
@@ -153,6 +154,10 @@ const AgentBrain = () => {
 
             <TabsContent value="analista" className="m-0 h-full">
                 <PromptEditor title="Analista de Datos (Extracción CAPI)" icon={BarChart3} value={prompts['prompt_analista_datos']} onChange={v => handlePromptChange('prompt_analista_datos', v)} color="text-emerald-500" placeholder="Define las reglas para extraer Emails, Nombres y Ciudades..." />
+            </TabsContent>
+
+            <TabsContent value="simulador" className="m-0 h-full">
+                <SimulatorTab currentPrompts={prompts} />
             </TabsContent>
 
             <TabsContent value="versiones" className="m-0 h-full">
