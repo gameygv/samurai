@@ -8,55 +8,43 @@ export const sendMessage = async (
   mediaFile?: { url: string; type: string; mimetype: string; name: string }
 ) => {
   try {
+    // 1. Obtener canal específico o el canal de notificaciones por defecto
     const { data: lead } = await supabase.from('leads').select('channel_id').eq('id', leadId).single();
+    const { data: config } = await supabase.from('app_config').select('value').eq('key', 'default_notification_channel').maybeSingle();
+    
+    let channelId = lead?.channel_id || config?.value;
     let channel;
-    if (!lead?.channel_id) {
-       const { data: firstChannel } = await supabase.from('whatsapp_channels').select('*').eq('is_active', true).limit(1).single();
-       channel = firstChannel;
+
+    if (!channelId) {
+       const { data: first } = await supabase.from('whatsapp_channels').select('*').eq('is_active', true).limit(1).single();
+       channel = first;
     } else {
-       const { data: leadChannel } = await supabase.from('whatsapp_channels').select('*').eq('id', lead.channel_id).single();
-       channel = leadChannel;
+       const { data: ch } = await supabase.from('whatsapp_channels').select('*').eq('id', channelId).single();
+       channel = ch;
     }
 
-    if (!channel) throw new Error('No hay canales activos.');
+    if (!channel) throw new Error('Sin canales configurados.');
 
     const cleanPhone = phone.replace(/\D/g, '');
     let endpoint = channel.api_url;
     let payload: any = {};
     let headers: any = { 'Content-Type': 'application/json' };
 
-    // ==========================================
-    // LÓGICA META CLOUD API (WhatsAPI)
-    // ==========================================
+    // --- LÓGICA POR PROVEEDOR ---
+
     if (channel.provider === 'meta') {
-      const version = 'v19.0'; // Versión recomendada
-      endpoint = `https://graph.facebook.com/${version}/${channel.instance_id}/messages`;
+      endpoint = `https://graph.facebook.com/v19.0/${channel.instance_id}/messages`;
       headers['Authorization'] = `Bearer ${channel.api_key}`;
-      
       if (mediaFile) {
         payload = {
-          messaging_product: "whatsapp",
-          recipient_type: "individual",
-          to: cleanPhone,
+          messaging_product: "whatsapp", to: cleanPhone,
           type: mediaFile.type === 'image' ? 'image' : 'document',
-          [mediaFile.type === 'image' ? 'image' : 'document']: {
-            link: mediaFile.url,
-            caption: message
-          }
+          [mediaFile.type === 'image' ? 'image' : 'document']: { link: mediaFile.url, caption: message }
         };
       } else {
-        payload = {
-          messaging_product: "whatsapp",
-          recipient_type: "individual",
-          to: cleanPhone,
-          type: "text",
-          text: { body: message }
-        };
+        payload = { messaging_product: "whatsapp", to: cleanPhone, type: "text", text: { body: message } };
       }
     } 
-    // ==========================================
-    // LÓGICA EVOLUTION API
-    // ==========================================
     else if (channel.provider === 'evolution') {
       headers['apikey'] = channel.api_key;
       if (mediaFile) {
@@ -64,12 +52,9 @@ export const sendMessage = async (
         payload = { number: cleanPhone, mediatype: mediaFile.type, mimetype: mediaFile.mimetype, caption: message || "", media: mediaFile.url, fileName: mediaFile.name };
       } else {
         endpoint = `${channel.api_url}/message/sendText/${channel.instance_id}`;
-        payload = { number: cleanPhone, text: message, linkPreview: true };
+        payload = { number: cleanPhone, text: message };
       }
     } 
-    // ==========================================
-    // LÓGICA GOWA
-    // ==========================================
     else if (channel.provider === 'gowa') {
       headers['Authorization'] = `Bearer ${channel.api_key}`;
       endpoint = `${channel.api_url}/${mediaFile ? 'send-media' : 'send-message'}`;
@@ -77,14 +62,10 @@ export const sendMessage = async (
     }
 
     const response = await fetch(endpoint, { method: 'POST', headers, body: JSON.stringify(payload) });
-    if (!response.ok) {
-      const errData = await response.json().catch(() => ({}));
-      throw new Error(errData.error?.message || `Error ${response.status}`);
-    }
-    return await response.json();
+    return response.ok ? await response.json() : null;
+
   } catch (error: any) {
     console.error('Messaging Error:', error);
-    toast.error(`Fallo: ${error.message}`);
     return null;
   }
 };
