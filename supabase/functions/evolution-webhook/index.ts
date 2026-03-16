@@ -16,21 +16,29 @@ serve(async (req) => {
 
   try {
     const payload = await req.json();
-    
-    // REGISTRO DE TRÁFICO (Para el Monitor Live y Diagnóstico)
+    const eventType = payload?.event || payload?.type || 'unknown';
+
+    // 1. LOG DE CUALQUIER ACTIVIDAD (Para el Monitor Live)
     await supabaseClient.from('activity_logs').insert({
         action: 'UPDATE',
         resource: 'SYSTEM',
-        description: `Webhook Hit: ${payload?.event || 'unknown_event'}`,
+        description: `Webhook Hit: ${eventType}`,
         status: 'OK',
-        metadata: { event: payload?.event }
+        metadata: { event: eventType }
     }).catch(() => {});
 
-    // 1. FILTRAR MENSAJES
+    // 2. RESPONDER A EVENTOS DE CONEXIÓN (Para que Evolution sepa que estamos vivos)
+    if (eventType.includes('connection') || eventType.includes('status')) {
+        return new Response(JSON.stringify({ status: 'connected', msg: 'Samurai Kernel is listening' }), { 
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        });
+    }
+
+    // 3. PROCESAR MENSAJES (MESSAGES_UPSERT)
     const msgData = payload?.data || payload?.body || payload;
     const msg = Array.isArray(msgData) ? msgData[0] : msgData;
 
-    if (msg?.key?.fromMe === true || msg?.fromMe === true) return new Response('fromMe ignored', { headers: corsHeaders });
+    if (msg?.key?.fromMe === true || msg?.fromMe === true) return new Response('ignored_from_me', { headers: corsHeaders });
 
     const phone = msg?.key?.remoteJid?.split('@')[0] || msg?.from?.split('@')[0] || msg?.remoteJid?.split('@')[0];
     const text = msg?.message?.conversation || 
@@ -39,11 +47,11 @@ serve(async (req) => {
                  msg?.text || 
                  msg?.message?.imageMessage?.caption || '';
 
-    if (!phone || !text) return new Response('no data ignored', { headers: corsHeaders });
+    if (!phone || !text) return new Response('no_content_ignored', { headers: corsHeaders });
 
     const cleanPhone = phone.replace(/\D/g, '');
 
-    // 2. LEAD OPS
+    // Lead Ops
     let { data: lead } = await supabaseClient.from('leads').select('*').or(`telefono.ilike.%${cleanPhone}%`).limit(1).maybeSingle();
     if (!lead) {
         const { data: newLead } = await supabaseClient.from('leads').insert({
@@ -59,7 +67,7 @@ serve(async (req) => {
 
     if (lead.ai_paused) return new Response('ai_paused', { headers: corsHeaders });
 
-    // 3. IA CONFIG
+    // AI Flow...
     const { data: configs } = await supabaseClient.from('app_config').select('key, value');
     const configMap = configs?.reduce((acc, item) => ({...acc, [item.key]: item.value}), {}) || {};
     
@@ -69,7 +77,6 @@ serve(async (req) => {
     const evolutionUrl = configMap['evolution_api_url'];
     const evolutionKey = configMap['evolution_api_key'];
 
-    // 4. LLAMAR A OPENAI
     const { data: history } = await supabaseClient.from('conversaciones').select('emisor, mensaje').eq('lead_id', lead.id).order('created_at', { ascending: true }).limit(10);
     const systemPrompt = `${configMap['prompt_alma_samurai']}\n${configMap['prompt_adn_core']}\n${configMap['prompt_behavior_rules']}`;
     
@@ -85,45 +92,35 @@ serve(async (req) => {
     const aiData = await aiRes.json();
     let aiText = aiData.choices?.[0]?.message?.content || '';
 
-    if (!aiText) return new Response('no ai text', { headers: corsHeaders });
+    if (aiText) {
+        const mediaMatch = aiText.match(/<<MEDIA:(.+?)>>/);
+        let endpoint = evolutionUrl;
+        let body = { number: cleanPhone, text: aiText };
 
-    // 5. DETECTAR Y ENVIAR MULTIMEDIA (POSTERS)
-    const mediaMatch = aiText.match(/<<MEDIA:(.+?)>>/);
-    let mediaPayload = null;
+        if (mediaMatch) {
+            const mediaUrl = mediaMatch[1];
+            const cleanAiText = aiText.replace(mediaMatch[0], '').trim();
+            endpoint = evolutionUrl.replace('sendText', 'sendMedia');
+            body = { number: cleanPhone, mediatype: "image", mimetype: "image/jpeg", caption: cleanAiText, media: mediaUrl };
+        }
 
-    if (mediaMatch) {
-       const mediaUrl = mediaMatch[1];
-       aiText = aiText.replace(mediaMatch[0], '').trim();
-       
-       mediaPayload = {
-          number: cleanPhone,
-          mediatype: "image",
-          mimetype: "image/jpeg",
-          caption: aiText,
-          media: mediaUrl
-       };
+        await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'apikey': evolutionKey },
+            body: JSON.stringify(body)
+        });
+
+        await supabaseClient.from('conversaciones').insert({ 
+            lead_id: lead.id, 
+            emisor: 'IA', 
+            mensaje: aiText, 
+            platform: 'WHATSAPP' 
+        });
     }
-
-    // 6. ENVIAR A WHATSAPP
-    const endpoint = mediaPayload ? evolutionUrl.replace('sendText', 'sendMedia') : evolutionUrl;
-    const body = mediaPayload || { number: cleanPhone, text: aiText };
-
-    await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'apikey': evolutionKey },
-        body: JSON.stringify(body)
-    });
-
-    await supabaseClient.from('conversaciones').insert({ 
-        lead_id: lead.id, 
-        emisor: 'IA', 
-        mensaje: mediaPayload ? `[IMG: ${mediaPayload.media}] ${aiText}` : aiText, 
-        platform: 'WHATSAPP' 
-    });
 
     return new Response('success', { headers: corsHeaders });
 
   } catch (err) {
-    return new Response(JSON.stringify({ error: err.message }), { status: 500, headers: corsHeaders });
+    return new Response(JSON.stringify({ error: err.message }), { status: 200, headers: corsHeaders });
   }
 });
