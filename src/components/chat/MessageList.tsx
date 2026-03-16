@@ -1,7 +1,6 @@
 import React, { useRef, useEffect } from 'react';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Loader2, Bot, Mic, Image as ImageIcon, Waves, FileText, Download, Lock } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
+import { Loader2, Bot, Mic, Image as ImageIcon, Waves, FileText, Download, Lock, User } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface MessageListProps {
@@ -17,11 +16,11 @@ export const MessageList = ({ messages, loading }: MessageListProps) => {
   }, [messages]);
 
   const renderMessageContent = (msg: any) => {
-    const text = msg.mensaje;
+    const text = msg.mensaje || '';
     
     // Transcripciones de audio de la IA
     if (text.includes('[TRANSCRIPCIÓN AUDIO]')) {
-      const cleanText = text.replace(/\[TRANSCRIPCIÓN AUDIO\]:?/, '').replace(/^ "/, '').replace(/"$/, '').trim();
+      const cleanText = text.replace(/\[TRANSCRIPCIÓN AUDIO\]:?/i, '').replace(/^ "/, '').replace(/"$/, '').trim();
       return (
         <div className="space-y-2 min-w-[200px]">
           <div className="flex items-center gap-2 text-[10px] text-indigo-300 font-bold uppercase bg-indigo-500/10 border border-indigo-500/20 p-2 rounded-lg">
@@ -30,7 +29,7 @@ export const MessageList = ({ messages, loading }: MessageListProps) => {
             <Waves className="w-4 h-4 text-indigo-400 animate-pulse" />
           </div>
           <p className="italic text-slate-300 text-sm leading-relaxed pl-1 border-l-2 border-indigo-500/30">
-            "{cleanText}"
+            "{cleanText || text}"
           </p>
         </div>
       );
@@ -59,13 +58,22 @@ export const MessageList = ({ messages, loading }: MessageListProps) => {
       );
     }
 
-    // Media antigua en texto plano [IMG: url] (Legacy support)
-    const mediaRegex = /<<MEDIA:(.*?)>>/;
-    const imgInLog = text.match(/\[IMG: (.*?)\]/);
+    // Errores de IA (Visibles claramente)
+    if (text.includes('[ERROR DE IA]')) {
+      return (
+        <div className="space-y-1">
+          <p className="text-red-300 text-sm font-bold">{text}</p>
+        </div>
+      );
+    }
+
+    // Media antigua en texto plano [IMG: url] o <<MEDIA:url>> (Legacy support robusto)
+    const mediaRegex = /<<MEDIA:(.*?)>>/i;
+    const imgInLog = text.match(/\[IMG:\s*(.*?)\]/i);
     const mediaInAi = text.match(mediaRegex);
     
     const url = imgInLog ? imgInLog[1] : (mediaInAi ? mediaInAi[1] : null);
-    let cleanText = text.replace(/\[IMG: .*?\]/, '').replace(mediaRegex, '').trim();
+    let cleanText = text.replace(/\[IMG:\s*.*?\]/i, '').replace(mediaRegex, '').trim();
 
     return (
       <div className="space-y-2">
@@ -77,7 +85,12 @@ export const MessageList = ({ messages, loading }: MessageListProps) => {
              </div>
           </div>
         )}
-        {cleanText && <p className="whitespace-pre-wrap leading-relaxed text-sm">{cleanText}</p>}
+        {cleanText ? (
+           <p className="whitespace-pre-wrap leading-relaxed text-sm">{cleanText}</p>
+        ) : !url ? (
+           // Fallback absoluto: Si la limpieza falló o el mensaje está raro, muestra el texto crudo para que NUNCA sea invisible.
+           <p className="whitespace-pre-wrap leading-relaxed text-sm text-slate-400">{text || '[Mensaje vacío o procesado internamente]'}</p>
+        ) : null}
       </div>
     );
   };
@@ -91,9 +104,13 @@ export const MessageList = ({ messages, loading }: MessageListProps) => {
       ) : (
         <div className="space-y-6 pb-4">
           {messages.map((msg) => {
-             const isInternalNote = msg.emisor === 'NOTA';
-             const isClient = msg.emisor === 'CLIENTE';
-             const isAI = msg.emisor === 'IA' || msg.emisor === 'SAMURAI';
+             // Procesamiento robusto del Emisor (ignorando mayúsculas/minúsculas)
+             const emisorUpper = (msg.emisor || '').toUpperCase();
+             const isInternalNote = emisorUpper === 'NOTA';
+             const isClient = emisorUpper === 'CLIENTE';
+             const isAI = emisorUpper === 'IA' || emisorUpper === 'SAMURAI';
+             const isHuman = emisorUpper === 'HUMANO';
+             const isError = msg.platform === 'ERROR' || (msg.mensaje || '').includes('[ERROR');
              
              // Definir alineación
              const alignClass = isClient ? 'justify-start' : (isInternalNote ? 'justify-center' : 'justify-end');
@@ -101,12 +118,17 @@ export const MessageList = ({ messages, loading }: MessageListProps) => {
 
              // Estilos del globo de chat
              let bubbleClass = '';
-             if (isInternalNote) {
+             if (isError) {
+                bubbleClass = 'bg-red-950/40 border-red-900/50 text-red-200 rounded-2xl shadow-md shadow-red-900/10';
+             } else if (isInternalNote) {
                 bubbleClass = 'bg-amber-500/10 border-amber-500/30 text-amber-200 rounded-2xl w-full max-w-[90%] shadow-md shadow-amber-900/10';
              } else if (isClient) {
                 bubbleClass = 'bg-slate-900 border-slate-800 text-slate-200 rounded-2xl rounded-bl-sm shadow-sm';
-             } else {
+             } else if (isAI) {
                 bubbleClass = 'bg-indigo-600/10 border-indigo-500/20 text-indigo-100 rounded-2xl rounded-br-sm shadow-sm';
+             } else {
+                // HUMANO (Vendedores / Agentes)
+                bubbleClass = 'bg-emerald-600/10 border-emerald-500/20 text-emerald-100 rounded-2xl rounded-br-sm shadow-sm';
              }
 
              return (
@@ -114,7 +136,7 @@ export const MessageList = ({ messages, loading }: MessageListProps) => {
                 <div className={cn("flex flex-col max-w-[85%]", itemsClass, isInternalNote && "w-full max-w-[95%]")}>
                    <div className={cn("p-3.5 text-sm border", bubbleClass)}>
                     
-                    {isInternalNote && (
+                    {isInternalNote && !isError && (
                        <div className="flex items-center gap-2 mb-2 pb-2 border-b border-amber-500/20 text-[10px] uppercase font-bold text-amber-500 tracking-widest">
                           <Lock className="w-3 h-3" /> Nota Interna (Privada)
                        </div>
@@ -124,9 +146,10 @@ export const MessageList = ({ messages, loading }: MessageListProps) => {
                   </div>
                   
                   <div className={cn("flex items-center gap-2 mt-1 px-1 opacity-60", isInternalNote && "justify-center w-full mt-2 opacity-40")}>
-                     {isAI && <Bot className="w-3 h-3 text-indigo-400" />}
+                     {isAI && !isError && <Bot className="w-3 h-3 text-indigo-400" />}
+                     {isHuman && !isError && <User className="w-3 h-3 text-emerald-400" />}
                      <span className="text-[9px] text-slate-500 font-mono uppercase tracking-wider">
-                        {isAI ? 'ELEPHANT BOWL AI' : (isInternalNote ? 'AGENTE - NOTA' : (msg.emisor === 'HUMANO' ? 'AGENTE' : 'CLIENTE'))} • {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        {isAI ? 'INTELIGENCIA ARTIFICIAL' : (isHuman ? 'AGENTE HUMANO' : (isInternalNote ? 'AGENTE - NOTA' : 'CLIENTE'))} • {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                      </span>
                   </div>
                 </div>

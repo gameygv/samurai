@@ -152,6 +152,14 @@ serve(async (req) => {
         })
     });
 
+    // REGLA CRÍTICA DE VISIBILIDAD DE ERRORES: Si OpenAI Falla, lo anotamos en el chat.
+    if (!aiRes.ok) {
+        const errorText = await aiRes.text();
+        await supabaseClient.from('activity_logs').insert({ action: 'ERROR', resource: 'SYSTEM', description: `OpenAI Error: ${errorText.substring(0, 150)}`, status: 'ERROR' });
+        await supabaseClient.from('conversaciones').insert({ lead_id: lead.id, emisor: 'IA', mensaje: `[ERROR DE IA] No pude procesar el mensaje. Verifica tu API Key de OpenAI y tu saldo en la plataforma.`, platform: 'ERROR' });
+        return new Response("OpenAI Error logged", { status: 200, headers: corsHeaders }); // Retornamos 200 para que Evolution no reintente en bucle
+    }
+
     const aiData = await aiRes.json();
     let rawAnswer = aiData.choices?.[0]?.message?.content || "";
     
@@ -187,10 +195,21 @@ serve(async (req) => {
         });
     }
 
-    const mediaRegex = /<<MEDIA:(.*?)>>/;
+    const mediaRegex = /<<MEDIA:(.*?)>>/i;
     const mediaMatch = rawAnswer.match(mediaRegex);
     const mediaUrl = mediaMatch ? mediaMatch[1].trim() : null;
     let textToSend = rawAnswer.replace(mediaRegex, '').trim();
+
+    // REGLA CRÍTICA DE VISIBILIDAD DE SILENCIO: Si la IA decide no hablar, lo anotamos como Nota Interna.
+    if (!textToSend && !mediaUrl) {
+        await supabaseClient.from('conversaciones').insert({ 
+            lead_id: lead.id, 
+            emisor: 'NOTA', 
+            mensaje: `🤖 [Análisis Silencioso IA]: La IA procesó el mensaje correctamente pero determinó que no era necesario responder con texto al cliente en este momento.`, 
+            platform: 'SISTEMA' 
+        });
+        return new Response(JSON.stringify({ success: true, note: "Silent processing" }), { headers: corsHeaders });
+    }
 
     if (evoUrl && evoKey && (textToSend || mediaUrl)) {
         const endpoint = mediaUrl ? evoUrl.replace('sendText', 'sendMedia') : evoUrl;
@@ -208,17 +227,17 @@ serve(async (req) => {
         if (!response.ok) {
             const errText = await response.text();
             await supabaseClient.from('activity_logs').insert({ action: 'ERROR', resource: 'SYSTEM', description: `Evolution API falló: ${errText.substring(0, 150)}`, status: 'ERROR' });
-            await supabaseClient.from('conversaciones').insert({ lead_id: lead.id, emisor: 'IA', mensaje: `[ERROR WA] ${messageToLog}`, platform: 'ERROR' });
+            await supabaseClient.from('conversaciones').insert({ lead_id: lead.id, emisor: 'IA', mensaje: `[ERROR DE ENVÍO WA] ${messageToLog}`, platform: 'ERROR' });
         } else {
             await supabaseClient.from('conversaciones').insert({ lead_id: lead.id, emisor: 'IA', mensaje: messageToLog, platform: 'WHATSAPP_AUTO' });
         }
     } else if (textToSend || mediaUrl) {
-        // FALLBACK: Si no hay API de WA configurada, igual logueamos la respuesta de la IA (Modo Test)
+        // FALLBACK DIRECTO: Incluso sin WA, registramos qué iba a decir la IA.
         const messageToLog = mediaUrl ? `[IMG: ${mediaUrl}] ${textToSend}` : textToSend;
         await supabaseClient.from('conversaciones').insert({ 
             lead_id: lead.id, 
             emisor: 'IA', 
-            mensaje: `[PRUEBA / WHATSAPP DESCONECTADO] ${messageToLog}`, 
+            mensaje: `[MODO PRUEBA / WA DESCONECTADO]\n${messageToLog}`, 
             platform: 'SISTEMA' 
         });
     }
