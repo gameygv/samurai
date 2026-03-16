@@ -5,7 +5,7 @@ import {
   LayoutDashboard, Brain, Settings as SettingsIcon, Database, LogOut, 
   Users, FileText, UserCircle, MessageSquare, Contact,
   GitBranch, Link as LinkIcon, Image, Sparkles, BookOpen, Clock,
-  Archive, Globe, CreditCard, BarChart3, Zap, Trello, Menu, Activity, Search, MessageCircle, Shield
+  Archive, Globe, CreditCard, BarChart3, Zap, Trello, Menu, Activity, Search, MessageCircle, Shield, AlertCircle
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/context/AuthContext';
@@ -71,6 +71,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
       items: [
         { icon: Users, label: 'Equipo', path: '/users', roles: ['admin', 'dev'] },
         { icon: BarChart3, label: 'Meta CAPI', path: '/meta-capi', roles: ['admin', 'dev'] },
+        { icon: AlertCircle, label: 'Diagnóstico Mensajes', path: '/webhook-diag', roles: ['admin', 'dev'] },
         { icon: SettingsIcon, label: 'Ajustes', path: '/settings', roles: ['admin', 'dev'] },
       ]
     }
