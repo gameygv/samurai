@@ -8,16 +8,9 @@ export const sendMessage = async (
   mediaFile?: { url: string; type: string; mimetype: string; name: string }
 ) => {
   try {
-    // 1. Obtener el lead para saber su canal
-    const { data: lead } = await supabase
-      .from('leads')
-      .select('channel_id')
-      .eq('id', leadId)
-      .single();
-
+    const { data: lead } = await supabase.from('leads').select('channel_id').eq('id', leadId).single();
     let channel;
     if (!lead?.channel_id) {
-       // Fallback: usar el primer canal activo si no tiene uno asignado
        const { data: firstChannel } = await supabase.from('whatsapp_channels').select('*').eq('is_active', true).limit(1).single();
        channel = firstChannel;
     } else {
@@ -25,7 +18,7 @@ export const sendMessage = async (
        channel = leadChannel;
     }
 
-    if (!channel) throw new Error('No hay canales de WhatsApp activos vinculados.');
+    if (!channel) throw new Error('No hay canales activos.');
 
     const cleanPhone = phone.replace(/\D/g, '');
     let endpoint = channel.api_url;
@@ -33,72 +26,67 @@ export const sendMessage = async (
     let headers: any = { 'Content-Type': 'application/json' };
 
     // ==========================================
-    // LÓGICA EVOLUTION API
+    // LÓGICA META CLOUD API (WhatsAPI)
     // ==========================================
-    if (channel.provider === 'evolution') {
-      headers['apikey'] = channel.api_key;
+    if (channel.provider === 'meta') {
+      const version = 'v19.0'; // Versión recomendada
+      endpoint = `https://graph.facebook.com/${version}/${channel.instance_id}/messages`;
+      headers['Authorization'] = `Bearer ${channel.api_key}`;
       
       if (mediaFile) {
-        endpoint = `${channel.api_url}/message/sendMedia/${channel.instance_id}`;
         payload = {
-          number: cleanPhone,
-          mediatype: mediaFile.type,
-          mimetype: mediaFile.mimetype,
-          caption: message || "",
-          media: mediaFile.url,
-          fileName: mediaFile.name
+          messaging_product: "whatsapp",
+          recipient_type: "individual",
+          to: cleanPhone,
+          type: mediaFile.type === 'image' ? 'image' : 'document',
+          [mediaFile.type === 'image' ? 'image' : 'document']: {
+            link: mediaFile.url,
+            caption: message
+          }
         };
       } else {
-        endpoint = `${channel.api_url}/message/sendText/${channel.instance_id}`;
         payload = {
-          number: cleanPhone,
-          text: message,
-          linkPreview: true
+          messaging_product: "whatsapp",
+          recipient_type: "individual",
+          to: cleanPhone,
+          type: "text",
+          text: { body: message }
         };
       }
     } 
     // ==========================================
-    // LÓGICA GOWA (Go-WhatsApp)
+    // LÓGICA EVOLUTION API
+    // ==========================================
+    else if (channel.provider === 'evolution') {
+      headers['apikey'] = channel.api_key;
+      if (mediaFile) {
+        endpoint = `${channel.api_url}/message/sendMedia/${channel.instance_id}`;
+        payload = { number: cleanPhone, mediatype: mediaFile.type, mimetype: mediaFile.mimetype, caption: message || "", media: mediaFile.url, fileName: mediaFile.name };
+      } else {
+        endpoint = `${channel.api_url}/message/sendText/${channel.instance_id}`;
+        payload = { number: cleanPhone, text: message, linkPreview: true };
+      }
+    } 
+    // ==========================================
+    // LÓGICA GOWA
     // ==========================================
     else if (channel.provider === 'gowa') {
       headers['Authorization'] = `Bearer ${channel.api_key}`;
-      
-      if (mediaFile) {
-        endpoint = `${channel.api_url}/send-media`;
-        payload = {
-          phone: cleanPhone,
-          media_url: mediaFile.url,
-          caption: message,
-          type: mediaFile.type
-        };
-      } else {
-        endpoint = `${channel.api_url}/send-message`;
-        payload = {
-          phone: cleanPhone,
-          message: message
-        };
-      }
+      endpoint = `${channel.api_url}/${mediaFile ? 'send-media' : 'send-message'}`;
+      payload = mediaFile ? { phone: cleanPhone, media_url: mediaFile.url, caption: message, type: mediaFile.type } : { phone: cleanPhone, message: message };
     }
 
-    const response = await fetch(endpoint, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(payload),
-    });
-
+    const response = await fetch(endpoint, { method: 'POST', headers, body: JSON.stringify(payload) });
     if (!response.ok) {
       const errData = await response.json().catch(() => ({}));
-      throw new Error(errData.message || `Error ${response.status} en ${channel.provider}`);
+      throw new Error(errData.error?.message || `Error ${response.status}`);
     }
-    
     return await response.json();
-
   } catch (error: any) {
     console.error('Messaging Error:', error);
-    toast.error(`Fallo Multicanal: ${error.message}`);
+    toast.error(`Fallo: ${error.message}`);
     return null;
   }
 };
 
-// Deprecated: maintain for compatibility during migration if needed
 export const sendEvolutionMessage = sendMessage;
