@@ -125,6 +125,25 @@ const LearningLog = () => {
         return;
       }
 
+      // 1. OBTENER SESIÓN Y PROMPTS ACTUALES PARA RESPALDO
+      const { data: { session } } = await supabase.auth.getSession();
+      const { data: currentDbData } = await supabase.from('app_config').select('key, value').eq('category', 'PROMPT');
+      
+      if (currentDbData && currentDbData.length > 0) {
+         const oldPrompts: any = {};
+         currentDbData.forEach(item => oldPrompts[item.key] = item.value);
+         
+         const backupName = `Auto-Respaldo pre-Sincronización #CIA - ${new Date().toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}`;
+         const { error: backupError } = await supabase.from('prompt_versions').insert({
+             version_name: backupName,
+             prompts_snapshot: oldPrompts,
+             created_by: session?.user?.id || null,
+             notes: 'Copia de seguridad automática previa a inyectar reglas de la Bitácora #CIA.'
+         });
+         if (backupError) console.error("Error al crear respaldo previo:", backupError);
+      }
+
+      // 2. CONSTRUIR E INYECTAR REGLAS #CIA
       const instructionBlock = `# REGLAS DE APRENDIZAJE CRÍTICAS (#CIA)\n` + 
         `# Este bloque se genera automáticamente desde la Bitácora.\n\n` +
         validated.map((e, i) => `REGLA ${i+1} [${e.categoria}]:\n- INSTRUCCIÓN: ${e.correccion_sugerida}`).join('\n\n');
@@ -147,7 +166,7 @@ const LearningLog = () => {
           status: 'OK'
       });
 
-      toast.success(`¡Cerebro actualizado! ${validated.length} reglas inyectadas.`);
+      toast.success(`¡Cerebro actualizado! Se ha guardado un Snapshot previo por seguridad.`);
       fetchData();
     } catch (err: any) {
       toast.error(`Fallo de sincronización: ${err.message}`);
