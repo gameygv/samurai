@@ -8,7 +8,6 @@ export const sendMessage = async (
   mediaFile?: { url: string; type: string; mimetype: string; name: string }
 ) => {
   try {
-    // 1. Obtener canal específico o el canal de notificaciones por defecto
     const { data: lead } = await supabase.from('leads').select('channel_id').eq('id', leadId).single();
     const { data: config } = await supabase.from('app_config').select('value').eq('key', 'default_notification_channel').maybeSingle();
     
@@ -30,9 +29,32 @@ export const sendMessage = async (
     let payload: any = {};
     let headers: any = { 'Content-Type': 'application/json' };
 
-    // --- LÓGICA POR PROVEEDOR ---
-
-    if (channel.provider === 'meta') {
+    // --- LÓGICA GOWA ---
+    if (channel.provider === 'gowa') {
+      headers['Authorization'] = `Bearer ${channel.api_key}`;
+      // Gowa suele requerir el instance_id en la URL o como parámetro
+      const baseUrl = channel.api_url.endsWith('/') ? channel.api_url.slice(0, -1) : channel.api_url;
+      
+      if (mediaFile) {
+        endpoint = `${baseUrl}/send-media`;
+        payload = { 
+            phone: cleanPhone, 
+            media_url: mediaFile.url, 
+            caption: message || "", 
+            type: mediaFile.type,
+            instance_id: channel.instance_id 
+        };
+      } else {
+        endpoint = `${baseUrl}/send-message`;
+        payload = { 
+            phone: cleanPhone, 
+            message: message,
+            instance_id: channel.instance_id 
+        };
+      }
+    } 
+    // --- LÓGICA META ---
+    else if (channel.provider === 'meta') {
       endpoint = `https://graph.facebook.com/v19.0/${channel.instance_id}/messages`;
       headers['Authorization'] = `Bearer ${channel.api_key}`;
       if (mediaFile) {
@@ -45,6 +67,7 @@ export const sendMessage = async (
         payload = { messaging_product: "whatsapp", to: cleanPhone, type: "text", text: { body: message } };
       }
     } 
+    // --- LÓGICA EVOLUTION ---
     else if (channel.provider === 'evolution') {
       headers['apikey'] = channel.api_key;
       if (mediaFile) {
@@ -54,11 +77,6 @@ export const sendMessage = async (
         endpoint = `${channel.api_url}/message/sendText/${channel.instance_id}`;
         payload = { number: cleanPhone, text: message };
       }
-    } 
-    else if (channel.provider === 'gowa') {
-      headers['Authorization'] = `Bearer ${channel.api_key}`;
-      endpoint = `${channel.api_url}/${mediaFile ? 'send-media' : 'send-message'}`;
-      payload = mediaFile ? { phone: cleanPhone, media_url: mediaFile.url, caption: message, type: mediaFile.type } : { phone: cleanPhone, message: message };
     }
 
     const response = await fetch(endpoint, { method: 'POST', headers, body: JSON.stringify(payload) });
