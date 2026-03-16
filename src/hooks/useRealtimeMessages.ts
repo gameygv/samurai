@@ -14,9 +14,7 @@ export const useRealtimeMessages = (leadId: string | null, open: boolean = true)
       .eq('lead_id', id)
       .order('created_at', { ascending: true });
     
-    if (data) {
-      setMessages(data);
-    }
+    if (data) setMessages(data);
     setLoading(false);
   };
 
@@ -29,48 +27,25 @@ export const useRealtimeMessages = (leadId: string | null, open: boolean = true)
 
     leadIdRef.current = leadId;
     setLoading(true);
-
-    // Carga inicial
     fetchMessages(leadId);
 
-    // Polling cada 2 segundos - usa ref para evitar stale closures
+    // Polling ultra-rápido (1.5s) para que se sienta en tiempo real
     intervalRef.current = setInterval(() => {
       if (leadIdRef.current) {
-        supabase
-          .from('conversaciones')
-          .select('*')
-          .eq('lead_id', leadIdRef.current)
-          .order('created_at', { ascending: true })
+        supabase.from('conversaciones').select('*')
+          .eq('lead_id', leadIdRef.current).order('created_at', { ascending: true })
           .then(({ data }) => {
             if (data) {
-              setMessages(prev => {
-                // Solo actualizar si hay cambios reales
-                if (prev.length !== data.length) return data;
-                const lastPrev = prev[prev.length - 1];
-                const lastNew = data[data.length - 1];
-                if (lastPrev?.id !== lastNew?.id) return data;
-                return prev;
-              });
+              setMessages(prev => (prev.length !== data.length ? data : prev));
             }
           });
       }
-    }, 2000);
+    }, 1500);
 
-    // También suscripción Realtime como respaldo
-    const channel = supabase
-      .channel(`realtime-msgs-${leadId}`)
-      .on('postgres_changes', { 
-        event: 'INSERT', 
-        schema: 'public', 
-        table: 'conversaciones', 
-        filter: `lead_id=eq.${leadId}` 
-      }, (payload) => {
-        setMessages(prev => {
-          if (prev.some(m => m.id === payload.new.id)) return prev;
-          return [...prev, payload.new];
-        });
-      })
-      .subscribe();
+    const channel = supabase.channel(`live-${leadId}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'conversaciones', filter: `lead_id=eq.${leadId}` }, (payload) => {
+        setMessages(prev => prev.some(m => m.id === payload.new.id) ? prev : [...prev, payload.new]);
+      }).subscribe();
 
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
@@ -79,6 +54,7 @@ export const useRealtimeMessages = (leadId: string | null, open: boolean = true)
     };
   }, [leadId, open]);
 
+  // Añadimos la función refetch que faltaba
   const refetch = () => {
     if (leadIdRef.current) fetchMessages(leadIdRef.current);
   };
