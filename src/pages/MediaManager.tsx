@@ -52,7 +52,7 @@ const MediaManager = () => {
      
      try {
         const { data, error } = await supabase.functions.invoke('scrape-website', {
-           body: { url: asset.url, mode: 'VISION', assetCategory: asset.category } // SE ENVÍA LA CATEGORÍA AQUÍ
+           body: { url: asset.url, mode: 'VISION', assetCategory: asset.category }
         });
 
         if (error) throw new Error(error.message);
@@ -241,7 +241,6 @@ const MediaManager = () => {
         </div>
       </div>
       
-      {/* Upload Dialog */}
       <Dialog open={isUploadOpen} onOpenChange={setIsUploadOpen}>
         <DialogContent className="bg-slate-900 border-slate-800 text-slate-100 max-w-lg rounded-2xl shadow-2xl">
           <DialogHeader>
@@ -283,7 +282,6 @@ const MediaManager = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Edit Dialog */}
       <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
         <DialogContent className="bg-slate-900 border-slate-800 text-slate-100 max-w-lg rounded-2xl shadow-2xl">
           <DialogHeader><DialogTitle className="text-sm uppercase tracking-widest text-amber-500 font-bold">Editar Recurso</DialogTitle></DialogHeader>
