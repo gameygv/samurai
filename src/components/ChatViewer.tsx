@@ -19,6 +19,7 @@ import {
 import { toast } from 'sonner';
 import { sendEvolutionMessage } from '@/utils/messagingService';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/context/AuthContext';
 
 interface ChatViewerProps {
   lead: any;
@@ -27,6 +28,7 @@ interface ChatViewerProps {
 }
 
 const ChatViewer = ({ lead: initialLead, open, onOpenChange }: ChatViewerProps) => {
+  const { user } = useAuth();
   const [lead, setLead] = useState(initialLead);
   const [messages, setMessages] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -184,6 +186,13 @@ const ChatViewer = ({ lead: initialLead, open, onOpenChange }: ChatViewerProps) 
         platform: 'PANEL',
         metadata: mediaData ? { mediaUrl: mediaData.url, mediaType: mediaData.type, fileName: mediaData.name } : {}
       });
+
+      // DISPARO SILENCIOSO DE AUDITORÍA QA PARA VENDEDORES
+      if (user && text && !isInternalNote) {
+          supabase.functions.invoke('evaluate-agent', {
+              body: { agent_id: user.id, lead_id: lead.id, message_text: text }
+          }).catch(e => console.error("Error silencioso QA:", e));
+      }
 
       fetchMessages();
       setDraftMessage('');

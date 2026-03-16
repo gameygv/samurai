@@ -222,6 +222,13 @@ const Inbox = () => {
         metadata: mediaData ? { mediaUrl: mediaData.url, mediaType: mediaData.type, fileName: mediaData.name } : {}
       });
 
+      // DISPARO SILENCIOSO DE AUDITORÍA QA PARA VENDEDORES
+      if (user && text && !isInternalNote) {
+          supabase.functions.invoke('evaluate-agent', {
+              body: { agent_id: user.id, lead_id: activeLead.id, message_text: text }
+          }).catch(e => console.error("Error silencioso QA:", e));
+      }
+
       setDraftMessage('');
     } catch (err: any) {
       toast.error('Error: ' + err.message);
@@ -441,7 +448,7 @@ const Inbox = () => {
            )}>
               <div className="xl:hidden h-16 px-4 bg-slate-900 border-b border-slate-800 flex items-center justify-between shrink-0">
                  <span className="font-bold text-sm uppercase tracking-widest text-slate-300">Ficha Táctica</span>
-                 <Button variant="ghost" size="icon" onClick={() => setShowMemoryMobile(false)}><X className="w-5 h-5"/></Button>
+                 <Button variant="ghost" size="sm" onClick={() => setShowMemoryMobile(false)}><X className="w-5 h-5"/></Button>
               </div>
               <MemoryPanel currentAnalysis={activeLead} isEditing={isEditingMemory} setIsEditing={setIsEditingMemory} memoryForm={memoryForm} setMemoryForm={setMemoryForm} onSave={saveMemory} saving={sending} onReset={() => {}} onToggleFollowup={() => handleSendMessage(activeLead.ai_paused ? '#START' : '#STOP')} onAnalysisComplete={() => fetchMessages(activeLead.id)} />
            </div>
