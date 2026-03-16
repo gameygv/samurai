@@ -23,6 +23,7 @@ import WebsiteContent from "./pages/WebsiteContent";
 import Payments from "./pages/Payments";
 import MetaCapi from "./pages/MetaCapi";
 import Pipeline from "./pages/Pipeline";
+import Inbox from "./pages/Inbox";
 import { Loader2 } from "lucide-react";
 
 const queryClient = new QueryClient();
@@ -70,6 +71,7 @@ const App = () => (
             <Route path="/login" element={<Login />} />
             
             <Route path="/" element={<PrivateRoute><Index /></PrivateRoute>} />
+            <Route path="/inbox" element={<PrivateRoute><Inbox /></PrivateRoute>} />
             <Route path="/profile" element={<PrivateRoute><Profile /></PrivateRoute>} />
             <Route path="/activity" element={<PrivateRoute><Activity /></PrivateRoute>} />
             <Route path="/leads" element={<PrivateRoute><Leads /></PrivateRoute>} />

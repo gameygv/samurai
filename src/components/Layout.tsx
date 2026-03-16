@@ -4,7 +4,7 @@ import {
   LayoutDashboard, Brain, Settings as SettingsIcon, Database, LogOut, 
   Users, FileText, UserCircle, MessageSquare, Contact,
   GitBranch, Link as LinkIcon, Image, Sparkles, BookOpen, Clock,
-  Archive, Globe, CreditCard, BarChart3, Zap, Trello, Menu, Activity, Search
+  Archive, Globe, CreditCard, BarChart3, Zap, Trello, Menu, Activity, Search, MessageCircle
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/context/AuthContext';
@@ -39,6 +39,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
       title: "PRINCIPAL",
       items: [
         { icon: LayoutDashboard, label: 'Dashboard', path: '/', roles: ['any'] },
+        { icon: MessageCircle, label: 'Chats (Inbox)', path: '/inbox', roles: ['any'] },
         { icon: Activity, label: 'Monitor Live', path: '/activity', roles: ['any'] },
       ]
     },
@@ -61,7 +62,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
       title: "GESTIÓN",
       items: [
         { icon: Trello, label: 'Pipeline Ventas', path: '/pipeline', roles: ['any'] },
-        { icon: MessageSquare, label: 'Radar de Leads', path: '/leads', roles: ['any'] },
+        { icon: MessageSquare, label: 'Radar Leads', path: '/leads', roles: ['any'] },
         { icon: Contact, label: 'Contactos', path: '/contacts', roles: ['any'] },
         { icon: CreditCard, label: 'Pagos & Ventas', path: '/payments', roles: ['any'] },
         { icon: Archive, label: 'Archivo de Chats', path: '/archive', roles: ['any'] },
