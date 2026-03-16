@@ -5,13 +5,13 @@ import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { 
-  Edit2, Save, Loader2, Zap, Fingerprint, MapPin, User, Tag, X, Plus, ShieldAlert, Brain, Target
+  Edit2, Save, Loader2, Fingerprint, MapPin, User, ShieldAlert, Brain
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { Badge } from '@/components/ui/badge';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { useAuth } from '@/context/AuthContext';
+import { cn } from '@/lib/utils';
 
 // Import Componentes Modulares
 import { FinancialAudit } from './memory/FinancialAudit';
@@ -41,7 +41,6 @@ export const MemoryPanel = ({
   const [correctionText, setCorrectionText] = useState('');
   const [analyzing, setAnalyzing] = useState(false);
   const [agents, setAgents] = useState<any[]>([]);
-  const [tagInput, setTagInput] = useState('');
 
   const capiFields = [
      true, 
@@ -73,118 +72,116 @@ export const MemoryPanel = ({
      }
   };
 
-  const handleAddTag = (text: string) => {
-    const clean = text.trim().toUpperCase();
-    if (clean && !memoryForm.tags.includes(clean)) {
-      setMemoryForm({ ...memoryForm, tags: [...memoryForm.tags, clean] });
-    }
-    setTagInput('');
-  };
-
   const handleUpdatePaymentStatus = async (status: string) => {
      const tid = toast.loading("Actualizando auditoría...");
      try {
-         // Si es válido, lo marcamos como comprado también
          const updates: any = { payment_status: status };
          if (status === 'VALID') updates.buying_intent = 'COMPRADO';
-         
          const { error } = await supabase.from('leads').update(updates).eq('id', currentAnalysis.id);
          if (error) throw error;
-         
          toast.success("Auditoría actualizada.", { id: tid });
-         if (onAnalysisComplete) onAnalysisComplete(); // Refrescar chat/lead
+         if (onAnalysisComplete) onAnalysisComplete();
      } catch (err: any) {
          toast.error(err.message, { id: tid });
      }
   };
 
-  const currentAgentName = agents.find(a => a.id === currentAnalysis.assigned_to)?.full_name || 'Bot Global (Sin Asignar)';
+  const currentAgentName = agents.find(a => a.id === currentAnalysis.assigned_to)?.full_name || 'Bot Global';
 
   return (
-    <div className="w-full flex-shrink-0 bg-slate-900/90 flex flex-col h-full">
+    <div className="w-full flex-shrink-0 bg-[#0d0a08] flex flex-col h-full">
       <CapiStatus healthScore={healthScore} healthPercent={healthPercent} onRunAnalysis={handleRunAnalysis} analyzing={analyzing} />
 
-      <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-6">
+      <div className="flex-1 overflow-y-auto custom-scrollbar p-5 space-y-8">
         
-        {/* SECCIÓN PSICOGRÁFICA (EXTRACTO IA) */}
-        <div className="space-y-3 bg-indigo-900/10 border border-indigo-500/20 p-4 rounded-2xl shadow-inner relative overflow-hidden">
-           <div className="absolute top-0 right-0 p-2 opacity-10"><Brain className="w-12 h-12 text-indigo-400" /></div>
-           <h4 className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest flex items-center gap-2">
-              <Brain className="w-3.5 h-3.5" /> Perfil Psicográfico (IA)
-           </h4>
-           <p className="text-xs text-slate-300 leading-relaxed italic">
-              {currentAnalysis.perfil_psicologico || "Sam está perfilando al cliente... Sigue charlando para obtener más insights."}
-           </p>
-        </div>
+        <FinancialAudit status={currentAnalysis.payment_status} onUpdate={handleUpdatePaymentStatus} loading={saving} />
 
-        <div className="space-y-2">
-           <div className="flex justify-between items-center mb-1">
-              <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2"><Fingerprint className="w-3.5 h-3.5" /> Ficha Técnica & CRM</h4>
+        <div>
+           <div className="flex justify-between items-center mb-2">
+              <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                 <Fingerprint className="w-4 h-4" /> Identidad & CRM
+              </h4>
               {!isEditing && <Button variant="ghost" size="icon" className="h-6 w-6 text-slate-500 hover:text-white" onClick={() => setIsEditing(true)}><Edit2 className="w-3.5 h-3.5" /></Button>}
            </div>
 
            {isEditing ? (
-              <div className="space-y-4 bg-slate-950 p-4 rounded-xl border border-indigo-500/50 shadow-inner">
+              <div className="space-y-4 bg-slate-900/50 p-4 rounded-xl border border-slate-800">
+                 <div className="grid grid-cols-2 gap-2">
+                    <Input value={memoryForm.nombre} onChange={e => setMemoryForm({...memoryForm, nombre: e.target.value})} placeholder="Nombre" className="h-8 text-xs bg-slate-950 border-slate-800" />
+                    <Input value={memoryForm.ciudad} onChange={e => setMemoryForm({...memoryForm, ciudad: e.target.value})} placeholder="Ciudad" className="h-8 text-xs bg-slate-950 border-slate-800" />
+                 </div>
+                 <Input value={memoryForm.email} onChange={e => setMemoryForm({...memoryForm, email: e.target.value})} placeholder="Email" className="h-8 text-xs bg-slate-950 border-slate-800" />
+                 
                  <div className="space-y-1">
-                    <Label className="text-[9px] text-slate-500 uppercase tracking-widest">Asignación Directa</Label>
+                    <Label className="text-[9px] text-slate-500 uppercase tracking-widest">Asignar a:</Label>
                     <Select value={memoryForm.assigned_to || "unassigned"} onValueChange={v => setMemoryForm({...memoryForm, assigned_to: v === "unassigned" ? null : v})}>
-                       <SelectTrigger className="h-8 text-xs bg-slate-900 border-slate-800"><SelectValue /></SelectTrigger>
+                       <SelectTrigger className="h-8 text-xs bg-slate-950 border-slate-800"><SelectValue /></SelectTrigger>
                        <SelectContent className="bg-slate-900 border-slate-800 text-white">
-                          <SelectItem value="unassigned">Sin Asignar (IA Global)</SelectItem>
+                          <SelectItem value="unassigned">Sin Asignar (Bot Global)</SelectItem>
                           {agents.map(a => <SelectItem key={a.id} value={a.id}>{a.full_name}</SelectItem>)}
                        </SelectContent>
                     </Select>
                  </div>
 
-                 <div className="grid grid-cols-2 gap-2">
-                    <Input value={memoryForm.nombre} onChange={e => setMemoryForm({...memoryForm, nombre: e.target.value})} placeholder="Nombre" className="h-8 text-xs bg-slate-900 border-slate-800" />
-                    <Input value={memoryForm.ciudad} onChange={e => setMemoryForm({...memoryForm, ciudad: e.target.value})} placeholder="Ciudad" className="h-8 text-xs bg-slate-900 border-slate-800" />
-                 </div>
-                 
-                 <Input value={memoryForm.email} onChange={e => setMemoryForm({...memoryForm, email: e.target.value})} placeholder="Email" className="h-8 text-xs bg-slate-900 border-slate-800" />
-
-                 <Button onClick={onSave} disabled={saving} className="w-full bg-amber-600 hover:bg-amber-500 text-slate-900 h-9 text-xs font-bold rounded-lg shadow-glow">
+                 <Button onClick={onSave} disabled={saving} className="w-full bg-indigo-600 hover:bg-indigo-500 text-white h-9 text-xs font-bold rounded-lg">
                     {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Save className="w-3.5 h-3.5 mr-2" /> ACTUALIZAR CRM</>}
                  </Button>
               </div>
            ) : (
-              <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-5">
-                 <div className="flex justify-between items-start">
-                    <div className="flex flex-col">
-                       <span className="text-[9px] text-slate-500 uppercase">Agente Responsable</span>
-                       <span className="text-xs text-emerald-400 font-bold flex items-center gap-1.5 mt-0.5">
-                          <User className="w-3 h-3"/> {currentAgentName}
-                       </span>
-                    </div>
-                    <Badge variant="outline" className="text-[9px] border-indigo-500/30 text-indigo-400 bg-indigo-900/10">
-                       {currentAnalysis.buying_intent || 'BAJO'}
-                    </Badge>
-                 </div>
-                 
-                 <div className="pt-3 border-t border-slate-800/50">
-                    <div className="flex flex-col gap-1 mb-4">
-                       <span className="text-[9px] text-slate-500 uppercase flex items-center gap-1"><MapPin className="w-2.5 h-2.5"/> Ubicación</span>
-                       <span className="text-xs text-slate-300">{currentAnalysis.ciudad || 'Desconocida'}</span>
-                    </div>
-                    
-                    {/* Componente de Auditoría Financiera Restaurado */}
-                    <FinancialAudit 
-                       status={currentAnalysis.payment_status} 
-                       onUpdate={handleUpdatePaymentStatus} 
-                       loading={saving} 
-                    />
-                 </div>
-              </div>
+              <Accordion type="single" collapsible defaultValue="tactico" className="w-full bg-slate-900/20 border border-slate-800/50 rounded-xl px-3">
+                 <AccordionItem value="tactico" className="border-0">
+                    <AccordionTrigger className="text-[10px] font-bold text-slate-300 uppercase py-3 hover:no-underline hover:text-indigo-400">Resumen Táctico</AccordionTrigger>
+                    <AccordionContent className="space-y-4 pt-1 pb-4">
+                       <div>
+                          <span className="text-[9px] text-slate-500 uppercase font-bold tracking-widest">Contacto</span>
+                          <p className="text-sm text-white font-bold mt-0.5">{currentAnalysis.nombre || currentAnalysis.telefono}</p>
+                       </div>
+                       <div>
+                          <span className="text-[9px] text-slate-500 uppercase font-bold tracking-widest">Email</span>
+                          <p className={cn("text-xs font-bold mt-0.5", currentAnalysis.email && currentAnalysis.email.includes('@') ? "text-emerald-400" : "text-emerald-400/60 italic")}>
+                             {currentAnalysis.email || 'Pendiente'}
+                          </p>
+                       </div>
+                       <div>
+                          <span className="text-[9px] text-slate-500 uppercase font-bold tracking-widest">Ciudad</span>
+                          <p className="text-xs text-slate-300 mt-0.5">{currentAnalysis.ciudad || 'Pendiente'}</p>
+                       </div>
+                       <div>
+                          <span className="text-[9px] text-slate-500 uppercase font-bold tracking-widest">Perfil Psicográfico</span>
+                          <p className="text-xs text-slate-400 italic mt-0.5">{currentAnalysis.perfil_psicologico || 'Analizando...'}</p>
+                       </div>
+                       <div>
+                          <span className="text-[9px] text-slate-500 uppercase font-bold tracking-widest">Agente</span>
+                          <p className="text-xs text-slate-300 mt-0.5 flex items-center gap-1.5"><User className="w-3.5 h-3.5 text-slate-500"/> {currentAgentName}</p>
+                       </div>
+                    </AccordionContent>
+                 </AccordionItem>
+              </Accordion>
            )}
         </div>
 
-        <div className="space-y-3 border-t border-slate-800 pt-6">
-           <h4 className="text-[10px] font-bold text-amber-500 uppercase tracking-widest flex items-center gap-2"><ShieldAlert className="w-3 h-3" /> Reportar a Bitácora #CIA</h4>
-           <Textarea value={correctionText} onChange={e => setCorrectionText(e.target.value)} placeholder="¿Qué debe corregir Sam? (Tono, datos, repetición...)" className="bg-slate-950 border-slate-800 text-xs min-h-[60px] rounded-xl" />
-           <Button onClick={() => { toast.success("Enviado a Auditoría"); setCorrectionText(''); }} disabled={!correctionText.trim()} className="w-full h-8 text-[10px] bg-amber-500/10 text-amber-500 border border-amber-500/30 font-bold uppercase rounded-lg">
+        <div className="space-y-3">
+           <h4 className="text-[10px] font-bold text-amber-500 uppercase tracking-widest flex items-center gap-2"><ShieldAlert className="w-3.5 h-3.5" /> Reportar a Bitácora #CIA</h4>
+           <Textarea value={correctionText} onChange={e => setCorrectionText(e.target.value)} placeholder="¿Qué debe corregir Sam?" className="bg-slate-950 border-slate-800 text-xs min-h-[80px] rounded-xl" />
+           <Button onClick={() => { toast.success("Enviado a Auditoría"); setCorrectionText(''); }} disabled={!correctionText.trim()} className="w-full h-10 text-[10px] bg-[#1a120b] text-amber-500 border border-[#3b2513] hover:bg-[#291b0f] font-bold uppercase tracking-widest rounded-xl transition-colors">
              NOTIFICAR MEJORA
            </Button>
         </div>
+      </div>
+
+      {/* BIG RED BUTTON AT BOTTOM */}
+      <div className="p-5 border-t border-slate-800 bg-[#0d0a08]">
+         <Button 
+            onClick={onToggleFollowup} 
+            className={cn(
+               "w-full h-12 text-[10px] font-bold tracking-widest uppercase rounded-xl border transition-all duration-300", 
+               currentAnalysis.ai_paused 
+                  ? "bg-emerald-900/20 text-emerald-500 border-emerald-900/50 hover:bg-emerald-900/40" 
+                  : "bg-red-950 text-red-500 border-red-900 hover:bg-red-900 hover:text-red-100"
+            )}
+         >
+            {currentAnalysis.ai_paused ? "▶ ACTIVAR IA (ESTE CHAT)" : "⏸ PAUSAR IA (ESTE CHAT)"}
+         </Button>
       </div>
     </div>
   );

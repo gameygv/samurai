@@ -1,6 +1,5 @@
 import React from 'react';
-import { Button } from '@/components/ui/button';
-import { Sparkles, Loader2, RefreshCw } from 'lucide-react';
+import { Sparkles, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface AiSuggestionsProps {
@@ -10,12 +9,12 @@ interface AiSuggestionsProps {
   onRefresh: () => void;
 }
 
-export const AiSuggestions = ({ suggestions, loading, onSelect, onRefresh }: AiSuggestionsProps) => {
+export const AiSuggestions = ({ suggestions, loading, onSelect }: AiSuggestionsProps) => {
   if (loading && suggestions.length === 0) {
     return (
-      <div className="flex gap-2 mb-3 px-1 animate-pulse">
-        {[1, 2, 3].map(i => (
-          <div key={i} className="h-8 w-24 bg-slate-800 rounded-full border border-slate-700" />
+      <div className="flex flex-col gap-2 mb-4 px-2 w-full animate-pulse">
+        {[1, 2].map(i => (
+          <div key={i} className="h-10 w-full bg-slate-800/50 rounded-xl border border-slate-700/50" />
         ))}
       </div>
     );
@@ -24,33 +23,22 @@ export const AiSuggestions = ({ suggestions, loading, onSelect, onRefresh }: AiS
   if (!suggestions || suggestions.length === 0) return null;
 
   return (
-    <div className="flex flex-wrap items-center gap-2 mb-4 px-1 group">
-      <div className="p-1.5 rounded-full bg-indigo-500/10 text-indigo-400">
-         <Sparkles className="w-3 h-3" />
-      </div>
+    <div className="flex flex-col gap-2 mb-4 px-2 w-full">
       {suggestions.map((s, i) => (
         <button
           key={i}
           onClick={() => onSelect(s.text)}
           className={cn(
-            "h-7 text-[10px] font-bold rounded-full border px-3 transition-all transform hover:scale-105 active:scale-95",
-            s.type === 'VENTA' ? 'bg-orange-500/10 border-orange-500/30 text-orange-400' : 
-            s.type === 'EMPATIA' ? 'bg-indigo-500/10 border-indigo-500/30 text-indigo-400' :
-            'bg-slate-800 border-slate-700 text-slate-400'
+            "text-left text-[11px] p-3 rounded-xl border transition-all hover:opacity-80 flex items-start gap-2.5",
+            s.type === 'VENTA' ? 'bg-[#1a0e08] border-[#3d1c05] text-orange-400' : 
+            s.type === 'EMPATIA' ? 'bg-[#0a0a1a] border-[#18183d] text-indigo-400' :
+            'bg-slate-900/50 border-slate-700/50 text-slate-300'
           )}
         >
-          {s.text}
+          <Sparkles className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+          <span className="leading-relaxed">{s.text}</span>
         </button>
       ))}
-      <Button 
-        variant="ghost" 
-        size="icon" 
-        className="h-7 w-7 text-slate-600 hover:text-indigo-400 opacity-0 group-hover:opacity-100 transition-opacity" 
-        onClick={onRefresh}
-        disabled={loading}
-      >
-        <RefreshCw className={cn("w-3 h-3", loading && "animate-spin")} />
-      </Button>
     </div>
   );
 };
