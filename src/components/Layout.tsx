@@ -40,7 +40,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
       items: [
         { icon: LayoutDashboard, label: 'Dashboard', path: '/', roles: ['any'] },
         { icon: MessageCircle, label: 'Chats (Inbox)', path: '/inbox', roles: ['any'] },
-        { icon: Activity, label: 'Monitor Live', path: '/activity', roles: ['any'] },
+        { icon: Activity, label: 'Monitor Live', path: '/activity', roles: ['admin', 'dev'] },
       ]
     },
     {
@@ -64,7 +64,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
         { icon: Trello, label: 'Pipeline Ventas', path: '/pipeline', roles: ['any'] },
         { icon: MessageSquare, label: 'Radar Leads', path: '/leads', roles: ['any'] },
         { icon: Contact, label: 'Contactos', path: '/contacts', roles: ['any'] },
-        { icon: CreditCard, label: 'Pagos & Ventas', path: '/payments', roles: ['any'] },
+        { icon: CreditCard, label: 'Pagos & Ventas', path: '/payments', roles: ['admin', 'dev'] },
         { icon: Archive, label: 'Archivo de Chats', path: '/archive', roles: ['any'] },
       ]
     },

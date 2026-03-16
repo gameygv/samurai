@@ -73,14 +73,16 @@ const App = () => (
             <Route path="/" element={<PrivateRoute><Index /></PrivateRoute>} />
             <Route path="/inbox" element={<PrivateRoute><Inbox /></PrivateRoute>} />
             <Route path="/profile" element={<PrivateRoute><Profile /></PrivateRoute>} />
-            <Route path="/activity" element={<PrivateRoute><Activity /></PrivateRoute>} />
+            
+            {/* Rutas filtradas por Vendedor en su interior */}
             <Route path="/leads" element={<PrivateRoute><Leads /></PrivateRoute>} />
             <Route path="/contacts" element={<PrivateRoute><Contacts /></PrivateRoute>} />
             <Route path="/pipeline" element={<PrivateRoute><Pipeline /></PrivateRoute>} />
             <Route path="/archive" element={<PrivateRoute><Archive /></PrivateRoute>} />
-            <Route path="/payments" element={<PrivateRoute><Payments /></PrivateRoute>} />
             
             {/* RUTAS PROTEGIDAS PARA ADMIN/DEV */}
+            <Route path="/activity" element={<PrivateRoute><AdminRoute><Activity /></AdminRoute></PrivateRoute>} />
+            <Route path="/payments" element={<PrivateRoute><AdminRoute><Payments /></AdminRoute></PrivateRoute>} />
             <Route path="/brain" element={<PrivateRoute><AdminRoute><AgentBrain /></AdminRoute></PrivateRoute>} />
             <Route path="/learning" element={<PrivateRoute><AdminRoute><LearningLog /></AdminRoute></PrivateRoute>} />
             <Route path="/knowledge" element={<PrivateRoute><AdminRoute><KnowledgeBase /></AdminRoute></PrivateRoute>} />
