@@ -13,18 +13,11 @@ import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { Input } from '@/components/ui/input';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 
 const Layout = ({ children }: { children: React.ReactNode }) => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { profile, signOut, isAdmin } = useAuth();
+  const { profile, signOut, isAdmin, isDev } = useAuth();
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [brandName, setBrandName] = useState('Samurai Workspace');
 
@@ -72,6 +65,14 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
         { icon: CreditCard, label: 'Pagos & Ventas', path: '/payments', roles: ['admin', 'dev'] },
         { icon: Archive, label: 'Archivo de Chats', path: '/archive', roles: ['any'] },
       ]
+    },
+    {
+      title: "SISTEMA",
+      items: [
+        { icon: Users, label: 'Equipo', path: '/users', roles: ['admin', 'dev'] },
+        { icon: BarChart3, label: 'Meta CAPI', path: '/meta-capi', roles: ['admin', 'dev'] },
+        { icon: SettingsIcon, label: 'Ajustes', path: '/settings', roles: ['admin', 'dev'] },
+      ]
     }
   ];
 
@@ -97,7 +98,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
                   {group.title}
                 </h4>
                 <div className="space-y-1">
-                  {group.items.filter(item => item.roles.includes('any') || (isAdmin && item.roles.includes('admin'))).map((item) => {
+                  {group.items.filter(item => item.roles.includes('any') || (isAdmin && item.roles.includes('admin')) || (isDev && item.roles.includes('dev'))).map((item) => {
                     const Icon = item.icon;
                     const isActive = location.pathname === item.path;
                     return (
@@ -127,11 +128,11 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
          <div className="bg-slate-950/50 rounded-xl p-3 border border-slate-800">
             <div className="flex items-center gap-3">
                <div className="w-8 h-8 rounded-full bg-indigo-900 flex items-center justify-center text-[10px] font-bold text-amber-500 border border-indigo-500/30">
-                  {profile?.full_name?.substring(0, 2).toUpperCase()}
+                  {profile?.full_name?.substring(0, 2).toUpperCase() || '??'}
                </div>
                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-bold text-slate-200 truncate">{profile?.full_name}</p>
-                  <p className="text-[9px] text-slate-500 uppercase font-mono">{profile?.role}</p>
+                  <p className="text-xs font-bold text-slate-200 truncate">{profile?.full_name || 'Usuario'}</p>
+                  <p className="text-[9px] text-slate-500 uppercase font-mono">{profile?.role || 'dev'}</p>
                </div>
                <button onClick={handleLogout} title="Cerrar Sesión" className="text-slate-600 hover:text-red-400 transition-colors">
                   <LogOut className="w-4 h-4" />

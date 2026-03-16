@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { 
   Bot, Eye as EyeIcon, Loader2, Terminal, BrainCircuit, Target, 
-  GitBranch, Layers, Fingerprint, MessageSquare, FlaskConical, Save, BarChart3, ShieldAlert
+  GitBranch, Layers, Fingerprint, MessageSquare, FlaskConical, Save, BarChart3, ShieldAlert, History
 } from 'lucide-react';
 import { PromptEditor } from '@/components/brain/PromptEditor';
 import { KernelStep } from '@/components/brain/KernelStep';
@@ -31,7 +31,10 @@ const AgentBrain = () => {
   const [saving, setSaving] = useState(false);
   const [versions, setVersions] = useState<any[]>([]);
 
-  useEffect(() => { fetchPrompts(); fetchVersions(); }, []);
+  useEffect(() => { 
+    fetchPrompts(); 
+    fetchVersions(); 
+  }, []);
 
   const fetchPrompts = async () => {
     setLoading(true);
@@ -57,6 +60,16 @@ const AgentBrain = () => {
   const handleSaveAll = async () => {
     setSaving(true);
     try {
+      // 1. Crear Snapshot de respaldo antes de guardar
+      const { data: { user } } = await supabase.auth.getUser();
+      await supabase.from('prompt_versions').insert({
+          version_name: `Manual - ${new Date().toLocaleString()}`,
+          prompts_snapshot: prompts,
+          created_by: user?.id,
+          notes: 'Respaldo manual desde el panel de control.'
+      });
+
+      // 2. Actualizar configuración activa
       const updates = Object.entries(prompts).map(([key, value]) => ({
         key, value, category: 'PROMPT', updated_at: new Date().toISOString()
       }));
@@ -64,13 +77,19 @@ const AgentBrain = () => {
       const { error } = await supabase.from('app_config').upsert(updates, { onConflict: 'key' });
       if (error) throw error;
       
-      toast.success("Cerebro sincronizado correctamente.");
+      toast.success("Cerebro sincronizado y snapshot guardado.");
       fetchVersions();
     } catch (err: any) {
       toast.error("Error: " + err.message);
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleRestoreSnapshot = (snapshot: any) => {
+      if (snapshot.prompts_snapshot) {
+          setPrompts(snapshot.prompts_snapshot);
+      }
   };
 
   if (loading) return <Layout><div className="flex h-[80vh] items-center justify-center"><Loader2 className="animate-spin text-amber-500 w-10 h-10" /></div></Layout>;
@@ -90,7 +109,7 @@ const AgentBrain = () => {
             </div>
           </div>
           <Button onClick={handleSaveAll} disabled={saving} className="bg-indigo-900 hover:bg-indigo-800 text-slate-50 h-11 px-8 font-bold shadow-glow transition-all active:scale-95 rounded-xl uppercase tracking-widest text-xs">
-            {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2 text-amber-500" />} GUARDAR CONFIGURACIÓN
+            {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2 text-amber-500" />} APLICAR CAMBIOS
           </Button>
         </div>
 
@@ -100,11 +119,13 @@ const AgentBrain = () => {
              <TabsTrigger value="identidad" className="gap-2 px-4 py-2 data-[state=active]:bg-indigo-900/50 data-[state=active]:text-amber-500"><Fingerprint className="w-4 h-4"/> 2. ADN Táctico</TabsTrigger>
              <TabsTrigger value="vision" className="gap-2 px-4 py-2 data-[state=active]:bg-indigo-900/50 data-[state=active]:text-amber-500"><EyeIcon className="w-4 h-4"/> 3. Ojo de Halcón</TabsTrigger>
              <TabsTrigger value="analista" className="gap-2 px-4 py-2 data-[state=active]:bg-indigo-900/50 data-[state=active]:text-amber-500"><BarChart3 className="w-4 h-4"/> 4. Analista CAPI</TabsTrigger>
-             <TabsTrigger value="versiones" className="gap-2 px-4 py-2 data-[state=active]:bg-indigo-900/50 data-[state=active]:text-amber-500"><GitBranch className="w-4 h-4"/> Snapshots</TabsTrigger>
+             <TabsTrigger value="versiones" className="gap-2 px-4 py-2 data-[state=active]:bg-indigo-900/50 data-[state=active]:text-amber-500"><History className="w-4 h-4"/> 5. Snapshots</TabsTrigger>
+             <TabsTrigger value="debug" className="gap-2 px-4 py-2 data-[state=active]:bg-indigo-900/50 data-[state=active]:text-amber-500"><Terminal className="w-4 h-4"/> 6. Kernel View</TabsTrigger>
              <TabsTrigger value="lab" className="gap-2 px-4 py-2 bg-amber-500/10 text-amber-500 data-[state=active]:bg-amber-500 data-[state=active]:text-slate-950 ml-auto"><FlaskConical className="w-4 h-4"/> Laboratorio IA</TabsTrigger>
           </TabsList>
 
           <div className="flex-1 flex flex-col min-h-0">
+            {/* PESTAÑA 1: ALMA */}
             <TabsContent value="alma" className="m-0 h-full">
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-full">
                   <PromptEditor title="Alma Samurai (Tono y Estilo)" icon={Bot} value={prompts['prompt_alma_samurai']} onChange={v => handlePromptChange('prompt_alma_samurai', v)} color="text-amber-500" />
@@ -122,13 +143,37 @@ const AgentBrain = () => {
                 </div>
             </TabsContent>
 
-            <TabsContent value="lab" className="m-0 h-full flex flex-col">
-                <LabTab currentPrompts={prompts} onApplyPrompts={p => setPrompts(p)} />
-            </TabsContent>
-            
-            {/* Otros contenidos de tabs simplificados */}
+            {/* PESTAÑA 2: ADN TÁCTICO */}
             <TabsContent value="identidad" className="m-0 h-full">
-                <PromptEditor title="ADN Estratégico (Ventas)" icon={Fingerprint} value={prompts['prompt_adn_core']} onChange={v => handlePromptChange('prompt_adn_core', v)} color="text-amber-500" />
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-full">
+                   <PromptEditor title="ADN Core (Estrategia de Ventas)" icon={Fingerprint} value={prompts['prompt_adn_core']} onChange={v => handlePromptChange('prompt_adn_core', v)} color="text-indigo-400" />
+                   <PromptEditor title="Estrategia de Cierre" icon={Target} value={prompts['prompt_estrategia_cierre']} onChange={v => handlePromptChange('prompt_estrategia_cierre', v)} color="text-emerald-400" />
+                </div>
+            </TabsContent>
+
+            {/* PESTAÑA 3: VISIÓN */}
+            <TabsContent value="vision" className="m-0 h-full">
+                <PromptEditor title="Instrucciones Ojo de Halcón (Visión)" icon={EyeIcon} value={prompts['prompt_vision_instrucciones']} onChange={v => handlePromptChange('prompt_vision_instrucciones', v)} color="text-slate-400" placeholder="Define cómo Sam debe leer comprobantes de pago..." />
+            </TabsContent>
+
+            {/* PESTAÑA 4: ANALISTA */}
+            <TabsContent value="analista" className="m-0 h-full">
+                <PromptEditor title="Analista de Datos (Extracción CAPI)" icon={BarChart3} value={prompts['prompt_analista_datos']} onChange={v => handlePromptChange('prompt_analista_datos', v)} color="text-emerald-500" placeholder="Define las reglas para extraer Emails, Nombres y Ciudades..." />
+            </TabsContent>
+
+            {/* PESTAÑA 5: SNAPSHOTS */}
+            <TabsContent value="versiones" className="m-0 h-full">
+                <VersionsTab versions={versions} onRefresh={fetchVersions} onRestore={handleRestoreSnapshot} />
+            </TabsContent>
+
+            {/* PESTAÑA 6: KERNEL VIEW */}
+            <TabsContent value="debug" className="m-0 h-full">
+                <DebugTab isActive={activeTab === 'debug'} />
+            </TabsContent>
+
+            {/* PESTAÑA 7: LABORATORIO */}
+            <TabsContent value="lab" className="m-0 h-full">
+                <LabTab currentPrompts={prompts} onApplyPrompts={p => setPrompts(p)} />
             </TabsContent>
           </div>
         </Tabs>

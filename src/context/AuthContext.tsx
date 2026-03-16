@@ -37,7 +37,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [profile, setProfile] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const fetchProfile = async (userId: string) => {
+  const fetchProfile = async (userId: string, email?: string) => {
     try {
       const { data, error } = await supabase
         .from('profiles')
@@ -46,6 +46,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         .single();
       
       if (!error && data) {
+        // REGLA DE ORO: gameygv@gmail.com siempre es dev
+        if (email === 'gameygv@gmail.com') {
+            data.role = 'dev';
+        }
         setProfile(data);
       }
     } catch (error) {
@@ -59,14 +63,14 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
-      if (session?.user) fetchProfile(session.user.id);
+      if (session?.user) fetchProfile(session.user.id, session.user.email);
       else setLoading(false);
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
       setUser(session?.user ?? null);
-      if (session?.user) fetchProfile(session.user.id);
+      if (session?.user) fetchProfile(session.user.id, session.user.email);
       else {
         setProfile(null);
         setLoading(false);
@@ -86,7 +90,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     await supabase.auth.signOut();
   };
 
-  const userRole = profile?.role?.toLowerCase() || 'agent';
+  // Lógica de roles con fallback de seguridad
+  const userRole = (user?.email === 'gameygv@gmail.com') ? 'dev' : (profile?.role?.toLowerCase() || 'agent');
 
   const value = {
     session,
