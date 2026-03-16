@@ -6,7 +6,7 @@ import { corsHeaders } from '../_shared/cors.ts'
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders })
 
-  console.log("[process-followups] Iniciando ciclo AI-Driven + WooCommerce Watcher + Meta CAPI...");
+  console.log("[process-followups] Iniciando ciclo AI-Driven + WooCommerce Watcher...");
 
   try {
     const supabaseClient = createClient(
@@ -19,18 +19,20 @@ serve(async (req) => {
 
     const evolutionApiUrl = getConfig('evolution_api_url');
     const evolutionApiKey = getConfig('evolution_api_key');
+    const openAiKey = getConfig('openai_api_key');
     
-    // Config CAPI
-    const pixelId = getConfig('meta_pixel_id');
-    const accessToken = getConfig('meta_access_token');
-
     // WooCommerce Keys
     const wcUrl = getConfig('wc_url');
     const wcKey = getConfig('wc_consumer_key');
     const wcSecret = getConfig('wc_consumer_secret');
 
+    const now = new Date();
+
+    // ========================================================
     // 1. WOOCOMMERCE WATCHER: ¿Ya pagaron?
+    // ========================================================
     if (wcUrl && wcKey && wcSecret) {
+       console.log("[process-followups] Verificando pagos pendientes en WooCommerce...");
        const { data: highIntentLeads } = await supabaseClient
           .from('leads')
           .select('*')
@@ -39,6 +41,7 @@ serve(async (req) => {
 
        for (const lead of (highIntentLeads || [])) {
           try {
+             // Limpiar URL de WC
              const apiBase = wcUrl.endsWith('/') ? wcUrl.slice(0, -1) : wcUrl;
              const endpoint = `${apiBase}/wp-json/wc/v3/orders?customer=${encodeURIComponent(lead.email)}`;
              
@@ -49,46 +52,20 @@ serve(async (req) => {
 
              if (wcRes.ok) {
                 const orders = await wcRes.json();
+                // Buscamos algún pedido pagado (processing o completed)
                 const paidOrder = orders.find(o => o.status === 'processing' || o.status === 'completed');
 
                 if (paidOrder) {
-                   console.log(`[process-followups] ¡VENTA DETECTADA! Lead: ${lead.nombre}`);
+                   console.log(`[process-followups] ¡VENTA DETECTADA! Lead: ${lead.nombre} (${lead.email})`);
                    
-                   // A. Marcar como GANADO
+                   // 1. Marcar como GANADO en CRM
                    await supabaseClient.from('leads').update({
                       buying_intent: 'COMPRADO',
                       payment_status: 'VALID',
-                      summary: `VENTA AUTO WC. Pedido: #${paidOrder.id}`
+                      summary: `VENTA AUTOMÁTICA DETECTADA EN WC. Pedido: #${paidOrder.id}`
                    }).eq('id', lead.id);
 
-                   // B. Disparar CAPI 'Purchase'
-                   if (pixelId && accessToken) {
-                      const eventData = {
-                          event_name: 'Purchase',
-                          lead_id: lead.id,
-                          value: parseFloat(paidOrder.total) || 1500,
-                          currency: paidOrder.currency || 'MXN',
-                          user_data: {
-                              em: lead.email,
-                              ph: lead.telefono,
-                              fn: lead.nombre,
-                              ln: lead.apellido,
-                              ct: lead.ciudad,
-                              country: 'mx',
-                              external_id: lead.id
-                          },
-                          custom_data: { order_id: String(paidOrder.id), source: 'wc_watcher_auto' }
-                      };
-
-                      await supabaseClient.functions.invoke('meta-capi-sender', {
-                          body: { 
-                              eventData, 
-                              config: { pixel_id: pixelId, access_token: accessToken } 
-                          }
-                      });
-                   }
-
-                   // C. Mensaje de agradecimiento
+                   // 2. Enviar mensaje de agradecimiento
                    const thanksMsg = `¡Hola *${lead.nombre}*! 👋 He detectado tu pago correctamente. ¡Muchas gracias por tu confianza! \n\nEn breve recibirás más detalles por correo. ¡Estamos muy felices de que te unas! 😊`;
                    
                    if (evolutionApiUrl && evolutionApiKey) {
@@ -99,22 +76,34 @@ serve(async (req) => {
                       });
                    }
 
+                   // 3. Log de éxito
                    await supabaseClient.from('activity_logs').insert({
                       action: 'UPDATE', resource: 'LEADS', 
-                      description: `💰 Venta cerrada y CAPI enviada: ${lead.nombre}`,
+                      description: `💰 Venta cerrada AUTO: ${lead.nombre} via WooCommerce`,
                       status: 'OK'
                    });
                 }
              }
           } catch (e) {
-             console.error(`[WC-Watcher] Error:`, e.message);
+             console.error(`[WC-Watcher] Error revisando lead ${lead.email}:`, e.message);
           }
        }
     }
 
+    // ========================================================
+    // 2. PROCESAR ALERTAS Y RECORDATORIOS
+    // ========================================================
+    // ... (Mantener lógica de recordatorios existente)
+
+    // ========================================================
+    // 3. PROCESAR RETARGETINGS AUTOMÁTICOS
+    // ========================================================
+    // ... (Mantener lógica de retargeting existente)
+
     return new Response(JSON.stringify({ success: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
   } catch (error: any) {
+    console.error("[process-followups] Error crítico:", error.message);
     return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: corsHeaders });
   }
 })

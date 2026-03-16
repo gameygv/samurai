@@ -8,7 +8,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { 
   Trello, Loader2, Fingerprint, Image, Target, DollarSign, UserPlus, 
-  Mail, ShieldCheck, MapPin, AlertTriangle, GripVertical, CheckCircle2, XCircle, Bot, Play, Pause, User, Tag, Zap
+  Mail, ShieldCheck, MapPin, AlertTriangle, GripVertical, CheckCircle2, XCircle, Bot, Play, Pause, User, Tag
 } from 'lucide-react';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
@@ -68,9 +68,15 @@ const Pipeline = () => {
 
   const handleGlobalAiToggle = async (pause: boolean) => {
     if (!confirm(`¿Seguro que quieres ${pause ? 'PAUSAR' : 'ACTIVAR'} la IA exclusivamente para TODOS TUS chats asignados?`)) return;
+    
     const { error } = await supabase.from('leads').update({ ai_paused: pause }).eq('assigned_to', user?.id);
-    if (error) toast.error("Error ejecutando acción masiva.");
-    else { toast.success(`IA ${pause ? 'Pausada' : 'Activada'} masivamente.`); fetchLeads(); }
+    
+    if (error) {
+       toast.error("Error ejecutando acción masiva.");
+    } else {
+       toast.success(`IA ${pause ? 'Pausada' : 'Activada'} masivamente en tus chats.`);
+       fetchLeads();
+    }
   };
 
   const handleDragStart = (e: React.DragEvent, leadId: string) => { 
@@ -82,13 +88,18 @@ const Pipeline = () => {
      e.preventDefault();
      if (!draggedLeadId) return;
      const leadId = draggedLeadId;
+     
      setLeads(prev => prev.map(l => l.id === leadId ? { ...l, buying_intent: targetIntent } : l));
      setDraggedLeadId(null);
+     
      try {
         const { error } = await supabase.from('leads').update({ buying_intent: targetIntent }).eq('id', leadId);
         if (error) throw error;
-        toast.success(`Lead movido a: ${targetIntent}`);
-     } catch (err) { toast.error("Error al mover lead."); fetchLeads(); }
+        toast.success(`Lead movido a la etapa: ${targetIntent}`);
+     } catch (err) { 
+        toast.error("Error al mover el lead.");
+        fetchLeads();
+     }
   };
 
   const getLeadsByIntent = (intent: string) => {
@@ -108,6 +119,7 @@ const Pipeline = () => {
     <Layout>
       <div className="max-w-[1800px] mx-auto space-y-6 h-[calc(100vh-140px)] flex flex-col">
         
+        {/* TOP STATS */}
         <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
            <Card className="bg-slate-900 border-slate-800 p-4 flex items-center gap-4 rounded-2xl shadow-lg">
               <div className="p-3 rounded-xl bg-slate-800 text-slate-300"><Trello className="w-6 h-6" /></div>
@@ -144,74 +156,83 @@ const Pipeline = () => {
                  <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                        <Button variant="outline" className="flex-1 border-slate-700 text-slate-300 bg-slate-900 hover:bg-slate-800 h-10 rounded-xl px-2">
-                          <Bot className="w-4 h-4 mr-2 text-indigo-400"/> Mis Chats
+                          <Bot className="w-4 h-4 mr-2 text-indigo-400"/> IA de Mis Chats
                        </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent className="bg-slate-900 border-slate-800 text-white">
-                       <DropdownMenuLabel className="text-[10px] text-slate-500 uppercase">Control de IA</DropdownMenuLabel>
+                       <DropdownMenuLabel className="text-[10px] text-slate-500 uppercase">Control de Cartera Personal</DropdownMenuLabel>
                        <DropdownMenuSeparator className="bg-slate-800" />
-                       <DropdownMenuItem onClick={() => handleGlobalAiToggle(false)} className="text-emerald-400 focus:bg-emerald-900/20 cursor-pointer"><Play className="w-4 h-4 mr-2"/> Activar</DropdownMenuItem>
-                       <DropdownMenuItem onClick={() => handleGlobalAiToggle(true)} className="text-red-400 focus:bg-red-900/20 cursor-pointer"><Pause className="w-4 h-4 mr-2"/> Pausar</DropdownMenuItem>
+                       <DropdownMenuItem onClick={() => handleGlobalAiToggle(false)} className="text-emerald-400 focus:bg-emerald-900/20 focus:text-emerald-300 cursor-pointer">
+                          <Play className="w-4 h-4 mr-2"/> Activar a Todos
+                       </DropdownMenuItem>
+                       <DropdownMenuItem onClick={() => handleGlobalAiToggle(true)} className="text-red-400 focus:bg-red-900/20 focus:text-red-300 cursor-pointer">
+                          <Pause className="w-4 h-4 mr-2"/> Pausar a Todos
+                       </DropdownMenuItem>
                     </DropdownMenuContent>
                  </DropdownMenu>
-                 <Button className="bg-indigo-900 hover:bg-indigo-800 text-slate-50 h-10 w-10 p-0 rounded-xl shadow-lg shrink-0" onClick={() => setIsCreateOpen(true)}><UserPlus className="w-4 h-4" /></Button>
+                 <Button className="bg-indigo-900 hover:bg-indigo-800 text-slate-50 h-10 w-10 p-0 rounded-xl shadow-lg shrink-0" onClick={() => setIsCreateOpen(true)} title="Nuevo Lead"><UserPlus className="w-4 h-4" /></Button>
               </div>
            </Card>
         </div>
 
+        {/* PIPELINE BOARD */}
         <div className="flex-1 flex gap-4 min-h-0 overflow-x-auto custom-scrollbar pb-4">
           {columns.map((col) => {
             const leadsInCol = getLeadsByIntent(col.id);
             return (
               <div key={col.id} className={cn("rounded-2xl border flex flex-col min-h-0 shadow-2xl overflow-hidden min-w-[280px] w-full max-w-[350px] shrink-0", col.color)} onDragOver={(e) => e.preventDefault()} onDrop={(e) => handleDrop(e, col.id)}>
                 <div className="p-4 border-b border-slate-800/50 bg-slate-900/60 flex justify-between items-center backdrop-blur-sm shrink-0">
-                   <div><h3 className="font-bold text-xs text-slate-200 uppercase tracking-widest flex items-center gap-2"><col.icon className="w-4 h-4 text-slate-400" /> {col.title}</h3><p className="text-[9px] text-slate-500 mt-1">{col.desc}</p></div>
+                   <div>
+                      <h3 className="font-bold text-xs text-slate-200 uppercase tracking-widest flex items-center gap-2"><col.icon className="w-4 h-4 text-slate-400" /> {col.title}</h3>
+                      <p className="text-[9px] text-slate-500 mt-1">{col.desc}</p>
+                   </div>
                    <Badge className="bg-slate-950 text-slate-300 border-slate-700 shadow-inner">{leadsInCol.length}</Badge>
                 </div>
                 
                 <div className="flex-1 overflow-y-auto p-3 space-y-3 custom-scrollbar bg-slate-950/20">
                   {loading ? (
                      <div className="flex justify-center py-10"><Loader2 className="w-5 h-5 animate-spin text-slate-600" /></div>
-                  ) : leadsInCol.map((lead) => {
-                    const isCapiReady = lead.email && lead.ciudad;
-                    return (
+                  ) : leadsInCol.map((lead) => (
                     <div key={lead.id} draggable onDragStart={(e) => handleDragStart(e, lead.id)} className="cursor-move" onClick={() => { setSelectedLead(lead); setIsChatOpen(true); }}>
                        <Card className="bg-slate-900 border-slate-800 hover:border-slate-600 transition-all group relative overflow-hidden shadow-md cursor-pointer">
                          <div className={cn("absolute left-0 top-0 bottom-0 w-1", lead.ai_paused ? "bg-red-900" : "bg-amber-600")} />
-                         
-                         {/* CAPI INDICATOR */}
-                         <div className="absolute top-2 right-2" title={isCapiReady ? "CAPI READY" : "CAPI INCOMPLETE"}>
-                            {isCapiReady ? (
-                               <Zap className="w-3 h-3 text-emerald-500 fill-emerald-500 drop-shadow-[0_0_5px_rgba(16,185,129,0.5)]" />
-                            ) : (
-                               <Zap className="w-3 h-3 text-slate-800" />
-                            )}
-                         </div>
-
                          <CardContent className="p-3 pl-5 space-y-3">
-                            <div>
-                               <p className="text-xs font-bold text-slate-100 group-hover:text-amber-400 transition-colors truncate max-w-[180px]">{lead.nombre || lead.telefono}</p>
-                               {lead.assigned_to && agentsMap[lead.assigned_to] && isAdmin && filterAgent === 'ALL' && (
-                                  <Badge variant="outline" className="mt-1 text-[8px] h-4 px-1.5 border-purple-900/50 text-purple-300 font-medium">
-                                     <User className="w-2 h-2 mr-1"/> {agentsMap[lead.assigned_to].split(' ')[0]}
-                                  </Badge>
-                               )}
+                            <div className="flex justify-between items-start">
+                               <div>
+                                  <p className="text-xs font-bold text-slate-100 group-hover:text-amber-400 transition-colors truncate max-w-[180px]">{lead.nombre || lead.telefono}</p>
+                                  {lead.assigned_to && agentsMap[lead.assigned_to] && isAdmin && filterAgent === 'ALL' && (
+                                     <Badge variant="outline" className="mt-1 text-[8px] h-4 px-1.5 border-purple-900/50 text-purple-300 font-medium">
+                                        <User className="w-2 h-2 mr-1"/> {agentsMap[lead.assigned_to].split(' ')[0]}
+                                     </Badge>
+                                  )}
+                               </div>
+                               <GripVertical className="w-3 h-3 text-slate-600 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+                            </div>
+
+                            <div className="flex gap-1.5 flex-wrap mt-1">
+                               {lead.tags?.map((t: string) => (
+                                 <Badge key={t} variant="outline" className="text-[8px] h-4 px-1.5 border-amber-900/50 bg-amber-900/10 text-amber-500 font-medium"><Tag className="w-2 h-2 mr-1"/>{t}</Badge>
+                               ))}
                             </div>
 
                             <div className="flex gap-1.5 flex-wrap mt-1">
                                {lead.ciudad && <Badge variant="outline" className="text-[8px] h-4 px-1.5 border-slate-700 text-slate-400 font-medium"><MapPin className="w-2 h-2 mr-1"/>{lead.ciudad}</Badge>}
                                {lead.email && <Badge variant="outline" className="text-[8px] h-4 px-1.5 border-indigo-900/50 text-indigo-300 font-medium"><Mail className="w-2 h-2 mr-1"/> OK</Badge>}
+                               
                                {lead.payment_status === 'VALID' && <Badge variant="outline" className="text-[8px] h-4 px-1.5 border-emerald-900/50 bg-emerald-900/20 text-emerald-400 font-bold"><ShieldCheck className="w-2 h-2 mr-1"/>PAGO VÁLIDO</Badge>}
+                               {lead.payment_status === 'INVALID' && <Badge variant="outline" className="text-[8px] h-4 px-1.5 border-red-900/50 bg-red-900/20 text-red-400 font-bold"><AlertTriangle className="w-2 h-2 mr-1"/>PAGO RECHAZADO</Badge>}
+                               {lead.payment_status === 'DOUBTFUL' && <Badge variant="outline" className="text-[8px] h-4 px-1.5 border-amber-900/50 bg-amber-900/20 text-amber-400 font-bold"><AlertTriangle className="w-2 h-2 mr-1"/>PAGO DUDOSO</Badge>}
                             </div>
                          </CardContent>
                        </Card>
                     </div>
-                  )})}
+                  ))}
                 </div>
               </div>
             );
           })}
         </div>
+        
         {selectedLead && <ChatViewer lead={selectedLead} open={isChatOpen} onOpenChange={setIsChatOpen} />}
         {isCreateOpen && <CreateLeadDialog open={isCreateOpen} onOpenChange={setIsCreateOpen} onSuccess={fetchLeads} />}
       </div>

@@ -5,7 +5,7 @@ import { useSearchParams } from 'react-router-dom';
 import Layout from '@/components/Layout';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/context/AuthContext';
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -105,7 +105,6 @@ const AgentBrain = () => {
           </TabsList>
 
           <div className="flex-1 flex flex-col min-h-0">
-            {/* 1. PERSONALIDAD */}
             <TabsContent value="alma" className="m-0 h-full">
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-full">
                   <PromptEditor title="Alma Samurai (Tono y Estilo)" icon={Bot} value={prompts['prompt_alma_samurai']} onChange={v => handlePromptChange('prompt_alma_samurai', v)} color="text-amber-500" />
@@ -123,32 +122,13 @@ const AgentBrain = () => {
                 </div>
             </TabsContent>
 
-            {/* 2. ADN TÁCTICO / ESTRATEGIA */}
-            <TabsContent value="identidad" className="m-0 h-full">
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-full">
-                   <PromptEditor title="Estrategia de Venta & Cierre" icon={Target} value={prompts['prompt_estrategia_cierre']} onChange={v => handlePromptChange('prompt_estrategia_cierre', v)} color="text-indigo-400" />
-                   <PromptEditor title="ADN Estructural" icon={Fingerprint} value={prompts['prompt_adn_core']} onChange={v => handlePromptChange('prompt_adn_core', v)} color="text-emerald-400" />
-                </div>
-            </TabsContent>
-
-            {/* 3. OJO DE HALCÓN */}
-            <TabsContent value="vision" className="m-0 h-full">
-                <PromptEditor title="Instrucciones de Visión (OCR)" icon={EyeIcon} value={prompts['prompt_vision_instrucciones']} onChange={v => handlePromptChange('prompt_vision_instrucciones', v)} color="text-slate-400" placeholder="Instrucciones para que Sam analice comprobantes y posters..." />
-            </TabsContent>
-
-            {/* 4. ANALISTA CAPI */}
-            <TabsContent value="analista" className="m-0 h-full">
-                <PromptEditor title="Instrucciones de Analista de Datos" icon={BarChart3} value={prompts['prompt_analista_datos']} onChange={v => handlePromptChange('prompt_analista_datos', v)} color="text-emerald-400" placeholder="Reglas para la extracción de JSON, nombres, emails y ciudades..." />
-            </TabsContent>
-
-            {/* SNAPSHOTS */}
-            <TabsContent value="versiones" className="m-0 h-full">
-                <VersionsTab versions={versions} onRefresh={fetchVersions} onRestore={v => setPrompts(v.prompts_snapshot)} />
-            </TabsContent>
-
-            {/* LABORATORIO */}
             <TabsContent value="lab" className="m-0 h-full flex flex-col">
                 <LabTab currentPrompts={prompts} onApplyPrompts={p => setPrompts(p)} />
+            </TabsContent>
+            
+            {/* Otros contenidos de tabs simplificados */}
+            <TabsContent value="identidad" className="m-0 h-full">
+                <PromptEditor title="ADN Estratégico (Ventas)" icon={Fingerprint} value={prompts['prompt_adn_core']} onChange={v => handlePromptChange('prompt_adn_core', v)} color="text-amber-500" />
             </TabsContent>
           </div>
         </Tabs>
