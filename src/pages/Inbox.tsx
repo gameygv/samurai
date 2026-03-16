@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { 
   Search, Loader2, MessageCircle, Bot, Filter, Zap, 
-  CreditCard, Link as LinkIcon, MessageSquarePlus, Play, Pause, X, Menu, ShieldAlert
+  CreditCard, Link as LinkIcon, MessageSquarePlus, Play, Pause, X, Menu, ShieldAlert, ShoppingCart
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -37,6 +37,7 @@ const Inbox = () => {
   // Chat Tools State
   const [quickActions, setQuickActions] = useState<any>({});
   const [quickReplies, setQuickReplies] = useState<any[]>([]);
+  const [products, setProducts] = useState<any[]>([]);
   const [suggestions, setSuggestions] = useState<any[]>([]);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
   const [draftMessage, setDraftMessage] = useState('');
@@ -110,14 +111,15 @@ const Inbox = () => {
   };
 
   const fetchQuickActions = async () => {
-    const { data } = await supabase.from('app_config').select('key, value').in('key', ['wc_url', 'wc_product_id', 'bank_name', 'bank_account', 'bank_clabe', 'bank_holder', 'quick_replies']);
+    const { data } = await supabase.from('app_config').select('key, value').in('key', ['wc_url', 'bank_name', 'bank_account', 'bank_clabe', 'bank_holder', 'quick_replies', 'wc_products']);
     if (data) {
        const config: any = data.reduce((acc, item) => ({...acc, [item.key]: item.value}), {});
        setQuickActions({
-          paymentLink: `${config.wc_url || 'https://site.com'}/checkout/?add-to-cart=${config.wc_product_id || '0'}`,
+          wcBaseUrl: config.wc_url || 'https://theelephantbowl.com',
           bankInfo: `Banco: ${config.bank_name}\nCuenta: ${config.bank_account}\nCLABE: ${config.bank_clabe}\nTitular: ${config.bank_holder}`
        });
        try { if (config.quick_replies) setQuickReplies(JSON.parse(config.quick_replies)); } catch (e) {}
+       try { if (config.wc_products) setProducts(JSON.parse(config.wc_products)); } catch (e) {}
     }
   };
 
@@ -391,10 +393,25 @@ const Inbox = () => {
                           <DropdownMenuTrigger asChild>
                              <Button size="sm" variant="outline" className="h-7 text-[10px] bg-slate-950 border-slate-700 text-amber-500 uppercase font-bold tracking-widest"><Zap className="w-3 h-3 mr-1.5" /> Plantillas</Button>
                           </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="bg-slate-900 border-slate-800 text-white w-64 max-h-[300px] overflow-y-auto">
-                             <DropdownMenuLabel className="text-[10px] uppercase text-slate-500 font-bold">Scripts Base</DropdownMenuLabel>
-                             <DropdownMenuItem onClick={() => setDraftMessage(quickActions.paymentLink)} className="cursor-pointer hover:bg-indigo-600/20 text-xs"><LinkIcon className="w-3 h-3 mr-2 text-indigo-400" /> Link de Pago</DropdownMenuItem>
+                          <DropdownMenuContent align="end" className="bg-slate-900 border-slate-800 text-white w-64 max-h-[300px] overflow-y-auto custom-scrollbar">
+                             <DropdownMenuLabel className="text-[10px] uppercase text-slate-500 font-bold">Catálogo de Cobro</DropdownMenuLabel>
+                             
+                             {products.length === 0 ? (
+                                 <DropdownMenuItem disabled className="text-[10px] italic text-slate-500">Sin productos configurados</DropdownMenuItem>
+                             ) : products.map(p => (
+                                 <DropdownMenuItem 
+                                    key={p.id} 
+                                    onClick={() => setDraftMessage(`${quickActions.wcBaseUrl}/checkout/?add-to-cart=${p.wc_id}`)} 
+                                    className="cursor-pointer hover:bg-indigo-600/20 text-xs"
+                                 >
+                                    <ShoppingCart className="w-3 h-3 mr-2 text-indigo-400 shrink-0" />
+                                    <span className="truncate">{p.title}</span>
+                                 </DropdownMenuItem>
+                             ))}
+
+                             <DropdownMenuSeparator className="bg-slate-800 my-2"/>
                              <DropdownMenuItem onClick={() => setDraftMessage(quickActions.bankInfo)} className="cursor-pointer hover:bg-indigo-600/20 text-xs"><CreditCard className="w-3 h-3 mr-2 text-indigo-400" /> Datos Bancarios</DropdownMenuItem>
+                             
                              {quickReplies.length > 0 && (
                                 <>
                                    <DropdownMenuSeparator className="bg-slate-800 my-2"/>

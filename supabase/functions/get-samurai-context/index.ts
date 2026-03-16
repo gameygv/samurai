@@ -17,35 +17,42 @@ serve(async (req) => {
 
     const wcUrl = getConfig('wc_url', "https://theelephantbowl.com");
     const checkoutPath = getConfig('wc_checkout_path', "/inscripciones/");
-    const productId = getConfig('wc_product_id', ""); 
     
     const baseUrl = wcUrl.endsWith('/') ? wcUrl.slice(0, -1) : wcUrl;
     const path = checkoutPath.startsWith('/') ? checkoutPath : `/${checkoutPath}`;
     
-    let paymentLink = `${baseUrl}${path}`;
-    let isFirstParam = true;
-
-    if (productId && productId.trim() !== '') {
-        paymentLink += `?add-to-cart=${productId}`;
-        isFirstParam = false;
-    }
-    
-    const addParam = (key, value) => {
-        if (!value || value === 'null') return;
-        paymentLink += `${isFirstParam ? '?' : '&'}${key}=${value}`;
-        isFirstParam = false;
-    };
-    
+    // Parámetros dinámicos para los links
+    let leadParams = "";
     if (lead.nombre && !lead.nombre.includes('Nuevo Lead')) {
         const names = lead.nombre.trim().split(' ');
-        addParam('wffn_billing_first_name', encodeURIComponent(names[0]));
+        leadParams += `&wffn_billing_first_name=${encodeURIComponent(names[0])}`;
         if (names.length > 1) {
-           addParam('wffn_billing_last_name', encodeURIComponent(names.slice(1).join(' ')));
+           leadParams += `&wffn_billing_last_name=${encodeURIComponent(names.slice(1).join(' '))}`;
         }
     }
-    if (lead.email) addParam('wffn_billing_email', encodeURIComponent(lead.email));
-    if (lead.telefono) addParam('wffn_billing_phone', encodeURIComponent(lead.telefono));
-    if (lead.ciudad) addParam('wffn_billing_city', encodeURIComponent(lead.ciudad));
+    if (lead.email) leadParams += `&wffn_billing_email=${encodeURIComponent(lead.email)}`;
+    if (lead.telefono) leadParams += `&wffn_billing_phone=${encodeURIComponent(lead.telefono)}`;
+    if (lead.ciudad) leadParams += `&wffn_billing_city=${encodeURIComponent(lead.ciudad)}`;
+
+    // CARGAR CATÁLOGO DE PRODUCTOS
+    let products = [];
+    try {
+       const prodStr = getConfig('wc_products', '[]');
+       products = JSON.parse(prodStr);
+    } catch(e) {}
+
+    let catalogContext = "\n=== CATÁLOGO DE PRODUCTOS (ENLACES DE PAGO) ===\n";
+    if (products.length > 0) {
+        catalogContext += "Usa ESTOS enlaces específicos según lo que el cliente quiera comprar. Entrégalo SOLO UNA VEZ en toda la conversación y solo cuando estés en fase de cierre (cuando ya te dio su correo y ciudad).\n\n";
+        products.forEach((p: any) => {
+            const finalLink = `${baseUrl}${path}?add-to-cart=${p.wc_id}${leadParams}`;
+            catalogContext += `[PRODUCTO]: ${p.title} ($${p.price})\n`;
+            catalogContext += `[LINK EXACTO PARA ENVIAR]: ${finalLink}\n`;
+            catalogContext += `[CUÁNDO OFRECERLO]: ${p.prompt}\n\n`;
+        });
+    } else {
+        catalogContext += "No hay productos configurados en el catálogo.\n";
+    }
 
     const { data: mediaAssets } = await supabaseClient
         .from('media_assets')
@@ -124,15 +131,11 @@ ${kbContext}
 
 ${mediaContext}
 
-=== LINK DE PAGO (MAPEO FUNNELKIT OK) ===
-ÚSALO SOLO UNA VEZ EN TODA LA CONVERSACIÓN:
-${paymentLink}
+${catalogContext}
 
-=== DATOS PARA TRANSFERENCIA ===
-ÚSALOS SOLO UNA VEZ EN TODA LA CONVERSACIÓN:
+=== DATOS PARA TRANSFERENCIA BANCARIA ===
+ÚSALOS SOLO UNA VEZ EN TODA LA CONVERSACIÓN y preséntalos como alternativa al pago por tarjeta:
 ${bankInfo}
-
-[REGLA VITAL]: Entrega el link de pago o la cuenta SOLAMENTE si el cliente ya te dio su Ciudad y Email (Fase de Cierre).
 `;
 
     return new Response(JSON.stringify({ system_prompt: systemPrompt }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });

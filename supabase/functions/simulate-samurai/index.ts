@@ -24,20 +24,29 @@ serve(async (req) => {
 
     const wcUrl = getConfig('wc_url') || "https://theelephantbowl.com";
     const checkoutPath = getConfig('wc_checkout_path') || "/inscripciones/";
-    const productId = getConfig('wc_product_id') || "";
     
     const baseUrl = wcUrl.endsWith('/') ? wcUrl.slice(0, -1) : wcUrl;
-    const cleanPath = checkoutPath.startsWith('/') ? checkoutPath : `/${checkoutPath}`;
+    const path = checkoutPath.startsWith('/') ? checkoutPath : `/${checkoutPath}`;
     
-    let basePaymentLink = `${baseUrl}${cleanPath}`;
-    let isFirst = true;
+    // CARGAR CATÁLOGO DE PRODUCTOS EN EL SIMULADOR
+    let products = [];
+    try {
+       const prodStr = getConfig('wc_products') || '[]';
+       products = JSON.parse(prodStr);
+    } catch(e) {}
 
-    if (productId && productId.trim() !== '') {
-        basePaymentLink += `?add-to-cart=${productId}`;
-        isFirst = false;
+    let catalogContext = "\n=== CATÁLOGO DE PRODUCTOS (ENLACES DE PAGO) ===\n";
+    if (products.length > 0) {
+        catalogContext += "Usa ESTOS enlaces específicos según lo que el cliente quiera comprar. Entrégalo SOLO UNA VEZ en toda la conversación y solo cuando estés en fase de cierre (cuando ya te dio su correo y ciudad).\n\n";
+        products.forEach((p: any) => {
+            const finalLink = `${baseUrl}${path}?add-to-cart=${p.wc_id}&wffn_billing_email=test@simulador.com`;
+            catalogContext += `[PRODUCTO]: ${p.title} ($${p.price})\n`;
+            catalogContext += `[LINK EXACTO PARA ENVIAR]: ${finalLink}\n`;
+            catalogContext += `[CUÁNDO OFRECERLO]: ${p.prompt}\n\n`;
+        });
+    } else {
+        catalogContext += "No hay productos configurados en el catálogo.\n";
     }
-    
-    const separator = isFirst ? '?' : '&';
 
     // CARGAR POSTERS
     const { data: mediaAssets } = await supabaseClient
@@ -100,8 +109,9 @@ serve(async (req) => {
 
       ${mediaContext}
 
-      === DATOS DE PAGO (SOLO USAR UNA VEZ) ===
-      Link: ${basePaymentLink}${separator}wffn_billing_first_name=NOMBRE&wffn_billing_email=CORREO&wffn_billing_city=CIUDAD
+      ${catalogContext}
+
+      === DATOS DE TRANSFERENCIA DIRECTA ===
       Cuenta: ${bankInfo}
     `;
 
@@ -128,7 +138,7 @@ serve(async (req) => {
     
     return new Response(JSON.stringify({ 
         answer: parts[0].trim(), 
-        explanation: parts[1] ? JSON.parse(parts[1].trim().replace(/```json/g, '').replace(/```/g, '')) : { layers_used: ["FUNNELKIT", "VERDAD MAESTRA"], reasoning: "Contexto cruzado correctamente." }
+        explanation: parts[1] ? JSON.parse(parts[1].trim().replace(/```json/g, '').replace(/```/g, '')) : { layers_used: ["CATÁLOGO WOOCOMMERCE", "VERDAD MAESTRA"], reasoning: "Contexto cruzado correctamente." }
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
   } catch (error: any) {
