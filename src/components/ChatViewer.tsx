@@ -140,19 +140,15 @@ const ChatViewer = ({ lead: initialLead, open, onOpenChange }: ChatViewerProps) 
     } finally { setLoadingSuggestions(false); }
   };
 
-  // NUEVO: Generar respuesta directa con el Kernel (Simulate)
   const handleAutoGenerate = async () => {
       try {
-         // Cargamos historial formateado para simulate
          const history = messages.slice(-15).map(m => ({ 
              role: (m.emisor === 'IA' || m.emisor === 'SAMURAI' ? 'bot' : 'user'), 
              text: m.mensaje 
          }));
-
          const { data, error } = await supabase.functions.invoke('simulate-samurai', {
             body: { question: "Por favor genera la mejor respuesta corta y persuasiva para continuar esta conversación como un experto humano.", history, customPrompts: null }
          });
-
          if (error) throw error;
          return data.answer as string;
       } catch (e) {
@@ -248,56 +244,60 @@ const ChatViewer = ({ lead: initialLead, open, onOpenChange }: ChatViewerProps) 
         <div className={cn("flex-1 min-w-0 flex flex-col h-full bg-slate-950 transition-all", showMemoryMobile ? "hidden sm:flex" : "flex")}>
           <ChatHeader lead={lead} isAiPaused={lead.ai_paused} sending={sending} onSendCommand={(cmd) => handleSendMessage(cmd)} />
           <MessageList messages={messages} loading={loading} />
-          <div className="p-4 bg-slate-900/50 border-t border-slate-800 relative">
-            <div className="absolute right-4 -top-12 flex gap-2">
-               <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                     <Button size="sm" className="bg-indigo-600 hover:bg-indigo-700 h-8 w-8 p-0 rounded-full shadow-lg border border-indigo-500/50"><Zap className="w-4 h-4 text-white" /></Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="bg-slate-900 border-slate-800 text-white w-64 max-h-[300px] overflow-y-auto custom-scrollbar">
-                     <DropdownMenuLabel className="text-[10px] uppercase text-slate-500 font-bold">Catálogo de Cobro</DropdownMenuLabel>
-                     {products.length === 0 ? (
-                         <DropdownMenuItem disabled className="text-[10px] italic text-slate-500">Sin productos configurados</DropdownMenuItem>
-                     ) : products.map(p => (
-                         <DropdownMenuItem key={p.id} onClick={() => setDraftMessage(`${quickActions.wcBaseUrl}/checkout/?add-to-cart=${p.wc_id}`)} className="cursor-pointer hover:bg-indigo-600/20 text-xs">
-                            <ShoppingCart className="w-3 h-3 mr-2 text-indigo-400 shrink-0" /><span className="truncate">{p.title}</span>
-                         </DropdownMenuItem>
-                     ))}
+          
+          <div className="p-3 bg-slate-900/80 border-t border-slate-800 shrink-0">
+             <AiSuggestions suggestions={suggestions} loading={loadingSuggestions} onSelect={setDraftMessage} onRefresh={() => fetchAiSuggestions(messages)} />
+             
+             <MessageInput 
+                onSendMessage={handleSendMessage} 
+                sending={sending} 
+                isAiPaused={lead.ai_paused} 
+                initialValue={draftMessage} 
+                onAutoGenerate={handleAutoGenerate}
+                toolbarAction={
+                   <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                         <Button size="sm" variant="outline" className="h-8 text-[10px] bg-slate-950 border-slate-700 text-amber-500 uppercase font-bold tracking-widest rounded-lg">
+                            <Zap className="w-3 h-3 mr-1.5" /> Plantillas
+                         </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="start" className="bg-slate-900 border-slate-800 text-white w-64 max-h-[300px] overflow-y-auto">
+                         <DropdownMenuLabel className="text-[10px] uppercase text-slate-500 font-bold">Catálogo</DropdownMenuLabel>
+                         {products.map(p => (
+                             <DropdownMenuItem key={p.id} onClick={() => setDraftMessage(`${quickActions.wcBaseUrl}/checkout/?add-to-cart=${p.wc_id}`)} className="cursor-pointer text-xs">
+                                <ShoppingCart className="w-3 h-3 mr-2 text-indigo-400 shrink-0" /><span className="truncate">{p.title}</span>
+                             </DropdownMenuItem>
+                         ))}
+                         <DropdownMenuSeparator className="bg-slate-800 my-2"/>
+                         <DropdownMenuItem onClick={() => setDraftMessage(quickActions.bankInfo)} className="cursor-pointer text-xs"><CreditCard className="w-3 h-3 mr-2 text-indigo-400" /> Datos Bancarios</DropdownMenuItem>
+                         
+                         {globalReplies.length > 0 && <>
+                            <DropdownMenuSeparator className="bg-slate-800 my-2"/>
+                            <DropdownMenuLabel className="text-[10px] uppercase text-slate-500 font-bold">Plantillas Globales</DropdownMenuLabel>
+                            {globalReplies.map((qr) => (
+                               <DropdownMenuItem key={qr.id} onClick={() => setDraftMessage(qr.text)} className="cursor-pointer text-xs">
+                                  <MessageSquarePlus className="w-3 h-3 mr-2 text-indigo-400 shrink-0" /><span className="truncate">{qr.title}</span>
+                               </DropdownMenuItem>
+                            ))}
+                         </>}
 
-                     <DropdownMenuSeparator className="bg-slate-800 my-2"/>
-                     <DropdownMenuItem onClick={() => setDraftMessage(quickActions.bankInfo)} className="cursor-pointer hover:bg-indigo-600/20 text-xs"><CreditCard className="w-3 h-3 mr-2 text-indigo-400" /> Datos Bancarios</DropdownMenuItem>
-                     
-                     {globalReplies.length > 0 && (
-                        <>
-                           <DropdownMenuSeparator className="bg-slate-800 my-2"/>
-                           <DropdownMenuLabel className="text-[10px] uppercase text-slate-500 font-bold">Plantillas Globales</DropdownMenuLabel>
-                           {globalReplies.map((qr) => (
-                              <DropdownMenuItem key={qr.id} onClick={() => setDraftMessage(qr.text)} className="cursor-pointer hover:bg-indigo-600/20 text-xs">
-                                 <MessageSquarePlus className="w-3 h-3 mr-2 text-indigo-400 shrink-0" /><span className="truncate">{qr.title}</span>
-                              </DropdownMenuItem>
-                           ))}
-                        </>
-                     )}
-
-                     {localReplies.length > 0 && (
-                        <>
-                           <DropdownMenuSeparator className="bg-slate-800 my-2"/>
-                           <DropdownMenuLabel className="text-[10px] uppercase text-slate-500 font-bold">Mis Plantillas Privadas</DropdownMenuLabel>
-                           {localReplies.map((qr) => (
-                              <DropdownMenuItem key={qr.id} onClick={() => setDraftMessage(qr.text)} className="cursor-pointer hover:bg-indigo-600/20 text-xs">
-                                 <MessageSquarePlus className="w-3 h-3 mr-2 text-amber-500 shrink-0" /><span className="truncate">{qr.title}</span>
-                              </DropdownMenuItem>
-                           ))}
-                        </>
-                     )}
-                  </DropdownMenuContent>
-               </DropdownMenu>
-               <Button size="sm" variant="secondary" className="sm:hidden h-8 w-8 p-0 rounded-full border border-slate-700" onClick={() => setShowMemoryMobile(true)}><Menu className="w-4 h-4" /></Button>
-            </div>
-            <AiSuggestions suggestions={suggestions} loading={loadingSuggestions} onSelect={setDraftMessage} onRefresh={() => fetchAiSuggestions(messages)} />
-            <MessageInput onSendMessage={handleSendMessage} sending={sending} isAiPaused={lead.ai_paused} initialValue={draftMessage} onAutoGenerate={handleAutoGenerate} />
+                         {localReplies.length > 0 && <>
+                            <DropdownMenuSeparator className="bg-slate-800 my-2"/>
+                            <DropdownMenuLabel className="text-[10px] uppercase text-slate-500 font-bold">Mis Plantillas Privadas</DropdownMenuLabel>
+                            {localReplies.map((qr) => (
+                               <DropdownMenuItem key={qr.id} onClick={() => setDraftMessage(qr.text)} className="cursor-pointer text-xs">
+                                  <MessageSquarePlus className="w-3 h-3 mr-2 text-amber-500 shrink-0" /><span className="truncate">{qr.title}</span>
+                               </DropdownMenuItem>
+                            ))}
+                         </>}
+                      </DropdownMenuContent>
+                   </DropdownMenu>
+                }
+             />
+             <Button variant="ghost" size="icon" className="sm:hidden absolute top-4 right-4 text-slate-400" onClick={() => setShowMemoryMobile(true)}><Menu className="w-5 h-5" /></Button>
           </div>
         </div>
+
         <div className={cn("w-full sm:w-[380px] sm:min-w-[380px] flex-shrink-0 bg-slate-900/50 border-l border-slate-800 flex flex-col overflow-y-auto absolute sm:relative z-20 h-full transition-transform duration-300", showMemoryMobile ? "translate-x-0" : "translate-x-full sm:translate-x-0")}>
            <div className="sm:hidden p-4 border-b border-slate-800 flex justify-between items-center bg-slate-900">
               <span className="font-bold text-sm">Ficha Táctica</span>

@@ -364,45 +364,54 @@ const Inbox = () => {
                  <MessageList messages={messages} loading={loadingMessages} />
 
                  <div className="p-3 bg-slate-900/80 border-t border-slate-800 shrink-0">
-                    <div className="flex justify-between items-center mb-2 px-1">
-                       <AiSuggestions suggestions={suggestions} loading={loadingSuggestions} onSelect={setDraftMessage} onRefresh={() => fetchAiSuggestions(activeLead.id, messages)} />
-                       <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                             <Button size="sm" variant="outline" className="h-7 text-[10px] bg-slate-950 border-slate-700 text-amber-500 uppercase font-bold tracking-widest"><Zap className="w-3 h-3 mr-1.5" /> Plantillas</Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="bg-slate-900 border-slate-800 text-white w-64 max-h-[300px] overflow-y-auto">
-                             <DropdownMenuLabel className="text-[10px] uppercase text-slate-500 font-bold">Catálogo</DropdownMenuLabel>
-                             {products.map(p => (
-                                 <DropdownMenuItem key={p.id} onClick={() => setDraftMessage(`${quickActions.wcBaseUrl}/checkout/?add-to-cart=${p.wc_id}`)} className="cursor-pointer text-xs">
-                                    <ShoppingCart className="w-3 h-3 mr-2 text-indigo-400 shrink-0" /><span className="truncate">{p.title}</span>
-                                 </DropdownMenuItem>
-                             ))}
-                             <DropdownMenuSeparator className="bg-slate-800 my-2"/>
-                             <DropdownMenuItem onClick={() => setDraftMessage(quickActions.bankInfo)} className="cursor-pointer text-xs"><CreditCard className="w-3 h-3 mr-2 text-indigo-400" /> Datos Bancarios</DropdownMenuItem>
-                             
-                             {globalReplies.length > 0 && <>
-                                <DropdownMenuSeparator className="bg-slate-800 my-2"/>
-                                <DropdownMenuLabel className="text-[10px] uppercase text-slate-500 font-bold">Plantillas Globales</DropdownMenuLabel>
-                                {globalReplies.map((qr) => (
-                                   <DropdownMenuItem key={qr.id} onClick={() => setDraftMessage(qr.text)} className="cursor-pointer text-xs">
-                                      <MessageSquarePlus className="w-3 h-3 mr-2 text-indigo-400 shrink-0" /><span className="truncate">{qr.title}</span>
-                                   </DropdownMenuItem>
+                    <AiSuggestions suggestions={suggestions} loading={loadingSuggestions} onSelect={setDraftMessage} onRefresh={() => fetchAiSuggestions(activeLead.id, messages)} />
+                    
+                    <MessageInput 
+                       onSendMessage={handleSendMessage} 
+                       sending={sending} 
+                       isAiPaused={activeLead.ai_paused} 
+                       initialValue={draftMessage} 
+                       onAutoGenerate={handleAutoGenerate}
+                       toolbarAction={
+                          <DropdownMenu>
+                             <DropdownMenuTrigger asChild>
+                                <Button size="sm" variant="outline" className="h-8 text-[10px] bg-slate-950 border-slate-700 text-amber-500 uppercase font-bold tracking-widest rounded-lg">
+                                   <Zap className="w-3 h-3 mr-1.5" /> Plantillas
+                                </Button>
+                             </DropdownMenuTrigger>
+                             <DropdownMenuContent align="start" className="bg-slate-900 border-slate-800 text-white w-64 max-h-[300px] overflow-y-auto">
+                                <DropdownMenuLabel className="text-[10px] uppercase text-slate-500 font-bold">Catálogo</DropdownMenuLabel>
+                                {products.map(p => (
+                                    <DropdownMenuItem key={p.id} onClick={() => setDraftMessage(`${quickActions.wcBaseUrl}/checkout/?add-to-cart=${p.wc_id}`)} className="cursor-pointer text-xs">
+                                       <ShoppingCart className="w-3 h-3 mr-2 text-indigo-400 shrink-0" /><span className="truncate">{p.title}</span>
+                                    </DropdownMenuItem>
                                 ))}
-                             </>}
+                                <DropdownMenuSeparator className="bg-slate-800 my-2"/>
+                                <DropdownMenuItem onClick={() => setDraftMessage(quickActions.bankInfo)} className="cursor-pointer text-xs"><CreditCard className="w-3 h-3 mr-2 text-indigo-400" /> Datos Bancarios</DropdownMenuItem>
+                                
+                                {globalReplies.length > 0 && <>
+                                   <DropdownMenuSeparator className="bg-slate-800 my-2"/>
+                                   <DropdownMenuLabel className="text-[10px] uppercase text-slate-500 font-bold">Plantillas Globales</DropdownMenuLabel>
+                                   {globalReplies.map((qr) => (
+                                      <DropdownMenuItem key={qr.id} onClick={() => setDraftMessage(qr.text)} className="cursor-pointer text-xs">
+                                         <MessageSquarePlus className="w-3 h-3 mr-2 text-indigo-400 shrink-0" /><span className="truncate">{qr.title}</span>
+                                      </DropdownMenuItem>
+                                   ))}
+                                </>}
 
-                             {localReplies.length > 0 && <>
-                                <DropdownMenuSeparator className="bg-slate-800 my-2"/>
-                                <DropdownMenuLabel className="text-[10px] uppercase text-slate-500 font-bold">Mis Plantillas</DropdownMenuLabel>
-                                {localReplies.map((qr) => (
-                                   <DropdownMenuItem key={qr.id} onClick={() => setDraftMessage(qr.text)} className="cursor-pointer text-xs">
-                                      <MessageSquarePlus className="w-3 h-3 mr-2 text-amber-500 shrink-0" /><span className="truncate">{qr.title}</span>
-                                   </DropdownMenuItem>
-                                ))}
-                             </>}
-                          </DropdownMenuContent>
-                       </DropdownMenu>
-                    </div>
-                    <MessageInput onSendMessage={handleSendMessage} sending={sending} isAiPaused={activeLead.ai_paused} initialValue={draftMessage} onAutoGenerate={handleAutoGenerate} />
+                                {localReplies.length > 0 && <>
+                                   <DropdownMenuSeparator className="bg-slate-800 my-2"/>
+                                   <DropdownMenuLabel className="text-[10px] uppercase text-slate-500 font-bold">Mis Plantillas</DropdownMenuLabel>
+                                   {localReplies.map((qr) => (
+                                      <DropdownMenuItem key={qr.id} onClick={() => setDraftMessage(qr.text)} className="cursor-pointer text-xs">
+                                         <MessageSquarePlus className="w-3 h-3 mr-2 text-amber-500 shrink-0" /><span className="truncate">{qr.title}</span>
+                                      </DropdownMenuItem>
+                                   ))}
+                                </>}
+                             </DropdownMenuContent>
+                          </DropdownMenu>
+                       }
+                    />
                  </div>
               </>
            )}

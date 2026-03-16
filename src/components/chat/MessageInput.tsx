@@ -11,10 +11,11 @@ interface MessageInputProps {
   sending: boolean;
   isAiPaused: boolean;
   initialValue?: string;
-  onAutoGenerate?: () => Promise<string | null>; // Nueva función para generar con IA
+  onAutoGenerate?: () => Promise<string | null>;
+  toolbarAction?: React.ReactNode;
 }
 
-export const MessageInput = ({ onSendMessage, sending, isAiPaused, initialValue = '', onAutoGenerate }: MessageInputProps) => {
+export const MessageInput = ({ onSendMessage, sending, isAiPaused, initialValue = '', onAutoGenerate, toolbarAction }: MessageInputProps) => {
   const [message, setMessage] = useState(initialValue);
   const [file, setFile] = useState<File | null>(null);
   const [mode, setMode] = useState<'message' | 'note'>('message');
@@ -55,7 +56,7 @@ export const MessageInput = ({ onSendMessage, sending, isAiPaused, initialValue 
   };
 
   return (
-    <div className="p-3 bg-slate-900 border-t border-slate-800 flex flex-col gap-2">
+    <div className="flex flex-col gap-2 w-full mt-2">
       
       <div className="flex items-center justify-between">
          <Tabs value={mode} onValueChange={(v: any) => setMode(v)} className="w-auto">
@@ -70,8 +71,9 @@ export const MessageInput = ({ onSendMessage, sending, isAiPaused, initialValue 
          </Tabs>
          
          <div className="flex items-center gap-3">
+             {toolbarAction}
              {isAiPaused && mode === 'message' && (
-               <div className="text-[9px] text-red-400 flex items-center gap-1 opacity-80 font-bold tracking-widest">
+               <div className="text-[9px] text-red-400 flex items-center gap-1 opacity-80 font-bold tracking-widest bg-red-900/10 px-2 py-1 rounded-md border border-red-500/20">
                  <ShieldAlert className="w-3 h-3" /> BOT PAUSADO
                </div>
              )}
