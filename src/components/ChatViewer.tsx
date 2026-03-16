@@ -61,13 +61,27 @@ const ChatViewer = ({ lead: initialLead, open, onOpenChange }: ChatViewerProps) 
   useEffect(() => {
     if (open && lead?.id) {
       fetchMessages();
-      const channel = supabase.channel(`lead-monitor-${lead.id}`)
+      
+      const leadChannel = supabase.channel(`lead-monitor-${lead.id}`)
         .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'leads', filter: `id=eq.${lead.id}` }, (payload) => {
            setLead(payload.new);
            updateMemoryForm(payload.new);
         })
         .subscribe();
-      return () => { supabase.removeChannel(channel); };
+        
+      const msgChannel = supabase.channel(`chat-msgs-viewer-${lead.id}`)
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'conversaciones', filter: `lead_id=eq.${lead.id}` }, (payload) => {
+           setMessages(prev => {
+              if (prev.some(m => m.id === payload.new.id)) return prev;
+              return [...prev, payload.new];
+           });
+        })
+        .subscribe();
+
+      return () => { 
+          supabase.removeChannel(leadChannel); 
+          supabase.removeChannel(msgChannel);
+      };
     }
   }, [open, lead?.id]);
 

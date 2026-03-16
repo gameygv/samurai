@@ -212,6 +212,15 @@ serve(async (req) => {
         } else {
             await supabaseClient.from('conversaciones').insert({ lead_id: lead.id, emisor: 'IA', mensaje: messageToLog, platform: 'WHATSAPP_AUTO' });
         }
+    } else if (textToSend || mediaUrl) {
+        // FALLBACK: Si no hay API de WA configurada, igual logueamos la respuesta de la IA (Modo Test)
+        const messageToLog = mediaUrl ? `[IMG: ${mediaUrl}] ${textToSend}` : textToSend;
+        await supabaseClient.from('conversaciones').insert({ 
+            lead_id: lead.id, 
+            emisor: 'IA', 
+            mensaje: `[PRUEBA / WHATSAPP DESCONECTADO] ${messageToLog}`, 
+            platform: 'SISTEMA' 
+        });
     }
 
     if (requestHumanToUpdate) {

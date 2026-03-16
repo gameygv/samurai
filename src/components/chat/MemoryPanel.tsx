@@ -295,7 +295,27 @@ export const MemoryPanel = ({
 
                      <div className="flex flex-col gap-1 mt-2 pt-2 border-t border-slate-800">
                         <span className="text-[9px] text-slate-500 uppercase tracking-widest flex items-center gap-1"><User className="w-3 h-3"/> Responsable</span>
-                        <span className="text-xs text-slate-300">{currentAgentName}</span>
+                        {isAdmin ? (
+                           <Select 
+                              value={currentAnalysis.assigned_to || "unassigned"} 
+                              onValueChange={async (v) => {
+                                 const newId = v === "unassigned" ? null : v;
+                                 await supabase.from('leads').update({ assigned_to: newId }).eq('id', currentAnalysis.id);
+                                 toast.success("Responsable actualizado");
+                                 if (onAnalysisComplete) onAnalysisComplete();
+                              }}
+                           >
+                              <SelectTrigger className="h-8 text-xs bg-slate-900 border-slate-700 mt-1">
+                                 <SelectValue placeholder="Seleccionar Agente" />
+                              </SelectTrigger>
+                              <SelectContent className="bg-slate-900 border-slate-800 text-white">
+                                 <SelectItem value="unassigned">Bot Global (Sin Asignar)</SelectItem>
+                                 {agents.map(a => <SelectItem key={a.id} value={a.id}>{a.full_name}</SelectItem>)}
+                              </SelectContent>
+                           </Select>
+                        ) : (
+                           <span className="text-xs text-slate-300">{currentAgentName}</span>
+                        )}
                      </div>
 
                      {currentAnalysis.tags && currentAnalysis.tags.length > 0 && (
