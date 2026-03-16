@@ -9,14 +9,18 @@ import { SystemStatus } from '@/components/SystemStatus';
 import { BrainHealthCard } from '@/components/dashboard/BrainHealthCard';
 import { TaskRadar } from '@/components/dashboard/TaskRadar';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/context/AuthContext';
 import { 
   Database, Shield, Activity, Terminal, AlertTriangle, 
   CheckCircle2, MessageSquare, TrendingUp, Clock, Loader2,
-  Zap, Brain, RefreshCw, Send, ArrowRight, UserCheck, ShieldAlert, BarChart3, Users2, DollarSign, Globe, Eye, Image as ImageIcon, Settings as SettingsIcon, Fingerprint, Trello
+  Zap, Brain, RefreshCw, Send, ArrowRight, UserCheck, ShieldAlert, BarChart3, Users2, DollarSign, Globe, Eye, Image as ImageIcon, Settings as SettingsIcon, Fingerprint, Trello, CalendarClock, Target, ShieldCheck
 } from 'lucide-react';
 import { ResponsiveContainer, BarChart, Bar, Cell, XAxis, YAxis, Tooltip } from 'recharts';
+import ChatViewer from '@/components/ChatViewer';
 
 const Index = () => {
+  const { user, isAdmin, profile } = useAuth();
+  
   const [stats, setStats] = useState({
     totalErrors: 0,
     pendingCorrections: 0,
@@ -41,66 +45,84 @@ const Index = () => {
   const [loading, setLoading] = useState(true);
   const [latency, setLatency] = useState<number | null>(null);
 
+  // Estados para vendedores
+  const [myLeads, setMyLeads] = useState<any[]>([]);
+  const [isChatOpen, setIsChatOpen] = useState(false);
+  const [selectedLead, setSelectedLead] = useState<any>(null);
+
   useEffect(() => {
     fetchDashboardData();
     const interval = setInterval(fetchDashboardData, 60000);
     return () => clearInterval(interval);
-  }, []);
+  }, [isAdmin, user]);
 
   const fetchDashboardData = async () => {
     try {
       const start = performance.now();
       
+      let leadsQuery = supabase.from('leads').select('*');
+      if (!isAdmin) {
+         leadsQuery = leadsQuery.eq('assigned_to', user?.id);
+      }
+
       const [
         errorsRes, 
-        pendingRes, 
-        versionsRes, 
-        logsRes, 
-        followupsRes, 
-        leadsRes, 
-        webRes, 
         validatedCiaRes, 
         adnPromptRes,
-        salesRes
+        leadsRes, 
+        webRes,
+        logsRes
       ] = await Promise.all([
-        supabase.from('errores_ia').select('count', { count: 'exact', head: true }),
-        supabase.from('errores_ia').select('count', { count: 'exact', head: true }).eq('estado_correccion', 'REPORTADA'),
-        supabase.from('versiones_prompts_aprendidas').select('*').order('created_at', { ascending: true }),
-        supabase.from('activity_logs').select('*').order('created_at', { ascending: false }).limit(15),
-        supabase.from('leads').select('id, nombre, next_followup_at').not('next_followup_at', 'is', null).order('next_followup_at', { ascending: true }).limit(5),
-        supabase.from('leads').select('*'),
-        supabase.from('main_website_content').select('scrape_status'),
-        supabase.from('errores_ia').select('count', { count: 'exact', head: true }).eq('estado_correccion', 'VALIDADA'),
-        supabase.from('app_config').select('key').eq('key', 'prompt_adn_core').limit(1).maybeSingle(),
-        supabase.from('activity_logs').select('count', { count: 'exact', head: true }).like('description', '%Venta CERRADA%')
+        isAdmin ? supabase.from('errores_ia').select('count', { count: 'exact', head: true }) : Promise.resolve({ count: 0 }),
+        isAdmin ? supabase.from('errores_ia').select('count', { count: 'exact', head: true }).eq('estado_correccion', 'VALIDADA') : Promise.resolve({ count: 0 }),
+        isAdmin ? supabase.from('app_config').select('key').eq('key', 'prompt_adn_core').limit(1).maybeSingle() : Promise.resolve({ data: null }),
+        leadsQuery,
+        isAdmin ? supabase.from('main_website_content').select('scrape_status') : Promise.resolve({ data: [] }),
+        isAdmin ? supabase.from('activity_logs').select('*').order('created_at', { ascending: false }).limit(15) : Promise.resolve({ data: [] })
       ]);
 
       const end = performance.now();
       setLatency(Math.round(end - start));
 
       const leads = leadsRes.data || [];
+      setMyLeads(leads);
+
       const identified = leads.filter(l => l.nombre && !l.nombre.includes('Nuevo Lead')).length;
       const capiReady = leads.filter(l => (l.nombre && !l.nombre.includes('Nuevo Lead')) && (l.email && l.email.length > 5)).length;
+      const wonSales = leads.filter(l => l.buying_intent === 'COMPRADO').length;
       
       const webPages = webRes.data || [];
       const healthyPages = webPages.filter(p => p.scrape_status === 'success').length;
       const webHealth = webPages.length > 0 ? Math.round((healthyPages / webPages.length) * 100) : 0;
 
-      setBrainHealth({ 
-        adnCoreStatus: adnPromptRes.data ? 'ok' : 'missing', 
-        ciaRules: validatedCiaRes.count || 0, 
-        webHealth, 
-        overallStatus: (webHealth < 50 || !adnPromptRes.data) ? 'Sync Required' : (webHealth < 80 ? 'Degraded' : 'Operational') 
-      });
+      if (isAdmin) {
+        setBrainHealth({ 
+            adnCoreStatus: adnPromptRes.data ? 'ok' : 'missing', 
+            ciaRules: validatedCiaRes.count || 0, 
+            webHealth, 
+            overallStatus: (webHealth < 50 || !adnPromptRes.data) ? 'Sync Required' : (webHealth < 80 ? 'Degraded' : 'Operational') 
+        });
+      }
 
-      const tasks = (followupsRes.data || []).map(f => ({
-        id: f.id,
-        type: 'FOLLOWUP',
-        target: f.nombre || 'Lead Desconocido',
-        time: new Date(f.next_followup_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        status: 'scheduled'
-      }));
-      setUpcomingTasks(tasks);
+      // Tareas = Próximas acciones o followups
+      const now = new Date().getTime();
+      const futureTasks = leads
+         .filter(l => l.next_followup_at)
+         .sort((a, b) => new Date(a.next_followup_at).getTime() - new Date(b.next_followup_at).getTime())
+         .slice(0, 8)
+         .map(f => {
+            const t = new Date(f.next_followup_at).getTime();
+            const isLate = t < now;
+            return {
+              id: f.id,
+              type: isLate ? 'ATRASADO' : 'PENDIENTE',
+              target: f.nombre || 'Lead Desconocido',
+              time: new Date(f.next_followup_at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }),
+              status: isLate ? 'running' : 'scheduled',
+              rawLead: f
+            };
+         });
+      setUpcomingTasks(futureTasks);
 
       setFunnelData([
         { name: 'Prospectos', value: leads.length, color: '#946f51' },
@@ -111,13 +133,13 @@ const Index = () => {
 
       setStats({
         totalErrors: errorsRes.count || 0,
-        pendingCorrections: pendingRes.count || 0,
-        activeVersions: (versionsRes.data || []).length,
+        pendingCorrections: 0,
+        activeVersions: 0,
         recentLogs: logsRes.data || [],
-        activeFollowups: followupsRes.count || 0,
+        activeFollowups: futureTasks.length,
         identifiedLeads: identified,
         totalLeads: leads.length,
-        validatedSales: salesRes.count || 0,
+        validatedSales: wonSales,
         capiReadyLeads: capiReady
       });
 
@@ -130,6 +152,110 @@ const Index = () => {
 
   if (loading) return <Layout><div className="flex h-[80vh] items-center justify-center"><Loader2 className="w-10 h-10 animate-spin text-amber-600" /></div></Layout>;
 
+  // === VISTA DE VENDEDOR ===
+  if (!isAdmin) {
+      const comisiones = stats.validatedSales * 1500; // Asumiendo $1500 por ticket vendido
+      const hotLeads = myLeads.filter(l => l.buying_intent === 'ALTO');
+
+      return (
+         <Layout>
+            <div className="space-y-8 pb-12 max-w-7xl mx-auto">
+               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <div>
+                     <h1 className="text-3xl font-bold text-slate-50 tracking-tight flex items-center gap-3">
+                        <span className="text-2xl">👋</span> Hola, {profile?.full_name?.split(' ')[0] || 'Agente'}
+                     </h1>
+                     <p className="text-slate-400 text-sm mt-1">Este es tu resumen de ventas y tareas pendientes de hoy.</p>
+                  </div>
+               </div>
+
+               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                  <StatCard title="Ventas Cerradas" value={stats.validatedSales} icon={CheckCircle2} color="text-emerald-400" bg="bg-emerald-500/10" footer="Clientes Ganados" />
+                  <StatCard title="Ingresos Generados" value={`$${comisiones.toLocaleString()}`} icon={DollarSign} color="text-amber-500" bg="bg-amber-500/10" footer="Volumen de Cierre" />
+                  <StatCard title="Leads en Cartera" value={stats.totalLeads} icon={Users2} color="text-indigo-400" bg="bg-indigo-500/10" footer="Prospectos Asignados" />
+                  <StatCard title="Cierres Calientes" value={hotLeads.length} icon={Target} color="text-orange-400" bg="bg-orange-500/10" footer="Esperando Pago" />
+               </div>
+
+               <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                  {/* Tareas del Agente */}
+                  <Card className="bg-slate-900 border-slate-800 shadow-xl overflow-hidden rounded-2xl flex flex-col h-[400px]">
+                     <CardHeader className="py-4 border-b border-slate-800 bg-slate-950/30 shrink-0">
+                        <CardTitle className="text-slate-100 text-sm flex items-center gap-2 font-bold uppercase tracking-widest">
+                           <CalendarClock className="w-5 h-5 text-amber-500" /> Mis Tareas y Recordatorios
+                        </CardTitle>
+                     </CardHeader>
+                     <ScrollArea className="flex-1 p-0">
+                        {upcomingTasks.length === 0 ? (
+                           <div className="flex flex-col items-center justify-center py-20 text-slate-500 gap-3">
+                              <CheckCircle2 className="w-10 h-10 opacity-20" />
+                              <span className="text-xs uppercase tracking-widest font-bold">Sin tareas pendientes</span>
+                           </div>
+                        ) : (
+                           <div className="divide-y divide-slate-800">
+                              {upcomingTasks.map((task) => (
+                                 <div key={task.id} className="p-4 hover:bg-slate-800/30 transition-colors flex items-center justify-between group cursor-pointer" onClick={() => { setSelectedLead(task.rawLead); setIsChatOpen(true); }}>
+                                    <div className="flex items-center gap-3">
+                                       <div className={cn("p-2 rounded-lg", task.status === 'running' ? 'bg-red-500/10 text-red-400' : 'bg-indigo-500/10 text-indigo-400')}>
+                                          <MessageSquare className="w-4 h-4" />
+                                       </div>
+                                       <div className="flex flex-col">
+                                          <span className="text-sm font-bold text-slate-100 group-hover:text-amber-400 transition-colors">{task.target}</span>
+                                          <span className={cn("text-[10px] uppercase font-bold tracking-widest", task.status === 'running' ? 'text-red-500' : 'text-indigo-400')}>{task.type}</span>
+                                       </div>
+                                    </div>
+                                    <div className="flex flex-col items-end gap-1">
+                                       <span className="text-xs text-slate-400 font-mono">{task.time}</span>
+                                       <ArrowRight className="w-4 h-4 text-slate-600 group-hover:text-amber-500 transition-transform group-hover:translate-x-1" />
+                                    </div>
+                                 </div>
+                              ))}
+                           </div>
+                        )}
+                     </ScrollArea>
+                  </Card>
+
+                  {/* Acceso Rápido a Hot Leads */}
+                  <Card className="bg-slate-900 border-slate-800 shadow-xl overflow-hidden rounded-2xl flex flex-col h-[400px]">
+                     <CardHeader className="py-4 border-b border-slate-800 bg-slate-950/30 shrink-0">
+                        <CardTitle className="text-slate-100 text-sm flex items-center gap-2 font-bold uppercase tracking-widest">
+                           <Target className="w-5 h-5 text-orange-500" /> Pendientes de Cierre
+                        </CardTitle>
+                     </CardHeader>
+                     <ScrollArea className="flex-1 p-0">
+                        {hotLeads.length === 0 ? (
+                           <div className="flex flex-col items-center justify-center py-20 text-slate-500 gap-3">
+                              <ShieldCheck className="w-10 h-10 opacity-20" />
+                              <span className="text-xs uppercase tracking-widest font-bold">No hay clientes en fase de cierre</span>
+                           </div>
+                        ) : (
+                           <div className="divide-y divide-slate-800">
+                              {hotLeads.map((lead) => (
+                                 <div key={lead.id} className="p-4 hover:bg-slate-800/30 transition-colors flex items-center justify-between group cursor-pointer" onClick={() => { setSelectedLead(lead); setIsChatOpen(true); }}>
+                                    <div className="flex items-center gap-3">
+                                       <div className="w-10 h-10 rounded-full bg-slate-950 border border-slate-800 flex items-center justify-center text-slate-400 font-bold uppercase shrink-0">
+                                          {lead.nombre?.substring(0, 2) || 'CL'}
+                                       </div>
+                                       <div className="flex flex-col">
+                                          <span className="text-sm font-bold text-slate-100 group-hover:text-orange-400 transition-colors">{lead.nombre || lead.telefono}</span>
+                                          <span className="text-[10px] text-slate-500 line-clamp-1">{lead.summary || 'En negociación...'}</span>
+                                       </div>
+                                    </div>
+                                    <Badge variant="outline" className="bg-orange-500/10 text-orange-500 border-orange-500/20 text-[9px] uppercase font-bold shrink-0">Dar Seguimiento</Badge>
+                                 </div>
+                              ))}
+                           </div>
+                        )}
+                     </ScrollArea>
+                  </Card>
+               </div>
+               {selectedLead && <ChatViewer lead={selectedLead} open={isChatOpen} onOpenChange={setIsChatOpen} />}
+            </div>
+         </Layout>
+      );
+  }
+
+
+  // === VISTA DE ADMINISTRADOR / DEV ===
   return (
     <Layout>
       <div className="space-y-8 pb-12">
@@ -164,7 +290,7 @@ const Index = () => {
                 <Card className="bg-slate-900 border-slate-800 flex flex-col shadow-2xl rounded-2xl">
                   <CardHeader className="py-4 border-b border-slate-800">
                      <CardTitle className="text-slate-200 text-xs flex items-center gap-2 uppercase tracking-widest font-bold">
-                        <BarChart3 className="w-4 h-4 text-amber-500" /> Pipeline de Conversión (CAPI)
+                        <BarChart3 className="w-4 h-4 text-amber-500" /> Pipeline Global (CAPI)
                      </CardTitle>
                   </CardHeader>
                   <CardContent className="p-6 h-[250px]">

@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { 
   BrainCircuit, Edit2, Save, Loader2, ShieldAlert, Zap, 
   Fingerprint, Sparkles, Heart, ShieldX, ShieldCheck, AlertTriangle, 
-  CreditCard, MapPin, Navigation, TrendingUp, BarChart3, Database, History, Activity, ExternalLink, User, Tag, X
+  CreditCard, MapPin, Navigation, TrendingUp, BarChart3, Database, History, Activity, ExternalLink, User, Tag, X, CalendarClock
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -143,6 +143,13 @@ export const MemoryPanel = ({
   };
 
   const currentAgentName = agents.find(a => a.id === currentAnalysis.assigned_to)?.full_name || 'Bot Global (Sin Asignar)';
+  
+  // Format datetime for input
+  const formatDateTimeForInput = (dateString: string | null) => {
+     if (!dateString) return '';
+     const date = new Date(dateString);
+     return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+  };
 
   return (
     <div className="w-full flex-shrink-0 bg-slate-900/90 flex flex-col h-full">
@@ -191,15 +198,26 @@ export const MemoryPanel = ({
         {/* CORE DATA ACCORDION */}
         <div className="space-y-2">
            <div className="flex justify-between items-center mb-1">
-              <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2"><Fingerprint className="w-3.5 h-3.5" /> Identidad & CAPI</h4>
+              <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2"><Fingerprint className="w-3.5 h-3.5" /> Identidad & CRM</h4>
               {!isEditing && <Button variant="ghost" size="icon" className="h-6 w-6 text-slate-500 hover:text-white" onClick={() => setIsEditing(true)}><Edit2 className="w-3 h-3" /></Button>}
            </div>
 
            {isEditing ? (
               <div className="space-y-3 bg-slate-950 p-4 rounded-xl border border-indigo-500/50 shadow-inner">
                  
+                 {/* Tareas y Recordatorios */}
+                 <div className="space-y-1 mb-4 p-2 bg-indigo-900/20 border border-indigo-500/30 rounded-lg">
+                    <Label className="text-[9px] text-indigo-400 uppercase tracking-widest flex items-center gap-1.5"><CalendarClock className="w-3 h-3"/> Recordatorio / Próxima Acción</Label>
+                    <Input 
+                       type="datetime-local" 
+                       value={formatDateTimeForInput(memoryForm.next_followup_at)} 
+                       onChange={e => setMemoryForm({...memoryForm, next_followup_at: e.target.value ? new Date(e.target.value).toISOString() : null})}
+                       className="h-8 text-xs bg-slate-900 border-slate-700 text-slate-200" 
+                    />
+                 </div>
+
                  {isAdmin && (
-                    <div className="space-y-1 mb-3">
+                    <div className="space-y-1 mb-3 border-b border-slate-800 pb-3">
                        <Label className="text-[9px] text-slate-500 uppercase tracking-widest">Asignado A (Vendedor)</Label>
                        <Select 
                           value={memoryForm.assigned_to || "unassigned"} 
@@ -261,10 +279,21 @@ export const MemoryPanel = ({
                         <span className="text-[9px] text-slate-500 uppercase tracking-widest">Email</span>
                         <span className="text-xs text-emerald-400 font-mono">{currentAnalysis.email || 'Falta Correo'}</span>
                      </div>
+
+                     {currentAnalysis.next_followup_at && (
+                        <div className="flex flex-col gap-1 mt-2 pt-2 border-t border-slate-800">
+                           <span className="text-[9px] text-indigo-400 uppercase tracking-widest flex items-center gap-1"><CalendarClock className="w-3 h-3"/> Recordatorio / Tarea</span>
+                           <span className="text-xs text-slate-200 font-medium">
+                              {new Date(currentAnalysis.next_followup_at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
+                           </span>
+                        </div>
+                     )}
+
                      <div className="flex flex-col gap-1 mt-2 pt-2 border-t border-slate-800">
                         <span className="text-[9px] text-slate-500 uppercase tracking-widest flex items-center gap-1"><User className="w-3 h-3"/> Responsable</span>
-                        <span className="text-xs text-indigo-300">{currentAgentName}</span>
+                        <span className="text-xs text-slate-300">{currentAgentName}</span>
                      </div>
+
                      {currentAnalysis.tags && currentAnalysis.tags.length > 0 && (
                        <div className="flex flex-wrap gap-1.5 mt-3 pt-2 border-t border-slate-800">
                           {currentAnalysis.tags.map((t: string) => (
@@ -324,16 +353,18 @@ export const MemoryPanel = ({
            )}
         </div>
 
-        {/* BITÁCORA #CIA QUICK */}
-        <div className="space-y-3 border-t border-slate-800/60 pt-6">
-           <h4 className="text-[10px] font-bold text-amber-500 uppercase tracking-widest flex items-center gap-2">
-              <ShieldAlert className="w-3 h-3" /> #CorregirIA
-           </h4>
-           <Textarea value={correctionText} onChange={e => setCorrectionText(e.target.value)} placeholder="Instrucción de conducta..." className="bg-slate-950 border-slate-800 text-xs min-h-[60px] focus:border-amber-500 rounded-xl" />
-           <Button onClick={handleSaveCorrection} disabled={isReporting || !correctionText.trim()} className="w-full h-9 text-[10px] border-amber-500/50 text-amber-500 bg-amber-500/10 hover:bg-amber-500/20 font-bold uppercase tracking-widest rounded-xl">
-             {isReporting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Zap className="w-3 h-3 mr-2" />} Inyectar Lección
-           </Button>
-        </div>
+        {/* BITÁCORA #CIA QUICK (Solamente visible para Admin/Dev si se desea, pero lo dejamos por si los vendedores pueden sugerir) */}
+        {isAdmin && (
+           <div className="space-y-3 border-t border-slate-800/60 pt-6">
+              <h4 className="text-[10px] font-bold text-amber-500 uppercase tracking-widest flex items-center gap-2">
+                 <ShieldAlert className="w-3 h-3" /> #CorregirIA
+              </h4>
+              <Textarea value={correctionText} onChange={e => setCorrectionText(e.target.value)} placeholder="Instrucción de conducta..." className="bg-slate-950 border-slate-800 text-xs min-h-[60px] focus:border-amber-500 rounded-xl" />
+              <Button onClick={handleSaveCorrection} disabled={isReporting || !correctionText.trim()} className="w-full h-9 text-[10px] border-amber-500/50 text-amber-500 bg-amber-500/10 hover:bg-amber-500/20 font-bold uppercase tracking-widest rounded-xl">
+                {isReporting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Zap className="w-3 h-3 mr-2" />} Inyectar Lección
+              </Button>
+           </div>
+        )}
 
       </div>
       
