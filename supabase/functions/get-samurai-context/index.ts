@@ -86,6 +86,13 @@ CATÁLOGO DISPONIBLE:\n`;
         });
     }
 
+    // EXTRAER NOMBRE DEL AGENTE ASIGNADO
+    let agentName = "uno de nuestros asesores";
+    if (lead.assigned_to) {
+        const { data: agentProfile } = await supabaseClient.from('profiles').select('full_name').eq('id', lead.assigned_to).maybeSingle();
+        if (agentProfile?.full_name) agentName = agentProfile.full_name.split(' ')[0];
+    }
+
     const bankInfo = `Banco: ${getConfig('bank_name')}\nCuenta: ${getConfig('bank_account')}\nCLABE: ${getConfig('bank_clabe')}\nTitular: ${getConfig('bank_holder')}`;
     const pAlma = getConfig('prompt_alma_samurai');
     const pAdn = getConfig('prompt_adn_core');
@@ -104,6 +111,13 @@ ${pEstrategia}
 3. MEMORIA DE PAGOS (ESTRICTO): Revisa el historial. Si ya enviaste el número de cuenta, la CLABE o el link de pago arriba, NUNCA LOS VUELVAS A REPETIR en tus siguientes mensajes. Si el cliente pregunta "¿se puede pagar en Oxxo?" dile: "Sí, claro, puedes usar la misma cuenta que te mandé aquí arriba", sin escribir los números otra vez.
 4. NO REPETIR CUESTIONARIOS: Si el cliente ya te respondió algo sobre su alimentación o motivación, solo haz un comentario cálido y natural. No vuelvas a hacer la pregunta ni a repetir la cuenta bancaria. Solo dile que quedas atento a su comprobante.
 5. CONTEXTO CONTINUO: Compórtate como un humano. Si ya te dijeron que sí a algo, pasa a lo siguiente.
+
+=== ESCALADO A HUMANO (MUY IMPORTANTE) ===
+Si el cliente pide explícitamente hablar con una persona, asesor o humano, O BIEN te hace preguntas complejas que no puedes responder basándote en tu Verdad Maestra o Base de Conocimiento, DEBES:
+1. Responderle al cliente de forma natural diciendo que en breve será atendido por ${agentName}.
+2. PAUSAR tu operación añadiendo obligatoriamente este bloque JSON EXACTO al final de tu respuesta:
+---JSON---
+{"request_human": true}
 
 ${pRelearning && pRelearning.trim() !== '' && pRelearning !== '# Aún no hay lecciones inyectadas.' ? `\n=== REGLAS #CIA (PRIORIDAD ABSOLUTA) ===\nEstas reglas corrigen comportamientos pasados. Síguelas por encima de todo lo demás:\n${pRelearning}\n` : ''}
 

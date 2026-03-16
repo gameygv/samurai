@@ -85,6 +85,13 @@ serve(async (req) => {
       3. MEMORIA DE PAGOS (ESTRICTO): Si en el historial ya enviaste la cuenta, la CLABE o el link de pago, NUNCA LOS VUELVAS A REPETIR. Si preguntan "¿se puede en Oxxo?" diles: "Sí, puedes usar la misma cuenta de arriba".
       4. CONTEXTO CONTINUO: Compórtate como humano. Si responden tus preguntas, solo asiente de forma natural, NO repitas el mensaje de venta ni los datos.
 
+      === ESCALADO A HUMANO (MUY IMPORTANTE) ===
+      Si el cliente pide explícitamente hablar con una persona o hace preguntas que no puedes responder, DEBES:
+      1. Responderle diciendo que en breve será atendido por un asesor.
+      2. PAUSAR tu operación añadiendo este bloque JSON EXACTO al final de tu respuesta:
+      ---JSON---
+      {"request_human": true}
+
       ${pRelearning && pRelearning.trim() !== '' && pRelearning !== '# Aún no hay lecciones inyectadas.' ? `\n=== REGLAS #CIA (PRIORIDAD ABSOLUTA) ===\n${pRelearning}\n` : ''}
 
       ${masterTruth}
@@ -99,7 +106,7 @@ serve(async (req) => {
     `;
 
     const messages = [
-        { role: "system", content: "Eres Sam. Al final añade '---JSON---' con layers_used y reasoning." },
+        { role: "system", content: "Eres Sam. Al final añade '---JSON---' con layers_used y reasoning. Si te piden un humano, añade 'request_human': true." },
         { role: "system", content: systemPrompt }
     ];
 
@@ -121,7 +128,7 @@ serve(async (req) => {
     
     return new Response(JSON.stringify({ 
         answer: parts[0].trim(), 
-        explanation: parts[1] ? JSON.parse(parts[1].trim()) : { layers_used: ["FUNNELKIT", "VERDAD MAESTRA"], reasoning: "Contexto cruzado correctamente." }
+        explanation: parts[1] ? JSON.parse(parts[1].trim().replace(/```json/g, '').replace(/```/g, '')) : { layers_used: ["FUNNELKIT", "VERDAD MAESTRA"], reasoning: "Contexto cruzado correctamente." }
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
   } catch (error: any) {

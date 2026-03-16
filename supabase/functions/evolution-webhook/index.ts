@@ -156,15 +156,22 @@ serve(async (req) => {
 
     const aiData = await aiRes.json();
     let rawAnswer = aiData.choices?.[0]?.message?.content || "";
+    
+    // --- NUEVO: INTERCEPCIÓN JSON DUAL (Pagos y Petición de Humano) ---
     let paymentStatusToUpdate = null;
+    let requestHumanToUpdate = false;
 
     if (rawAnswer.includes('---JSON---')) {
         const parts = rawAnswer.split('---JSON---');
         rawAnswer = parts[0].trim();
         try {
-            const parsedJson = JSON.parse(parts[1].trim());
+            let jsonStr = parts[1].trim();
+            // Limpiar block quotes por si GPT agrega markdown
+            jsonStr = jsonStr.replace(/```json/g, '').replace(/```/g, '').trim();
+            const parsedJson = JSON.parse(jsonStr);
             if (parsedJson.payment_status) paymentStatusToUpdate = parsedJson.payment_status;
-        } catch(e) { console.error("[Webhook] Error procesando JSON de Auditoría:", e); }
+            if (parsedJson.request_human) requestHumanToUpdate = true;
+        } catch(e) { console.error("[Webhook] Error procesando JSON IA:", e); }
     }
 
     if (paymentStatusToUpdate) {
@@ -215,6 +222,41 @@ serve(async (req) => {
         } else {
             await supabaseClient.from('conversaciones').insert({ lead_id: lead.id, emisor: 'IA', mensaje: messageToLog, platform: 'WHATSAPP_AUTO' });
         }
+    }
+
+    // --- ACCIÓN POST-ENVÍO: ESCALADO A HUMANO ---
+    if (requestHumanToUpdate) {
+        // Pausar bot
+        await supabaseClient.from('leads').update({ ai_paused: true }).eq('id', lead.id);
+        
+        // Notificar al Vendedor por WhatsApp
+        if (lead.assigned_to && evoUrl && evoKey) {
+            const { data: agentProfile } = await supabaseClient.from('profiles').select('full_name, phone').eq('id', lead.assigned_to).maybeSingle();
+            
+            if (agentProfile?.phone) {
+                const agentAlertMsg = `🚨 *ATENCIÓN REQUERIDA* 🚨\n\nEl cliente *${lead.nombre || lead.telefono}* ha solicitado asistencia humana o hizo una pregunta que la IA no pudo responder.\n\nEl Bot ha sido pausado automáticamente para este chat.\n👉 Ingresa al CRM para atenderlo.`;
+                
+                await fetch(evoUrl, {
+                    method: 'POST', 
+                    headers: { 'Content-Type': 'application/json', 'apikey': evoKey }, 
+                    body: JSON.stringify({ number: agentProfile.phone.replace(/\D/g, ''), text: agentAlertMsg })
+                });
+            }
+        }
+        
+        // Logs Internos
+        await supabaseClient.from('activity_logs').insert({
+            action: 'UPDATE', resource: 'LEADS',
+            description: `IA pausada y agente notificado para ${lead.nombre}`,
+            status: 'OK'
+        });
+        
+        await supabaseClient.from('conversaciones').insert({ 
+            lead_id: lead.id, 
+            mensaje: `IA Pausada automáticamente porque el cliente solicitó asistencia humana o hizo una pregunta sin respuesta en KB.`, 
+            emisor: 'NOTA', 
+            platform: 'PANEL_INTERNO' 
+        });
     }
 
     return new Response(JSON.stringify({ success: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
