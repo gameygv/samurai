@@ -5,13 +5,14 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { RefreshCw, Bot, User, MessageCircle, AlertCircle, CheckCircle2, Terminal, Server, ShieldAlert } from 'lucide-react';
+import { RefreshCw, Bot, User, MessageCircle, AlertCircle, CheckCircle2, Terminal, Server, ShieldAlert, Zap } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const WebhookDiag = () => {
   const [allMessages, setAllMessages] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({ total: 0, ia: 0, cliente: 0, humano: 0, error: 0 });
+  const [lastHit, setLastHit] = useState<string | null>(null);
 
   useEffect(() => {
     fetchAll();
@@ -25,6 +26,17 @@ const WebhookDiag = () => {
       .select('*, leads(nombre, telefono)')
       .order('created_at', { ascending: false })
       .limit(50);
+
+    const { data: logs } = await supabase
+      .from('activity_logs')
+      .select('*')
+      .eq('description', 'Webhook Hit: unknown_event')
+      .order('created_at', { ascending: false })
+      .limit(1);
+
+    if (logs && logs.length > 0) {
+        setLastHit(new Date(logs[0].created_at).toLocaleTimeString());
+    }
 
     if (data) {
       setAllMessages(data);
@@ -60,14 +72,25 @@ const WebhookDiag = () => {
             </h1>
             <p className="text-slate-400 text-sm">Monitor de salud de la conexión Evolution API ⟷ Samurai.</p>
           </div>
-          <Button onClick={fetchAll} variant="outline" className="border-slate-700">
+          <Button onClick={fetchAll} variant="outline" className="border-slate-700 text-slate-300">
             <RefreshCw className={cn("w-4 h-4 mr-2", loading && "animate-spin")} /> Actualizar
           </Button>
         </div>
 
+        {lastHit && (
+            <div className="bg-indigo-600/20 border border-indigo-500/50 p-4 rounded-xl flex items-center gap-4 animate-in zoom-in-95">
+                <div className="p-2 bg-indigo-500 rounded-lg animate-pulse">
+                    <Zap className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                    <h3 className="text-indigo-100 font-bold text-sm">¡TRÁFICO DETECTADO!</h3>
+                    <p className="text-indigo-300/80 text-[11px]">Tu VPS acaba de intentar enviar un evento a las <span className="font-mono text-white">{lastHit}</span>. La conexión de red funciona.</p>
+                </div>
+            </div>
+        )}
+
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
            <div className="lg:col-span-2 space-y-6">
-              {/* Stats */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <Card className="bg-slate-900 border-slate-800 p-4 text-center">
                   <p className="text-2xl font-bold text-white">{stats.total}</p>
@@ -87,7 +110,6 @@ const WebhookDiag = () => {
                 </Card>
               </div>
 
-              {/* Lista de mensajes */}
               <Card className="bg-slate-900 border-slate-800">
                 <CardHeader className="border-b border-slate-800">
                   <CardTitle className="text-white text-sm uppercase tracking-widest">Últimas Intercepciones</CardTitle>
@@ -99,7 +121,7 @@ const WebhookDiag = () => {
                          <div className="py-20 text-center text-slate-600 italic">No se han detectado mensajes entrantes...</div>
                       ) : allMessages.map(msg => (
                         <div key={msg.id} className="p-3 flex items-start gap-3 hover:bg-slate-800/30 transition-colors">
-                          <Badge variant="outline" className={cn("text-[9px] shrink-0 mt-0.5 min-w-[70px] justify-center", getEmisorColor(msg.emisor, msg.platform))}>
+                          <Badge variant="outline" className={cn("text-[9px] shrink-0 mt-0.5 min-w-[70px] justify-center uppercase font-bold", getEmisorColor(msg.emisor, msg.platform))}>
                             {msg.emisor}
                           </Badge>
                           <div className="flex-1 min-w-0">
@@ -116,44 +138,34 @@ const WebhookDiag = () => {
               </Card>
            </div>
 
-           {/* Troubleshooting Guide */}
            <div className="space-y-6">
               <Card className="bg-[#1A1110] border-red-900/50">
                  <CardHeader className="bg-red-950/20 border-b border-red-900/50">
                     <CardTitle className="text-red-400 text-xs uppercase tracking-widest flex items-center gap-2">
-                       <Server className="w-4 h-4"/> VPS Troubleshooting
+                       <Server className="w-4 h-4"/> VPS Checklist
                     </CardTitle>
                  </CardHeader>
                  <CardContent className="p-5 space-y-4">
                     <div className="space-y-2">
-                       <p className="text-[11px] font-bold text-red-200">1. Revisa logs en Easypanel</p>
-                       <p className="text-[10px] text-red-300/70 leading-relaxed">
-                          Si puedes enviar pero no recibir, busca errores tipo <code className="bg-black px-1 text-red-400">ECONNRESET</code> o <code className="bg-black px-1 text-red-400">Unauthorized</code> en los logs del servicio de Evolution API.
+                       <p className="text-[11px] font-bold text-red-200">1. URL del Servidor</p>
+                       <p className="text-[10px] text-red-300/70 leading-relaxed italic">
+                          Asegúrate de que <code className="bg-black px-1 text-red-400">SERVER_URL</code> NO tenga una barra "/" al final.
                        </p>
                     </div>
                     <div className="space-y-2">
-                       <p className="text-[11px] font-bold text-red-200">2. Variable SERVER_URL</p>
-                       <p className="text-[10px] text-red-300/70 leading-relaxed">
-                          Asegúrate de que la variable <code className="bg-black px-1 text-red-400">SERVER_URL</code> sea exactamente <code className="bg-black px-1 text-red-400">https://tu-dominio.com</code>.
+                       <p className="text-[11px] font-bold text-red-200">2. Auth Type</p>
+                       <p className="text-[10px] text-red-300/70 leading-relaxed italic">
+                          Debes tener <code className="bg-black px-1 text-red-400">AUTHENTICATION_TYPE=apikey</code> para validar sesiones.
                        </p>
                     </div>
-                    <div className="space-y-2">
-                       <p className="text-[11px] font-bold text-red-200">3. Apaga Webhook by Events</p>
-                       <p className="text-[10px] text-red-300/70 leading-relaxed">
-                          En el panel de Evolution, apaga el switch "Webhook by Events". Debe estar en OFF para que Samurai reciba los datos.
+                    <div className="space-y-2 border-t border-red-900/30 pt-3">
+                       <p className="text-[11px] font-bold text-amber-200">3. ¿Sigues sin recibir?</p>
+                       <p className="text-[10px] text-amber-300/70 leading-relaxed">
+                          Borra la instancia en el panel de Evolution, **reinstala el servicio en Easypanel** y vuelve a escanear el QR. v2 a veces corrompe la sesión local si las variables cambian.
                        </p>
                     </div>
                  </CardContent>
               </Card>
-
-              <div className="p-4 bg-indigo-900/10 border border-indigo-500/20 rounded-xl">
-                 <h4 className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest mb-2 flex items-center gap-2">
-                    <Terminal className="w-3.5 h-3.5" /> Consejo de Sam:
-                 </h4>
-                 <p className="text-[10px] text-slate-400 leading-relaxed italic">
-                    "Si nada de esto funciona, usa el **Modo Emergencia** en el Inbox. Yo seguiré respondiendo allí y tú solo pegas la respuesta en WhatsApp."
-                 </p>
-              </div>
            </div>
         </div>
       </div>
