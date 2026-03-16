@@ -61,11 +61,12 @@ const Contacts = () => {
 
   const handleDeleteContact = async (contact: any) => {
     try {
-      // Intentar borrar de tabla contacts primero
-      const { error } = await supabase.from('contacts').delete().eq('id', contact.id);
-      if (error) {
-        // Fallback: borrar de leads si no existe tabla contacts
-        await supabase.from('leads').delete().eq('id', contact.id);
+      // Intentar borrar de tabla contacts primero si fue instanciado ahí
+      if (contact.lead_id) {
+         await supabase.from('contacts').delete().eq('id', contact.id);
+      } else {
+         // Fallback: borrar de leads directamente si no existe tabla contacts
+         await supabase.from('leads').delete().eq('id', contact.id);
       }
       toast.success(`Contacto "${contact.nombre}" eliminado permanentemente.`);
       setContactToDelete(null);

@@ -81,6 +81,23 @@ export const MemoryPanel = ({
     setTagInput('');
   };
 
+  const handleUpdatePaymentStatus = async (status: string) => {
+     const tid = toast.loading("Actualizando auditoría...");
+     try {
+         // Si es válido, lo marcamos como comprado también
+         const updates: any = { payment_status: status };
+         if (status === 'VALID') updates.buying_intent = 'COMPRADO';
+         
+         const { error } = await supabase.from('leads').update(updates).eq('id', currentAnalysis.id);
+         if (error) throw error;
+         
+         toast.success("Auditoría actualizada.", { id: tid });
+         if (onAnalysisComplete) onAnalysisComplete(); // Refrescar chat/lead
+     } catch (err: any) {
+         toast.error(err.message, { id: tid });
+     }
+  };
+
   const currentAgentName = agents.find(a => a.id === currentAnalysis.assigned_to)?.full_name || 'Bot Global (Sin Asignar)';
 
   return (
@@ -131,7 +148,7 @@ export const MemoryPanel = ({
                  </Button>
               </div>
            ) : (
-              <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-4">
+              <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-5">
                  <div className="flex justify-between items-start">
                     <div className="flex flex-col">
                        <span className="text-[9px] text-slate-500 uppercase">Agente Responsable</span>
@@ -144,15 +161,18 @@ export const MemoryPanel = ({
                     </Badge>
                  </div>
                  
-                 <div className="grid grid-cols-2 gap-4 pt-2 border-t border-slate-800/50">
-                    <div className="flex flex-col gap-1">
+                 <div className="pt-3 border-t border-slate-800/50">
+                    <div className="flex flex-col gap-1 mb-4">
                        <span className="text-[9px] text-slate-500 uppercase flex items-center gap-1"><MapPin className="w-2.5 h-2.5"/> Ubicación</span>
                        <span className="text-xs text-slate-300">{currentAnalysis.ciudad || 'Desconocida'}</span>
                     </div>
-                    <div className="flex flex-col gap-1">
-                       <span className="text-[9px] text-slate-500 uppercase flex items-center gap-1"><Target className="w-2.5 h-2.5"/> Status Pago</span>
-                       <span className="text-xs text-slate-300">{currentAnalysis.payment_status === 'VALID' ? 'CONFIRMADO' : 'PENDIENTE'}</span>
-                    </div>
+                    
+                    {/* Componente de Auditoría Financiera Restaurado */}
+                    <FinancialAudit 
+                       status={currentAnalysis.payment_status} 
+                       onUpdate={handleUpdatePaymentStatus} 
+                       loading={saving} 
+                    />
                  </div>
               </div>
            )}

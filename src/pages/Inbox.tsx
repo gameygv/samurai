@@ -118,9 +118,15 @@ const Inbox = () => {
     setLoadingSuggestions(true);
     try {
       const transcript = msgs.slice(-8).map(m => `${m.emisor}: ${m.mensaje}`).join('\n');
-      const { data } = await supabase.functions.invoke('get-ai-suggestions', { body: { lead_id: leadId, transcript } });
-      if (data?.suggestions) setSuggestions(data.suggestions);
-    } finally { setLoadingSuggestions(false); }
+      const { data, error } = await supabase.functions.invoke('get-ai-suggestions', { body: { lead_id: leadId, transcript } });
+      if (!error && data?.suggestions) {
+         setSuggestions(data.suggestions);
+      }
+    } catch (e) {
+      console.error("AI Suggestion failed:", e);
+    } finally { 
+      setLoadingSuggestions(false); 
+    }
   };
 
   const updateMemoryForm = (data: any) => {
