@@ -10,42 +10,41 @@ serve(async (req) => {
 
   try {
     const supabaseClient = createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '');
-    const { lead_id } = await req.json();
+    const { lead_id, force } = await req.json();
 
-    // 1. Obtener datos del lead y configuración
     const { data: lead } = await supabaseClient.from('leads').select('*').eq('id', lead_id).single();
     const { data: configs } = await supabaseClient.from('app_config').select('key, value');
     const configMap = configs?.reduce((acc, item) => ({...acc, [item.key]: item.value}), {});
     const apiKey = configMap['openai_api_key'];
 
-    // 2. Obtener Agentes para el Routing Inteligente
     const { data: agents } = await supabaseClient.from('profiles').select('id, full_name, territories').eq('is_active', true);
-    const agentsList = agents?.map(a => `- Agente: ${a.full_name}, ID: ${a.id}, Territorios: ${a.territories?.join(', ') || 'Global'}`).join('\n');
+    const agentsContext = agents?.map(a => `- Agente ID: ${a.id}, Nombre: ${a.full_name}, Cobertura: ${a.territories?.join(', ') || 'GLOBAL'}`).join('\n');
 
-    // 3. Obtener Historial
-    const { data: messages } = await supabaseClient.from('conversaciones').select('emisor, mensaje').eq('lead_id', lead_id).order('created_at', { ascending: true }).limit(20);
+    const { data: messages } = await supabaseClient.from('conversaciones').select('emisor, mensaje').eq('lead_id', lead_id).order('created_at', { ascending: true }).limit(25);
     const transcript = messages?.map(m => `[${m.emisor}]: ${m.mensaje}`).join('\n') || '';
 
     const systemPrompt = `
-Eres el Analista Táctico de Samurai CRM. Tu misión es procesar el chat y actualizar el CRM.
+Eres el Analista de Datos de The Elephant Bowl. Tu misión es extraer inteligencia y asignar responsables.
 
-=== TAREAS DE EXTRACCIÓN ===
-1. DATOS: Nombre, Email, Ciudad.
-2. PERFIL PSICOGRÁFICO: Identifica si es para uso PERSONAL (sanación, hobby) o PROFESIONAL (terapeuta, psicólogo). Resume sus miedos/deseos.
-3. INTENT: BAJO, MEDIO, ALTO, COMPRADO.
+=== REGLAS DE ROUTING (GEOPROXIMIDAD) ===
+Tu tarea es decidir quién atiende este lead basándote en su CIUDAD. 
+Lista de Agentes y Zonas:
+${agentsContext}
 
-=== LÓGICA DE ROUTING (ASIGNACIÓN) ===
-Debes decidir quién es el mejor agente para atender a este cliente basándote en la CIUDAD detectada y esta lista:
-${agentsList}
+INSTRUCCIÓN DE GPS IA: 
+1. Si el cliente dice "Zapopan" y un agente tiene "Guadalajara" o "Jalisco", ASÍGNALO A ÉL.
+2. Si la ciudad es pequeña, busca la ciudad grande más cercana (ej: San Pedro -> Monterrey).
+3. Si no hay una relación geográfica clara, asígnalo al agente que tenga cobertura 'GLOBAL' o deja en null.
 
-REGLA DE PROXIMIDAD: Si la ciudad no coincide exactamente (ej: Zapopan), usa tu conocimiento geográfico para asignarlo al agente de la zona más cercana (ej: Guadalajara). Si no hay cercanía obvia, asigna al agente 'Global' o deja en null.
+=== PERFILAMIENTO PSICOGRÁFICO ===
+Extrae por qué le interesa el curso: ¿Manejo de estrés? ¿Es terapeuta (profesional)? ¿Busca una experiencia mística? Resume en 15 palabras.
 
 RESPONDE SOLO JSON:
 {
   "nombre": "string", "email": "string", "ciudad": "string",
-  "intent": "string", "summary": "string",
+  "intent": "BAJO|MEDIO|ALTO|COMPRADO",
   "perfil_psicologico": "string",
-  "suggested_agent_id": "uuid o null"
+  "suggested_agent_id": "UUID o null"
 }
 `;
 
@@ -54,7 +53,7 @@ RESPONDE SOLO JSON:
         headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
             model: "gpt-4o",
-            messages: [{ role: "system", content: systemPrompt }, { role: "user", content: `Chat:\n${transcript}` }],
+            messages: [{ role: "system", content: systemPrompt }, { role: "user", content: `Chat del Lead:\n\n${transcript}` }],
             response_format: { type: "json_object" },
             temperature: 0
         })
@@ -63,46 +62,39 @@ RESPONDE SOLO JSON:
     const aiData = await response.json();
     const result = JSON.parse(aiData.choices[0].message.content);
 
-    // 4. Actualizar Lead
     const updates: any = { last_ai_analysis: new Date().toISOString() };
     if (result.nombre && result.nombre !== 'null') updates.nombre = result.nombre;
     if (result.email && result.email !== 'null') updates.email = result.email;
     if (result.ciudad && result.ciudad !== 'null') updates.ciudad = result.ciudad;
     if (result.intent) updates.buying_intent = result.intent;
-    if (result.summary) updates.summary = result.summary;
     if (result.perfil_psicologico) updates.perfil_psicologico = result.perfil_psicologico;
-    if (result.suggested_agent_id && !lead.assigned_to) updates.assigned_to = result.suggested_agent_id;
+    
+    if (result.suggested_agent_id && !lead.assigned_to) {
+        updates.assigned_to = result.suggested_agent_id;
+        await supabaseClient.from('activity_logs').insert({
+            action: 'UPDATE', resource: 'USERS', 
+            description: `Routing IA: Lead asignado a agente por proximidad en '${result.ciudad}'.`,
+            status: 'OK'
+        });
+    }
 
     await supabaseClient.from('leads').update(updates).eq('id', lead_id);
 
-    // 5. DISPARO META CAPI (Si detectamos email por primera vez)
-    if (result.email && result.email.includes('@') && !lead.capi_lead_event_sent_at) {
-        console.log(`[Analista] Nuevo Email detectado (${result.email}). Disparando Meta CAPI...`);
-        
-        const eventPayload = {
-            eventData: {
-                event_name: 'Lead',
-                lead_id: lead_id,
-                user_data: {
-                    em: result.email,
-                    ph: lead.telefono,
-                    fn: result.nombre || lead.nombre,
-                    ct: result.ciudad || lead.ciudad
-                }
-            },
-            config: {
-                pixel_id: configMap['meta_pixel_id'],
-                access_token: configMap['meta_access_token'],
-                test_event_code: configMap['meta_test_event_code']
-            }
-        };
-
+    if (result.email && !lead.capi_lead_event_sent_at) {
         fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/meta-capi-sender`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${Deno.env.get('SUPABASE_ANON_KEY')}` },
-            body: JSON.stringify(eventPayload)
-        }).catch(e => console.error("Error CAPI:", e));
-
+            body: JSON.stringify({
+                eventData: {
+                    event_name: 'Lead', lead_id,
+                    user_data: { em: result.email, ph: lead.telefono, fn: result.nombre || lead.nombre, ct: result.ciudad || lead.ciudad }
+                },
+                config: { 
+                    pixel_id: configMap['meta_pixel_id'], 
+                    access_token: configMap['meta_access_token'] 
+                }
+            })
+        }).catch(() => {});
         await supabaseClient.from('leads').update({ capi_lead_event_sent_at: new Date().toISOString() }).eq('id', lead_id);
     }
 
