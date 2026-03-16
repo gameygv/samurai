@@ -5,6 +5,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { 
   Trello, Loader2, Fingerprint, Image, Target, DollarSign, UserPlus, 
   Mail, ShieldCheck, MapPin, AlertTriangle, GripVertical, CheckCircle2, XCircle, Bot, Play, Pause, User, Tag
@@ -28,6 +29,7 @@ const Pipeline = () => {
   const [agentsMap, setAgentsMap] = useState<Record<string, string>>({});
   
   const [draggedLeadId, setDraggedLeadId] = useState<string | null>(null);
+  const [filterAgent, setFilterAgent] = useState<string>('ALL');
 
   const TICKET_PRICE = 1500;
 
@@ -41,7 +43,7 @@ const Pipeline = () => {
 
   useEffect(() => {
     fetchLeads();
-    supabase.from('profiles').select('id, full_name').then(({data}) => {
+    supabase.from('profiles').select('id, full_name, role').in('role', ['admin', 'dev', 'sales']).then(({data}) => {
        if (data) {
           const map: any = {};
           data.forEach(d => map[d.id] = d.full_name);
@@ -105,20 +107,30 @@ const Pipeline = () => {
      }
   };
 
-  const getLeadsByIntent = (intent: string) => leads.filter(l => (l.buying_intent || 'BAJO').toUpperCase() === intent);
+  // Filtrado final de Leads por intención y por el Agente seleccionado (Si es Admin)
+  const getLeadsByIntent = (intent: string) => {
+     return leads.filter(l => {
+        const matchesIntent = (l.buying_intent || 'BAJO').toUpperCase() === intent;
+        const matchesAgent = filterAgent === 'ALL' || l.assigned_to === filterAgent || (filterAgent === 'UNASSIGNED' && !l.assigned_to);
+        return matchesIntent && matchesAgent;
+     });
+  };
   
-  const totalPotential = leads.filter(l => l.buying_intent === 'ALTO').length * TICKET_PRICE;
-  const totalWon = leads.filter(l => l.buying_intent === 'COMPRADO').length * TICKET_PRICE;
-  const capiReadyCount = leads.filter(l => l.email && l.email.length > 5).length;
+  // Stats solo de los filtrados si es admin
+  const visibleLeads = leads.filter(l => filterAgent === 'ALL' || l.assigned_to === filterAgent || (filterAgent === 'UNASSIGNED' && !l.assigned_to));
+  const totalPotential = visibleLeads.filter(l => l.buying_intent === 'ALTO').length * TICKET_PRICE;
+  const totalWon = visibleLeads.filter(l => l.buying_intent === 'COMPRADO').length * TICKET_PRICE;
+  const capiReadyCount = visibleLeads.filter(l => l.email && l.email.length > 5).length;
 
   return (
     <Layout>
       <div className="max-w-[1800px] mx-auto space-y-6 h-[calc(100vh-140px)] flex flex-col">
         
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        {/* TOP STATS */}
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
            <Card className="bg-slate-900 border-slate-800 p-4 flex items-center gap-4 rounded-2xl shadow-lg">
               <div className="p-3 rounded-xl bg-slate-800 text-slate-300"><Trello className="w-6 h-6" /></div>
-              <div><h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest">Total Embudo</h3><p className="text-xl font-bold text-slate-50">{leads.length} Leads</p></div>
+              <div><h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest">Total Embudo</h3><p className="text-xl font-bold text-slate-50">{visibleLeads.length}</p></div>
            </Card>
            <Card className="bg-slate-900 border-slate-800 p-4 flex items-center gap-4 rounded-2xl shadow-lg">
               <div className="p-3 rounded-xl bg-indigo-900/30 text-indigo-300 border border-indigo-900/50"><ShieldCheck className="w-6 h-6" /></div>
@@ -126,18 +138,32 @@ const Pipeline = () => {
            </Card>
            <Card className="bg-slate-900 border-slate-800 p-4 flex items-center gap-4 rounded-2xl shadow-lg">
               <div className="p-3 rounded-xl bg-amber-900/30 text-amber-500 border border-amber-900/50"><Target className="w-6 h-6" /></div>
-              <div><h3 className="text-xs font-bold text-amber-600/80 uppercase tracking-widest">Potencial (Alto)</h3><p className="text-xl font-bold text-slate-50">${totalPotential.toLocaleString()}</p></div>
+              <div><h3 className="text-xs font-bold text-amber-600/80 uppercase tracking-widest">Potencial</h3><p className="text-xl font-bold text-slate-50">${totalPotential.toLocaleString()}</p></div>
            </Card>
-           <Card className="bg-slate-900 border-emerald-600/30 p-4 flex items-center justify-between border-l-4 border-l-emerald-500 rounded-2xl shadow-xl">
-              <div className="flex items-center gap-4">
-                 <div className="p-3 rounded-xl bg-emerald-900/30 text-emerald-500"><DollarSign className="w-6 h-6" /></div>
-                 <div><h3 className="text-xs font-bold text-emerald-600/80 uppercase tracking-widest">Ingresos Ganados</h3><p className="text-xl font-bold text-slate-50">${totalWon.toLocaleString()}</p></div>
-              </div>
+           <Card className="bg-slate-900 border-emerald-600/30 p-4 flex items-center gap-4 border-l-4 border-l-emerald-500 rounded-2xl shadow-xl">
+              <div className="p-3 rounded-xl bg-emerald-900/30 text-emerald-500"><DollarSign className="w-6 h-6" /></div>
+              <div><h3 className="text-xs font-bold text-emerald-600/80 uppercase tracking-widest">Ganados</h3><p className="text-xl font-bold text-slate-50">${totalWon.toLocaleString()}</p></div>
+           </Card>
+           <Card className="bg-transparent border-0 p-0 flex flex-col justify-center gap-2 shadow-none">
+              {isAdmin && (
+                 <Select value={filterAgent} onValueChange={setFilterAgent}>
+                    <SelectTrigger className="w-full bg-slate-900 border-slate-800 h-10 rounded-xl">
+                       <SelectValue placeholder="Filtro de Vendedores" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-slate-900 border-slate-800 text-white">
+                       <SelectItem value="ALL">Equipo Completo</SelectItem>
+                       <SelectItem value="UNASSIGNED">Bot Global (Sin Asignar)</SelectItem>
+                       {Object.entries(agentsMap).map(([id, name]) => (
+                          <SelectItem key={id} value={id}>{name}</SelectItem>
+                       ))}
+                    </SelectContent>
+                 </Select>
+              )}
               <div className="flex gap-2">
                  <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                       <Button variant="outline" className="border-slate-700 text-slate-300 bg-slate-900 hover:bg-slate-800 h-10 px-3 rounded-xl">
-                          <Bot className="w-4 h-4 mr-2 text-indigo-400"/> IA Global
+                       <Button variant="outline" className="flex-1 border-slate-700 text-slate-300 bg-slate-900 hover:bg-slate-800 h-10 rounded-xl px-2">
+                          <Bot className="w-4 h-4 mr-2 text-indigo-400"/> IA Masiva
                        </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent className="bg-slate-900 border-slate-800 text-white">
@@ -156,6 +182,7 @@ const Pipeline = () => {
            </Card>
         </div>
 
+        {/* PIPELINE BOARD */}
         <div className="flex-1 flex gap-4 min-h-0 overflow-x-auto custom-scrollbar pb-4">
           {columns.map((col) => {
             const leadsInCol = getLeadsByIntent(col.id);
@@ -180,7 +207,7 @@ const Pipeline = () => {
                             <div className="flex justify-between items-start">
                                <div>
                                   <p className="text-xs font-bold text-slate-100 group-hover:text-amber-400 transition-colors truncate max-w-[180px]">{lead.nombre || lead.telefono}</p>
-                                  {lead.assigned_to && agentsMap[lead.assigned_to] && isAdmin && (
+                                  {lead.assigned_to && agentsMap[lead.assigned_to] && isAdmin && filterAgent === 'ALL' && (
                                      <Badge variant="outline" className="mt-1 text-[8px] h-4 px-1.5 border-purple-900/50 text-purple-300 font-medium">
                                         <User className="w-2 h-2 mr-1"/> {agentsMap[lead.assigned_to].split(' ')[0]}
                                      </Badge>

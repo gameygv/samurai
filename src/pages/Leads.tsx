@@ -27,6 +27,7 @@ const Leads = () => {
   const [analyzing, setAnalyzing] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterIntent, setFilterIntent] = useState<string>('ALL');
+  const [filterAgent, setFilterAgent] = useState<string>('ALL');
   
   const [selectedLead, setSelectedLead] = useState<any>(null);
   const [isChatOpen, setIsChatOpen] = useState(false);
@@ -34,7 +35,7 @@ const Leads = () => {
 
   useEffect(() => {
     fetchLeads();
-    supabase.from('profiles').select('id, full_name').then(({data}) => {
+    supabase.from('profiles').select('id, full_name, role').in('role', ['admin', 'dev', 'sales']).then(({data}) => {
        if (data) {
           const map: any = {};
           data.forEach(d => map[d.id] = d.full_name);
@@ -87,7 +88,8 @@ const Leads = () => {
   const filteredLeads = leads.filter(l => {
     const matchesSearch = (l.nombre?.toLowerCase().includes(searchTerm.toLowerCase()) || l.telefono?.includes(searchTerm) || l.apellido?.toLowerCase().includes(searchTerm.toLowerCase()));
     const matchesIntent = filterIntent === 'ALL' || l.buying_intent?.toUpperCase() === filterIntent;
-    return matchesSearch && matchesIntent;
+    const matchesAgent = filterAgent === 'ALL' || l.assigned_to === filterAgent || (filterAgent === 'UNASSIGNED' && !l.assigned_to);
+    return matchesSearch && matchesIntent && matchesAgent;
   });
 
   const getIntentUI = (intent: string) => {
@@ -112,6 +114,21 @@ const Leads = () => {
           </div>
           <div className="flex gap-3 items-center flex-wrap">
              
+             {isAdmin && (
+                 <Select value={filterAgent} onValueChange={setFilterAgent}>
+                    <SelectTrigger className="w-[160px] bg-slate-900 border-slate-800 rounded-full text-xs h-9">
+                       <SelectValue placeholder="Filtro Vendedor" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-slate-900 border-slate-800 text-white">
+                       <SelectItem value="ALL">Todo el Equipo</SelectItem>
+                       <SelectItem value="UNASSIGNED">Bot Global</SelectItem>
+                       {Object.entries(agentsMap).map(([id, name]) => (
+                          <SelectItem key={id} value={id}>{name}</SelectItem>
+                       ))}
+                    </SelectContent>
+                 </Select>
+             )}
+
              <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                    <Button variant="outline" className="border-indigo-500/30 text-indigo-400 bg-indigo-900/10 hover:bg-indigo-900/30 rounded-full h-9">
@@ -152,7 +169,7 @@ const Leads = () => {
                 </SelectContent>
              </Select>
 
-             <div className="relative w-full md:w-64">
+             <div className="relative w-full md:w-56">
                <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-500" />
                <Input 
                   placeholder="Buscar nombre o tel..." 
@@ -196,7 +213,7 @@ const Leads = () => {
                           <span className="font-bold text-slate-100">{lead.nombre || 'Desconocido'} {lead.apellido || ''}</span>
                           <div className="flex items-center gap-2">
                              <span className="text-[10px] text-slate-500 font-mono">{lead.telefono}</span>
-                             {lead.assigned_to && agentsMap[lead.assigned_to] && isAdmin && (
+                             {lead.assigned_to && agentsMap[lead.assigned_to] && isAdmin && filterAgent === 'ALL' && (
                                 <Badge variant="outline" className="text-[8px] h-4 px-1 border-purple-900/50 bg-purple-900/20 text-purple-400 font-medium">Resp: {agentsMap[lead.assigned_to].split(' ')[0]}</Badge>
                              )}
                           </div>

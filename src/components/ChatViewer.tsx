@@ -7,7 +7,7 @@ import { MessageInput } from './chat/MessageInput';
 import { MemoryPanel } from './chat/MemoryPanel';
 import { AiSuggestions } from './chat/AiSuggestions';
 import { Button } from '@/components/ui/button';
-import { Zap, CreditCard, Link as LinkIcon, FileText, X, Menu } from 'lucide-react';
+import { Zap, CreditCard, Link as LinkIcon, FileText, X, Menu, MessageSquarePlus } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -35,6 +35,7 @@ const ChatViewer = ({ lead: initialLead, open, onOpenChange }: ChatViewerProps) 
   
   const [showMemoryMobile, setShowMemoryMobile] = useState(false);
   const [quickActions, setQuickActions] = useState<any>({});
+  const [quickReplies, setQuickReplies] = useState<{id: string, title: string, text: string}[]>([]);
   const [suggestions, setSuggestions] = useState<any[]>([]);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
   const [draftMessage, setDraftMessage] = useState('');
@@ -68,13 +69,19 @@ const ChatViewer = ({ lead: initialLead, open, onOpenChange }: ChatViewerProps) 
   }, [open, lead?.id]);
 
   const fetchQuickActions = async () => {
-     const { data } = await supabase.from('app_config').select('key, value').in('key', ['wc_url', 'wc_product_id', 'bank_name', 'bank_account', 'bank_clabe', 'bank_holder']);
+     const { data } = await supabase.from('app_config').select('key, value').in('key', ['wc_url', 'wc_product_id', 'bank_name', 'bank_account', 'bank_clabe', 'bank_holder', 'quick_replies']);
      if (data) {
         const config: any = data.reduce((acc, item) => ({...acc, [item.key]: item.value}), {});
         setQuickActions({
            paymentLink: `${config.wc_url || 'https://site.com'}/checkout/?add-to-cart=${config.wc_product_id || '0'}`,
            bankInfo: `Banco: ${config.bank_name}\nCuenta: ${config.bank_account}\nCLABE: ${config.bank_clabe}\nTitular: ${config.bank_holder}`
         });
+        
+        try {
+            if (config.quick_replies) {
+               setQuickReplies(JSON.parse(config.quick_replies));
+            }
+        } catch (e) {}
      }
   };
 
@@ -118,7 +125,6 @@ const ChatViewer = ({ lead: initialLead, open, onOpenChange }: ChatViewerProps) 
   const handleSendMessage = async (text: string, file?: File, isInternalNote: boolean = false) => {
     setSending(true);
     try {
-      // 1. Manejo de Notas Internas (No se envía a WhatsApp)
       if (isInternalNote) {
          await supabase.from('conversaciones').insert({ 
            lead_id: lead.id, 
@@ -129,17 +135,15 @@ const ChatViewer = ({ lead: initialLead, open, onOpenChange }: ChatViewerProps) 
          toast.success("Nota interna guardada.");
          fetchMessages();
          setDraftMessage('');
-         return; // Terminamos aquí
+         return; 
       }
 
-      // 2. Manejo de Mensajes a WhatsApp
       let mediaData = undefined;
 
       if (file) {
         const ext = file.name.split('.').pop();
         const path = `chat_uploads/${Date.now()}_${Math.random().toString(36).substring(7)}.${ext}`;
         
-        // Subir archivo al storage
         const { error: uploadErr } = await supabase.storage.from('media').upload(path, file);
         if (uploadErr) throw uploadErr;
 
@@ -156,7 +160,6 @@ const ChatViewer = ({ lead: initialLead, open, onOpenChange }: ChatViewerProps) 
       const apiResponse = await sendEvolutionMessage(lead.telefono, text, mediaData);
       if (!apiResponse) { setSending(false); return; }
 
-      // Insertar en la base de datos como HUMANO
       await supabase.from('conversaciones').insert({ 
         lead_id: lead.id, 
         mensaje: text || (file ? `[ARCHIVO ENVIADO: ${file.name}]` : ''), 
@@ -168,7 +171,6 @@ const ChatViewer = ({ lead: initialLead, open, onOpenChange }: ChatViewerProps) 
       fetchMessages();
       setDraftMessage('');
       
-      // Control por hashtags
       if (text.includes('#STOP') || text.includes('#START')) {
          const isPaused = text.includes('#STOP');
          await supabase.from('leads').update({ ai_paused: isPaused }).eq('id', lead.id);
@@ -223,11 +225,23 @@ const ChatViewer = ({ lead: initialLead, open, onOpenChange }: ChatViewerProps) 
                   <DropdownMenuTrigger asChild>
                      <Button size="sm" className="bg-indigo-600 hover:bg-indigo-700 h-8 w-8 p-0 rounded-full shadow-lg border border-indigo-500/50"><Zap className="w-4 h-4 text-white" /></Button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="bg-slate-900 border-slate-800 text-white w-56">
-                     <DropdownMenuLabel className="text-[10px] uppercase text-slate-500 font-bold">Scripts de Cierre</DropdownMenuLabel>
-                     <DropdownMenuSeparator className="bg-slate-800"/>
+                  <DropdownMenuContent align="end" className="bg-slate-900 border-slate-800 text-white w-64 max-h-[300px] overflow-y-auto custom-scrollbar">
+                     <DropdownMenuLabel className="text-[10px] uppercase text-slate-500 font-bold">Herramientas Base</DropdownMenuLabel>
                      <DropdownMenuItem onClick={() => setDraftMessage(quickActions.paymentLink)} className="cursor-pointer hover:bg-indigo-600/20 text-xs"><LinkIcon className="w-3 h-3 mr-2 text-indigo-400" /> Link de Pago</DropdownMenuItem>
                      <DropdownMenuItem onClick={() => setDraftMessage(quickActions.bankInfo)} className="cursor-pointer hover:bg-indigo-600/20 text-xs"><CreditCard className="w-3 h-3 mr-2 text-indigo-400" /> Datos Bancarios</DropdownMenuItem>
+                     
+                     {quickReplies.length > 0 && (
+                        <>
+                           <DropdownMenuSeparator className="bg-slate-800 my-2"/>
+                           <DropdownMenuLabel className="text-[10px] uppercase text-slate-500 font-bold">Plantillas Rápidas</DropdownMenuLabel>
+                           {quickReplies.map((qr) => (
+                              <DropdownMenuItem key={qr.id} onClick={() => setDraftMessage(qr.text)} className="cursor-pointer hover:bg-indigo-600/20 text-xs">
+                                 <MessageSquarePlus className="w-3 h-3 mr-2 text-indigo-400 shrink-0" />
+                                 <span className="truncate">{qr.title}</span>
+                              </DropdownMenuItem>
+                           ))}
+                        </>
+                     )}
                   </DropdownMenuContent>
                </DropdownMenu>
                <Button size="sm" variant="secondary" className="sm:hidden h-8 w-8 p-0 rounded-full border border-slate-700" onClick={() => setShowMemoryMobile(true)}><Menu className="w-4 h-4" /></Button>

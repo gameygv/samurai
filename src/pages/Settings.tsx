@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
-import { Webhook, Key, Save, Loader2, ShoppingCart, Target, Building2, Store, Hash, Send, Clock, Play, DollarSign } from 'lucide-react';
+import { Webhook, Key, Save, Loader2, ShoppingCart, Target, Building2, Store, Hash, Send, Clock, Play, DollarSign, MessageSquarePlus, Trash2, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 import { sendEvolutionMessage } from '@/utils/messagingService';
 
@@ -18,6 +18,7 @@ const Settings = () => {
   const activeTab = searchParams.get('tab') || 'mensajeria';
   
   const [configs, setConfigs] = useState<any[]>([]);
+  const [quickReplies, setQuickReplies] = useState<{id: string, title: string, text: string}[]>([]);
   
   // Follow-up de Exploración
   const [followupConfig, setFollowupConfig] = useState<any>({
@@ -57,6 +58,11 @@ const Settings = () => {
             stage_2_message: getC('sales_stage_2_message', 'Tu lugar sigue pre-reservado, pero necesitamos confirmar el pago para asegurarlo.'),
             stage_3_message: getC('sales_stage_3_message', 'Liberaremos tu lugar en unas horas si no recibimos el comprobante. ¿Te ayudo con algo?')
         });
+        
+        const qrString = getC('quick_replies', '[]');
+        try {
+            setQuickReplies(JSON.parse(qrString));
+        } catch(e) { setQuickReplies([]); }
     }
 
     const { data: fcData } = await supabase.from('followup_config').select('*').limit(1).maybeSingle();
@@ -83,21 +89,31 @@ const Settings = () => {
     });
   };
 
+  const handleAddQuickReply = () => {
+     setQuickReplies([...quickReplies, { id: Date.now().toString(), title: 'Nueva Plantilla', text: '' }]);
+  };
+
+  const handleUpdateQuickReply = (id: string, field: 'title'|'text', value: string) => {
+     setQuickReplies(prev => prev.map(qr => qr.id === id ? { ...qr, [field]: value } : qr));
+  };
+
+  const handleRemoveQuickReply = (id: string) => {
+     setQuickReplies(prev => prev.filter(qr => qr.id !== id));
+  };
+
   const handleSaveAll = async () => {
     setSaving(true);
     try {
-      // 1. Limpiamos la configuración base de las llaves de ventas para evitar duplicados
       const salesKeys = [
           'sales_followup_enabled', 'sales_stage_1_delay', 'sales_stage_2_delay', 
           'sales_stage_3_delay', 'sales_stage_1_message', 'sales_stage_2_message', 
-          'sales_stage_3_message'
+          'sales_stage_3_message', 'quick_replies'
       ];
       
       const cleanConfigs = configs
           .filter(c => !salesKeys.includes(c.key))
           .map(c => ({ key: c.key, value: c.value, category: c.category || 'SYSTEM' }));
 
-      // 2. Agregamos las llaves de ventas de forma única
       const newConfigs = [
         ...cleanConfigs,
         { key: 'sales_followup_enabled', value: String(salesConfig.enabled), category: 'FOLLOWUP' },
@@ -107,13 +123,12 @@ const Settings = () => {
         { key: 'sales_stage_1_message', value: salesConfig.stage_1_message, category: 'FOLLOWUP' },
         { key: 'sales_stage_2_message', value: salesConfig.stage_2_message, category: 'FOLLOWUP' },
         { key: 'sales_stage_3_message', value: salesConfig.stage_3_message, category: 'FOLLOWUP' },
+        { key: 'quick_replies', value: JSON.stringify(quickReplies), category: 'SYSTEM' }
       ];
       
-      // Guardar App Configs
       const { error } = await supabase.from('app_config').upsert(newConfigs, { onConflict: 'key' });
       if (error) throw error;
 
-      // Guardar Followup de Exploración
       if (followupConfig.id) {
           const { error: fError } = await supabase.from('followup_config').update(followupConfig).eq('id', followupConfig.id);
           if (fError) throw fError;
@@ -175,11 +190,53 @@ const Settings = () => {
         <Tabs value={activeTab} onValueChange={v => setSearchParams({ tab: v })}>
           <TabsList className="bg-slate-900 border border-slate-800 p-1 flex-wrap h-auto">
             <TabsTrigger value="mensajeria" className="gap-2"><Send className="w-4 h-4"/> Mensajería</TabsTrigger>
+            <TabsTrigger value="plantillas" className="gap-2"><MessageSquarePlus className="w-4 h-4"/> Plantillas</TabsTrigger>
             <TabsTrigger value="followup" className="gap-2"><Clock className="w-4 h-4"/> Retargeting IA</TabsTrigger>
             <TabsTrigger value="woocommerce" className="gap-2"><Store className="w-4 h-4"/> WooCommerce</TabsTrigger>
             <TabsTrigger value="pago_directo" className="gap-2"><Building2 className="w-4 h-4"/> Depósito Directo</TabsTrigger>
             <TabsTrigger value="secrets" className="gap-2"><Key className="w-4 h-4"/> API Keys</TabsTrigger>
           </TabsList>
+
+          <TabsContent value="plantillas" className="mt-6 space-y-6">
+             <Card className="bg-slate-900 border-slate-800 border-l-4 border-l-indigo-500">
+                <CardHeader className="flex flex-row items-center justify-between">
+                   <div>
+                       <CardTitle className="text-white flex items-center gap-2"><MessageSquarePlus className="w-5 h-5 text-indigo-400" /> Respuestas Rápidas</CardTitle>
+                       <CardDescription>Plantillas de texto disponibles para todos los vendedores en el chat.</CardDescription>
+                   </div>
+                   <Button onClick={handleAddQuickReply} className="bg-indigo-900 hover:bg-indigo-800 text-amber-500 h-9 text-xs rounded-xl shadow-lg">
+                      <Plus className="w-4 h-4 mr-2" /> Añadir Plantilla
+                   </Button>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                   {quickReplies.length === 0 ? (
+                      <div className="text-center py-10 border-2 border-dashed border-slate-800 rounded-xl text-slate-500 italic text-xs">
+                         No hay plantillas configuradas.
+                      </div>
+                   ) : quickReplies.map((qr) => (
+                      <div key={qr.id} className="p-4 bg-slate-950 border border-slate-800 rounded-xl flex gap-4 items-start group">
+                         <div className="flex-1 space-y-3">
+                            <Input 
+                               value={qr.title} 
+                               onChange={e => handleUpdateQuickReply(qr.id, 'title', e.target.value)} 
+                               placeholder="Título (Ej: Info Retiro)" 
+                               className="bg-slate-900 border-slate-700 h-9 text-xs font-bold" 
+                            />
+                            <Textarea 
+                               value={qr.text} 
+                               onChange={e => handleUpdateQuickReply(qr.id, 'text', e.target.value)} 
+                               placeholder="Mensaje que se pegará en el chat..." 
+                               className="bg-slate-900 border-slate-700 text-xs min-h-[80px]" 
+                            />
+                         </div>
+                         <Button variant="ghost" size="icon" onClick={() => handleRemoveQuickReply(qr.id)} className="text-slate-500 hover:text-red-500 opacity-50 group-hover:opacity-100 transition-opacity">
+                            <Trash2 className="w-4 h-4" />
+                         </Button>
+                      </div>
+                   ))}
+                </CardContent>
+             </Card>
+          </TabsContent>
 
           <TabsContent value="mensajeria" className="mt-6 space-y-6">
              <Card className="bg-slate-900 border-slate-800 border-l-4 border-l-green-600">
@@ -229,7 +286,6 @@ const Settings = () => {
              </Card>
 
              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                 {/* BLOQUE 1: EXPLORACIÓN */}
                  <Card className="bg-slate-900 border-slate-800 border-t-4 border-t-amber-500 shadow-xl">
                     <CardHeader className="border-b border-slate-800 bg-slate-950/30">
                        <div className="flex justify-between items-center">
@@ -254,7 +310,6 @@ const Settings = () => {
                     </CardContent>
                  </Card>
 
-                 {/* BLOQUE 2: CIERRE DE VENTAS */}
                  <Card className="bg-slate-900 border-slate-800 border-t-4 border-t-emerald-500 shadow-xl">
                     <CardHeader className="border-b border-slate-800 bg-slate-950/30">
                        <div className="flex justify-between items-center">
