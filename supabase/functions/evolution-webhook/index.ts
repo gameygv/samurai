@@ -78,7 +78,7 @@ serve(async (req) => {
         .from('conversaciones')
         .select('id')
         .eq('lead_id', lead.id)
-        .eq('emisor', 'IA')
+        .in('emisor', ['IA', 'SAMURAI'])
         .gte('created_at', new Date(Date.now() - 15000).toISOString())
         .limit(1);
 
@@ -119,7 +119,7 @@ serve(async (req) => {
 
     if (!apiKey) {
       await supabase.from('conversaciones').insert({
-        lead_id: lead.id, emisor: 'IA', 
+        lead_id: lead.id, emisor: 'SAMURAI', 
         mensaje: '[ERROR: Falta OpenAI API Key en Ajustes > API Keys]', 
         platform: 'ERROR'
       });
@@ -209,7 +209,7 @@ serve(async (req) => {
       console.error("[webhook] OpenAI error:", errText);
       // GUARDAR ERROR COMO MENSAJE DE IA PARA QUE SEA VISIBLE
       await supabase.from('conversaciones').insert({
-        lead_id: lead.id, emisor: 'IA',
+        lead_id: lead.id, emisor: 'SAMURAI',
         mensaje: `[ERROR OPENAI ${aiRes.status}]: ${errText.substring(0, 300)}`,
         platform: 'ERROR'
       });
@@ -221,7 +221,7 @@ serve(async (req) => {
 
     if (!rawAnswer) {
       await supabase.from('conversaciones').insert({
-        lead_id: lead.id, emisor: 'IA',
+        lead_id: lead.id, emisor: 'SAMURAI',
         mensaje: '[IA procesó sin generar respuesta de texto]',
         platform: 'SISTEMA'
       });
@@ -250,14 +250,13 @@ serve(async (req) => {
 
     // ============================================================
     // GUARDADO INDESTRUCTIBLE EN BASE DE DATOS
-    // Este INSERT es la operación más importante del sistema.
-    // Se ejecuta ANTES de enviar a WhatsApp.
+    // Cambiado 'IA' por 'SAMURAI' para pasar el Check Constraint
     // ============================================================
     const { data: savedMsg, error: saveError } = await supabase
       .from('conversaciones')
       .insert({
         lead_id: lead.id,
-        emisor: 'IA',
+        emisor: 'SAMURAI',
         mensaje: messageToLog,
         platform: 'WHATSAPP_AUTO'
       })
@@ -268,7 +267,7 @@ serve(async (req) => {
       console.error("[webhook] ERROR CRÍTICO guardando mensaje IA:", JSON.stringify(saveError));
       // Intentar de nuevo con insert simple
       await supabase.from('conversaciones').insert({
-        lead_id: lead.id, emisor: 'IA', mensaje: messageToLog, platform: 'WHATSAPP_AUTO'
+        lead_id: lead.id, emisor: 'SAMURAI', mensaje: messageToLog, platform: 'WHATSAPP_AUTO'
       });
     } else {
       console.log("[webhook] Mensaje IA guardado exitosamente. ID:", savedMsg?.id);
@@ -317,7 +316,7 @@ serve(async (req) => {
       try {
         const supabase2 = createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '');
         await supabase2.from('conversaciones').insert({
-          lead_id: leadId, emisor: 'IA',
+          lead_id: leadId, emisor: 'SAMURAI',
           mensaje: `[ERROR INTERNO WEBHOOK]: ${error.message}`,
           platform: 'ERROR'
         });
