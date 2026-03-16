@@ -115,16 +115,31 @@ const ChatViewer = ({ lead: initialLead, open, onOpenChange }: ChatViewerProps) 
     }
   };
 
-  const handleSendMessage = async (text: string, file?: File) => {
+  const handleSendMessage = async (text: string, file?: File, isInternalNote: boolean = false) => {
     setSending(true);
     try {
+      // 1. Manejo de Notas Internas (No se envía a WhatsApp)
+      if (isInternalNote) {
+         await supabase.from('conversaciones').insert({ 
+           lead_id: lead.id, 
+           mensaje: text, 
+           emisor: 'NOTA', 
+           platform: 'PANEL_INTERNO'
+         });
+         toast.success("Nota interna guardada.");
+         fetchMessages();
+         setDraftMessage('');
+         return; // Terminamos aquí
+      }
+
+      // 2. Manejo de Mensajes a WhatsApp
       let mediaData = undefined;
 
       if (file) {
         const ext = file.name.split('.').pop();
         const path = `chat_uploads/${Date.now()}_${Math.random().toString(36).substring(7)}.${ext}`;
         
-        // Subir archivo al storage (asegúrate de que el bucket 'media' esté configurado como público)
+        // Subir archivo al storage
         const { error: uploadErr } = await supabase.storage.from('media').upload(path, file);
         if (uploadErr) throw uploadErr;
 
@@ -141,7 +156,7 @@ const ChatViewer = ({ lead: initialLead, open, onOpenChange }: ChatViewerProps) 
       const apiResponse = await sendEvolutionMessage(lead.telefono, text, mediaData);
       if (!apiResponse) { setSending(false); return; }
 
-      // Insertar en la base de datos
+      // Insertar en la base de datos como HUMANO
       await supabase.from('conversaciones').insert({ 
         lead_id: lead.id, 
         mensaje: text || (file ? `[ARCHIVO ENVIADO: ${file.name}]` : ''), 
@@ -153,12 +168,13 @@ const ChatViewer = ({ lead: initialLead, open, onOpenChange }: ChatViewerProps) 
       fetchMessages();
       setDraftMessage('');
       
+      // Control por hashtags
       if (text.includes('#STOP') || text.includes('#START')) {
          const isPaused = text.includes('#STOP');
          await supabase.from('leads').update({ ai_paused: isPaused }).eq('id', lead.id);
       }
     } catch (err: any) {
-      toast.error('Error al enviar: ' + err.message);
+      toast.error('Error: ' + err.message);
     } finally {
       setSending(false);
     }

@@ -1,7 +1,8 @@
 import React, { useRef, useEffect } from 'react';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Loader2, Bot, Mic, Image as ImageIcon, Waves, FileText, Download } from 'lucide-react';
+import { Loader2, Bot, Mic, Image as ImageIcon, Waves, FileText, Download, Lock } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { cn } from '@/lib/utils';
 
 interface MessageListProps {
   messages: any[];
@@ -89,25 +90,48 @@ export const MessageList = ({ messages, loading }: MessageListProps) => {
         </div>
       ) : (
         <div className="space-y-6 pb-4">
-          {messages.map((msg) => (
-              <div key={msg.id} className={`flex ${msg.emisor === 'CLIENTE' ? 'justify-start' : 'justify-end'} animate-in fade-in slide-in-from-bottom-2 duration-300`}>
-                <div className={`flex flex-col max-w-[85%] ${msg.emisor === 'CLIENTE' ? 'items-start' : 'items-end'}`}>
-                   <div className={`rounded-2xl p-3.5 text-sm shadow-sm border ${
-                      msg.emisor === 'CLIENTE' 
-                      ? 'bg-slate-900 border-slate-800 text-slate-200 rounded-bl-sm' 
-                      : 'bg-indigo-600/10 border-indigo-500/20 text-indigo-100 rounded-br-sm'
-                   }`}>
+          {messages.map((msg) => {
+             const isInternalNote = msg.emisor === 'NOTA';
+             const isClient = msg.emisor === 'CLIENTE';
+             const isAI = msg.emisor === 'IA' || msg.emisor === 'SAMURAI';
+             
+             // Definir alineación
+             const alignClass = isClient ? 'justify-start' : (isInternalNote ? 'justify-center' : 'justify-end');
+             const itemsClass = isClient ? 'items-start' : (isInternalNote ? 'items-center' : 'items-end');
+
+             // Estilos del globo de chat
+             let bubbleClass = '';
+             if (isInternalNote) {
+                bubbleClass = 'bg-amber-500/10 border-amber-500/30 text-amber-200 rounded-2xl w-full max-w-[90%] shadow-md shadow-amber-900/10';
+             } else if (isClient) {
+                bubbleClass = 'bg-slate-900 border-slate-800 text-slate-200 rounded-2xl rounded-bl-sm shadow-sm';
+             } else {
+                bubbleClass = 'bg-indigo-600/10 border-indigo-500/20 text-indigo-100 rounded-2xl rounded-br-sm shadow-sm';
+             }
+
+             return (
+              <div key={msg.id} className={`flex ${alignClass} animate-in fade-in slide-in-from-bottom-2 duration-300`}>
+                <div className={cn("flex flex-col max-w-[85%]", itemsClass, isInternalNote && "w-full max-w-[95%]")}>
+                   <div className={cn("p-3.5 text-sm border", bubbleClass)}>
+                    
+                    {isInternalNote && (
+                       <div className="flex items-center gap-2 mb-2 pb-2 border-b border-amber-500/20 text-[10px] uppercase font-bold text-amber-500 tracking-widest">
+                          <Lock className="w-3 h-3" /> Nota Interna (Privada)
+                       </div>
+                    )}
+                    
                     {renderMessageContent(msg)}
                   </div>
-                  <div className="flex items-center gap-2 mt-1 px-1 opacity-60">
-                     {(msg.emisor === 'IA' || msg.emisor === 'SAMURAI') && <Bot className="w-3 h-3 text-indigo-400" />}
+                  
+                  <div className={cn("flex items-center gap-2 mt-1 px-1 opacity-60", isInternalNote && "justify-center w-full mt-2 opacity-40")}>
+                     {isAI && <Bot className="w-3 h-3 text-indigo-400" />}
                      <span className="text-[9px] text-slate-500 font-mono uppercase tracking-wider">
-                        {(msg.emisor === 'IA' || msg.emisor === 'SAMURAI') ? 'ELEPHANT BOWL AI' : (msg.emisor === 'HUMANO' ? 'AGENTE' : 'CLIENTE')} • {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        {isAI ? 'ELEPHANT BOWL AI' : (isInternalNote ? 'AGENTE - NOTA' : (msg.emisor === 'HUMANO' ? 'AGENTE' : 'CLIENTE'))} • {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                      </span>
                   </div>
                 </div>
               </div>
-          ))}
+          )})}
           <div ref={scrollRef} />
         </div>
       )}
