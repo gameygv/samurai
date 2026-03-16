@@ -38,17 +38,26 @@ export const ChannelsTab = () => {
   };
 
   const handleAddChannel = () => {
-    setChannels([...channels, { id: `new-${Date.now()}`, name: '', provider: 'evolution', api_url: '', api_key: '', instance_id: '', verify_token: 'samurai_v3', is_new: true }]);
+    setChannels([...channels, { id: `new-${Date.now()}`, name: '', provider: 'meta', api_url: '', api_key: '', instance_id: '', verify_token: 'samurai_v3', is_new: true }]);
   };
 
   const handleSaveChannel = async (ch: any) => {
     setSaving(true);
     try {
       const { is_new, ...payload } = ch;
-      const data = { name: payload.name, provider: payload.provider, api_url: payload.api_url || 'https://graph.facebook.com', api_key: payload.api_key, instance_id: payload.instance_id, verify_token: payload.verify_token, is_active: true };
+      const data = { 
+        name: payload.name, 
+        provider: payload.provider, 
+        api_url: payload.api_url, 
+        api_key: payload.api_key, 
+        instance_id: payload.instance_id, 
+        verify_token: payload.verify_token, 
+        is_active: true 
+      };
+      
       const { error } = is_new ? await supabase.from('whatsapp_channels').insert(data) : await supabase.from('whatsapp_channels').update(data).eq('id', ch.id);
       if (error) throw error;
-      toast.success("Canal activo");
+      toast.success("Canal guardado correctamente.");
       fetchAll();
     } catch (err: any) { toast.error(err.message); } finally { setSaving(false); }
   };
@@ -75,42 +84,63 @@ export const ChannelsTab = () => {
                </div>
                <div className="flex gap-2">
                   {!ch.is_new && defaultNotifyId !== ch.id && (
-                     <Button variant="ghost" size="sm" onClick={() => handleSetDefault(ch.id)} className="text-[10px] text-slate-400 hover:text-amber-500 uppercase font-bold">Usar para Notificaciones</Button>
+                     <Button variant="ghost" size="sm" onClick={() => handleSetDefault(ch.id)} className="text-[10px] text-slate-400 hover:text-amber-500 uppercase font-bold">Usar para Alertas</Button>
                   )}
                   <Button variant="ghost" size="icon" onClick={async () => { if(confirm("¿Eliminar?")) { await supabase.from('whatsapp_channels').delete().eq('id', ch.id); fetchAll(); } }} className="text-slate-500 hover:text-red-500"><Trash2 className="w-4 h-4" /></Button>
                </div>
             </CardHeader>
-            <CardContent className="p-6 grid grid-cols-1 md:grid-cols-3 gap-6">
-               <div className="space-y-2">
-                  <Label className="text-[10px] uppercase font-bold text-slate-500">Proveedor</Label>
-                  <Select value={ch.provider} onValueChange={v => setChannels(channels.map(c => c.id === ch.id ? {...c, provider: v} : c))}>
-                     <SelectTrigger className="bg-slate-950 border-slate-800"><SelectValue /></SelectTrigger>
-                     <SelectContent className="bg-slate-900 border-slate-800 text-white">
-                        <SelectItem value="meta">Meta Cloud API (Recomendado)</SelectItem>
-                        <SelectItem value="evolution">Evolution API</SelectItem>
-                        <SelectItem value="gowa">GOWA</SelectItem>
-                     </SelectContent>
-                  </Select>
+            <CardContent className="p-6">
+               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                  <div className="space-y-2">
+                     <Label className="text-[10px] uppercase font-bold text-slate-500">Proveedor</Label>
+                     <Select value={ch.provider} onValueChange={v => setChannels(channels.map(c => c.id === ch.id ? {...c, provider: v} : c))}>
+                        <SelectTrigger className="bg-slate-950 border-slate-800"><SelectValue /></SelectTrigger>
+                        <SelectContent className="bg-slate-900 border-slate-800 text-white">
+                           <SelectItem value="meta">Meta Cloud API</SelectItem>
+                           <SelectItem value="evolution">Evolution API</SelectItem>
+                           <SelectItem value="gowa">GOWA</SelectItem>
+                        </SelectContent>
+                     </Select>
+                  </div>
+                  
+                  <div className="space-y-2">
+                     <Label className="text-[10px] uppercase font-bold text-slate-500">URL del Servidor</Label>
+                     <Input 
+                        value={ch.api_url} 
+                        onChange={e => setChannels(channels.map(c => c.id === ch.id ? {...c, api_url: e.target.value} : c))} 
+                        placeholder={ch.provider === 'meta' ? 'https://graph.facebook.com' : 'https://tu-gowa.com'}
+                        className="bg-slate-950 border-slate-800 font-mono text-xs" 
+                     />
+                  </div>
+
+                  <div className="space-y-2">
+                     <Label className="text-[10px] uppercase font-bold text-slate-500">{ch.provider === 'meta' ? 'Access Token' : 'API Key'}</Label>
+                     <Input type="password" value={ch.api_key} onChange={e => setChannels(channels.map(c => c.id === ch.id ? {...c, api_key: e.target.value} : c))} className="bg-slate-950 border-slate-800" />
+                  </div>
+
+                  <div className="space-y-2">
+                     <Label className="text-[10px] uppercase font-bold text-slate-500">{ch.provider === 'meta' ? 'Phone Number ID' : 'Instance ID'}</Label>
+                     <Input value={ch.instance_id} onChange={e => setChannels(channels.map(c => c.id === ch.id ? {...c, instance_id: e.target.value} : c))} className="bg-slate-950 border-slate-800" />
+                  </div>
                </div>
-               <div className="space-y-2">
-                  <Label className="text-[10px] uppercase font-bold text-slate-500">{ch.provider === 'meta' ? 'Permanent Access Token' : 'API Key'}</Label>
-                  <Input type="password" value={ch.api_key} onChange={e => setChannels(channels.map(c => c.id === ch.id ? {...c, api_key: e.target.value} : c))} className="bg-slate-950 border-slate-800" />
-               </div>
-               <div className="space-y-2">
-                  <Label className="text-[10px] uppercase font-bold text-slate-500">{ch.provider === 'meta' ? 'Phone Number ID' : 'Instance ID'}</Label>
-                  <Input value={ch.instance_id} onChange={e => setChannels(channels.map(c => c.id === ch.id ? {...c, instance_id: e.target.value} : c))} className="bg-slate-950 border-slate-800" />
-               </div>
+
                {ch.provider === 'meta' && (
-                  <div className="space-y-2 md:col-span-2">
-                     <Label className="text-[10px] uppercase font-bold text-amber-500">Verify Token (Cópialo en Meta App Webhook)</Label>
-                     <Input value={ch.verify_token} onChange={e => setChannels(channels.map(c => c.id === ch.id ? {...c, verify_token: e.target.value} : c))} className="bg-slate-950 border-amber-900/50 text-amber-400 font-mono" />
+                  <div className="mt-6 p-4 bg-slate-950 border border-amber-900/30 rounded-xl space-y-2">
+                     <Label className="text-[10px] uppercase font-bold text-amber-500">Verify Token (Para Meta Webhook)</Label>
+                     <Input value={ch.verify_token} onChange={e => setChannels(channels.map(c => c.id === ch.id ? {...c, verify_token: e.target.value} : c))} className="bg-transparent border-slate-800 text-amber-400 font-mono" />
                   </div>
                )}
-               <div className="flex items-end"><Button onClick={() => handleSaveChannel(ch)} disabled={saving} className="w-full bg-slate-800 font-bold">{saving ? <Loader2 className="animate-spin w-4 h-4"/> : "GUARDAR CONFIG"}</Button></div>
+
+               <div className="mt-6 flex justify-end">
+                  <Button onClick={() => handleSaveChannel(ch)} disabled={saving} className="bg-indigo-900 hover:bg-indigo-800 text-amber-500 font-bold px-10">
+                     {saving ? <Loader2 className="animate-spin w-4 h-4 mr-2"/> : <ShieldCheck className="w-4 h-4 mr-2"/>} 
+                     GUARDAR CONFIG
+                  </Button>
+               </div>
             </CardContent>
             {!ch.is_new && (
                <CardFooter className="bg-slate-950/30 border-t border-slate-800/50 py-3 flex flex-col items-start gap-2">
-                  <span className="text-[9px] text-slate-500 font-mono uppercase">URL de Webhook para este canal:</span>
+                  <span className="text-[9px] text-slate-500 font-mono uppercase font-bold">Copia esta URL en tu panel de Gowa (Webhooks):</span>
                   <code className="text-[10px] text-indigo-400 bg-black p-2 rounded border border-slate-800 w-full truncate select-all">
                      {`https://giwoovmvwlddaizorizk.supabase.co/functions/v1/evolution-webhook?channel_id=${ch.id}`}
                   </code>
