@@ -80,15 +80,18 @@ serve(async (req) => {
     const sEnabled = getConfig('sales_followup_enabled') === 'true';
     
     if (!fConfig.enabled && !sEnabled) {
+        console.log("[process-followups] Todos los retargeting desactivados. Saliendo.");
         return new Response(JSON.stringify({ success: true, message: "Todos los retargeting desactivados." }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
+    // Verificar horario laboral (hora México UTC-6)
     const mxHour = (now.getUTCHours() - 6 + 24) % 24; 
     const startHour = Number(fConfig.start_hour ?? 9);
     const endHour = Number(fConfig.end_hour ?? 20);
 
     if (mxHour < startHour || mxHour >= endHour) {
-        return new Response(JSON.stringify({ success: true, message: `Fuera de horario laboral. Hora actual: ${mxHour}h` }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        console.log(`[process-followups] Fuera de horario laboral. Hora MX: ${mxHour}h. Ventana: ${startHour}-${endHour}h`);
+        return new Response(JSON.stringify({ success: true, message: `Fuera de horario. Hora actual: ${mxHour}h` }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     if (!openAiKey) throw new Error("Falta OpenAI API Key.");
@@ -125,7 +128,7 @@ serve(async (req) => {
                 })
             });
 
-            if (!aiRes.ok) throw new Error("Fallo en OpenAI");
+            if (!aiRes.ok) throw new Error(`OpenAI error: ${aiRes.status}`);
             const aiData = await aiRes.json();
             const rawAnswer = aiData.choices?.[0]?.message?.content || "";
             
@@ -139,7 +142,8 @@ serve(async (req) => {
             if (evolutionApiUrl && evolutionApiKey) {
                 const endpoint = mediaUrl ? evolutionApiUrl.replace('sendText', 'sendMedia') : evolutionApiUrl;
                 const payload = mediaUrl ? {
-                    number: lead.telefono, mediatype: "image", media: mediaUrl, caption: textToSend || "", mediaMessage: { mediatype: "image", media: mediaUrl, caption: textToSend || "" }, delay: 1500
+                    number: lead.telefono, mediatype: "image", media: mediaUrl, caption: textToSend || "", 
+                    mediaMessage: { mediatype: "image", media: mediaUrl, caption: textToSend || "" }, delay: 1500
                 } : { number: lead.telefono, text: textToSend, delay: 1500, linkPreview: true };
 
                 const response = await fetch(endpoint, {
@@ -148,18 +152,36 @@ serve(async (req) => {
                     body: JSON.stringify(payload)
                 });
 
-                if (!response.ok) return false;
+                if (!response.ok) {
+                    console.error(`[process-followups] Error enviando a WhatsApp para ${lead.telefono}: ${response.status}`);
+                    return false;
+                }
             }
 
-            await supabaseClient.from('conversaciones').insert({ lead_id: lead.id, emisor: 'SAMURAI', mensaje: mediaUrl ? `[IMG: ${mediaUrl}] ${textToSend}` : textToSend, platform: 'AUTO_FOLLOWUP' });
+            await supabaseClient.from('conversaciones').insert({ 
+                lead_id: lead.id, emisor: 'SAMURAI', 
+                mensaje: mediaUrl ? `[IMG: ${mediaUrl}] ${textToSend}` : textToSend, 
+                platform: 'AUTO_FOLLOWUP' 
+            });
+            
+            console.log(`[process-followups] ✓ Followup enviado a ${lead.telefono} (Stage ${lead.followup_stage + 1})`);
             return true;
         } catch (e) {
-            console.error(`[process-followups] Error en ${lead.id}:`, e);
+            console.error(`[process-followups] Error en lead ${lead.id}:`, e.message);
             return false;
         }
     };
 
-    const { data: eligibleLeads } = await supabaseClient.from('leads').select('*').eq('ai_paused', false).neq('buying_intent', 'COMPRADO').neq('payment_status', 'VALID').lt('followup_stage', 3);
+    // Obtener leads elegibles
+    const { data: eligibleLeads } = await supabaseClient
+        .from('leads')
+        .select('*')
+        .eq('ai_paused', false)
+        .neq('buying_intent', 'COMPRADO')
+        .neq('payment_status', 'VALID')
+        .lt('followup_stage', 3);
+
+    console.log(`[process-followups] Leads elegibles: ${eligibleLeads?.length || 0}`);
 
     for (const lead of (eligibleLeads || [])) {
        const isSalesMode = lead.buying_intent === 'ALTO';
@@ -181,15 +203,31 @@ serve(async (req) => {
           const sent = await generateAndSend(lead, triggerInstruction);
           
           if (sent) {
-              await supabaseClient.from('leads').update({ followup_stage: nextStage, last_message_at: now.toISOString() }).eq('id', lead.id);
+              await supabaseClient.from('leads').update({ 
+                  followup_stage: nextStage, 
+                  last_message_at: now.toISOString() 
+              }).eq('id', lead.id);
               results.push({ lead: lead.telefono, stage: nextStage, mode: contextType });
           }
        }
     }
 
-    return new Response(JSON.stringify({ success: true, processed: results }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    // Log del ciclo
+    if (results.length > 0) {
+        await supabaseClient.from('activity_logs').insert({
+            action: 'FOLLOWUP',
+            resource: 'LEADS',
+            description: `Retargeting automático: ${results.length} mensajes enviados`,
+            status: 'OK',
+            metadata: { results }
+        });
+    }
+
+    console.log(`[process-followups] Ciclo completado. Enviados: ${results.length}`);
+    return new Response(JSON.stringify({ success: true, processed: results.length, details: results }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
   } catch (error: any) {
+    console.error("[process-followups] Error crítico:", error.message);
     return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: corsHeaders });
   }
 })
