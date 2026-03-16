@@ -9,19 +9,19 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
-import { Webhook, Key, Save, Loader2, ShoppingCart, Target, Building2, Store, Hash, Send, Clock, Play, DollarSign, MessageSquarePlus, Trash2, Plus, Sparkles, TerminalSquare, Download, Upload } from 'lucide-react';
+import { Webhook, Key, Save, Loader2, ShoppingCart, Target, Building2, Store, Hash, Send, Clock, Play, DollarSign, MessageSquarePlus, Trash2, Plus, Sparkles, TerminalSquare, Download, Upload, ShieldAlert } from 'lucide-react';
 import { toast } from 'sonner';
 import { sendEvolutionMessage } from '@/utils/messagingService';
 import { useAuth } from '@/context/AuthContext';
+import { cn } from '@/lib/utils';
 
 const Settings = () => {
-  const { isDev } = useAuth();
+  const { isAdmin, isDev } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const activeTab = searchParams.get('tab') || 'mensajeria';
   
   const [configs, setConfigs] = useState<any[]>([]);
   const [quickReplies, setQuickReplies] = useState<{id: string, title: string, text: string}[]>([]);
-  
   const [wcProducts, setWcProducts] = useState<any[]>([]);
   
   const [followupConfig, setFollowupConfig] = useState<any>({
@@ -45,6 +45,7 @@ const Settings = () => {
       prompt_qa_auditor: ''
   });
 
+  const [globalBotPaused, setGlobalBotPaused] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
@@ -61,6 +62,8 @@ const Settings = () => {
         setConfigs(data);
         const getC = (k: string, def: string) => data.find(c => c.key === k)?.value || def;
         
+        setGlobalBotPaused(getC('global_bot_paused', 'false') === 'true');
+
         setSalesConfig({
             enabled: getC('sales_followup_enabled', 'false') === 'true',
             stage_1_delay: parseInt(getC('sales_stage_1_delay', '60')),
@@ -117,6 +120,7 @@ const Settings = () => {
     setSaving(true);
     try {
       const excludedKeys = [
+          'global_bot_paused',
           'sales_followup_enabled', 'sales_stage_1_delay', 'sales_stage_2_delay', 'sales_stage_3_delay', 
           'sales_stage_1_message', 'sales_stage_2_message', 'sales_stage_3_message', 
           'quick_replies', 'wc_products',
@@ -129,6 +133,7 @@ const Settings = () => {
 
       const newConfigs = [
         ...cleanConfigs,
+        { key: 'global_bot_paused', value: String(globalBotPaused), category: 'SYSTEM' },
         { key: 'sales_followup_enabled', value: String(salesConfig.enabled), category: 'FOLLOWUP' },
         { key: 'sales_stage_1_delay', value: String(salesConfig.stage_1_delay), category: 'FOLLOWUP' },
         { key: 'sales_stage_2_delay', value: String(salesConfig.stage_2_delay), category: 'FOLLOWUP' },
@@ -233,6 +238,25 @@ const Settings = () => {
             {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />} Guardar Todo
           </Button>
         </div>
+
+        {isAdmin && (
+           <Card className="bg-slate-900 border-red-900/50 shadow-2xl relative overflow-hidden">
+             <div className={cn("absolute left-0 top-0 bottom-0 w-2", globalBotPaused ? "bg-red-500" : "bg-emerald-500")} />
+             <CardHeader className="pb-3 border-b border-slate-800 bg-slate-950/30">
+               <CardTitle className="text-white flex items-center justify-between gap-2">
+                 <div className="flex items-center gap-2"><ShieldAlert className="w-5 h-5 text-red-500" /> Interruptor Maestro (Kill Switch)</div>
+                 <Switch checked={globalBotPaused} onCheckedChange={setGlobalBotPaused} />
+               </CardTitle>
+             </CardHeader>
+             <CardContent className="pt-4">
+               <p className="text-xs text-slate-400">
+                  <strong className={globalBotPaused ? "text-red-400" : "text-emerald-400"}>
+                     {globalBotPaused ? "EL BOT ESTÁ APAGADO." : "EL BOT ESTÁ EN LÍNEA."}
+                  </strong> Al activar esta opción, la Inteligencia Artificial dejará de responder a <strong>cualquier cliente de la base de datos</strong> instantáneamente. Úsalo solo para mantenimientos de emergencia.
+               </p>
+             </CardContent>
+           </Card>
+        )}
 
         <Tabs value={activeTab} onValueChange={v => setSearchParams({ tab: v })}>
           <TabsList className="bg-slate-900 border border-slate-800 p-1 flex-wrap h-auto">

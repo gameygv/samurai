@@ -15,20 +15,17 @@ export const MessageList = ({ messages, loading }: MessageListProps) => {
     if (scrollRef.current) scrollRef.current.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  // Función para procesar y separar imágenes/documentos del texto
   const renderMessageContent = (msg: any) => {
     let text = msg.mensaje || '';
     let imageUrl = null;
     let docUrl = null;
     let docName = null;
 
-    // 1. Detectar patrón de imagen enviado por el Bot: [IMG: url]
     const imgMatch = text.match(/\[IMG:\s*(.+?)\]/i);
     if (imgMatch) {
       imageUrl = imgMatch[1];
       text = text.replace(imgMatch[0], '').trim();
     } 
-    // 2. Detectar metadatos si fue enviado por un humano desde el panel
     else if (msg.metadata?.mediaUrl) {
       if (msg.metadata.mediaType === 'image') {
         imageUrl = msg.metadata.mediaUrl;
@@ -36,7 +33,6 @@ export const MessageList = ({ messages, loading }: MessageListProps) => {
         docUrl = msg.metadata.mediaUrl;
         docName = msg.metadata.fileName || 'Documento adjunto';
       }
-      // Limpiar texto de etiquetas [ARCHIVO: ...]
       text = text.replace(/\[ARCHIVO:\s*.*?\]/i, '').trim();
     }
 
@@ -86,7 +82,6 @@ export const MessageList = ({ messages, loading }: MessageListProps) => {
              const isNote = emisor === 'NOTA';
              const isError = msg.platform === 'ERROR';
 
-             // Notas internas (Centradas)
              if (isNote) {
                return (
                  <div key={msg.id} className="flex justify-center animate-in fade-in duration-300">
@@ -98,7 +93,6 @@ export const MessageList = ({ messages, loading }: MessageListProps) => {
                );
              }
 
-             // Errores (Centrados)
              if (isError) {
                return (
                  <div key={msg.id} className="flex justify-center animate-in fade-in duration-300">
@@ -110,24 +104,23 @@ export const MessageList = ({ messages, loading }: MessageListProps) => {
                );
              }
 
-             // Mensajes de Chat (Derecha / Izquierda)
              const align = isClient ? 'justify-start' : 'justify-end';
              
              return (
               <div key={msg.id} className={cn("flex w-full animate-in fade-in duration-300", align)}>
                 <div className={cn("max-w-[85%] flex flex-col", isClient ? "items-start" : "items-end")}>
                    <div className={cn(
-                      "p-3.5 rounded-2xl text-sm border shadow-sm",
-                      isClient ? "bg-slate-900 border-slate-800 text-slate-200 rounded-bl-none" : 
-                      isAI ? "bg-indigo-600/10 border-indigo-500/30 text-indigo-100 rounded-br-none" : 
-                      "bg-emerald-600/10 border-emerald-500/30 text-emerald-100 rounded-br-none"
+                      "p-3.5 rounded-2xl text-sm border shadow-md",
+                      isClient ? "bg-slate-800 border-slate-700 text-slate-100 rounded-bl-none" : 
+                      isAI ? "bg-indigo-900/80 border-indigo-500/50 text-indigo-50 rounded-br-none" : 
+                      "bg-emerald-900/80 border-emerald-500/50 text-emerald-50 rounded-br-none"
                    )}>
                       {renderMessageContent(msg)}
                    </div>
-                   <div className="flex items-center gap-1.5 mt-1.5 px-1 opacity-50">
+                   <div className="flex items-center gap-1.5 mt-1.5 px-1 opacity-70">
                       {isAI && <Bot className="w-3 h-3 text-indigo-400" />}
                       {isHuman && <User className="w-3 h-3 text-emerald-400" />}
-                      <span className="text-[9px] font-mono uppercase tracking-widest">
+                      <span className="text-[9px] font-mono uppercase tracking-widest text-slate-400">
                          {isAI ? 'Samurai AI' : isHuman ? 'Vendedor' : 'Cliente'} • {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       </span>
                    </div>

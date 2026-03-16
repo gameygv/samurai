@@ -115,6 +115,15 @@ serve(async (req) => {
     // OBTENER CONFIGURACIÓN
     const { data: configs } = await supabase.from('app_config').select('key, value');
     const getC = (k: string) => configs?.find(c => c.key === k)?.value || '';
+
+    // ========================================================
+    // MASTER KILL SWITCH: Verificación global de apagado
+    // ========================================================
+    if (getC('global_bot_paused') === 'true') {
+       console.log(`[webhook] MASTER KILL SWITCH ACTIVADO. No se responderá a ${phone}`);
+       return new Response('Global bot is paused by admin');
+    }
+
     const apiKey = getC('openai_api_key');
 
     if (!apiKey) {
@@ -207,7 +216,6 @@ serve(async (req) => {
     if (!aiRes.ok) {
       const errText = await aiRes.text();
       console.error("[webhook] OpenAI error:", errText);
-      // GUARDAR ERROR COMO MENSAJE DE IA PARA QUE SEA VISIBLE
       await supabase.from('conversaciones').insert({
         lead_id: lead.id, emisor: 'SAMURAI',
         mensaje: `[ERROR OPENAI ${aiRes.status}]: ${errText.substring(0, 300)}`,
@@ -248,10 +256,6 @@ serve(async (req) => {
     const textToSend = rawAnswer.replace(mediaRegex, '').trim();
     const messageToLog = mediaUrl ? `[IMG: ${mediaUrl}] ${textToSend}` : textToSend;
 
-    // ============================================================
-    // GUARDADO INDESTRUCTIBLE EN BASE DE DATOS
-    // Cambiado 'IA' por 'SAMURAI' para pasar el Check Constraint
-    // ============================================================
     const { data: savedMsg, error: saveError } = await supabase
       .from('conversaciones')
       .insert({
@@ -265,12 +269,9 @@ serve(async (req) => {
 
     if (saveError) {
       console.error("[webhook] ERROR CRÍTICO guardando mensaje IA:", JSON.stringify(saveError));
-      // Intentar de nuevo con insert simple
       await supabase.from('conversaciones').insert({
         lead_id: lead.id, emisor: 'SAMURAI', mensaje: messageToLog, platform: 'WHATSAPP_AUTO'
       });
-    } else {
-      console.log("[webhook] Mensaje IA guardado exitosamente. ID:", savedMsg?.id);
     }
 
     // ACTUALIZAR ESTADOS
@@ -286,7 +287,7 @@ serve(async (req) => {
       });
     }
 
-    // ENVIAR A WHATSAPP (después del guardado)
+    // ENVIAR A WHATSAPP
     const evoUrl = getC('evolution_api_url');
     const evoKey = getC('evolution_api_key');
     if (evoUrl && evoKey && (textToSend || mediaUrl)) {
@@ -311,7 +312,6 @@ serve(async (req) => {
 
   } catch (error: any) {
     console.error("[webhook] Error crítico:", error.message);
-    // Si tenemos el leadId, guardar el error como mensaje visible
     if (leadId) {
       try {
         const supabase2 = createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '');

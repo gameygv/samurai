@@ -3,12 +3,18 @@ import Layout from '@/components/Layout';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Activity as ActivityIcon, Loader2, Terminal, Zap, ShieldAlert, CheckCircle2 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Activity as ActivityIcon, Loader2, Terminal, Zap, ShieldAlert, CheckCircle2, RefreshCw, Trash2 } from 'lucide-react';
 import ActivityFeed from '@/components/ActivityFeed';
+import { toast } from 'sonner';
+import { useAuth } from '@/context/AuthContext';
+import { cn } from '@/lib/utils';
 
 const ActivityPage = () => {
+  const { isAdmin } = useAuth();
   const [activities, setActivities] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [clearing, setClearing] = useState(false);
 
   useEffect(() => {
     fetchInitialActivities();
@@ -35,6 +41,21 @@ const ActivityPage = () => {
     setLoading(false);
   };
 
+  const handleClearLogs = async () => {
+     if (!confirm("¿Estás seguro de que quieres vaciar todo el historial del monitor?")) return;
+     setClearing(true);
+     try {
+        const { error } = await supabase.from('activity_logs').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+        if (error) throw error;
+        toast.success("Monitor limpiado correctamente.");
+        setActivities([]);
+     } catch (err: any) {
+        toast.error("Error al limpiar: " + err.message);
+     } finally {
+        setClearing(false);
+     }
+  };
+
   return (
     <Layout>
       <div className="max-w-5xl mx-auto space-y-6">
@@ -45,9 +66,17 @@ const ActivityPage = () => {
               </h1>
               <p className="text-slate-400">Eventos del sistema capturados en tiempo real.</p>
            </div>
-           <Badge className="bg-red-600/20 text-red-500 border-red-500/30 animate-pulse">
-              LIVE STREAM
-           </Badge>
+           <div className="flex gap-3 items-center">
+              <Badge className="bg-red-600/20 text-red-500 border-red-500/30 animate-pulse mr-2">LIVE STREAM</Badge>
+              <Button variant="outline" size="sm" className="border-slate-800 text-slate-400" onClick={fetchInitialActivities} disabled={loading}>
+                 <RefreshCw className={cn("w-4 h-4 mr-2", loading && "animate-spin")} /> Refrescar
+              </Button>
+              {isAdmin && (
+                 <Button variant="destructive" size="sm" className="bg-red-900/50 text-red-400 hover:bg-red-600 hover:text-white border border-red-900" onClick={handleClearLogs} disabled={clearing}>
+                    {clearing ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Trash2 className="w-4 h-4 mr-2" />} Vaciar Logs
+                 </Button>
+              )}
+           </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">

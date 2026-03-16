@@ -67,20 +67,15 @@ const Pipeline = () => {
   };
 
   const handleGlobalAiToggle = async (pause: boolean) => {
-    if (!confirm(`¿Estás seguro de ${pause ? 'PAUSAR' : 'ACTIVAR'} la IA para TODOS los leads en tu pantalla?`)) return;
-    setLoading(true);
-    try {
-        let query = supabase.from('leads').update({ ai_paused: pause });
-        if (!isAdmin) {
-            query = query.eq('assigned_to', user?.id);
-        } else {
-            query = query.neq('id', '00000000-0000-0000-0000-000000000000');
-        }
-        await query;
-        toast.success(`IA ${pause ? 'Pausada' : 'Activada'} masivamente.`);
-        fetchLeads();
-    } catch (err) {
-        toast.error("Error ejecutando acción masiva.");
+    if (!confirm(`¿Seguro que quieres ${pause ? 'PAUSAR' : 'ACTIVAR'} la IA exclusivamente para TODOS TUS chats asignados?`)) return;
+    
+    const { error } = await supabase.from('leads').update({ ai_paused: pause }).eq('assigned_to', user?.id);
+    
+    if (error) {
+       toast.error("Error ejecutando acción masiva.");
+    } else {
+       toast.success(`IA ${pause ? 'Pausada' : 'Activada'} masivamente en tus chats.`);
+       fetchLeads();
     }
   };
 
@@ -107,7 +102,6 @@ const Pipeline = () => {
      }
   };
 
-  // Filtrado final de Leads por intención y por el Agente seleccionado (Si es Admin)
   const getLeadsByIntent = (intent: string) => {
      return leads.filter(l => {
         const matchesIntent = (l.buying_intent || 'BAJO').toUpperCase() === intent;
@@ -116,7 +110,6 @@ const Pipeline = () => {
      });
   };
   
-  // Stats solo de los filtrados si es admin
   const visibleLeads = leads.filter(l => filterAgent === 'ALL' || l.assigned_to === filterAgent || (filterAgent === 'UNASSIGNED' && !l.assigned_to));
   const totalPotential = visibleLeads.filter(l => l.buying_intent === 'ALTO').length * TICKET_PRICE;
   const totalWon = visibleLeads.filter(l => l.buying_intent === 'COMPRADO').length * TICKET_PRICE;
@@ -163,11 +156,11 @@ const Pipeline = () => {
                  <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                        <Button variant="outline" className="flex-1 border-slate-700 text-slate-300 bg-slate-900 hover:bg-slate-800 h-10 rounded-xl px-2">
-                          <Bot className="w-4 h-4 mr-2 text-indigo-400"/> IA Masiva
+                          <Bot className="w-4 h-4 mr-2 text-indigo-400"/> IA de Mis Chats
                        </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent className="bg-slate-900 border-slate-800 text-white">
-                       <DropdownMenuLabel className="text-[10px] text-slate-500 uppercase">Control Masivo</DropdownMenuLabel>
+                       <DropdownMenuLabel className="text-[10px] text-slate-500 uppercase">Control de Cartera Personal</DropdownMenuLabel>
                        <DropdownMenuSeparator className="bg-slate-800" />
                        <DropdownMenuItem onClick={() => handleGlobalAiToggle(false)} className="text-emerald-400 focus:bg-emerald-900/20 focus:text-emerald-300 cursor-pointer">
                           <Play className="w-4 h-4 mr-2"/> Activar a Todos

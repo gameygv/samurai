@@ -44,7 +44,6 @@ const Inbox = () => {
   const [showMemoryMobile, setShowMemoryMobile] = useState(false);
   const [memoryForm, setMemoryForm] = useState<any>({});
 
-  // HOOK DE TIEMPO REAL - Polling estable cada 2 segundos
   const { messages, loading: loadingMessages, refetch: refetchMessages } = useRealtimeMessages(
     activeLead?.id || null,
     true
@@ -133,13 +132,17 @@ const Inbox = () => {
   };
 
   const handleGlobalAiToggle = async (pause: boolean) => {
-    if (!confirm(`¿${pause ? 'PAUSAR' : 'ACTIVAR'} la IA para TODOS?`)) return;
-    let query = supabase.from('leads').update({ ai_paused: pause });
-    if (!isAdmin) query = query.eq('assigned_to', user?.id);
-    else query = query.neq('id', '00000000-0000-0000-0000-000000000000');
-    await query;
-    toast.success(`IA ${pause ? 'Pausada' : 'Activada'} masivamente.`);
-    fetchLeads();
+    if (!confirm(`¿Seguro que quieres ${pause ? 'PAUSAR' : 'ACTIVAR'} la IA exclusivamente para TODOS TUS chats asignados?`)) return;
+    
+    // SIEMPRE afectará solo a los asignados a este usuario, sin importar si es Admin o no.
+    const { error } = await supabase.from('leads').update({ ai_paused: pause }).eq('assigned_to', user?.id);
+    
+    if (error) {
+       toast.error("Error ejecutando acción masiva.");
+    } else {
+       toast.success(`IA ${pause ? 'Pausada' : 'Activada'} masivamente en tus chats.`);
+       fetchLeads();
+    }
   };
 
   const handleDeleteLead = async () => {
@@ -257,13 +260,15 @@ const Inbox = () => {
                   <h2 className="text-sm font-bold text-white uppercase tracking-widest flex items-center gap-2"><MessageCircle className="w-4 h-4 text-indigo-400"/> Bandeja</h2>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                       <Button variant="outline" size="icon" className="h-7 w-7 border-slate-700 bg-slate-950 text-slate-400 hover:text-indigo-400"><Bot className="w-3.5 h-3.5"/></Button>
+                       <Button variant="outline" className="border-slate-700 text-slate-300 bg-slate-900 hover:bg-slate-800 h-8 rounded-xl px-3 shadow-md">
+                          <Bot className="w-4 h-4 mr-2 text-indigo-400"/> Mis Chats
+                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent className="bg-slate-900 border-slate-800 text-white" align="end">
-                       <DropdownMenuLabel className="text-[10px] text-slate-500 uppercase">Control IA</DropdownMenuLabel>
+                       <DropdownMenuLabel className="text-[10px] text-slate-500 uppercase">Control IA (Tus Asignados)</DropdownMenuLabel>
                        <DropdownMenuSeparator className="bg-slate-800" />
-                       <DropdownMenuItem onClick={() => handleGlobalAiToggle(false)} className="text-emerald-400 cursor-pointer text-xs"><Play className="w-3.5 h-3.5 mr-2"/> Activar a Todos</DropdownMenuItem>
-                       <DropdownMenuItem onClick={() => handleGlobalAiToggle(true)} className="text-red-400 cursor-pointer text-xs"><Pause className="w-3.5 h-3.5 mr-2"/> Pausar a Todos</DropdownMenuItem>
+                       <DropdownMenuItem onClick={() => handleGlobalAiToggle(false)} className="text-emerald-400 cursor-pointer text-xs"><Play className="w-3.5 h-3.5 mr-2"/> Activar en mis chats</DropdownMenuItem>
+                       <DropdownMenuItem onClick={() => handleGlobalAiToggle(true)} className="text-red-400 cursor-pointer text-xs"><Pause className="w-3.5 h-3.5 mr-2"/> Pausar en mis chats</DropdownMenuItem>
                     </DropdownMenuContent>
                  </DropdownMenu>
                </div>

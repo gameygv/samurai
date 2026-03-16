@@ -68,20 +68,16 @@ const Leads = () => {
   };
 
   const handleGlobalAiToggle = async (pause: boolean) => {
-    if (!confirm(`¿Estás seguro de ${pause ? 'PAUSAR' : 'ACTIVAR'} la IA para TODOS tus leads mostrados?`)) return;
-    setLoading(true);
-    try {
-        let query = supabase.from('leads').update({ ai_paused: pause });
-        if (!isAdmin) {
-            query = query.eq('assigned_to', user?.id);
-        } else {
-            query = query.neq('id', '00000000-0000-0000-0000-000000000000');
-        }
-        await query;
-        toast.success(`IA ${pause ? 'Pausada' : 'Activada'} masivamente.`);
-        fetchLeads();
-    } catch (err) {
-        toast.error("Error ejecutando acción masiva.");
+    if (!confirm(`¿Seguro que quieres ${pause ? 'PAUSAR' : 'ACTIVAR'} la IA exclusivamente para TODOS TUS chats asignados?`)) return;
+    
+    // Siempre se ejecuta sobre la cartera del usuario
+    const { error } = await supabase.from('leads').update({ ai_paused: pause }).eq('assigned_to', user?.id);
+    
+    if (error) {
+       toast.error("Error ejecutando acción masiva.");
+    } else {
+       toast.success(`IA ${pause ? 'Pausada' : 'Activada'} masivamente en tus chats.`);
+       fetchLeads();
     }
   };
 
@@ -132,11 +128,11 @@ const Leads = () => {
              <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                    <Button variant="outline" className="border-indigo-500/30 text-indigo-400 bg-indigo-900/10 hover:bg-indigo-900/30 rounded-full h-9">
-                      <Bot className="w-4 h-4 mr-2"/> IA Global
+                      <Bot className="w-4 h-4 mr-2"/> IA de Mis Chats
                    </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent className="bg-slate-900 border-slate-800 text-white">
-                   <DropdownMenuLabel className="text-[10px] text-slate-500 uppercase">Control Masivo</DropdownMenuLabel>
+                   <DropdownMenuLabel className="text-[10px] text-slate-500 uppercase">Control de Cartera Personal</DropdownMenuLabel>
                    <DropdownMenuSeparator className="bg-slate-800" />
                    <DropdownMenuItem onClick={() => handleGlobalAiToggle(false)} className="text-emerald-400 focus:bg-emerald-900/20 focus:text-emerald-300 cursor-pointer">
                       <Play className="w-4 h-4 mr-2"/> Activar a Todos
