@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import Layout from '@/components/Layout';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/context/AuthContext';
@@ -34,7 +34,6 @@ const Inbox = () => {
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [sending, setSending] = useState(false);
   
-  // Chat Tools State
   const [quickActions, setQuickActions] = useState<any>({});
   const [quickReplies, setQuickReplies] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
@@ -42,7 +41,6 @@ const Inbox = () => {
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
   const [draftMessage, setDraftMessage] = useState('');
   
-  // Memory Panel State
   const [isEditingMemory, setIsEditingMemory] = useState(false);
   const [showMemoryMobile, setShowMemoryMobile] = useState(false);
   const [memoryForm, setMemoryForm] = useState<any>({});
@@ -51,8 +49,8 @@ const Inbox = () => {
     fetchLeads();
     fetchQuickActions();
 
-    // Suscripción a cambios en leads (para reordenar la lista y actualizar status)
-    const leadsChannel = supabase.channel('inbox-leads')
+    const uniqueId = Math.random().toString(36).substring(7);
+    const leadsChannel = supabase.channel(`inbox-leads-${uniqueId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'leads' }, () => {
          fetchLeads(false); 
       }).subscribe();
@@ -61,18 +59,22 @@ const Inbox = () => {
   }, []);
 
   useEffect(() => {
+    let msgChannel: any;
+
     if (activeLead) {
        fetchMessages(activeLead.id);
        updateMemoryForm(activeLead);
        
-       // Suscripción a nuevos mensajes del lead activo (Chat en vivo)
-       const msgChannel = supabase.channel(`inbox-msgs-${activeLead.id}`)
+       const uniqueId = Math.random().toString(36).substring(7);
+       msgChannel = supabase.channel(`inbox-msgs-${activeLead.id}-${uniqueId}`)
          .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'conversaciones', filter: `lead_id=eq.${activeLead.id}` }, (payload) => {
-            setMessages(prev => [...prev, payload.new]);
+            setMessages(prev => {
+               if (prev.some(m => m.id === payload.new.id)) return prev;
+               return [...prev, payload.new];
+            });
          }).subscribe();
-         
-       return () => { supabase.removeChannel(msgChannel); };
     }
+    return () => { if (msgChannel) supabase.removeChannel(msgChannel); };
   }, [activeLead?.id]);
 
   useEffect(() => {
@@ -146,17 +148,13 @@ const Inbox = () => {
     });
   };
 
-  // Función para pausar/activar globalmente
   const handleGlobalAiToggle = async (pause: boolean) => {
     if (!confirm(`¿Estás seguro de ${pause ? 'PAUSAR' : 'ACTIVAR'} la IA para TODOS tus leads?`)) return;
     setLoadingLeads(true);
     try {
         let query = supabase.from('leads').update({ ai_paused: pause });
-        if (!isAdmin) {
-            query = query.eq('assigned_to', user?.id);
-        } else {
-            query = query.neq('id', '00000000-0000-0000-0000-000000000000');
-        }
+        if (!isAdmin) query = query.eq('assigned_to', user?.id);
+        else query = query.neq('id', '00000000-0000-0000-0000-000000000000');
         await query;
         toast.success(`IA ${pause ? 'Pausada' : 'Activada'} masivamente.`);
         fetchLeads();
@@ -170,34 +168,22 @@ const Inbox = () => {
     if (!activeLead) return;
     setSending(true);
     try {
-      // 1. Intercepción de Comandos del Sistema (Evita enviarlos al cliente)
       if (text.trim() === '#STOP' || text.trim() === '#START') {
          const isPaused = text.trim() === '#STOP';
          await supabase.from('leads').update({ ai_paused: isPaused }).eq('id', activeLead.id);
-         
-         await supabase.from('conversaciones').insert({ 
-           lead_id: activeLead.id, 
-           mensaje: `IA ${isPaused ? 'Pausada' : 'Activada'} manualmente.`, 
-           emisor: 'NOTA', 
-           platform: 'PANEL_INTERNO' 
-         });
-         
+         await supabase.from('conversaciones').insert({ lead_id: activeLead.id, mensaje: `IA ${isPaused ? 'Pausada' : 'Activada'} manualmente.`, emisor: 'NOTA', platform: 'PANEL_INTERNO' });
          toast.success(`Samurai ${isPaused ? 'Pausado' : 'Activado'}`);
-         fetchMessages(activeLead.id);
          setDraftMessage('');
          return;
       }
 
-      // 2. Manejo de Notas Internas regulares
       if (isInternalNote) {
          await supabase.from('conversaciones').insert({ lead_id: activeLead.id, mensaje: text, emisor: 'NOTA', platform: 'PANEL_INTERNO' });
          toast.success("Nota guardada.");
-         fetchMessages(activeLead.id);
          setDraftMessage('');
          return; 
       }
 
-      // 3. Envío al cliente por Evolution API
       let mediaData = undefined;
       if (file) {
         const ext = file.name.split('.').pop();
@@ -213,28 +199,18 @@ const Inbox = () => {
       }
 
       const apiResponse = await sendEvolutionMessage(activeLead.telefono, text, mediaData);
-      
-      // Permitimos guardar el mensaje en la BD aunque la API falle (Modo Prueba / Simulación)
-      if (!apiResponse) {
-          toast.warning("Modo Prueba: Mensaje guardado en el CRM pero WhatsApp no está conectado.", { duration: 5000 });
-      }
+      if (!apiResponse) toast.warning("Modo Prueba: Mensaje guardado en el CRM pero WhatsApp no está conectado.", { duration: 5000 });
 
       const textToSave = text || (file ? `[ARCHIVO ENVIADO: ${file.name}]` : '');
       const finalMessage = apiResponse ? textToSave : `[PRUEBA / WA DESCONECTADO] ${textToSave}`;
 
       await supabase.from('conversaciones').insert({ 
-        lead_id: activeLead.id, 
-        mensaje: finalMessage, 
-        emisor: 'HUMANO', 
-        platform: 'PANEL',
+        lead_id: activeLead.id, mensaje: finalMessage, emisor: 'HUMANO', platform: 'PANEL',
         metadata: mediaData ? { mediaUrl: mediaData.url, mediaType: mediaData.type, fileName: mediaData.name } : {}
       });
 
-      // DISPARO SILENCIOSO DE AUDITORÍA QA PARA VENDEDORES
       if (user && text && !isInternalNote) {
-          supabase.functions.invoke('evaluate-agent', {
-              body: { agent_id: user.id, lead_id: activeLead.id, message_text: text }
-          }).catch(e => console.error("Error silencioso QA:", e));
+          supabase.functions.invoke('evaluate-agent', { body: { agent_id: user.id, lead_id: activeLead.id, message_text: text } }).catch(e => {});
       }
 
       setDraftMessage('');
@@ -293,12 +269,9 @@ const Inbox = () => {
            <div className="p-4 border-b border-slate-800 bg-slate-900/50 shrink-0">
                <div className="flex items-center justify-between mb-3">
                   <h2 className="text-sm font-bold text-white uppercase tracking-widest flex items-center gap-2"><MessageCircle className="w-4 h-4 text-indigo-400"/> Bandeja</h2>
-                  
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                       <Button variant="outline" size="icon" className="h-7 w-7 border-slate-700 bg-slate-950 text-slate-400 hover:text-indigo-400">
-                          <Bot className="w-3.5 h-3.5"/>
-                       </Button>
+                       <Button variant="outline" size="icon" className="h-7 w-7 border-slate-700 bg-slate-950 text-slate-400 hover:text-indigo-400"><Bot className="w-3.5 h-3.5"/></Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent className="bg-slate-900 border-slate-800 text-white" align="end">
                        <DropdownMenuLabel className="text-[10px] text-slate-500 uppercase">Control de IA General</DropdownMenuLabel>
@@ -311,14 +284,12 @@ const Inbox = () => {
                        </DropdownMenuItem>
                     </DropdownMenuContent>
                  </DropdownMenu>
-
                </div>
                <div className="relative">
                   <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-500" />
                   <Input 
                      placeholder="Buscar chat o etiqueta..." 
-                     value={searchTerm}
-                     onChange={e => setSearchTerm(e.target.value)}
+                     value={searchTerm} onChange={e => setSearchTerm(e.target.value)}
                      className="pl-9 h-9 bg-slate-950 border-slate-800 text-xs rounded-xl focus-visible:ring-indigo-500"
                   />
                </div>
@@ -333,12 +304,8 @@ const Inbox = () => {
                  <div className="divide-y divide-slate-800/50">
                     {filteredLeads.map(lead => (
                        <button 
-                         key={lead.id} 
-                         onClick={() => setActiveLead(lead)}
-                         className={cn(
-                            "w-full text-left p-3 hover:bg-slate-800/30 transition-colors flex items-start gap-3 relative",
-                            activeLead?.id === lead.id ? "bg-indigo-900/20" : ""
-                         )}
+                         key={lead.id} onClick={() => setActiveLead(lead)}
+                         className={cn("w-full text-left p-3 hover:bg-slate-800/30 transition-colors flex items-start gap-3 relative", activeLead?.id === lead.id ? "bg-indigo-900/20" : "")}
                        >
                           {activeLead?.id === lead.id && <div className="absolute left-0 top-0 bottom-0 w-1 bg-indigo-500" />}
                           <div className="relative">
@@ -367,10 +334,7 @@ const Inbox = () => {
         </div>
 
         {/* COLUMNA 2: CHAT ACTIVO */}
-        <div className={cn(
-            "flex-1 min-w-0 flex flex-col bg-slate-950 relative",
-            !activeLead ? "hidden md:flex items-center justify-center" : "flex"
-        )}>
+        <div className={cn("flex-1 min-w-0 flex flex-col bg-slate-950 relative", !activeLead ? "hidden md:flex items-center justify-center" : "flex")}>
            {!activeLead ? (
               <div className="text-center flex flex-col items-center gap-4 text-slate-500">
                  <div className="w-16 h-16 rounded-2xl bg-slate-900 border border-slate-800 flex items-center justify-center shadow-inner"><MessageCircle className="w-8 h-8 opacity-50" /></div>
@@ -393,9 +357,7 @@ const Inbox = () => {
                        <Button variant="outline" size="sm" className={cn("hidden lg:flex h-8 text-xs border", activeLead.ai_paused ? "bg-emerald-500/10 border-emerald-500/50 text-emerald-500 hover:bg-emerald-500/20" : "bg-red-500/10 border-red-500/50 text-red-500 hover:bg-red-500/20")} onClick={() => handleSendMessage(activeLead.ai_paused ? '#START' : '#STOP')}>
                           {activeLead.ai_paused ? <><Play className="w-3 h-3 mr-2"/> Activar IA</> : <><Pause className="w-3 h-3 mr-2"/> Pausar IA</>}
                        </Button>
-                       <Button variant="ghost" size="icon" className="xl:hidden text-slate-400" onClick={() => setShowMemoryMobile(!showMemoryMobile)}>
-                          <Menu className="w-5 h-5" />
-                       </Button>
+                       <Button variant="ghost" size="icon" className="xl:hidden text-slate-400" onClick={() => setShowMemoryMobile(!showMemoryMobile)}><Menu className="w-5 h-5" /></Button>
                     </div>
                  </div>
 
@@ -410,31 +372,20 @@ const Inbox = () => {
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end" className="bg-slate-900 border-slate-800 text-white w-64 max-h-[300px] overflow-y-auto custom-scrollbar">
                              <DropdownMenuLabel className="text-[10px] uppercase text-slate-500 font-bold">Catálogo de Cobro</DropdownMenuLabel>
-                             
-                             {products.length === 0 ? (
-                                 <DropdownMenuItem disabled className="text-[10px] italic text-slate-500">Sin productos configurados</DropdownMenuItem>
-                             ) : products.map(p => (
-                                 <DropdownMenuItem 
-                                    key={p.id} 
-                                    onClick={() => setDraftMessage(`${quickActions.wcBaseUrl}/checkout/?add-to-cart=${p.wc_id}`)} 
-                                    className="cursor-pointer hover:bg-indigo-600/20 text-xs"
-                                 >
-                                    <ShoppingCart className="w-3 h-3 mr-2 text-indigo-400 shrink-0" />
-                                    <span className="truncate">{p.title}</span>
+                             {products.length === 0 ? ( <DropdownMenuItem disabled className="text-[10px] italic text-slate-500">Sin productos configurados</DropdownMenuItem> ) : products.map(p => (
+                                 <DropdownMenuItem key={p.id} onClick={() => setDraftMessage(`${quickActions.wcBaseUrl}/checkout/?add-to-cart=${p.wc_id}`)} className="cursor-pointer hover:bg-indigo-600/20 text-xs">
+                                    <ShoppingCart className="w-3 h-3 mr-2 text-indigo-400 shrink-0" /><span className="truncate">{p.title}</span>
                                  </DropdownMenuItem>
                              ))}
-
                              <DropdownMenuSeparator className="bg-slate-800 my-2"/>
                              <DropdownMenuItem onClick={() => setDraftMessage(quickActions.bankInfo)} className="cursor-pointer hover:bg-indigo-600/20 text-xs"><CreditCard className="w-3 h-3 mr-2 text-indigo-400" /> Datos Bancarios</DropdownMenuItem>
-                             
                              {quickReplies.length > 0 && (
                                 <>
                                    <DropdownMenuSeparator className="bg-slate-800 my-2"/>
                                    <DropdownMenuLabel className="text-[10px] uppercase text-slate-500 font-bold">Mis Plantillas</DropdownMenuLabel>
                                    {quickReplies.map((qr) => (
                                       <DropdownMenuItem key={qr.id} onClick={() => setDraftMessage(qr.text)} className="cursor-pointer hover:bg-indigo-600/20 text-xs">
-                                         <MessageSquarePlus className="w-3 h-3 mr-2 text-indigo-400 shrink-0" />
-                                         <span className="truncate">{qr.title}</span>
+                                         <MessageSquarePlus className="w-3 h-3 mr-2 text-indigo-400 shrink-0" /><span className="truncate">{qr.title}</span>
                                       </DropdownMenuItem>
                                    ))}
                                 </>
@@ -450,15 +401,12 @@ const Inbox = () => {
 
         {/* COLUMNA 3: FICHA TÁCTICA (MEMORY PANEL) */}
         {activeLead && (
-           <div className={cn(
-               "w-full xl:w-[350px] flex-shrink-0 bg-slate-900 border-l border-slate-800 flex flex-col absolute xl:relative z-20 h-full transition-transform duration-300",
-               showMemoryMobile ? "translate-x-0" : "translate-x-full xl:translate-x-0"
-           )}>
+           <div className={cn("w-full xl:w-[350px] flex-shrink-0 bg-slate-900 border-l border-slate-800 flex flex-col absolute xl:relative z-20 h-full transition-transform duration-300", showMemoryMobile ? "translate-x-0" : "translate-x-full xl:translate-x-0")}>
               <div className="xl:hidden h-16 px-4 bg-slate-900 border-b border-slate-800 flex items-center justify-between shrink-0">
                  <span className="font-bold text-sm uppercase tracking-widest text-slate-300">Ficha Táctica</span>
                  <Button variant="ghost" size="sm" onClick={() => setShowMemoryMobile(false)}><X className="w-5 h-5"/></Button>
               </div>
-              <MemoryPanel currentAnalysis={activeLead} isEditing={isEditingMemory} setIsEditing={setIsEditingMemory} memoryForm={memoryForm} setMemoryForm={setMemoryForm} onSave={saveMemory} saving={sending} onReset={() => {}} onToggleFollowup={() => handleSendMessage(activeLead.ai_paused ? '#START' : '#STOP')} onAnalysisComplete={() => fetchMessages(activeLead.id)} />
+              <MemoryPanel currentAnalysis={activeLead} isEditing={isEditingMemory} setIsEditing={setIsEditingMemory} memoryForm={memoryForm} setMemoryForm={setMemoryForm} onSave={saveMemory} saving={sending} onReset={() => {}} onToggleFollowup={() => handleSendMessage(activeLead.ai_paused ? '#START' : '#STOP')} />
            </div>
         )}
       </div>

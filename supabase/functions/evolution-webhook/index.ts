@@ -7,7 +7,6 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-// Búsqueda Profunda Recursiva
 function findValue(obj: any, keyToFind: string): any {
   if (!obj || typeof obj !== 'object') return null;
   if (keyToFind in obj) return obj[keyToFind];
@@ -43,25 +42,30 @@ serve(async (req) => {
 
     let messageText = findValue(messageData, 'conversation') || findValue(messageData, 'text') || findValue(messageData, 'caption') || "";
 
-    // --- LÓGICA UNIFICADA PARA MENSAJES MANUALES (AGENTES DESDE WHATSAPP MOVIL/WEB) ---
+    // --- LÓGICA DE AGENTES Y BLOQUEO DE ECO ---
     if (fromMe) {
         const { data: lead } = await supabaseClient.from('leads').select('id, nombre').or(`telefono.ilike.%${phone}%`).maybeSingle();
-        if (!lead) return new Response('Ignored: Lead not found for agent message');
+        if (!lead) return new Response('Ignored: Lead not found');
 
-        await supabaseClient.from('conversaciones').insert({ lead_id: lead.id, emisor: 'HUMANO', mensaje: messageText, platform: 'WHATSAPP_MANUAL' });
+        // Bloqueo de Eco: Si la IA acaba de enviar un mensaje en los últimos 5 segundos, ignoramos este evento para no duplicarlo como "Humano"
+        const { data: recentAiMsg } = await supabaseClient.from('conversaciones')
+            .select('id').eq('lead_id', lead.id).eq('emisor', 'IA')
+            .gte('created_at', new Date(Date.now() - 5000).toISOString()).limit(1);
 
-        if (messageText.includes('#STOP') || messageText.includes('#AI_OFF')) {
-            await supabaseClient.from('leads').update({ ai_paused: true }).eq('id', lead.id);
-            await supabaseClient.from('activity_logs').insert({ action: 'UPDATE', resource: 'LEADS', description: `IA PAUSADA por agente desde WA (${lead.nombre})`, status: 'OK' });
-        } else if (messageText.includes('#START') || messageText.includes('#AI_ON')) {
-            await supabaseClient.from('leads').update({ ai_paused: false }).eq('id', lead.id);
-            await supabaseClient.from('activity_logs').insert({ action: 'UPDATE', resource: 'LEADS', description: `IA ACTIVADA por agente desde WA (${lead.nombre})`, status: 'OK' });
+        if (recentAiMsg && recentAiMsg.length > 0) return new Response('Ignored: AI Echo');
+
+        if (messageText) {
+            await supabaseClient.from('conversaciones').insert({ lead_id: lead.id, emisor: 'HUMANO', mensaje: messageText, platform: 'WHATSAPP_MANUAL' });
+            if (messageText.includes('#STOP') || messageText.includes('#AI_OFF')) {
+                await supabaseClient.from('leads').update({ ai_paused: true }).eq('id', lead.id);
+            } else if (messageText.includes('#START') || messageText.includes('#AI_ON')) {
+                await supabaseClient.from('leads').update({ ai_paused: false }).eq('id', lead.id);
+            }
         }
-        
         return new Response('Agent message processed');
     }
 
-    // --- LÓGICA PARA MENSAJES DE CLIENTES ---
+    // --- LÓGICA DE CLIENTE E IA ---
     let isAudio = !!findValue(messageData, 'audioMessage');
     let isImage = !!findValue(messageData, 'imageMessage');
     let mimeType = isAudio ? findValue(messageData, 'mimetype') : (isImage ? findValue(messageData, 'mimetype') : null);
@@ -70,16 +74,10 @@ serve(async (req) => {
     if (!base64 && (isAudio || isImage) && evoUrl && evoKey) {
         try {
             const urlObj = new URL(evoUrl);
-            const baseUrl = urlObj.origin;
-            const instance = body.instance || urlObj.pathname.split('/').pop();
-            const getMediaUrl = `${baseUrl}/chat/getBase64FromMediaMessage/${instance}`;
-            const mediaRes = await fetch(getMediaUrl, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'apikey': evoKey },
-                body: JSON.stringify({ message: body.data || body })
-            });
+            const getMediaUrl = `${urlObj.origin}/chat/getBase64FromMediaMessage/${body.instance || urlObj.pathname.split('/').pop()}`;
+            const mediaRes = await fetch(getMediaUrl, { method: 'POST', headers: { 'Content-Type': 'application/json', 'apikey': evoKey }, body: JSON.stringify({ message: body.data || body }) });
             if (mediaRes.ok) base64 = (await mediaRes.json()).base64;
-        } catch (e) { console.error("[Webhook] Búsqueda de base64 falló:", e); }
+        } catch (e) {}
     }
 
     let bytes = null;
@@ -88,7 +86,7 @@ serve(async (req) => {
             const binary = atob(base64);
             bytes = new Uint8Array(binary.length);
             for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-        } catch(e) { console.error("Error decodificando base64:", e); }
+        } catch(e) {}
     }
 
     if (isAudio && bytes) {
@@ -97,11 +95,8 @@ serve(async (req) => {
             const formData = new FormData();
             formData.append('file', blob, 'audio.ogg');
             formData.append('model', 'whisper-1');
-            const whisperRes = await fetch('https://api.openai.com/v1/audio/transcriptions', {
-                method: 'POST', headers: { 'Authorization': `Bearer ${apiKey}` }, body: formData
-            });
-            if (whisperRes.ok) messageText = `[TRANSCRIPCIÓN AUDIO]: "${(await whisperRes.json()).text}"`;
-            else messageText = `[TRANSCRIPCIÓN AUDIO]: (Fallo en la transcripción)`;
+            const whisperRes = await fetch('https://api.openai.com/v1/audio/transcriptions', { method: 'POST', headers: { 'Authorization': `Bearer ${apiKey}` }, body: formData });
+            messageText = whisperRes.ok ? `[TRANSCRIPCIÓN AUDIO]: "${(await whisperRes.json()).text}"` : `[AUDIO NO RECONOCIDO]`;
         } catch (e) { messageText = `[AUDIO NO RECONOCIDO]`; }
     }
 
@@ -110,31 +105,25 @@ serve(async (req) => {
 
     let { data: lead } = await supabaseClient.from('leads').select('*').or(`telefono.ilike.%${phone}%`).maybeSingle();
     if (!lead) {
-        const { data: newLead } = await supabaseClient.from('leads').insert({ 
-            nombre: `Nuevo Lead ${phone.slice(-4)}`, telefono: phone, buying_intent: 'BAJO', payment_status: 'NONE'
-        }).select().single();
+        const { data: newLead } = await supabaseClient.from('leads').insert({ nombre: `Nuevo Lead ${phone.slice(-4)}`, telefono: phone, buying_intent: 'BAJO', payment_status: 'NONE' }).select().single();
         lead = newLead;
     }
 
     if (lead.ai_paused) return new Response('Paused');
 
-    await supabaseClient.from('leads').update({ 
-        last_message_at: new Date().toISOString(),
-        followup_stage: 0 
-    }).eq('id', lead.id);
+    await supabaseClient.from('leads').update({ last_message_at: new Date().toISOString(), followup_stage: 0 }).eq('id', lead.id);
 
     const { data: kernelData } = await supabaseClient.functions.invoke('get-samurai-context', { body: { lead } });
     const { data: history } = await supabaseClient.from('conversaciones').select('emisor, mensaje').eq('lead_id', lead.id).order('created_at', { ascending: false }).limit(20);
-    const historyMsgs = history ? history.reverse() : [];
-
+    
+    // GUARDAR MENSAJE DEL CLIENTE
     await supabaseClient.from('conversaciones').insert({ lead_id: lead.id, emisor: 'CLIENTE', mensaje: messageText, platform: 'WHATSAPP' });
 
     let finalSystemPrompt = kernelData?.system_prompt || "";
     let userMessageContent: any = messageText;
 
     if (isImage && base64) {
-        const visionPrompt = configs.find(c => c.key === 'prompt_vision_instrucciones')?.value || "Analiza esta imagen con precisión.";
-        finalSystemPrompt += `\n\n=== MÓDULO OJO DE HALCÓN ACTIVADO ===\n${visionPrompt}\n\n[REGLA DE SISTEMA OBLIGATORIA]: El cliente acaba de enviar una imagen. Si tras analizarla determinas que ES un comprobante de pago o ficha de depósito, DEBES añadir al final de tu mensaje este bloque JSON EXACTO para actualizar el Pipeline de ventas: \n---JSON---\n{"payment_status": "VALID"}\n(Usa "VALID" si el pago es correcto, "INVALID" si es falso o cuenta errónea, y "DOUBTFUL" si es borroso o dudoso). Si la imagen NO es un comprobante de pago, NO escribas el JSON.`;
+        finalSystemPrompt += `\n\n=== MÓDULO OJO DE HALCÓN ACTIVADO ===\nSi tras analizar la imagen determinas que ES un comprobante de pago, DEBES añadir al final de tu mensaje este JSON: \n---JSON---\n{"payment_status": "VALID"}\n(Usa "INVALID" si es falso o "DOUBTFUL" si dudoso).`;
         userMessageContent = [{ type: "text", text: messageText }, { type: "image_url", image_url: { url: `data:${mimeType || 'image/jpeg'};base64,${base64}` } }];
     }
 
@@ -145,19 +134,16 @@ serve(async (req) => {
             model: "gpt-4o",
             messages: [
                 { role: "system", content: finalSystemPrompt },
-                ...historyMsgs.map(m => ({ role: (m.emisor === 'IA' || m.emisor === 'SAMURAI' ? 'assistant' : 'user'), content: m.mensaje })),
+                ...(history ? history.reverse() : []).map(m => ({ role: (m.emisor === 'IA' || m.emisor === 'SAMURAI' ? 'assistant' : 'user'), content: m.mensaje })),
                 { role: "user", content: userMessageContent } 
             ],
             temperature: 0.3
         })
     });
 
-    // REGLA CRÍTICA DE VISIBILIDAD DE ERRORES: Si OpenAI Falla, lo anotamos en el chat.
     if (!aiRes.ok) {
-        const errorText = await aiRes.text();
-        await supabaseClient.from('activity_logs').insert({ action: 'ERROR', resource: 'SYSTEM', description: `OpenAI Error: ${errorText.substring(0, 150)}`, status: 'ERROR' });
-        await supabaseClient.from('conversaciones').insert({ lead_id: lead.id, emisor: 'IA', mensaje: `[ERROR DE IA] No pude procesar el mensaje. Verifica tu API Key de OpenAI y tu saldo en la plataforma.`, platform: 'ERROR' });
-        return new Response("OpenAI Error logged", { status: 200, headers: corsHeaders }); // Retornamos 200 para que Evolution no reintente en bucle
+        await supabaseClient.from('conversaciones').insert({ lead_id: lead.id, emisor: 'IA', mensaje: `[ERROR DE IA] Fallo conexión con OpenAI.`, platform: 'ERROR' });
+        return new Response("OpenAI Error", { status: 200, headers: corsHeaders });
     }
 
     const aiData = await aiRes.json();
@@ -170,11 +156,10 @@ serve(async (req) => {
         const parts = rawAnswer.split('---JSON---');
         rawAnswer = parts[0].trim();
         try {
-            let jsonStr = parts[1].trim().replace(/```json/g, '').replace(/```/g, '').trim();
-            const parsedJson = JSON.parse(jsonStr);
+            const parsedJson = JSON.parse(parts[1].trim().replace(/```json/g, '').replace(/```/g, '').trim());
             if (parsedJson.payment_status) paymentStatusToUpdate = parsedJson.payment_status;
             if (parsedJson.request_human) requestHumanToUpdate = true;
-        } catch(e) { console.error("[Webhook] Error procesando JSON IA:", e); }
+        } catch(e) {}
     }
 
     if (paymentStatusToUpdate) {
@@ -186,13 +171,10 @@ serve(async (req) => {
                 const { data: publicUrlData } = supabaseClient.storage.from('media').getPublicUrl(fileName);
                 await supabaseClient.from('media_assets').insert({
                     title: `Comprobante Automático ${lead.nombre}`, url: publicUrlData.publicUrl, type: 'IMAGE', category: 'PAYMENT',
-                    ocr_content: `[Ojo de Halcón] Status IA: ${paymentStatusToUpdate}\nLead: ${lead.nombre} (${lead.telefono})\nValidación Automática.`
+                    ocr_content: `[Ojo de Halcón] Status IA: ${paymentStatusToUpdate}\nLead: ${lead.nombre} (${lead.telefono})`
                 });
             }
         }
-        await supabaseClient.from('activity_logs').insert({
-            action: 'UPDATE', resource: 'LEADS', description: `Comprobante evaluado. Ojo de Halcón: ${paymentStatusToUpdate}`, status: paymentStatusToUpdate === 'VALID' ? 'OK' : 'ERROR'
-        });
     }
 
     const mediaRegex = /<<MEDIA:(.*?)>>/i;
@@ -200,59 +182,35 @@ serve(async (req) => {
     const mediaUrl = mediaMatch ? mediaMatch[1].trim() : null;
     let textToSend = rawAnswer.replace(mediaRegex, '').trim();
 
-    // REGLA CRÍTICA DE VISIBILIDAD DE SILENCIO: Si la IA decide no hablar, lo anotamos como Nota Interna.
     if (!textToSend && !mediaUrl) {
-        await supabaseClient.from('conversaciones').insert({ 
-            lead_id: lead.id, 
-            emisor: 'NOTA', 
-            mensaje: `🤖 [Análisis Silencioso IA]: La IA procesó el mensaje correctamente pero determinó que no era necesario responder con texto al cliente en este momento.`, 
-            platform: 'SISTEMA' 
-        });
-        return new Response(JSON.stringify({ success: true, note: "Silent processing" }), { headers: corsHeaders });
+        await supabaseClient.from('conversaciones').insert({ lead_id: lead.id, emisor: 'NOTA', mensaje: `🤖 [Análisis Silencioso IA]: Procesado. Sin respuesta de texto.`, platform: 'SISTEMA' });
+        return new Response('Silent processing');
     }
 
-    if (evoUrl && evoKey && (textToSend || mediaUrl)) {
+    const messageToLog = mediaUrl ? `[IMG: ${mediaUrl}] ${textToSend}` : textToSend;
+
+    // REGISTRO INDESTRUCTIBLE: Guardar en DB antes de llamar a WA API para asegurar historial en CRM
+    const { data: insertedMsg } = await supabaseClient.from('conversaciones').insert({ 
+        lead_id: lead.id, emisor: 'IA', mensaje: messageToLog, platform: 'WHATSAPP_AUTO' 
+    }).select().single();
+
+    if (evoUrl && evoKey) {
         const endpoint = mediaUrl ? evoUrl.replace('sendText', 'sendMedia') : evoUrl;
-        const payload = mediaUrl ? {
-            number: phone, mediatype: "image", media: mediaUrl, caption: textToSend || "",
-            mediaMessage: { mediatype: "image", media: mediaUrl, caption: textToSend || "" }
-        } : { number: phone, text: textToSend };
+        const payload = mediaUrl ? { number: phone, mediatype: "image", media: mediaUrl, caption: textToSend || "", mediaMessage: { mediatype: "image", media: mediaUrl, caption: textToSend || "" } } : { number: phone, text: textToSend };
 
-        const response = await fetch(endpoint, {
-            method: 'POST', headers: { 'Content-Type': 'application/json', 'apikey': evoKey }, body: JSON.stringify(payload)
-        });
-
-        const messageToLog = mediaUrl ? `[IMG: ${mediaUrl}] ${textToSend}` : textToSend;
-        
-        if (!response.ok) {
-            const errText = await response.text();
-            await supabaseClient.from('activity_logs').insert({ action: 'ERROR', resource: 'SYSTEM', description: `Evolution API falló: ${errText.substring(0, 150)}`, status: 'ERROR' });
-            await supabaseClient.from('conversaciones').insert({ lead_id: lead.id, emisor: 'IA', mensaje: `[ERROR DE ENVÍO WA] ${messageToLog}`, platform: 'ERROR' });
-        } else {
-            await supabaseClient.from('conversaciones').insert({ lead_id: lead.id, emisor: 'IA', mensaje: messageToLog, platform: 'WHATSAPP_AUTO' });
+        try {
+            const response = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json', 'apikey': evoKey }, body: JSON.stringify(payload) });
+            if (!response.ok && insertedMsg) {
+                await supabaseClient.from('conversaciones').update({ platform: 'ERROR_WA', mensaje: `[FALLO ENVÍO WA] ${messageToLog}` }).eq('id', insertedMsg.id);
+            }
+        } catch (e) {
+            if (insertedMsg) await supabaseClient.from('conversaciones').update({ platform: 'ERROR_WA', mensaje: `[FALLO ENVÍO WA] ${messageToLog}` }).eq('id', insertedMsg.id);
         }
-    } else if (textToSend || mediaUrl) {
-        // FALLBACK DIRECTO: Incluso sin WA, registramos qué iba a decir la IA.
-        const messageToLog = mediaUrl ? `[IMG: ${mediaUrl}] ${textToSend}` : textToSend;
-        await supabaseClient.from('conversaciones').insert({ 
-            lead_id: lead.id, 
-            emisor: 'IA', 
-            mensaje: `[MODO PRUEBA / WA DESCONECTADO]\n${messageToLog}`, 
-            platform: 'SISTEMA' 
-        });
     }
 
     if (requestHumanToUpdate) {
         await supabaseClient.from('leads').update({ ai_paused: true }).eq('id', lead.id);
-        if (lead.assigned_to && evoUrl && evoKey) {
-            const { data: agentProfile } = await supabaseClient.from('profiles').select('full_name, phone').eq('id', lead.assigned_to).maybeSingle();
-            if (agentProfile?.phone) {
-                const agentAlertMsg = `🚨 *ATENCIÓN REQUERIDA* 🚨\n\nEl cliente *${lead.nombre || lead.telefono}* requiere asistencia humana (o hizo una pregunta fuera del manual).\n\nEl Bot se ha pausado.\n👉 Atiéndelo en el CRM.`;
-                await fetch(evoUrl, { method: 'POST', headers: { 'Content-Type': 'application/json', 'apikey': evoKey }, body: JSON.stringify({ number: agentProfile.phone.replace(/\D/g, ''), text: agentAlertMsg }) });
-            }
-        }
-        await supabaseClient.from('activity_logs').insert({ action: 'UPDATE', resource: 'LEADS', description: `IA pausada (Escalado a Humano) para ${lead.nombre}`, status: 'OK' });
-        await supabaseClient.from('conversaciones').insert({ lead_id: lead.id, mensaje: `IA Pausada automáticamente porque el cliente solicitó asistencia humana o hizo una pregunta sin respuesta en la Base de Conocimiento.`, emisor: 'NOTA', platform: 'PANEL_INTERNO' });
+        await supabaseClient.from('conversaciones').insert({ lead_id: lead.id, mensaje: `IA Pausada. Cliente solicitó humano o información técnica.`, emisor: 'NOTA', platform: 'PANEL_INTERNO' });
     }
 
     return new Response(JSON.stringify({ success: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
