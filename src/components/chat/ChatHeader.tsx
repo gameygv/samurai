@@ -60,7 +60,7 @@ export const ChatHeader = ({ lead, isAiPaused, sending, onSendCommand }: ChatHea
             onClick={() => onSendCommand('#START')}
             disabled={sending}
           >
-            <Play className="w-3 h-3 sm:mr-2" /> <span className="hidden sm:inline">Activar IA</span>
+            <Play className="w-3 h-3 sm:mr-2" /> <span className="hidden sm:inline">Activar IA (Este Chat)</span>
           </Button>
         ) : (
           <Button
@@ -70,7 +70,7 @@ export const ChatHeader = ({ lead, isAiPaused, sending, onSendCommand }: ChatHea
             onClick={() => onSendCommand('#STOP')}
             disabled={sending}
           >
-            <Pause className="w-3 h-3 sm:mr-2" /> <span className="hidden sm:inline">Pausar IA</span>
+            <Pause className="w-3 h-3 sm:mr-2" /> <span className="hidden sm:inline">Pausar IA (Este Chat)</span>
           </Button>
         )}
       </div>

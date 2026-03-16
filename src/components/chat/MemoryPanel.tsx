@@ -397,7 +397,7 @@ export const MemoryPanel = ({
       <div className="p-4 bg-slate-950/50 border-t border-slate-800 shrink-0">
          <Button variant="outline" className={`w-full h-11 text-xs font-bold uppercase tracking-widest rounded-xl shadow-lg transition-all ${currentAnalysis.ai_paused ? 'border-emerald-500/50 text-emerald-500 bg-emerald-500/10 hover:bg-emerald-500/20' : 'border-red-500/50 text-red-500 bg-red-500/10 hover:bg-red-500/20'}`} onClick={onToggleFollowup}>
             {currentAnalysis.ai_paused ? <Zap className="w-4 h-4 mr-2"/> : <ShieldAlert className="w-4 h-4 mr-2"/>}
-            {currentAnalysis.ai_paused ? 'ACTIVAR SAMURAI' : 'PAUSAR SAMURAI'}
+            {currentAnalysis.ai_paused ? 'ACTIVAR IA (ESTE CHAT)' : 'PAUSAR IA (ESTE CHAT)'}
          </Button>
       </div>
     </div>
