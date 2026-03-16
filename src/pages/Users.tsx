@@ -11,7 +11,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Switch } from '@/components/ui/switch';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { toast } from 'sonner';
 import { logActivity } from '@/utils/logger';
@@ -85,12 +84,12 @@ const UsersPage = () => {
             : selectedUser.territories;
 
         const { error } = await supabase.from('profiles').update({ 
-           role: selectedUser.role, is_active: selectedUser.is_active, full_name: selectedUser.full_name,
+           role: selectedUser.role, full_name: selectedUser.full_name,
            phone: selectedUser.phone, territories: territoriesArray
         }).eq('id', selectedUser.id);
         
         if (error) throw error;
-        await logActivity({ action: 'UPDATE', resource: 'USERS', description: `Permisos actualizados para: ${selectedUser.username}`, status: 'OK' });
+        await logActivity({ action: 'UPDATE', resource: 'USERS', description: `Permisos actualizados para: ${selectedUser.username || selectedUser.full_name}`, status: 'OK' });
         toast.success("Perfil de usuario actualizado");
         setIsEditOpen(false);
         fetchAll();
@@ -369,11 +368,6 @@ const UsersPage = () => {
                          <SelectItem value="sales">Ventas (Limitado a su cartera)</SelectItem>
                       </SelectContent>
                     </Select>
-                  </div>
-
-                  <div className="flex items-center justify-between p-4 bg-slate-950 rounded-xl border border-slate-800">
-                     <div className="space-y-0.5"><Label>Acceso General</Label><p className="text-[9px] text-slate-500 uppercase font-bold">CRM Habilitado</p></div>
-                     <Switch checked={selectedUser.is_active} onCheckedChange={c => setSelectedUser({...selectedUser, is_active: c})} disabled={selectedUser.id === currentUser?.id} />
                   </div>
                   
                   <div className="pt-4 border-t border-slate-800"><Button variant="ghost" className="w-full text-red-500 hover:bg-red-500/10 h-11 uppercase text-[10px] font-bold tracking-widest rounded-xl" onClick={() => handleDeleteUser(selectedUser.id, selectedUser.full_name)} disabled={selectedUser.id === currentUser?.id}><Trash2 className="w-4 h-4 mr-2" /> Eliminar Permanentemente</Button></div>
