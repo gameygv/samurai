@@ -58,13 +58,16 @@ const Inbox = () => {
     return () => { supabase.removeChannel(leadsChannel); };
   }, []);
 
+  // SISTEMA HÍBRIDO DE TIEMPO REAL (WEBSOCKETS + POLLING)
   useEffect(() => {
     let msgChannel: any;
+    let pollInterval: NodeJS.Timeout;
 
     if (activeLead) {
        fetchMessages(activeLead.id);
        updateMemoryForm(activeLead);
        
+       // 1. WebSockets (Intento en Tiempo Real)
        const uniqueId = Math.random().toString(36).substring(7);
        msgChannel = supabase.channel(`inbox-msgs-${activeLead.id}-${uniqueId}`)
          .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'conversaciones', filter: `lead_id=eq.${activeLead.id}` }, (payload) => {
@@ -73,8 +76,25 @@ const Inbox = () => {
                return [...prev, payload.new];
             });
          }).subscribe();
+
+       // 2. Polling de Respaldo (Forzado cada 2.5s)
+       // Esto garantiza que NUNCA se pierda un mensaje si los WebSockets están bloqueados.
+       pollInterval = setInterval(async () => {
+           const { data } = await supabase.from('conversaciones')
+                .select('*').eq('lead_id', activeLead.id).order('created_at', { ascending: true });
+           if (data) {
+               setMessages(prev => {
+                   if (prev.length === data.length) return prev; // Sin cambios
+                   return data; // Actualizar con los nuevos
+               });
+           }
+       }, 2500);
     }
-    return () => { if (msgChannel) supabase.removeChannel(msgChannel); };
+
+    return () => { 
+        if (msgChannel) supabase.removeChannel(msgChannel); 
+        if (pollInterval) clearInterval(pollInterval);
+    };
   }, [activeLead?.id]);
 
   useEffect(() => {
@@ -199,13 +219,15 @@ const Inbox = () => {
       }
 
       const apiResponse = await sendEvolutionMessage(activeLead.telefono, text, mediaData);
-      if (!apiResponse) toast.warning("Modo Prueba: Mensaje guardado en el CRM pero WhatsApp no está conectado.", { duration: 5000 });
-
+      
       const textToSave = text || (file ? `[ARCHIVO ENVIADO: ${file.name}]` : '');
       const finalMessage = apiResponse ? textToSave : `[PRUEBA / WA DESCONECTADO] ${textToSave}`;
 
       await supabase.from('conversaciones').insert({ 
-        lead_id: activeLead.id, mensaje: finalMessage, emisor: 'HUMANO', platform: 'PANEL',
+        lead_id: activeLead.id, 
+        mensaje: finalMessage, 
+        emisor: 'HUMANO', 
+        platform: 'PANEL',
         metadata: mediaData ? { mediaUrl: mediaData.url, mediaType: mediaData.type, fileName: mediaData.name } : {}
       });
 

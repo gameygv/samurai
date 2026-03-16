@@ -9,7 +9,12 @@ import { AiSuggestions } from './chat/AiSuggestions';
 import { Button } from '@/components/ui/button';
 import { Zap, CreditCard, Link as LinkIcon, FileText, X, Menu, MessageSquarePlus, ShoppingCart } from 'lucide-react';
 import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { toast } from 'sonner';
 import { sendEvolutionMessage } from '@/utils/messagingService';
@@ -56,12 +61,14 @@ const ChatViewer = ({ lead: initialLead, open, onOpenChange }: ChatViewerProps) 
   useEffect(() => {
     let leadChannel: any;
     let msgChannel: any;
+    let pollInterval: NodeJS.Timeout;
 
     if (open && lead?.id) {
       fetchMessages();
       
       const uniqueId = Math.random().toString(36).substring(7);
       
+      // 1. WebSockets
       leadChannel = supabase.channel(`lead-watch-${lead.id}-${uniqueId}`)
         .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'leads', filter: `id=eq.${lead.id}` }, (payload) => {
            setLead(payload.new);
@@ -75,11 +82,24 @@ const ChatViewer = ({ lead: initialLead, open, onOpenChange }: ChatViewerProps) 
               return [...prev, payload.new];
            });
         }).subscribe();
+
+      // 2. Polling Forzado (Anti-bloqueo)
+      pollInterval = setInterval(async () => {
+         const { data } = await supabase.from('conversaciones')
+             .select('*').eq('lead_id', lead.id).order('created_at', { ascending: true });
+         if (data) {
+             setMessages(prev => {
+                 if (prev.length === data.length) return prev;
+                 return data;
+             });
+         }
+      }, 2500);
     }
 
     return () => { 
         if (leadChannel) supabase.removeChannel(leadChannel); 
         if (msgChannel) supabase.removeChannel(msgChannel);
+        if (pollInterval) clearInterval(pollInterval);
     };
   }, [open, lead?.id]);
 
@@ -87,10 +107,12 @@ const ChatViewer = ({ lead: initialLead, open, onOpenChange }: ChatViewerProps) 
      const { data } = await supabase.from('app_config').select('key, value').in('key', ['wc_url', 'bank_name', 'bank_account', 'bank_clabe', 'bank_holder', 'quick_replies', 'wc_products']);
      if (data) {
         const config: any = data.reduce((acc, item) => ({...acc, [item.key]: item.value}), {});
+        
         setQuickActions({
            wcBaseUrl: config.wc_url || 'https://theelephantbowl.com',
            bankInfo: `Banco: ${config.bank_name}\nCuenta: ${config.bank_account}\nCLABE: ${config.bank_clabe}\nTitular: ${config.bank_holder}`
         });
+        
         try { if (config.quick_replies) setQuickReplies(JSON.parse(config.quick_replies)); } catch (e) {}
         try { if (config.wc_products) setProducts(JSON.parse(config.wc_products)); } catch (e) {}
      }
@@ -124,59 +146,94 @@ const ChatViewer = ({ lead: initialLead, open, onOpenChange }: ChatViewerProps) 
     setLoadingSuggestions(true);
     try {
       const transcript = msgs.slice(-8).map(m => `${m.emisor}: ${m.mensaje}`).join('\n');
-      const { data, error } = await supabase.functions.invoke('get-ai-suggestions', { body: { lead_id: lead.id, transcript } });
+      const { data, error } = await supabase.functions.invoke('get-ai-suggestions', {
+        body: { lead_id: lead.id, transcript }
+      });
       if (!error && data?.suggestions) setSuggestions(data.suggestions);
-    } finally { setLoadingSuggestions(false); }
+    } finally {
+      setLoadingSuggestions(false);
+    }
   };
 
   const handleSendMessage = async (text: string, file?: File, isInternalNote: boolean = false) => {
     setSending(true);
     try {
+      // 1. Intercepción de Comandos del Sistema
       if (text.trim() === '#STOP' || text.trim() === '#START') {
          const isPaused = text.trim() === '#STOP';
          await supabase.from('leads').update({ ai_paused: isPaused }).eq('id', lead.id);
-         await supabase.from('conversaciones').insert({ lead_id: lead.id, mensaje: `IA ${isPaused ? 'Pausada' : 'Activada'} manualmente.`, emisor: 'NOTA', platform: 'PANEL_INTERNO' });
+         
+         await supabase.from('conversaciones').insert({ 
+           lead_id: lead.id, 
+           mensaje: `IA ${isPaused ? 'Pausada' : 'Activada'} manualmente.`, 
+           emisor: 'NOTA', 
+           platform: 'PANEL_INTERNO' 
+         });
+         
          toast.success(`Samurai ${isPaused ? 'Pausado' : 'Activado'}`);
+         fetchMessages();
          setDraftMessage('');
          return;
       }
 
       if (isInternalNote) {
-         await supabase.from('conversaciones').insert({ lead_id: lead.id, mensaje: text, emisor: 'NOTA', platform: 'PANEL_INTERNO' });
+         await supabase.from('conversaciones').insert({ 
+           lead_id: lead.id, 
+           mensaje: text, 
+           emisor: 'NOTA', 
+           platform: 'PANEL_INTERNO'
+         });
          toast.success("Nota interna guardada.");
+         fetchMessages();
          setDraftMessage('');
          return; 
       }
 
       let mediaData = undefined;
+
       if (file) {
         const ext = file.name.split('.').pop();
         const path = `chat_uploads/${Date.now()}_${Math.random().toString(36).substring(7)}.${ext}`;
+        
         const { error: uploadErr } = await supabase.storage.from('media').upload(path, file);
         if (uploadErr) throw uploadErr;
+
         const { data: { publicUrl } } = supabase.storage.from('media').getPublicUrl(path);
+
         let type = 'document';
         if (file.type.startsWith('image/')) type = 'image';
         else if (file.type.startsWith('video/')) type = 'video';
         else if (file.type.startsWith('audio/')) type = 'audio';
+
         mediaData = { url: publicUrl, type, mimetype: file.type, name: file.name };
       }
 
       const apiResponse = await sendEvolutionMessage(lead.telefono, text, mediaData);
-      if (!apiResponse) toast.warning("Modo Prueba: Mensaje guardado en CRM pero WhatsApp no está conectado.", { duration: 5000 });
+      
+      // Permitimos guardar el mensaje en la BD aunque la API falle (Modo Prueba / Simulación)
+      if (!apiResponse) {
+          toast.warning("Modo Prueba: Mensaje guardado en el CRM pero WhatsApp no está conectado.", { duration: 5000 });
+      }
 
       const textToSave = text || (file ? `[ARCHIVO ENVIADO: ${file.name}]` : '');
       const finalMessage = apiResponse ? textToSave : `[PRUEBA / WA DESCONECTADO] ${textToSave}`;
 
       await supabase.from('conversaciones').insert({ 
-        lead_id: lead.id, mensaje: finalMessage, emisor: 'HUMANO', platform: 'PANEL',
+        lead_id: lead.id, 
+        mensaje: finalMessage, 
+        emisor: 'HUMANO', 
+        platform: 'PANEL',
         metadata: mediaData ? { mediaUrl: mediaData.url, mediaType: mediaData.type, fileName: mediaData.name } : {}
       });
 
+      // DISPARO SILENCIOSO DE AUDITORÍA QA PARA VENDEDORES
       if (user && text && !isInternalNote) {
-          supabase.functions.invoke('evaluate-agent', { body: { agent_id: user.id, lead_id: lead.id, message_text: text } }).catch(e => {});
+          supabase.functions.invoke('evaluate-agent', {
+              body: { agent_id: user.id, lead_id: lead.id, message_text: text }
+          }).catch(e => console.error("Error silencioso QA:", e));
       }
 
+      fetchMessages();
       setDraftMessage('');
     } catch (err: any) {
       toast.error('Error: ' + err.message);
@@ -189,17 +246,24 @@ const ChatViewer = ({ lead: initialLead, open, onOpenChange }: ChatViewerProps) 
      setSending(true);
      try {
         const { data: updatedLead, error } = await supabase.from('leads').update({
-              nombre: memoryForm.nombre, apellido: memoryForm.apellido, email: memoryForm.email, summary: memoryForm.summary,
+              nombre: memoryForm.nombre, apellido: memoryForm.apellido,
+              email: memoryForm.email, summary: memoryForm.summary,
               estado_emocional_actual: memoryForm.mood, buying_intent: memoryForm.buying_intent,
-              ciudad: memoryForm.ciudad, estado: memoryForm.estado, cp: memoryForm.cp, pais: memoryForm.pais,
-              perfil_psicologico: memoryForm.perfil_psicologico, main_pain: memoryForm.main_pain, servicio_interes: memoryForm.servicio_interes,
+              ciudad: memoryForm.ciudad, estado: memoryForm.estado,
+              cp: memoryForm.cp, pais: memoryForm.pais,
+              perfil_psicologico: memoryForm.perfil_psicologico,
+              main_pain: memoryForm.main_pain, servicio_interes: memoryForm.servicio_interes,
               origen_contacto: memoryForm.origen_contacto, tiempo_compra: memoryForm.tiempo_compra,
-              lead_score: memoryForm.lead_score, assigned_to: memoryForm.assigned_to || null, tags: memoryForm.tags
+              lead_score: memoryForm.lead_score, assigned_to: memoryForm.assigned_to || null,
+              tags: memoryForm.tags
            }).eq('id', lead.id).select().single();
+
         if (error) throw error;
+
         if (updatedLead.email && !updatedLead.capi_lead_event_sent_at) {
            supabase.functions.invoke('analyze-leads', { body: { lead_id: lead.id, force: true } });
         }
+
         toast.success('Memoria del Samurai actualizada');
         setIsEditingMemory(false);
      } catch (err: any) {
@@ -223,20 +287,31 @@ const ChatViewer = ({ lead: initialLead, open, onOpenChange }: ChatViewerProps) 
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="bg-slate-900 border-slate-800 text-white w-64 max-h-[300px] overflow-y-auto custom-scrollbar">
                      <DropdownMenuLabel className="text-[10px] uppercase text-slate-500 font-bold">Catálogo de Cobro</DropdownMenuLabel>
-                     {products.length === 0 ? ( <DropdownMenuItem disabled className="text-[10px] italic text-slate-500">Sin productos configurados</DropdownMenuItem> ) : products.map(p => (
-                         <DropdownMenuItem key={p.id} onClick={() => setDraftMessage(`${quickActions.wcBaseUrl}/checkout/?add-to-cart=${p.wc_id}`)} className="cursor-pointer hover:bg-indigo-600/20 text-xs">
-                            <ShoppingCart className="w-3 h-3 mr-2 text-indigo-400 shrink-0" /><span className="truncate">{p.title}</span>
+                     
+                     {products.length === 0 ? (
+                         <DropdownMenuItem disabled className="text-[10px] italic text-slate-500">Sin productos configurados</DropdownMenuItem>
+                     ) : products.map(p => (
+                         <DropdownMenuItem 
+                            key={p.id} 
+                            onClick={() => setDraftMessage(`${quickActions.wcBaseUrl}/checkout/?add-to-cart=${p.wc_id}`)} 
+                            className="cursor-pointer hover:bg-indigo-600/20 text-xs"
+                         >
+                            <ShoppingCart className="w-3 h-3 mr-2 text-indigo-400 shrink-0" />
+                            <span className="truncate">{p.title}</span>
                          </DropdownMenuItem>
                      ))}
+
                      <DropdownMenuSeparator className="bg-slate-800 my-2"/>
                      <DropdownMenuItem onClick={() => setDraftMessage(quickActions.bankInfo)} className="cursor-pointer hover:bg-indigo-600/20 text-xs"><CreditCard className="w-3 h-3 mr-2 text-indigo-400" /> Datos Bancarios</DropdownMenuItem>
+                     
                      {quickReplies.length > 0 && (
                         <>
                            <DropdownMenuSeparator className="bg-slate-800 my-2"/>
-                           <DropdownMenuLabel className="text-[10px] uppercase text-slate-500 font-bold">Plantillas Rápidas</DropdownMenuLabel>
+                           <DropdownMenuLabel className="text-[10px] uppercase text-slate-500 font-bold">Mis Plantillas</DropdownMenuLabel>
                            {quickReplies.map((qr) => (
                               <DropdownMenuItem key={qr.id} onClick={() => setDraftMessage(qr.text)} className="cursor-pointer hover:bg-indigo-600/20 text-xs">
-                                 <MessageSquarePlus className="w-3 h-3 mr-2 text-indigo-400 shrink-0" /><span className="truncate">{qr.title}</span>
+                                 <MessageSquarePlus className="w-3 h-3 mr-2 text-indigo-400 shrink-0" />
+                                 <span className="truncate">{qr.title}</span>
                               </DropdownMenuItem>
                            ))}
                         </>
@@ -254,7 +329,7 @@ const ChatViewer = ({ lead: initialLead, open, onOpenChange }: ChatViewerProps) 
               <span className="font-bold text-sm">Ficha Táctica</span>
               <Button variant="ghost" size="sm" onClick={() => setShowMemoryMobile(false)}><X className="w-4 h-4" /></Button>
            </div>
-           <MemoryPanel currentAnalysis={lead} isEditing={isEditingMemory} setIsEditing={setIsEditingMemory} memoryForm={memoryForm} setMemoryForm={setMemoryForm} onSave={saveMemory} saving={sending} onReset={() => {}} onToggleFollowup={() => handleSendMessage(lead.ai_paused ? '#START' : '#STOP')} />
+           <MemoryPanel currentAnalysis={lead} isEditing={isEditingMemory} setIsEditing={setIsEditingMemory} memoryForm={memoryForm} setMemoryForm={setMemoryForm} onSave={saveMemory} saving={sending} onReset={() => {}} onToggleFollowup={() => handleSendMessage(lead.ai_paused ? '#START' : '#STOP')} onAnalysisComplete={() => fetchMessages()} />
         </div>
       </SheetContent>
     </Sheet>
