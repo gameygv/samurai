@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { 
   BrainCircuit, Edit2, Save, Loader2, ShieldAlert, Zap, 
   Fingerprint, Sparkles, Heart, ShieldX, ShieldCheck, AlertTriangle, 
-  CreditCard, MapPin, Navigation, TrendingUp, BarChart3, Database, History, Activity, ExternalLink, User, Tag, X, CalendarClock
+  CreditCard, MapPin, Navigation, TrendingUp, BarChart3, Database, History, Activity, ExternalLink, User, Tag, X, CalendarClock, Trash2
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -27,12 +27,13 @@ interface MemoryPanelProps {
   onReset: () => void;
   onToggleFollowup?: () => void;
   onAnalysisComplete?: () => void;
+  onDeleteLead?: () => void; // NUEVO PROP PARA ELIMINAR
 }
 
 export const MemoryPanel = ({
   currentAnalysis, isEditing, setIsEditing,
   memoryForm, setMemoryForm, onSave, saving,
-  onToggleFollowup, onAnalysisComplete
+  onToggleFollowup, onAnalysisComplete, onDeleteLead
 }: MemoryPanelProps) => {
 
   const { user, isAdmin, profile } = useAuth();
@@ -88,6 +89,7 @@ export const MemoryPanel = ({
         });
         if (error) throw new Error(error.message);
         toast.success(`¡Perfil enriquecido y segmentado!`, { id: tid });
+        fetchCapiHistory(); // Refrescar historial CAPI
         if (onAnalysisComplete) onAnalysisComplete();
      } catch (err: any) {
         toast.error("Error: " + err.message, { id: tid });
@@ -203,7 +205,16 @@ export const MemoryPanel = ({
         <div className="space-y-2">
            <div className="flex justify-between items-center mb-1">
               <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2"><Fingerprint className="w-3.5 h-3.5" /> Identidad & CRM</h4>
-              {!isEditing && <Button variant="ghost" size="icon" className="h-6 w-6 text-slate-500 hover:text-white" onClick={() => setIsEditing(true)}><Edit2 className="w-3 h-3" /></Button>}
+              <div className="flex items-center gap-1">
+                 {isAdmin && onDeleteLead && (
+                    <Button variant="ghost" size="icon" className="h-6 w-6 text-slate-500 hover:text-red-500 hover:bg-red-500/10" onClick={() => {
+                       if(confirm('¿Eliminar prospecto y TODO su historial de chat de forma permanente?')) onDeleteLead();
+                    }} title="Eliminar Lead">
+                       <Trash2 className="w-3 h-3" />
+                    </Button>
+                 )}
+                 {!isEditing && <Button variant="ghost" size="icon" className="h-6 w-6 text-slate-500 hover:text-white" onClick={() => setIsEditing(true)} title="Editar"><Edit2 className="w-3 h-3" /></Button>}
+              </div>
            </div>
 
            {isEditing ? (
@@ -283,6 +294,12 @@ export const MemoryPanel = ({
                         <span className="text-[9px] text-slate-500 uppercase tracking-widest">Email</span>
                         <span className="text-xs text-emerald-400 font-mono">{currentAnalysis.email || 'Falta Correo'}</span>
                      </div>
+                     <div className="flex flex-col gap-1 mt-2">
+                        <span className="text-[9px] text-slate-500 uppercase tracking-widest flex items-center gap-1"><MapPin className="w-3 h-3" /> Ubicación</span>
+                        <span className="text-xs text-slate-200">
+                           {currentAnalysis.ciudad ? `${currentAnalysis.ciudad}${currentAnalysis.estado ? `, ${currentAnalysis.estado}` : ''}` : 'Desconocida'}
+                        </span>
+                     </div>
 
                      {currentAnalysis.next_followup_at && (
                         <div className="flex flex-col gap-1 mt-2 pt-2 border-t border-slate-800">
@@ -338,7 +355,14 @@ export const MemoryPanel = ({
                      {loadingCapi ? (
                         <div className="flex justify-center py-2"><Loader2 className="w-4 h-4 animate-spin text-slate-700"/></div>
                      ) : capiHistory.length === 0 ? (
-                        <p className="text-[10px] text-slate-600 italic">No se han disparado eventos aún.</p>
+                        <div className="text-center py-2">
+                           <p className="text-[10px] text-slate-500 italic mb-2">No se han disparado eventos aún.</p>
+                           {healthPercent >= 28 && ( // Al menos 2/7 (ej. Email + Ciudad)
+                              <Button variant="outline" size="sm" className="h-7 text-[9px] border-indigo-500/30 text-indigo-400 hover:bg-indigo-900/20" onClick={handleRunAnalysis} disabled={analyzing}>
+                                 {analyzing ? <Loader2 className="w-3 h-3 animate-spin mr-1"/> : <Zap className="w-3 h-3 mr-1"/>} Forzar Sincronización
+                              </Button>
+                           )}
+                        </div>
                      ) : (
                         <div className="space-y-2">
                            {capiHistory.map((ev, i) => (

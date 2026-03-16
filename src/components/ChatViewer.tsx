@@ -155,6 +155,18 @@ const ChatViewer = ({ lead: initialLead, open, onOpenChange }: ChatViewerProps) 
     }
   };
 
+  const handleDeleteLead = async () => {
+    const tid = toast.loading("Eliminando prospecto...");
+    try {
+       await supabase.from('conversaciones').delete().eq('lead_id', lead.id);
+       await supabase.from('leads').delete().eq('id', lead.id);
+       toast.success("Prospecto eliminado correctamente.", { id: tid });
+       onOpenChange(false);
+    } catch (err: any) {
+       toast.error("Error al eliminar: " + err.message, { id: tid });
+    }
+  };
+
   const handleSendMessage = async (text: string, file?: File, isInternalNote: boolean = false) => {
     setSending(true);
     try {
@@ -329,7 +341,19 @@ const ChatViewer = ({ lead: initialLead, open, onOpenChange }: ChatViewerProps) 
               <span className="font-bold text-sm">Ficha Táctica</span>
               <Button variant="ghost" size="sm" onClick={() => setShowMemoryMobile(false)}><X className="w-4 h-4" /></Button>
            </div>
-           <MemoryPanel currentAnalysis={lead} isEditing={isEditingMemory} setIsEditing={setIsEditingMemory} memoryForm={memoryForm} setMemoryForm={setMemoryForm} onSave={saveMemory} saving={sending} onReset={() => {}} onToggleFollowup={() => handleSendMessage(lead.ai_paused ? '#START' : '#STOP')} onAnalysisComplete={() => fetchMessages()} />
+           <MemoryPanel 
+              currentAnalysis={lead} 
+              isEditing={isEditingMemory} 
+              setIsEditing={setIsEditingMemory} 
+              memoryForm={memoryForm} 
+              setMemoryForm={setMemoryForm} 
+              onSave={saveMemory} 
+              saving={sending} 
+              onReset={() => {}} 
+              onToggleFollowup={() => handleSendMessage(lead.ai_paused ? '#START' : '#STOP')} 
+              onAnalysisComplete={() => fetchMessages()} 
+              onDeleteLead={handleDeleteLead}
+           />
         </div>
       </SheetContent>
     </Sheet>

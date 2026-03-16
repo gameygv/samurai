@@ -142,6 +142,21 @@ const Inbox = () => {
     fetchLeads();
   };
 
+  const handleDeleteLead = async () => {
+    if (!activeLead) return;
+    const tid = toast.loading("Eliminando prospecto...");
+    try {
+       await supabase.from('conversaciones').delete().eq('lead_id', activeLead.id);
+       const { error } = await supabase.from('leads').delete().eq('id', activeLead.id);
+       if (error) throw error;
+       toast.success("Prospecto eliminado correctamente.", { id: tid });
+       setActiveLead(null);
+       fetchLeads();
+    } catch (err: any) {
+       toast.error("Error al eliminar: " + err.message, { id: tid });
+    }
+  };
+
   const handleSendMessage = async (text: string, file?: File, isInternalNote: boolean = false) => {
     if (!activeLead) return;
     setSending(true);
@@ -359,7 +374,18 @@ const Inbox = () => {
                  <span className="font-bold text-sm uppercase tracking-widest text-slate-300">Ficha Táctica</span>
                  <Button variant="ghost" size="sm" onClick={() => setShowMemoryMobile(false)}><X className="w-5 h-5"/></Button>
               </div>
-              <MemoryPanel currentAnalysis={activeLead} isEditing={isEditingMemory} setIsEditing={setIsEditingMemory} memoryForm={memoryForm} setMemoryForm={setMemoryForm} onSave={saveMemory} saving={sending} onReset={() => {}} onToggleFollowup={() => handleSendMessage(activeLead.ai_paused ? '#START' : '#STOP')} />
+              <MemoryPanel 
+                 currentAnalysis={activeLead} 
+                 isEditing={isEditingMemory} 
+                 setIsEditing={setIsEditingMemory} 
+                 memoryForm={memoryForm} 
+                 setMemoryForm={setMemoryForm} 
+                 onSave={saveMemory} 
+                 saving={sending} 
+                 onReset={() => {}} 
+                 onToggleFollowup={() => handleSendMessage(activeLead.ai_paused ? '#START' : '#STOP')} 
+                 onDeleteLead={handleDeleteLead}
+              />
            </div>
         )}
       </div>
