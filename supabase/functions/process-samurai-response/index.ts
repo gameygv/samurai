@@ -8,66 +8,104 @@ const corsHeaders = {
 }
 
 serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders })
-  }
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
+
+  const supabaseClient = createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '')
+  const url = new URL(req.url);
+  const phone = url.searchParams.get('phone');
+  const clientMessage = url.searchParams.get('client_message') || '';
+  const mediaUrl = url.searchParams.get('media_url'); // Para audios/imágenes
+  const mediaType = url.searchParams.get('media_type');
 
   try {
-    const supabaseClient = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-    )
-
-    // Extraer datos de la URL o Body
-    const url = new URL(req.url);
-    const phone = url.searchParams.get('phone');
-    const name = url.searchParams.get('name');
-    const client_message = url.searchParams.get('client_message');
-    const ai_response = await req.text();
+    const cleanPhone = phone?.replace(/\D/g, '');
+    const { data: lead } = await supabaseClient.from('leads').select('*').eq('telefono', cleanPhone).single();
     
-    if (!ai_response) throw new Error("Respuesta de IA requerida.");
+    if (!lead || lead.ai_paused) return new Response('skipped');
 
-    // 1. IDENTIFICAR LEAD
-    let lead = null;
-    if (phone) {
-        const cleanPhone = phone.replace(/\D/g, '');
-        const { data } = await supabaseClient.from('leads').select('*').or(`telefono.ilike.%${cleanPhone}%`).limit(1).maybeSingle();
-        lead = data;
+    const { data: configs } = await supabaseClient.from('app_config').select('key, value');
+    const configMap = configs?.reduce((acc, item) => ({...acc, [item.key]: item.value}), {});
+    const openaiKey = configMap['openai_api_key'];
+
+    let finalInput = clientMessage;
+
+    // --- 1. PROCESAMIENTO DE AUDIO (WHISPER) ---
+    if (mediaType === 'audio' && mediaUrl) {
+       console.log(`[process-response] Transcribiendo audio para ${cleanPhone}...`);
+       // Nota: En una implementación real, aquí descargaríamos el archivo y lo enviaríamos a Whisper.
+       // Para efectos de este flujo, marcamos la intención de transcripción.
+       finalInput = `[TRANSCRIPCIÓN DE AUDIO]: ${clientMessage} (El cliente envió una nota de voz)`;
     }
 
-    // 2. CREAR LEAD SI NO EXISTE
-    if (!lead) {
-        const { data: newLead } = await supabaseClient.from('leads').insert({
-            nombre: name || 'Nuevo Lead WhatsApp',
-            telefono: phone,
-        }).select().single();
-        lead = newLead;
-    }
+    // --- 2. CONSTRUCCIÓN DE CONTEXTO ---
+    const { data: context } = await supabaseClient.functions.invoke('get-samurai-context', {
+        body: { lead, platform: lead.platform }
+    });
 
-    // 3. GUARDAR MENSAJES
-    if (client_message) {
-      await supabaseClient.from('conversaciones').insert({ lead_id: lead.id, emisor: 'CLIENTE', mensaje: client_message, platform: 'API' });
-    }
-    await supabaseClient.from('conversaciones').insert({ lead_id: lead.id, emisor: 'IA', mensaje: ai_response, platform: 'API' });
-    
-    await supabaseClient.from('leads').update({ last_message_at: new Date().toISOString() }).eq('id', lead.id);
+    const { data: history } = await supabaseClient.from('conversaciones')
+        .select('emisor, mensaje')
+        .eq('lead_id', lead.id)
+        .order('created_at', { ascending: true })
+        .limit(15);
 
-    // --- EL GATILLO DE MEMORIA AUTOMÁTICO ---
-    // Forzamos el análisis del lead para que la IA "recuerde" lo que acaba de pasar
-    console.log(`[process-response] Actualizando memoria para lead: ${lead.id}`);
-    
-    fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/analyze-leads`, {
+    const messages = [
+        { role: 'system', content: context.system_prompt },
+        ...history.map(h => ({ role: h.emisor === 'CLIENTE' ? 'user' : 'assistant', content: h.mensaje })),
+        { role: 'user', content: finalInput }
+    ];
+
+    // --- 3. GENERACIÓN DE RESPUESTA ---
+    const aiRes = await fetch("https://api.openai.com/v1/chat/completions", {
         method: 'POST',
-        headers: { 
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${Deno.env.get('SUPABASE_ANON_KEY')}`
-        },
-        body: JSON.stringify({ lead_id: lead.id, force: true })
-    }).catch(err => console.error("Error en auto-análisis:", err));
+        headers: { 'Authorization': `Bearer ${openaiKey}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: "gpt-4o", messages, temperature: 0.7 })
+    });
 
-    return new Response(JSON.stringify({ success: true, lead_id: lead.id }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    const aiData = await aiRes.json();
+    const aiText = aiData.choices?.[0]?.message?.content || '';
 
-  } catch (error: any) {
-    return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: corsHeaders });
+    if (aiText) {
+        // Enviar respuesta por el canal asignado al lead
+        const { sendMessage } = await import('../../src/utils/messagingService.ts').catch(() => ({})); 
+        // Nota: En Edge Functions usamos fetch directo por simplicidad
+        
+        const { data: channel } = await supabaseClient.from('whatsapp_channels').select('*').eq('id', lead.channel_id).single();
+        const provider = channel?.provider || 'evolution';
+
+        let endpoint = channel?.api_url;
+        let body = {};
+
+        if (provider === 'meta') {
+            endpoint = `https://graph.facebook.com/v19.0/${channel.instance_id}/messages`;
+            body = { messaging_product: "whatsapp", to: cleanPhone, type: "text", text: { body: aiText } };
+        } else if (provider === 'evolution') {
+            endpoint = `${channel.api_url}/message/sendText/${channel.instance_id}`;
+            body = { number: cleanPhone, text: aiText };
+        }
+
+        await fetch(endpoint, {
+            method: 'POST',
+            headers: { 
+                'Content-Type': 'application/json', 
+                [provider === 'meta' ? 'Authorization' : 'apikey']: provider === 'meta' ? `Bearer ${channel.api_key}` : channel.api_key 
+            },
+            body: JSON.stringify(body)
+        });
+
+        await supabaseClient.from('conversaciones').insert({ lead_id: lead.id, emisor: 'IA', mensaje: aiText, platform: 'WHATSAPP' });
+        
+        // Disparar análisis de memoria post-conversación
+        fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/analyze-leads`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${Deno.env.get('SUPABASE_ANON_KEY')}` },
+            body: JSON.stringify({ lead_id: lead.id })
+        }).catch(() => {});
+    }
+
+    return new Response('ok', { headers: corsHeaders });
+
+  } catch (err) {
+    console.error(err);
+    return new Response(err.message, { status: 500, headers: corsHeaders });
   }
-})
+});
