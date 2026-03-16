@@ -1,6 +1,6 @@
 import React, { useRef, useEffect } from 'react';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Loader2, Bot, Mic, Image as ImageIcon, Waves } from 'lucide-react';
+import { Loader2, Bot, Mic, Image as ImageIcon, Waves, FileText, Download } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 
 interface MessageListProps {
@@ -15,7 +15,10 @@ export const MessageList = ({ messages, loading }: MessageListProps) => {
     if (scrollRef.current) scrollRef.current.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  const renderMessageContent = (text: string) => {
+  const renderMessageContent = (msg: any) => {
+    const text = msg.mensaje;
+    
+    // Transcripciones de audio de la IA
     if (text.includes('[TRANSCRIPCIÓN AUDIO]')) {
       const cleanText = text.replace(/\[TRANSCRIPCIÓN AUDIO\]:?/, '').replace(/^ "/, '').replace(/"$/, '').trim();
       return (
@@ -32,6 +35,30 @@ export const MessageList = ({ messages, loading }: MessageListProps) => {
       );
     }
 
+    // Media adjunta desde el panel (Metadata JSON)
+    if (msg.metadata?.mediaUrl) {
+      const isImg = msg.metadata.mediaType === 'image';
+      return (
+        <div className="space-y-2">
+          {isImg ? (
+            <div className="relative rounded-xl border border-slate-700/50 overflow-hidden max-w-[240px] bg-black shadow-lg">
+              <img src={msg.metadata.mediaUrl} alt="Adjunto" className="w-full h-auto object-cover" />
+            </div>
+          ) : (
+            <a href={msg.metadata.mediaUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 p-3 bg-slate-950 border border-slate-700 rounded-lg hover:border-indigo-500 transition-colors max-w-[240px]">
+              <div className="p-2 bg-indigo-900/50 text-indigo-400 rounded-lg shrink-0"><FileText className="w-5 h-5"/></div>
+              <div className="flex flex-col min-w-0">
+                <span className="text-xs font-bold text-slate-200 truncate">{msg.metadata.fileName || 'Documento adjunto'}</span>
+                <span className="text-[10px] text-indigo-400 flex items-center gap-1"><Download className="w-3 h-3"/> Descargar</span>
+              </div>
+            </a>
+          )}
+          {text && !text.includes('[ARCHIVO ENVIADO]') && <p className="whitespace-pre-wrap leading-relaxed text-sm mt-2">{text}</p>}
+        </div>
+      );
+    }
+
+    // Media antigua en texto plano [IMG: url] (Legacy support)
     const mediaRegex = /<<MEDIA:(.*?)>>/;
     const imgInLog = text.match(/\[IMG: (.*?)\]/);
     const mediaInAi = text.match(mediaRegex);
@@ -70,12 +97,12 @@ export const MessageList = ({ messages, loading }: MessageListProps) => {
                       ? 'bg-slate-900 border-slate-800 text-slate-200 rounded-bl-sm' 
                       : 'bg-indigo-600/10 border-indigo-500/20 text-indigo-100 rounded-br-sm'
                    }`}>
-                    {renderMessageContent(msg.mensaje)}
+                    {renderMessageContent(msg)}
                   </div>
                   <div className="flex items-center gap-2 mt-1 px-1 opacity-60">
                      {(msg.emisor === 'IA' || msg.emisor === 'SAMURAI') && <Bot className="w-3 h-3 text-indigo-400" />}
                      <span className="text-[9px] text-slate-500 font-mono uppercase tracking-wider">
-                        {(msg.emisor === 'IA' || msg.emisor === 'SAMURAI') ? 'ELEPHANT BOWL AI' : 'CLIENTE'} • {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        {(msg.emisor === 'IA' || msg.emisor === 'SAMURAI') ? 'ELEPHANT BOWL AI' : (msg.emisor === 'HUMANO' ? 'AGENTE' : 'CLIENTE')} • {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                      </span>
                   </div>
                 </div>

@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { 
   Trello, Loader2, Fingerprint, Image, Target, DollarSign, UserPlus, 
-  Mail, ShieldCheck, MapPin, AlertTriangle, GripVertical, CheckCircle2, XCircle, Bot, Play, Pause, User
+  Mail, ShieldCheck, MapPin, AlertTriangle, GripVertical, CheckCircle2, XCircle, Bot, Play, Pause, User, Tag
 } from 'lucide-react';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
@@ -115,7 +115,6 @@ const Pipeline = () => {
     <Layout>
       <div className="max-w-[1800px] mx-auto space-y-6 h-[calc(100vh-140px)] flex flex-col">
         
-        {/* TOP STATS */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
            <Card className="bg-slate-900 border-slate-800 p-4 flex items-center gap-4 rounded-2xl shadow-lg">
               <div className="p-3 rounded-xl bg-slate-800 text-slate-300"><Trello className="w-6 h-6" /></div>
@@ -157,7 +156,6 @@ const Pipeline = () => {
            </Card>
         </div>
 
-        {/* PIPELINE BOARD */}
         <div className="flex-1 flex gap-4 min-h-0 overflow-x-auto custom-scrollbar pb-4">
           {columns.map((col) => {
             const leadsInCol = getLeadsByIntent(col.id);
@@ -190,6 +188,13 @@ const Pipeline = () => {
                                </div>
                                <GripVertical className="w-3 h-3 text-slate-600 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
                             </div>
+
+                            <div className="flex gap-1.5 flex-wrap mt-1">
+                               {lead.tags?.map((t: string) => (
+                                 <Badge key={t} variant="outline" className="text-[8px] h-4 px-1.5 border-amber-900/50 bg-amber-900/10 text-amber-500 font-medium"><Tag className="w-2 h-2 mr-1"/>{t}</Badge>
+                               ))}
+                            </div>
+
                             <div className="flex gap-1.5 flex-wrap mt-1">
                                {lead.ciudad && <Badge variant="outline" className="text-[8px] h-4 px-1.5 border-slate-700 text-slate-400 font-medium"><MapPin className="w-2 h-2 mr-1"/>{lead.ciudad}</Badge>}
                                {lead.email && <Badge variant="outline" className="text-[8px] h-4 px-1.5 border-indigo-900/50 text-indigo-300 font-medium"><Mail className="w-2 h-2 mr-1"/> OK</Badge>}

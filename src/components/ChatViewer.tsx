@@ -42,7 +42,8 @@ const ChatViewer = ({ lead: initialLead, open, onOpenChange }: ChatViewerProps) 
   const [memoryForm, setMemoryForm] = useState({
     nombre: '', apellido: '', email: '', summary: '', mood: 'NEUTRO', buying_intent: 'BAJO',
     followup_stage: 0, next_followup_at: null, ciudad: '', estado: '', cp: '', pais: 'mx',
-    perfil_psicologico: '', main_pain: '', servicio_interes: '', origen_contacto: '', tiempo_compra: '', lead_score: 0, assigned_to: ''
+    perfil_psicologico: '', main_pain: '', servicio_interes: '', origen_contacto: '', tiempo_compra: '', 
+    lead_score: 0, assigned_to: '', tags: [] as string[]
   });
 
   useEffect(() => {
@@ -85,7 +86,8 @@ const ChatViewer = ({ lead: initialLead, open, onOpenChange }: ChatViewerProps) 
         ciudad: data.ciudad || '', estado: data.estado || '', cp: data.cp || '', pais: data.pais || 'mx',
         perfil_psicologico: data.perfil_psicologico || '', main_pain: data.main_pain || '',
         servicio_interes: data.servicio_interes || '', origen_contacto: data.origen_contacto || '',
-        tiempo_compra: data.tiempo_compra || '', lead_score: data.lead_score || 0, assigned_to: data.assigned_to || ''
+        tiempo_compra: data.tiempo_compra || '', lead_score: data.lead_score || 0, assigned_to: data.assigned_to || '',
+        tags: data.tags || []
      });
   };
 
@@ -113,13 +115,41 @@ const ChatViewer = ({ lead: initialLead, open, onOpenChange }: ChatViewerProps) 
     }
   };
 
-  const handleSendMessage = async (text: string) => {
+  const handleSendMessage = async (text: string, file?: File) => {
     setSending(true);
     try {
-      const apiResponse = await sendEvolutionMessage(lead.telefono, text);
+      let mediaData = undefined;
+
+      if (file) {
+        const ext = file.name.split('.').pop();
+        const path = `chat_uploads/${Date.now()}_${Math.random().toString(36).substring(7)}.${ext}`;
+        
+        // Subir archivo al storage (asegúrate de que el bucket 'media' esté configurado como público)
+        const { error: uploadErr } = await supabase.storage.from('media').upload(path, file);
+        if (uploadErr) throw uploadErr;
+
+        const { data: { publicUrl } } = supabase.storage.from('media').getPublicUrl(path);
+
+        let type = 'document';
+        if (file.type.startsWith('image/')) type = 'image';
+        else if (file.type.startsWith('video/')) type = 'video';
+        else if (file.type.startsWith('audio/')) type = 'audio';
+
+        mediaData = { url: publicUrl, type, mimetype: file.type, name: file.name };
+      }
+
+      const apiResponse = await sendEvolutionMessage(lead.telefono, text, mediaData);
       if (!apiResponse) { setSending(false); return; }
 
-      await supabase.from('conversaciones').insert({ lead_id: lead.id, mensaje: text, emisor: 'HUMANO', platform: 'PANEL' });
+      // Insertar en la base de datos
+      await supabase.from('conversaciones').insert({ 
+        lead_id: lead.id, 
+        mensaje: text || (file ? `[ARCHIVO ENVIADO: ${file.name}]` : ''), 
+        emisor: 'HUMANO', 
+        platform: 'PANEL',
+        metadata: mediaData ? { mediaUrl: mediaData.url, mediaType: mediaData.type, fileName: mediaData.name } : {}
+      });
+
       fetchMessages();
       setDraftMessage('');
       
@@ -127,6 +157,8 @@ const ChatViewer = ({ lead: initialLead, open, onOpenChange }: ChatViewerProps) 
          const isPaused = text.includes('#STOP');
          await supabase.from('leads').update({ ai_paused: isPaused }).eq('id', lead.id);
       }
+    } catch (err: any) {
+      toast.error('Error al enviar: ' + err.message);
     } finally {
       setSending(false);
     }
@@ -144,7 +176,8 @@ const ChatViewer = ({ lead: initialLead, open, onOpenChange }: ChatViewerProps) 
               perfil_psicologico: memoryForm.perfil_psicologico,
               main_pain: memoryForm.main_pain, servicio_interes: memoryForm.servicio_interes,
               origen_contacto: memoryForm.origen_contacto, tiempo_compra: memoryForm.tiempo_compra,
-              lead_score: memoryForm.lead_score, assigned_to: memoryForm.assigned_to || null
+              lead_score: memoryForm.lead_score, assigned_to: memoryForm.assigned_to || null,
+              tags: memoryForm.tags
            }).eq('id', lead.id).select().single();
 
         if (error) throw error;
@@ -166,7 +199,7 @@ const ChatViewer = ({ lead: initialLead, open, onOpenChange }: ChatViewerProps) 
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="w-full sm:max-w-6xl flex flex-col sm:flex-row bg-slate-950 border-l border-slate-800 text-white p-0 overflow-hidden">
         <div className={cn("flex-1 min-w-0 flex flex-col h-full bg-slate-950 transition-all", showMemoryMobile ? "hidden sm:flex" : "flex")}>
-          <ChatHeader lead={lead} isAiPaused={lead.ai_paused} sending={sending} onSendCommand={handleSendMessage} />
+          <ChatHeader lead={lead} isAiPaused={lead.ai_paused} sending={sending} onSendCommand={(cmd) => handleSendMessage(cmd)} />
           <MessageList messages={messages} loading={loading} />
           <div className="p-4 bg-slate-900/50 border-t border-slate-800 relative">
             <div className="absolute right-4 -top-12 flex gap-2">

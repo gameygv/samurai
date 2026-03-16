@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { 
   Contact, Search, Loader2, MapPin, Mail, ShieldCheck, 
-  AlertTriangle, Phone, ExternalLink, UserPlus, CreditCard 
+  AlertTriangle, Phone, ExternalLink, UserPlus, CreditCard, Tag
 } from 'lucide-react';
 import { toast } from 'sonner';
 import ChatViewer from '@/components/ChatViewer';
@@ -66,7 +66,8 @@ const Contacts = () => {
         c.apellido?.toLowerCase().includes(term) || 
         c.telefono?.includes(term) ||
         c.email?.toLowerCase().includes(term) ||
-        c.ciudad?.toLowerCase().includes(term)
+        c.ciudad?.toLowerCase().includes(term) ||
+        (c.tags && c.tags.some((t: string) => t.toLowerCase().includes(term)))
     );
   });
 
@@ -107,7 +108,7 @@ const Contacts = () => {
              <div className="relative w-full md:w-72">
                <Search className="absolute left-3 top-3 h-4 w-4 text-slate-500" />
                <Input 
-                  placeholder="Buscar por nombre, email, teléfono o ciudad..." 
+                  placeholder="Buscar nombre, tel, ciudad, etiqueta..." 
                   className="pl-10 bg-slate-900/50 border-slate-800 text-slate-200 rounded-xl focus:border-indigo-500 h-10 text-xs" 
                   value={searchTerm} 
                   onChange={e => setSearchTerm(e.target.value)} 
@@ -167,6 +168,16 @@ const Contacts = () => {
                               <span className="text-[10px] text-slate-300 flex items-center gap-1.5"><MapPin className="w-3 h-3 text-slate-500"/> {contact.ciudad} {contact.estado ? `, ${contact.estado}` : ''}</span>
                           ) : (
                               <span className="text-[10px] text-slate-600 flex items-center gap-1.5 italic"><MapPin className="w-3 h-3"/> Sin ubicación</span>
+                          )}
+
+                          {contact.tags && contact.tags.length > 0 && (
+                            <div className="flex gap-1 flex-wrap mt-1">
+                                {contact.tags.map((t: string) => (
+                                    <Badge key={t} variant="outline" className="text-[8px] h-4 px-1.5 bg-slate-950 text-slate-400 border-slate-700">
+                                        <Tag className="w-2 h-2 mr-1" /> {t}
+                                    </Badge>
+                                ))}
+                            </div>
                           )}
                        </div>
                     </TableCell>

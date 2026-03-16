@@ -7,7 +7,11 @@ const getConfig = async (keys: string[]): Promise<Record<string, string | null>>
   return data.reduce((acc, item) => ({ ...acc, [item.key]: item.value }), {} as Record<string, string | null>);
 };
 
-export const sendEvolutionMessage = async (phone: string, message: string) => {
+export const sendEvolutionMessage = async (
+  phone: string, 
+  message: string, 
+  mediaFile?: { url: string; type: string; mimetype: string; name: string }
+) => {
   try {
     const { evolution_api_url, evolution_api_key } = await getConfig(['evolution_api_url', 'evolution_api_key']);
     
@@ -15,13 +19,35 @@ export const sendEvolutionMessage = async (phone: string, message: string) => {
       throw new Error('Configuración incompleta en Ajustes.');
     }
 
-    // Estructura universal para Evolution API (v1 y v2)
-    const payload = {
-      number: phone.replace(/\D/g, ''), // Limpia cualquier carácter no numérico
-      text: message
+    let endpoint = evolution_api_url;
+    let payload: any = {
+      number: phone.replace(/\D/g, ''),
     };
 
-    const response = await fetch(evolution_api_url, {
+    if (mediaFile) {
+      // Cambiar el endpoint para envío de multimedia
+      endpoint = evolution_api_url.replace('sendText', 'sendMedia');
+      
+      // Payload compatible con Evolution API v1 y v2
+      payload = {
+        ...payload,
+        mediatype: mediaFile.type,
+        mimetype: mediaFile.mimetype,
+        caption: message || "",
+        media: mediaFile.url,
+        fileName: mediaFile.name,
+        mediaMessage: {
+          mediatype: mediaFile.type,
+          caption: message || "",
+          media: mediaFile.url,
+          fileName: mediaFile.name
+        }
+      };
+    } else {
+      payload.text = message;
+    }
+
+    const response = await fetch(endpoint, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

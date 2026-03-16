@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { 
   BrainCircuit, Edit2, Save, Loader2, ShieldAlert, Zap, 
   Fingerprint, Sparkles, Heart, ShieldX, ShieldCheck, AlertTriangle, 
-  CreditCard, MapPin, Navigation, TrendingUp, BarChart3, Database, History, Activity, ExternalLink, User
+  CreditCard, MapPin, Navigation, TrendingUp, BarChart3, Database, History, Activity, ExternalLink, User, Tag, X
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -43,10 +43,10 @@ export const MemoryPanel = ({
   const [capiHistory, setCapiHistory] = useState<any[]>([]);
   const [loadingCapi, setLoadingCapi] = useState(false);
   const [agents, setAgents] = useState<any[]>([]);
+  const [tagInput, setTagInput] = useState('');
 
-  // Advanced CAPI Health Calculation (7 Key Meta Identifiers)
   const capiFields = [
-     true, // Phone
+     true, 
      !!(currentAnalysis.email && currentAnalysis.email.includes('@')),
      !!(currentAnalysis.nombre && !currentAnalysis.nombre.includes('Nuevo')),
      !!(currentAnalysis.apellido && currentAnalysis.apellido.length > 1),
@@ -125,6 +125,21 @@ export const MemoryPanel = ({
     } finally {
       setUpdatingPayment(false);
     }
+  };
+
+  const handleAddTag = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && tagInput.trim()) {
+      e.preventDefault();
+      const newTag = tagInput.trim().toUpperCase();
+      if (!memoryForm.tags.includes(newTag)) {
+        setMemoryForm({ ...memoryForm, tags: [...memoryForm.tags, newTag] });
+      }
+      setTagInput('');
+    }
+  };
+
+  const removeTag = (tagToRemove: string) => {
+    setMemoryForm({ ...memoryForm, tags: memoryForm.tags.filter((t: string) => t !== tagToRemove) });
   };
 
   const currentAgentName = agents.find(a => a.id === currentAnalysis.assigned_to)?.full_name || 'Bot Global (Sin Asignar)';
@@ -211,6 +226,25 @@ export const MemoryPanel = ({
                     <div className="space-y-1"><Label className="text-[9px] text-slate-500">Ciudad</Label><Input value={memoryForm.ciudad} onChange={e => setMemoryForm({...memoryForm, ciudad: e.target.value})} className="h-8 text-xs bg-slate-900 border-slate-700" /></div>
                     <div className="space-y-1"><Label className="text-[9px] text-slate-500">Estado</Label><Input value={memoryForm.estado} onChange={e => setMemoryForm({...memoryForm, estado: e.target.value})} className="h-8 text-xs bg-slate-900 border-slate-700" placeholder="nl, jalisco..." /></div>
                  </div>
+
+                 {/* Sección de Etiquetas en Edición */}
+                 <div className="pt-2 border-t border-slate-800 space-y-2">
+                    <Label className="text-[9px] text-slate-500 uppercase tracking-widest flex items-center gap-1"><Tag className="w-3 h-3"/> Etiquetas</Label>
+                    <Input 
+                      value={tagInput} 
+                      onChange={e => setTagInput(e.target.value)} 
+                      onKeyDown={handleAddTag}
+                      placeholder="Ej: MAYORISTA (Presiona Enter)" 
+                      className="h-8 text-xs bg-slate-900 border-slate-700" 
+                    />
+                    <div className="flex flex-wrap gap-1.5 pt-1">
+                      {memoryForm.tags.map((t: string) => (
+                        <Badge key={t} variant="secondary" className="text-[9px] py-0 bg-slate-800 text-slate-300 hover:bg-red-900/30 hover:text-red-400 cursor-pointer flex items-center gap-1" onClick={() => removeTag(t)}>
+                          {t} <X className="w-2.5 h-2.5" />
+                        </Badge>
+                      ))}
+                    </div>
+                 </div>
                  
                  <Button onClick={onSave} disabled={saving} className="w-full bg-amber-600 hover:bg-amber-500 text-slate-900 h-9 text-xs font-bold shadow-lg rounded-lg mt-2"><Save className="w-3.5 h-3.5 mr-2" /> Guardar Todos</Button>
               </div>
@@ -231,6 +265,15 @@ export const MemoryPanel = ({
                         <span className="text-[9px] text-slate-500 uppercase tracking-widest flex items-center gap-1"><User className="w-3 h-3"/> Responsable</span>
                         <span className="text-xs text-indigo-300">{currentAgentName}</span>
                      </div>
+                     {currentAnalysis.tags && currentAnalysis.tags.length > 0 && (
+                       <div className="flex flex-wrap gap-1.5 mt-3 pt-2 border-t border-slate-800">
+                          {currentAnalysis.tags.map((t: string) => (
+                             <Badge key={t} variant="outline" className="text-[8px] border-indigo-500/30 text-indigo-300 bg-indigo-900/10">
+                               <Tag className="w-2 h-2 mr-1"/> {t}
+                             </Badge>
+                          ))}
+                       </div>
+                     )}
                   </AccordionContent>
                 </AccordionItem>
 
