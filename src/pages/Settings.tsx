@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
-import { Webhook, Key, Save, Loader2, ShoppingCart, Target, Building2, Store, Hash, Send, Clock, Play, DollarSign, MessageSquarePlus, Trash2, Plus, Sparkles, TerminalSquare, Download, Upload, ShieldAlert } from 'lucide-react';
+import { Webhook, Key, Save, Loader2, ShoppingCart, Target, Building2, Store, Hash, Send, Clock, Play, DollarSign, MessageSquarePlus, Trash2, Plus, Sparkles, TerminalSquare, Download, Upload, ShieldAlert, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import { sendEvolutionMessage } from '@/utils/messagingService';
 import { useAuth } from '@/context/AuthContext';
@@ -34,21 +34,17 @@ const Settings = () => {
       stage_1_message: '', stage_2_message: '', stage_3_message: ''
   });
 
-  // KERNEL DEV (Agnostic Core Prompts)
   const [kernelConfig, setKernelConfig] = useState({
-      prompt_catalog_rules: '',
-      prompt_media_rules: '',
-      prompt_behavior_rules: '',
-      prompt_human_handoff: '',
-      prompt_bank_rules: '',
-      prompt_ai_suggestions: '',
-      prompt_qa_auditor: ''
+      prompt_catalog_rules: '', prompt_media_rules: '', prompt_behavior_rules: '',
+      prompt_human_handoff: '', prompt_bank_rules: '', prompt_ai_suggestions: '', prompt_qa_auditor: ''
   });
 
   const [globalBotPaused, setGlobalBotPaused] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
+  const [clearingLogs, setClearingLogs] = useState(false);
+  const [wipingSystem, setWipingSystem] = useState(false);
   const [testPhone, setTestPhone] = useState('');
   
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -144,7 +140,6 @@ const Settings = () => {
         { key: 'quick_replies', value: JSON.stringify(quickReplies), category: 'SYSTEM' },
         { key: 'wc_products', value: JSON.stringify(wcProducts), category: 'WOOCOMMERCE' },
         
-        // KERNEL CONFIGS
         { key: 'prompt_catalog_rules', value: kernelConfig.prompt_catalog_rules, category: 'KERNEL' },
         { key: 'prompt_media_rules', value: kernelConfig.prompt_media_rules, category: 'KERNEL' },
         { key: 'prompt_behavior_rules', value: kernelConfig.prompt_behavior_rules, category: 'KERNEL' },
@@ -158,11 +153,9 @@ const Settings = () => {
       if (error) throw error;
 
       if (followupConfig.id) {
-          const { error: fError } = await supabase.from('followup_config').update(followupConfig).eq('id', followupConfig.id);
-          if (fError) throw fError;
+          await supabase.from('followup_config').update(followupConfig).eq('id', followupConfig.id);
       } else {
-          const { error: fError } = await supabase.from('followup_config').insert(followupConfig);
-          if (fError) throw fError;
+          await supabase.from('followup_config').insert(followupConfig);
       }
 
       toast.success('Configuración guardada correctamente.');
@@ -176,23 +169,44 @@ const Settings = () => {
 
   const handleExportConfig = async () => {
      try {
-         const { data: allConfigs } = await supabase.from('app_config').select('key, value, category, description');
+         // Backup Absolutamente Total
+         const [
+             { data: appConfig },
+             { data: followupConfigData },
+             { data: profiles },
+             { data: mediaAssets },
+             { data: knowledgeBase },
+             { data: promptVersions }
+         ] = await Promise.all([
+             supabase.from('app_config').select('*'),
+             supabase.from('followup_config').select('*'),
+             supabase.from('profiles').select('*'),
+             supabase.from('media_assets').select('*'),
+             supabase.from('knowledge_documents').select('*'),
+             supabase.from('prompt_versions').select('*')
+         ]);
+
          const exportData = {
-            metadata: { exported_at: new Date().toISOString(), version: '1.0' },
-            app_config: allConfigs,
-            followup_config: followupConfig
+            metadata: { exported_at: new Date().toISOString(), version: '2.0', description: "Respaldo Total Integral" },
+            app_config: appConfig,
+            followup_config: followupConfigData,
+            profiles: profiles,
+            media_assets: mediaAssets,
+            knowledge_documents: knowledgeBase,
+            prompt_versions: promptVersions
          };
+
          const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" });
          const url = URL.createObjectURL(blob);
          const link = document.createElement("a");
          link.href = url;
-         link.download = `samurai_kernel_backup_${Date.now()}.json`;
+         link.download = `samurai_full_backup_${Date.now()}.json`;
          document.body.appendChild(link);
          link.click();
          document.body.removeChild(link);
-         toast.success("Respaldo Total Descargado");
+         toast.success("Respaldo Total y Usuarios Descargado");
      } catch (e) {
-         toast.error("Error al exportar");
+         toast.error("Error al exportar todo el sistema");
      }
   };
 
@@ -206,17 +220,55 @@ const Settings = () => {
              const json = JSON.parse(event.target?.result as string);
              if (!json.app_config) throw new Error("Formato inválido");
              
-             // Insertar configuraciones masivamente
+             // Por seguridad en la interfaz, solo se re-inyectan configuraciones (no usuarios ni DB para evitar conflictos de Foreign Keys)
              const { error } = await supabase.from('app_config').upsert(json.app_config, { onConflict: 'key' });
              if (error) throw error;
              
-             toast.success("Configuración inyectada. Recargando...");
+             toast.success("Configuración Core inyectada con éxito. Recargando...");
              setTimeout(() => window.location.reload(), 1500);
          } catch (err: any) {
              toast.error("Error al importar: " + err.message);
          }
      };
      reader.readAsText(file);
+  };
+
+  const handleClearAllLogs = async () => {
+      if (!confirm("¿ESTÁS SEGURO? Esto vaciará permanentemente todos los logs de actividad del sistema.")) return;
+      setClearingLogs(true);
+      try {
+         await supabase.from('activity_logs').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+         toast.success("Todos los logs han sido purgados.");
+      } catch (err: any) {
+         toast.error("Fallo al vaciar logs: " + err.message);
+      } finally {
+         setClearingLogs(false);
+      }
+  };
+
+  const handleFactoryReset = async () => {
+      const promptRes = prompt("⚠️ PELIGRO CRÍTICO ⚠️\nEscribe 'DESTRUIR' para borrar TODA LA CONFIGURACIÓN, LEADS, CHATS y USUARIOS (excepto gameygv@gmail.com).");
+      if (promptRes !== 'DESTRUIR') {
+          if (promptRes !== null) toast.error("Abortando: Palabra clave incorrecta.");
+          return;
+      }
+
+      setWipingSystem(true);
+      try {
+          const { data, error } = await supabase.functions.invoke('system-wipe', {
+              body: { confirmation: 'FACTORY_RESET' }
+          });
+          
+          if (error) throw error;
+          if (data?.error) throw new Error(data.error);
+
+          toast.success("SISTEMA DESTRUIDO CON ÉXITO. Limpiando cache...");
+          setTimeout(() => window.location.reload(), 2000);
+      } catch (err: any) {
+          toast.error("Fallo durante Factory Reset: " + err.message);
+      } finally {
+          setWipingSystem(false);
+      }
   };
 
   const handleTestMessage = async () => {
@@ -277,7 +329,7 @@ const Settings = () => {
                          <CardTitle className="text-indigo-400 flex items-center gap-2 text-sm uppercase tracking-widest font-bold">
                             <TerminalSquare className="w-5 h-5" /> Samurai Kernel (Agnostic Core)
                          </CardTitle>
-                         <CardDescription className="text-[10px] mt-1">Configura las instrucciones envolventes que rigen al bot para adaptarlo a cualquier otro giro de negocio.</CardDescription>
+                         <CardDescription className="text-[10px] mt-1">Configura las instrucciones envolventes que rigen al bot.</CardDescription>
                       </div>
                       <div className="flex gap-2">
                          <input type="file" ref={fileInputRef} className="hidden" accept=".json" onChange={handleImportConfig} />
@@ -309,6 +361,31 @@ const Settings = () => {
                       <div className="space-y-2">
                          <Label className="text-[10px] text-red-500 uppercase font-bold tracking-widest">Prompt Auditor de Agentes (QA)</Label>
                          <Textarea value={kernelConfig.prompt_qa_auditor} onChange={e => handleKernelChange('prompt_qa_auditor', e.target.value)} className="bg-black border-slate-800 text-[10px] h-40 font-mono text-red-400/80" />
+                      </div>
+                   </CardContent>
+                </Card>
+
+                {/* ZONA DE PELIGRO */}
+                <Card className="bg-[#1A0C0B] border-red-900/50 shadow-2xl rounded-2xl overflow-hidden border-l-4 border-l-red-600">
+                   <CardHeader className="border-b border-red-900/30 bg-red-950/40">
+                      <CardTitle className="text-red-400 flex items-center gap-2 text-sm uppercase tracking-widest font-bold">
+                         <AlertTriangle className="w-5 h-5" /> ZONA DE PELIGRO (DANGER ZONE)
+                      </CardTitle>
+                   </CardHeader>
+                   <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6 p-6">
+                      <div className="space-y-2 p-4 border border-slate-800 rounded-xl bg-slate-950/50">
+                         <h4 className="text-white font-bold text-sm flex items-center gap-2"><Trash2 className="w-4 h-4 text-slate-400"/> Vaciar Logs del Sistema</h4>
+                         <p className="text-[10px] text-slate-400">Elimina de forma permanente todo el historial de actividad, errores y eventos del monitor.</p>
+                         <Button onClick={handleClearAllLogs} disabled={clearingLogs} variant="outline" className="mt-2 w-full border-red-900/50 text-red-400 hover:bg-red-900/30">
+                           {clearingLogs ? <Loader2 className="w-4 h-4 animate-spin mr-2"/> : "Eliminar Todos los Logs"}
+                         </Button>
+                      </div>
+                      <div className="space-y-2 p-4 border border-red-900/50 rounded-xl bg-red-950/20">
+                         <h4 className="text-red-400 font-bold text-sm flex items-center gap-2"><ShieldAlert className="w-4 h-4"/> Factory Reset (Wipe Total)</h4>
+                         <p className="text-[10px] text-red-300/70">Borra de tajo TODO el contenido: Configuración, Leads, Chats, Documentos y Usuarios (Protegiendo a gameygv@gmail.com).</p>
+                         <Button onClick={handleFactoryReset} disabled={wipingSystem} className="mt-2 w-full bg-red-700 hover:bg-red-600 text-white font-bold tracking-widest text-[10px] uppercase shadow-lg shadow-red-900/50">
+                           {wipingSystem ? <Loader2 className="w-4 h-4 animate-spin mr-2"/> : "DESTRUIR SISTEMA"}
+                         </Button>
                       </div>
                    </CardContent>
                 </Card>
