@@ -24,6 +24,7 @@ import Payments from "./pages/Payments";
 import MetaCapi from "./pages/MetaCapi";
 import Pipeline from "./pages/Pipeline";
 import Inbox from "./pages/Inbox";
+import WebhookDiag from "./pages/WebhookDiag";
 import { Loader2 } from "lucide-react";
 
 const queryClient = new QueryClient();
@@ -47,16 +48,10 @@ const PrivateRoute = ({ children }: { children: React.ReactNode }) => {
   return <>{children}</>;
 };
 
-// Nueva protección para páginas de administrador
 const AdminRoute = ({ children }: { children: React.ReactNode }) => {
     const { isAdmin, loading } = useAuth();
-  
     if (loading) return null;
-    
-    if (!isAdmin) {
-      return <Navigate to="/" replace />;
-    }
-  
+    if (!isAdmin) return <Navigate to="/" replace />;
     return <>{children}</>;
 };
 
@@ -74,13 +69,11 @@ const App = () => (
             <Route path="/inbox" element={<PrivateRoute><Inbox /></PrivateRoute>} />
             <Route path="/profile" element={<PrivateRoute><Profile /></PrivateRoute>} />
             
-            {/* Rutas filtradas por Vendedor en su interior */}
             <Route path="/leads" element={<PrivateRoute><Leads /></PrivateRoute>} />
             <Route path="/contacts" element={<PrivateRoute><Contacts /></PrivateRoute>} />
             <Route path="/pipeline" element={<PrivateRoute><Pipeline /></PrivateRoute>} />
             <Route path="/archive" element={<PrivateRoute><Archive /></PrivateRoute>} />
             
-            {/* RUTAS PROTEGIDAS PARA ADMIN/DEV */}
             <Route path="/activity" element={<PrivateRoute><AdminRoute><Activity /></AdminRoute></PrivateRoute>} />
             <Route path="/payments" element={<PrivateRoute><AdminRoute><Payments /></AdminRoute></PrivateRoute>} />
             <Route path="/brain" element={<PrivateRoute><AdminRoute><AgentBrain /></AdminRoute></PrivateRoute>} />
@@ -92,6 +85,7 @@ const App = () => (
             <Route path="/logs" element={<PrivateRoute><AdminRoute><Logs /></AdminRoute></PrivateRoute>} />
             <Route path="/settings" element={<PrivateRoute><AdminRoute><Settings /></AdminRoute></PrivateRoute>} />
             <Route path="/meta-capi" element={<PrivateRoute><AdminRoute><MetaCapi /></AdminRoute></PrivateRoute>} />
+            <Route path="/webhook-diag" element={<PrivateRoute><AdminRoute><WebhookDiag /></AdminRoute></PrivateRoute>} />
             
             <Route path="*" element={<NotFound />} />
           </Routes>
