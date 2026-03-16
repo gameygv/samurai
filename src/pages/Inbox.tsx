@@ -8,8 +8,8 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { 
-  Search, Loader2, MessageCircle, Bot, Filter, Zap, 
-  CreditCard, Link as LinkIcon, MessageSquarePlus, Play, Pause, X, Menu, ShieldAlert, ShoppingCart
+  Search, Loader2, MessageCircle, Bot, Zap, 
+  CreditCard, MessageSquarePlus, Play, Pause, X, Menu, ShoppingCart
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -18,20 +18,19 @@ import { MessageInput } from '@/components/chat/MessageInput';
 import { MemoryPanel } from '@/components/chat/MemoryPanel';
 import { AiSuggestions } from '@/components/chat/AiSuggestions';
 import { sendEvolutionMessage } from '@/utils/messagingService';
+import { useRealtimeMessages } from '@/hooks/useRealtimeMessages';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, 
   DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
 const Inbox = () => {
-  const { user, isAdmin, profile } = useAuth();
+  const { user, isAdmin } = useAuth();
   const [leads, setLeads] = useState<any[]>([]);
   const [filteredLeads, setFilteredLeads] = useState<any[]>([]);
   const [activeLead, setActiveLead] = useState<any>(null);
-  const [messages, setMessages] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [loadingLeads, setLoadingLeads] = useState(true);
-  const [loadingMessages, setLoadingMessages] = useState(false);
   const [sending, setSending] = useState(false);
   
   const [quickActions, setQuickActions] = useState<any>({});
@@ -45,56 +44,31 @@ const Inbox = () => {
   const [showMemoryMobile, setShowMemoryMobile] = useState(false);
   const [memoryForm, setMemoryForm] = useState<any>({});
 
+  // HOOK DE TIEMPO REAL - Polling estable cada 2 segundos
+  const { messages, loading: loadingMessages, refetch: refetchMessages } = useRealtimeMessages(
+    activeLead?.id || null,
+    true
+  );
+
   useEffect(() => {
     fetchLeads();
     fetchQuickActions();
 
-    const uniqueId = Math.random().toString(36).substring(7);
-    const leadsChannel = supabase.channel(`inbox-leads-${uniqueId}`)
+    const channel = supabase.channel('inbox-leads-watch')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'leads' }, () => {
          fetchLeads(false); 
       }).subscribe();
 
-    return () => { supabase.removeChannel(leadsChannel); };
+    return () => { supabase.removeChannel(channel); };
   }, []);
 
-  // SISTEMA HÍBRIDO DE TIEMPO REAL (WEBSOCKETS + POLLING)
   useEffect(() => {
-    let msgChannel: any;
-    let pollInterval: NodeJS.Timeout;
-
     if (activeLead) {
-       fetchMessages(activeLead.id);
        updateMemoryForm(activeLead);
-       
-       // 1. WebSockets (Intento en Tiempo Real)
-       const uniqueId = Math.random().toString(36).substring(7);
-       msgChannel = supabase.channel(`inbox-msgs-${activeLead.id}-${uniqueId}`)
-         .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'conversaciones', filter: `lead_id=eq.${activeLead.id}` }, (payload) => {
-            setMessages(prev => {
-               if (prev.some(m => m.id === payload.new.id)) return prev;
-               return [...prev, payload.new];
-            });
-         }).subscribe();
-
-       // 2. Polling de Respaldo (Forzado cada 2.5s)
-       // Esto garantiza que NUNCA se pierda un mensaje si los WebSockets están bloqueados.
-       pollInterval = setInterval(async () => {
-           const { data } = await supabase.from('conversaciones')
-                .select('*').eq('lead_id', activeLead.id).order('created_at', { ascending: true });
-           if (data) {
-               setMessages(prev => {
-                   if (prev.length === data.length) return prev; // Sin cambios
-                   return data; // Actualizar con los nuevos
-               });
-           }
-       }, 2500);
+       if (messages.length > 0) {
+          fetchAiSuggestions(activeLead.id, messages);
+       }
     }
-
-    return () => { 
-        if (msgChannel) supabase.removeChannel(msgChannel); 
-        if (pollInterval) clearInterval(pollInterval);
-    };
   }, [activeLead?.id]);
 
   useEffect(() => {
@@ -115,21 +89,11 @@ const Inbox = () => {
     if (data) {
        setLeads(data);
        if (activeLead) {
-          const updatedActive = data.find(l => l.id === activeLead.id);
-          if (updatedActive) setActiveLead(updatedActive);
+          const updated = data.find(l => l.id === activeLead.id);
+          if (updated) setActiveLead(updated);
        }
     }
     if (showLoader) setLoadingLeads(false);
-  };
-
-  const fetchMessages = async (leadId: string) => {
-    setLoadingMessages(true);
-    const { data } = await supabase.from('conversaciones').select('*').eq('lead_id', leadId).order('created_at', { ascending: true });
-    if (data) {
-      setMessages(data);
-      fetchAiSuggestions(leadId, data);
-    }
-    setLoadingMessages(false);
   };
 
   const fetchQuickActions = async () => {
@@ -137,7 +101,7 @@ const Inbox = () => {
     if (data) {
        const config: any = data.reduce((acc, item) => ({...acc, [item.key]: item.value}), {});
        setQuickActions({
-          wcBaseUrl: config.wc_url || 'https://theelephantbowl.com',
+          wcBaseUrl: config.wc_url || '',
           bankInfo: `Banco: ${config.bank_name}\nCuenta: ${config.bank_account}\nCLABE: ${config.bank_clabe}\nTitular: ${config.bank_holder}`
        });
        try { if (config.quick_replies) setQuickReplies(JSON.parse(config.quick_replies)); } catch (e) {}
@@ -150,8 +114,8 @@ const Inbox = () => {
     setLoadingSuggestions(true);
     try {
       const transcript = msgs.slice(-8).map(m => `${m.emisor}: ${m.mensaje}`).join('\n');
-      const { data, error } = await supabase.functions.invoke('get-ai-suggestions', { body: { lead_id: leadId, transcript } });
-      if (!error && data?.suggestions) setSuggestions(data.suggestions);
+      const { data } = await supabase.functions.invoke('get-ai-suggestions', { body: { lead_id: leadId, transcript } });
+      if (data?.suggestions) setSuggestions(data.suggestions);
     } finally { setLoadingSuggestions(false); }
   };
 
@@ -169,19 +133,13 @@ const Inbox = () => {
   };
 
   const handleGlobalAiToggle = async (pause: boolean) => {
-    if (!confirm(`¿Estás seguro de ${pause ? 'PAUSAR' : 'ACTIVAR'} la IA para TODOS tus leads?`)) return;
-    setLoadingLeads(true);
-    try {
-        let query = supabase.from('leads').update({ ai_paused: pause });
-        if (!isAdmin) query = query.eq('assigned_to', user?.id);
-        else query = query.neq('id', '00000000-0000-0000-0000-000000000000');
-        await query;
-        toast.success(`IA ${pause ? 'Pausada' : 'Activada'} masivamente.`);
-        fetchLeads();
-    } catch (err) {
-        toast.error("Error ejecutando acción masiva.");
-        setLoadingLeads(false);
-    }
+    if (!confirm(`¿${pause ? 'PAUSAR' : 'ACTIVAR'} la IA para TODOS?`)) return;
+    let query = supabase.from('leads').update({ ai_paused: pause });
+    if (!isAdmin) query = query.eq('assigned_to', user?.id);
+    else query = query.neq('id', '00000000-0000-0000-0000-000000000000');
+    await query;
+    toast.success(`IA ${pause ? 'Pausada' : 'Activada'} masivamente.`);
+    fetchLeads();
   };
 
   const handleSendMessage = async (text: string, file?: File, isInternalNote: boolean = false) => {
@@ -207,32 +165,27 @@ const Inbox = () => {
       let mediaData = undefined;
       if (file) {
         const ext = file.name.split('.').pop();
-        const path = `chat_uploads/${Date.now()}_${Math.random().toString(36).substring(7)}.${ext}`;
+        const path = `chat_uploads/${Date.now()}.${ext}`;
         const { error: uploadErr } = await supabase.storage.from('media').upload(path, file);
         if (uploadErr) throw uploadErr;
         const { data: { publicUrl } } = supabase.storage.from('media').getPublicUrl(path);
         let type = 'document';
         if (file.type.startsWith('image/')) type = 'image';
         else if (file.type.startsWith('video/')) type = 'video';
-        else if (file.type.startsWith('audio/')) type = 'audio';
         mediaData = { url: publicUrl, type, mimetype: file.type, name: file.name };
       }
 
       const apiResponse = await sendEvolutionMessage(activeLead.telefono, text, mediaData);
-      
-      const textToSave = text || (file ? `[ARCHIVO ENVIADO: ${file.name}]` : '');
+      const textToSave = text || (file ? `[ARCHIVO: ${file.name}]` : '');
       const finalMessage = apiResponse ? textToSave : `[PRUEBA / WA DESCONECTADO] ${textToSave}`;
 
       await supabase.from('conversaciones').insert({ 
-        lead_id: activeLead.id, 
-        mensaje: finalMessage, 
-        emisor: 'HUMANO', 
-        platform: 'PANEL',
+        lead_id: activeLead.id, mensaje: finalMessage, emisor: 'HUMANO', platform: 'PANEL',
         metadata: mediaData ? { mediaUrl: mediaData.url, mediaType: mediaData.type, fileName: mediaData.name } : {}
       });
 
-      if (user && text && !isInternalNote) {
-          supabase.functions.invoke('evaluate-agent', { body: { agent_id: user.id, lead_id: activeLead.id, message_text: text } }).catch(e => {});
+      if (user && text) {
+          supabase.functions.invoke('evaluate-agent', { body: { agent_id: user.id, lead_id: activeLead.id, message_text: text } }).catch(() => {});
       }
 
       setDraftMessage('');
@@ -255,15 +208,14 @@ const Inbox = () => {
              origen_contacto: memoryForm.origen_contacto, tiempo_compra: memoryForm.tiempo_compra,
              lead_score: memoryForm.lead_score, assigned_to: memoryForm.assigned_to || null, tags: memoryForm.tags
           }).eq('id', activeLead.id).select().single();
-
        if (error) throw error;
        if (updatedLead.email && !updatedLead.capi_lead_event_sent_at) {
           supabase.functions.invoke('analyze-leads', { body: { lead_id: activeLead.id, force: true } });
        }
-       toast.success('Memoria del Samurai actualizada');
+       toast.success('Memoria actualizada');
        setIsEditingMemory(false);
     } catch (err: any) {
-       toast.error("Error al guardar: " + err.message);
+       toast.error("Error: " + err.message);
     } finally {
        setSending(false);
     }
@@ -283,11 +235,8 @@ const Inbox = () => {
     <Layout>
       <div className="h-[calc(100vh-64px)] -m-4 md:-m-8 flex overflow-hidden bg-slate-950 border-t border-slate-800">
         
-        {/* COLUMNA 1: LISTA DE CHATS */}
-        <div className={cn(
-            "w-full md:w-80 flex-shrink-0 border-r border-slate-800 bg-[#0d0a08] flex flex-col transition-all",
-            activeLead ? "hidden md:flex" : "flex"
-        )}>
+        {/* COLUMNA 1: LISTA */}
+        <div className={cn("w-full md:w-80 flex-shrink-0 border-r border-slate-800 bg-[#0d0a08] flex flex-col", activeLead ? "hidden md:flex" : "flex")}>
            <div className="p-4 border-b border-slate-800 bg-slate-900/50 shrink-0">
                <div className="flex items-center justify-between mb-3">
                   <h2 className="text-sm font-bold text-white uppercase tracking-widest flex items-center gap-2"><MessageCircle className="w-4 h-4 text-indigo-400"/> Bandeja</h2>
@@ -296,39 +245,25 @@ const Inbox = () => {
                        <Button variant="outline" size="icon" className="h-7 w-7 border-slate-700 bg-slate-950 text-slate-400 hover:text-indigo-400"><Bot className="w-3.5 h-3.5"/></Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent className="bg-slate-900 border-slate-800 text-white" align="end">
-                       <DropdownMenuLabel className="text-[10px] text-slate-500 uppercase">Control de IA General</DropdownMenuLabel>
+                       <DropdownMenuLabel className="text-[10px] text-slate-500 uppercase">Control IA</DropdownMenuLabel>
                        <DropdownMenuSeparator className="bg-slate-800" />
-                       <DropdownMenuItem onClick={() => handleGlobalAiToggle(false)} className="text-emerald-400 focus:bg-emerald-900/20 focus:text-emerald-300 cursor-pointer text-xs">
-                          <Play className="w-3.5 h-3.5 mr-2"/> Activar a Todos
-                       </DropdownMenuItem>
-                       <DropdownMenuItem onClick={() => handleGlobalAiToggle(true)} className="text-red-400 focus:bg-red-900/20 focus:text-red-300 cursor-pointer text-xs">
-                          <Pause className="w-3.5 h-3.5 mr-2"/> Pausar a Todos
-                       </DropdownMenuItem>
+                       <DropdownMenuItem onClick={() => handleGlobalAiToggle(false)} className="text-emerald-400 cursor-pointer text-xs"><Play className="w-3.5 h-3.5 mr-2"/> Activar a Todos</DropdownMenuItem>
+                       <DropdownMenuItem onClick={() => handleGlobalAiToggle(true)} className="text-red-400 cursor-pointer text-xs"><Pause className="w-3.5 h-3.5 mr-2"/> Pausar a Todos</DropdownMenuItem>
                     </DropdownMenuContent>
                  </DropdownMenu>
                </div>
                <div className="relative">
                   <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-500" />
-                  <Input 
-                     placeholder="Buscar chat o etiqueta..." 
-                     value={searchTerm} onChange={e => setSearchTerm(e.target.value)}
-                     className="pl-9 h-9 bg-slate-950 border-slate-800 text-xs rounded-xl focus-visible:ring-indigo-500"
-                  />
+                  <Input placeholder="Buscar..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="pl-9 h-9 bg-slate-950 border-slate-800 text-xs rounded-xl"/>
                </div>
            </div>
-           
            <ScrollArea className="flex-1">
-              {loadingLeads ? (
-                 <div className="flex justify-center p-8"><Loader2 className="w-6 h-6 animate-spin text-slate-600"/></div>
-              ) : filteredLeads.length === 0 ? (
-                 <div className="text-center p-8 text-xs text-slate-600 italic">No hay conversaciones.</div>
-              ) : (
-                 <div className="divide-y divide-slate-800/50">
+              {loadingLeads ? <div className="flex justify-center p-8"><Loader2 className="w-6 h-6 animate-spin text-slate-600"/></div>
+              : filteredLeads.length === 0 ? <div className="text-center p-8 text-xs text-slate-600 italic">No hay conversaciones.</div>
+              : <div className="divide-y divide-slate-800/50">
                     {filteredLeads.map(lead => (
-                       <button 
-                         key={lead.id} onClick={() => setActiveLead(lead)}
-                         className={cn("w-full text-left p-3 hover:bg-slate-800/30 transition-colors flex items-start gap-3 relative", activeLead?.id === lead.id ? "bg-indigo-900/20" : "")}
-                       >
+                       <button key={lead.id} onClick={() => setActiveLead(lead)}
+                         className={cn("w-full text-left p-3 hover:bg-slate-800/30 transition-colors flex items-start gap-3 relative", activeLead?.id === lead.id ? "bg-indigo-900/20" : "")}>
                           {activeLead?.id === lead.id && <div className="absolute left-0 top-0 bottom-0 w-1 bg-indigo-500" />}
                           <div className="relative">
                              <Avatar className="h-10 w-10 border border-slate-700">
@@ -350,21 +285,20 @@ const Inbox = () => {
                           </div>
                        </button>
                     ))}
-                 </div>
-              )}
+                 </div>}
            </ScrollArea>
         </div>
 
-        {/* COLUMNA 2: CHAT ACTIVO */}
+        {/* COLUMNA 2: CHAT */}
         <div className={cn("flex-1 min-w-0 flex flex-col bg-slate-950 relative", !activeLead ? "hidden md:flex items-center justify-center" : "flex")}>
            {!activeLead ? (
               <div className="text-center flex flex-col items-center gap-4 text-slate-500">
-                 <div className="w-16 h-16 rounded-2xl bg-slate-900 border border-slate-800 flex items-center justify-center shadow-inner"><MessageCircle className="w-8 h-8 opacity-50" /></div>
+                 <MessageCircle className="w-12 h-12 opacity-20" />
                  <p className="text-sm uppercase tracking-widest font-bold">Selecciona una conversación</p>
               </div>
            ) : (
               <>
-                 <div className="h-16 px-4 bg-slate-900/80 border-b border-slate-800 flex items-center justify-between shrink-0 backdrop-blur-md">
+                 <div className="h-16 px-4 bg-slate-900/80 border-b border-slate-800 flex items-center justify-between shrink-0">
                     <div className="flex items-center gap-3">
                        <Button variant="ghost" size="icon" className="md:hidden text-slate-400 -ml-2" onClick={() => setActiveLead(null)}><X className="w-5 h-5"/></Button>
                        <div className="flex flex-col">
@@ -376,7 +310,7 @@ const Inbox = () => {
                        </div>
                     </div>
                     <div className="flex items-center gap-2">
-                       <Button variant="outline" size="sm" className={cn("hidden lg:flex h-8 text-xs border", activeLead.ai_paused ? "bg-emerald-500/10 border-emerald-500/50 text-emerald-500 hover:bg-emerald-500/20" : "bg-red-500/10 border-red-500/50 text-red-500 hover:bg-red-500/20")} onClick={() => handleSendMessage(activeLead.ai_paused ? '#START' : '#STOP')}>
+                       <Button variant="outline" size="sm" className={cn("hidden lg:flex h-8 text-xs border", activeLead.ai_paused ? "bg-emerald-500/10 border-emerald-500/50 text-emerald-500" : "bg-red-500/10 border-red-500/50 text-red-500")} onClick={() => handleSendMessage(activeLead.ai_paused ? '#START' : '#STOP')}>
                           {activeLead.ai_paused ? <><Play className="w-3 h-3 mr-2"/> Activar IA</> : <><Pause className="w-3 h-3 mr-2"/> Pausar IA</>}
                        </Button>
                        <Button variant="ghost" size="icon" className="xl:hidden text-slate-400" onClick={() => setShowMemoryMobile(!showMemoryMobile)}><Menu className="w-5 h-5" /></Button>
@@ -385,33 +319,30 @@ const Inbox = () => {
 
                  <MessageList messages={messages} loading={loadingMessages} />
 
-                 <div className="p-3 bg-slate-900/80 border-t border-slate-800 shrink-0 backdrop-blur-md">
+                 <div className="p-3 bg-slate-900/80 border-t border-slate-800 shrink-0">
                     <div className="flex justify-between items-center mb-2 px-1">
                        <AiSuggestions suggestions={suggestions} loading={loadingSuggestions} onSelect={setDraftMessage} onRefresh={() => fetchAiSuggestions(activeLead.id, messages)} />
                        <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                              <Button size="sm" variant="outline" className="h-7 text-[10px] bg-slate-950 border-slate-700 text-amber-500 uppercase font-bold tracking-widest"><Zap className="w-3 h-3 mr-1.5" /> Plantillas</Button>
                           </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="bg-slate-900 border-slate-800 text-white w-64 max-h-[300px] overflow-y-auto custom-scrollbar">
-                             <DropdownMenuLabel className="text-[10px] uppercase text-slate-500 font-bold">Catálogo de Cobro</DropdownMenuLabel>
-                             {products.length === 0 ? ( <DropdownMenuItem disabled className="text-[10px] italic text-slate-500">Sin productos configurados</DropdownMenuItem> ) : products.map(p => (
-                                 <DropdownMenuItem key={p.id} onClick={() => setDraftMessage(`${quickActions.wcBaseUrl}/checkout/?add-to-cart=${p.wc_id}`)} className="cursor-pointer hover:bg-indigo-600/20 text-xs">
+                          <DropdownMenuContent align="end" className="bg-slate-900 border-slate-800 text-white w-64 max-h-[300px] overflow-y-auto">
+                             <DropdownMenuLabel className="text-[10px] uppercase text-slate-500 font-bold">Catálogo</DropdownMenuLabel>
+                             {products.map(p => (
+                                 <DropdownMenuItem key={p.id} onClick={() => setDraftMessage(`${quickActions.wcBaseUrl}/checkout/?add-to-cart=${p.wc_id}`)} className="cursor-pointer text-xs">
                                     <ShoppingCart className="w-3 h-3 mr-2 text-indigo-400 shrink-0" /><span className="truncate">{p.title}</span>
                                  </DropdownMenuItem>
                              ))}
                              <DropdownMenuSeparator className="bg-slate-800 my-2"/>
-                             <DropdownMenuItem onClick={() => setDraftMessage(quickActions.bankInfo)} className="cursor-pointer hover:bg-indigo-600/20 text-xs"><CreditCard className="w-3 h-3 mr-2 text-indigo-400" /> Datos Bancarios</DropdownMenuItem>
-                             {quickReplies.length > 0 && (
-                                <>
-                                   <DropdownMenuSeparator className="bg-slate-800 my-2"/>
-                                   <DropdownMenuLabel className="text-[10px] uppercase text-slate-500 font-bold">Mis Plantillas</DropdownMenuLabel>
-                                   {quickReplies.map((qr) => (
-                                      <DropdownMenuItem key={qr.id} onClick={() => setDraftMessage(qr.text)} className="cursor-pointer hover:bg-indigo-600/20 text-xs">
-                                         <MessageSquarePlus className="w-3 h-3 mr-2 text-indigo-400 shrink-0" /><span className="truncate">{qr.title}</span>
-                                      </DropdownMenuItem>
-                                   ))}
-                                </>
-                             )}
+                             <DropdownMenuItem onClick={() => setDraftMessage(quickActions.bankInfo)} className="cursor-pointer text-xs"><CreditCard className="w-3 h-3 mr-2 text-indigo-400" /> Datos Bancarios</DropdownMenuItem>
+                             {quickReplies.length > 0 && <>
+                                <DropdownMenuSeparator className="bg-slate-800 my-2"/>
+                                {quickReplies.map((qr) => (
+                                   <DropdownMenuItem key={qr.id} onClick={() => setDraftMessage(qr.text)} className="cursor-pointer text-xs">
+                                      <MessageSquarePlus className="w-3 h-3 mr-2 text-indigo-400 shrink-0" /><span className="truncate">{qr.title}</span>
+                                   </DropdownMenuItem>
+                                ))}
+                             </>}
                           </DropdownMenuContent>
                        </DropdownMenu>
                     </div>
@@ -421,7 +352,7 @@ const Inbox = () => {
            )}
         </div>
 
-        {/* COLUMNA 3: FICHA TÁCTICA (MEMORY PANEL) */}
+        {/* COLUMNA 3: FICHA TÁCTICA */}
         {activeLead && (
            <div className={cn("w-full xl:w-[350px] flex-shrink-0 bg-slate-900 border-l border-slate-800 flex flex-col absolute xl:relative z-20 h-full transition-transform duration-300", showMemoryMobile ? "translate-x-0" : "translate-x-full xl:translate-x-0")}>
               <div className="xl:hidden h-16 px-4 bg-slate-900 border-b border-slate-800 flex items-center justify-between shrink-0">
