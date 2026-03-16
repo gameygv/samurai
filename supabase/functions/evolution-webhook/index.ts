@@ -12,7 +12,6 @@ serve(async (req) => {
   const channelId = url.searchParams.get('channel_id');
   const supabaseClient = createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '');
 
-  // 1. VERIFICACIÓN DE META (GET)
   if (req.method === 'GET') {
     const mode = url.searchParams.get("hub.mode");
     const token = url.searchParams.get("hub.verify_token");
@@ -30,9 +29,12 @@ serve(async (req) => {
     const payload = await req.json();
     let phone, text = '', pushName = 'Cliente WA', mediaUrl = null, mediaType = null;
 
-    // --- DETECCIÓN DE FORMATO ---
+    // --- 1. PROCESAR CANAL ---
+    const { data: channel } = await supabaseClient.from('whatsapp_channels').select('*').eq('id', channelId).single();
+    if (!channel) return new Response('invalid_channel');
+
+    // --- 2. DETECCIÓN DE FORMATO Y RESOLUCIÓN DE MEDIA ---
     
-    // A. META CLOUD API
     if (payload.object === 'whatsapp_business_account') {
        const message = payload.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
        const contact = payload.entry?.[0]?.changes?.[0]?.value?.contacts?.[0];
@@ -41,57 +43,59 @@ serve(async (req) => {
        phone = message.from;
        pushName = contact?.profile?.name || 'Lead Meta';
        
-       if (message.type === 'text') text = message.text.body;
-       else if (message.type === 'image') { text = "[IMAGEN]"; mediaUrl = "META_RESERVED"; mediaType = 'image'; }
-       else if (message.type === 'audio') { text = "[AUDIO]"; mediaUrl = "META_RESERVED"; mediaType = 'audio'; }
+       if (message.type === 'text') {
+           text = message.text.body;
+       } else if (['image', 'audio', 'video', 'document'].includes(message.type)) {
+           mediaType = message.type;
+           const mediaId = message[mediaType].id;
+           text = `[${mediaType.toUpperCase()} RECIBIDO]`;
+           
+           // RESOLVER URL DE META
+           const metaRes = await fetch(`https://graph.facebook.com/v19.0/${mediaId}`, {
+               headers: { 'Authorization': `Bearer ${channel.api_key}` }
+           });
+           const metaData = await metaRes.json();
+           mediaUrl = metaData.url; // Esta URL es temporal y requiere el token para descargarla
+       }
     } 
-    // B. EVOLUTION API / GOWA
     else {
        const msg = payload.data?.[0] || payload.data || payload;
        if (msg?.key?.fromMe) return new Response('ignored');
-       
        phone = msg?.key?.remoteJid?.split('@')[0] || payload.phone || payload.sender;
        pushName = payload.pushName || msg?.pushName || 'Lead WA';
-       
-       // Detección de texto o media
        text = msg?.message?.conversation || msg?.message?.extendedTextMessage?.text || msg?.text || payload.message || '';
        
        if (msg?.message?.imageMessage || payload.type === 'image') {
-          text = text || "[IMAGEN]";
           mediaType = 'image';
+          mediaUrl = msg?.message?.imageMessage?.url || payload.url;
+          text = text || "[IMAGEN]";
        } else if (msg?.message?.audioMessage || payload.type === 'audio') {
-          text = text || "[AUDIO]";
           mediaType = 'audio';
+          mediaUrl = msg?.message?.audioMessage?.url || payload.url;
+          text = text || "[AUDIO]";
        }
     }
 
     if (!phone) return new Response('invalid_data');
     const cleanPhone = phone.replace(/\D/g, '');
 
-    // 2. SINCRONIZACIÓN CRM
+    // --- 3. ACTUALIZAR CRM ---
     let { data: lead } = await supabaseClient.from('leads').select('*').or(`telefono.ilike.%${cleanPhone}%`).limit(1).maybeSingle();
-    
     if (!lead) {
       const { data: nl } = await supabaseClient.from('leads').insert({ nombre: pushName, telefono: cleanPhone, channel_id: channelId }).select().single();
       lead = nl;
     } else {
-      await supabaseClient.from('leads').update({ last_message_at: new Date().toISOString(), channel_id: channelId || lead.channel_id }).eq('id', lead.id);
+      await supabaseClient.from('leads').update({ last_message_at: new Date().toISOString(), channel_id: channelId }).eq('id', lead.id);
     }
 
-    // 3. REGISTRO DE MENSAJE
     await supabaseClient.from('conversaciones').insert({ 
-        lead_id: lead.id, 
-        emisor: 'CLIENTE', 
-        mensaje: text, 
-        platform: 'WHATSAPP',
-        metadata: { mediaUrl, mediaType }
+        lead_id: lead.id, emisor: 'CLIENTE', mensaje: text, platform: 'WHATSAPP',
+        metadata: { mediaUrl, mediaType, provider: channel.provider }
     });
 
-    // 4. TRIGGER DE SAMURAI (IA)
+    // --- 4. LANZAR IA ---
     if (!lead.ai_paused) {
-       // Aquí Samurai se activa. Si es audio, su módulo de transcripción 
-       // entrará en acción antes de generar la respuesta.
-       fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/process-samurai-response?phone=${cleanPhone}&client_message=${encodeURIComponent(text)}`, {
+       fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/process-samurai-response?phone=${cleanPhone}&client_message=${encodeURIComponent(text)}&media_url=${encodeURIComponent(mediaUrl || '')}&media_type=${mediaType || ''}`, {
            method: 'POST',
            headers: { 'Authorization': `Bearer ${Deno.env.get('SUPABASE_ANON_KEY')}` }
        }).catch(() => {});

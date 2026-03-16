@@ -28,7 +28,7 @@ interface MemoryPanelProps {
   onReset: () => void;
   onToggleFollowup?: () => void;
   onAnalysisComplete?: () => void;
-  onDeleteLead?: () => void; // Prop añadida para corregir TS2322
+  onDeleteLead?: () => void;
 }
 
 export const MemoryPanel = ({
