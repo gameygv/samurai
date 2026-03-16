@@ -14,7 +14,7 @@ serve(async (req) => {
     const { data: configs } = await supabaseClient.from('app_config').select('key, value');
     const getConfig = (key: string, def = "") => configs?.find((c: any) => c.key === key)?.value || def;
 
-    // --- PROTOCOLO HARDCODED DE CAPTURA ---
+    // --- PROTOCOLO HARDCODED DE CAPTURA (PRIORIDAD 1) ---
     const missingData = [];
     if (!lead.nombre || lead.nombre.includes('Nuevo')) missingData.push("NOMBRE COMPLETO");
     if (!lead.ciudad) missingData.push("CIUDAD/UBICACIÓN");
@@ -22,12 +22,12 @@ serve(async (req) => {
     if (!lead.telefono) missingData.push("TELÉFONO");
 
     const gatheringProtocol = missingData.length > 0 
-      ? `\n🚨 [PROTOCOLO CRÍTICO DE CAPTURA - FASE 1]:
-Faltan los siguientes datos obligatorios: ${missingData.join(', ')}.
-INSTRUCCIÓN: Antes de enviar catálogos, posters o precios, DEBES obtener estos datos de forma natural pero persistente. 
-Si el cliente pregunta algo, responde brevemente y de inmediato pide uno de los datos faltantes. 
-NO AVANCES A LA VENTA SIN EMAIL Y CIUDAD.` 
-      : `\n✅ [PROTOCOLO DE CAPTURA COMPLETO]: Procede con la Fase 2 (Seducción Visual) y Fase 3 (Cierre).`;
+      ? `### [ORDEN PRIORITARIA #1 - CAPTURA DE DATOS]:
+Faltan datos obligatorios: ${missingData.join(', ')}.
+REGLA INQUEBRANTABLE: NO puedes dar precios ni enviar posters hasta obtener estos datos. 
+Si el cliente te saluda o pregunta, reconoce brevemente lo que dice y pídeles inmediatamente lo que falta. 
+Ejemplo: "Hola! Con gusto te ayudo, solo dime ¿de qué ciudad nos escribes para darte la info correcta?"` 
+      : `### [PROTOCOLO COMPLETADO]: Procede con normalidad a la Fase 2 y 3.`;
 
     // --- CARGAR CONTEXTO DINÁMICO ---
     const { data: webPages } = await supabaseClient.from('main_website_content').select('title, content').eq('scrape_status', 'success');
@@ -35,14 +35,16 @@ NO AVANCES A LA VENTA SIN EMAIL Y CIUDAD.`
 
     const pAlma = getConfig('prompt_alma_samurai');
     const pAdn = getConfig('prompt_adn_core');
+    const pEstrategia = getConfig('prompt_estrategia_cierre');
     const pRelearning = getConfig('prompt_relearning');
     const pBehavior = getConfig('prompt_behavior_rules');
 
     const systemPrompt = `
+${gatheringProtocol}
+
 ${pAlma}
 ${pAdn}
-
-${gatheringProtocol}
+${pEstrategia}
 
 === REGLAS DE CONDUCTA ===
 ${pBehavior}
@@ -50,7 +52,7 @@ ${pBehavior}
 === REGLAS #CIA (APRENDIZAJE) ===
 ${pRelearning}
 
-=== VERDAD MAESTRA (TIENDA) ===
+=== VERDAD MAESTRA (SITIO WEB) ===
 ${masterTruth}
 `;
 
