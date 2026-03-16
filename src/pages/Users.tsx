@@ -370,7 +370,7 @@ const UsersPage = () => {
                     </Select>
                   </div>
                   
-                  <div className="pt-4 border-t border-slate-800"><Button variant="ghost" className="w-full text-red-500 hover:bg-red-500/10 h-11 uppercase text-[10px] font-bold tracking-widest rounded-xl" onClick={() => handleDeleteUser(selectedUser.id, selectedUser.full_name)} disabled={selectedUser.id === currentUser?.id}><Trash2 className="w-4 h-4 mr-2" /> Eliminar Permanentemente</Button></div>
+                  <div className="pt-4 border-t border-slate-800"><Button variant="ghost" className="w-full text-red-500 hover:bg-red-500/10 h-11 uppercase text-[10px] font-bold tracking-widest rounded-xl" onClick={() => handleDeleteUser(selectedUser.id, selectedUser.full_name)} disabled={selectedUser.id === currentUser?.id}> <Trash2 className="w-4 h-4 mr-2" /> Eliminar Permanentemente</Button></div>
                 </div>
               )}
               <DialogFooter className="gap-2 sm:gap-0 mt-2">
