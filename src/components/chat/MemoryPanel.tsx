@@ -5,7 +5,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { 
-  Edit2, Save, Loader2, Fingerprint, MapPin, User, ShieldAlert, Brain
+  Edit2, Save, Loader2, Fingerprint, MapPin, User, ShieldAlert, Brain, Smartphone, Trash2
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -28,19 +28,20 @@ interface MemoryPanelProps {
   onReset: () => void;
   onToggleFollowup?: () => void;
   onAnalysisComplete?: () => void;
-  onDeleteLead?: () => void;
+  onDeleteLead?: () => void; // Prop añadida para corregir TS2322
 }
 
 export const MemoryPanel = ({
   currentAnalysis, isEditing, setIsEditing,
   memoryForm, setMemoryForm, onSave, saving,
-  onToggleFollowup, onAnalysisComplete
+  onToggleFollowup, onAnalysisComplete, onDeleteLead
 }: MemoryPanelProps) => {
 
-  const { user } = useAuth();
+  const { user, isAdmin } = useAuth();
   const [correctionText, setCorrectionText] = useState('');
   const [analyzing, setAnalyzing] = useState(false);
   const [agents, setAgents] = useState<any[]>([]);
+  const [channels, setChannels] = useState<any[]>([]);
 
   const capiFields = [
      true, 
@@ -52,11 +53,19 @@ export const MemoryPanel = ({
   const healthScore = capiFields.filter(Boolean).length;
   const healthPercent = Math.round((healthScore / 4) * 100);
 
-  useEffect(() => { fetchAgents(); }, []);
+  useEffect(() => { 
+    fetchAgents(); 
+    fetchChannels();
+  }, []);
 
   const fetchAgents = async () => {
       const { data } = await supabase.from('profiles').select('id, full_name, role');
       if (data) setAgents(data);
+  };
+
+  const fetchChannels = async () => {
+      const { data } = await supabase.from('whatsapp_channels').select('id, name, provider').eq('is_active', true);
+      if (data) setChannels(data);
   };
 
   const handleRunAnalysis = async () => {
@@ -87,6 +96,7 @@ export const MemoryPanel = ({
   };
 
   const currentAgentName = agents.find(a => a.id === currentAnalysis.assigned_to)?.full_name || 'Bot Global';
+  const currentChannelName = channels.find(c => c.id === currentAnalysis.channel_id)?.name || 'Canal Desconocido';
 
   return (
     <div className="w-full flex-shrink-0 bg-[#0d0a08] flex flex-col h-full">
@@ -101,7 +111,14 @@ export const MemoryPanel = ({
               <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
                  <Fingerprint className="w-4 h-4" /> Identidad & CRM
               </h4>
-              {!isEditing && <Button variant="ghost" size="icon" className="h-6 w-6 text-slate-500 hover:text-white" onClick={() => setIsEditing(true)}><Edit2 className="w-3.5 h-3.5" /></Button>}
+              <div className="flex gap-1">
+                {isAdmin && onDeleteLead && (
+                   <Button variant="ghost" size="icon" className="h-6 w-6 text-red-900/50 hover:text-red-500" onClick={() => { if(confirm("¿Borrar lead?")) onDeleteLead(); }} title="Eliminar de raíz">
+                      <Trash2 className="w-3.5 h-3.5" />
+                   </Button>
+                )}
+                {!isEditing && <Button variant="ghost" size="icon" className="h-6 w-6 text-slate-500 hover:text-white" onClick={() => setIsEditing(true)}><Edit2 className="w-3.5 h-3.5" /></Button>}
+              </div>
            </div>
 
            {isEditing ? (
@@ -112,15 +129,27 @@ export const MemoryPanel = ({
                  </div>
                  <Input value={memoryForm.email} onChange={e => setMemoryForm({...memoryForm, email: e.target.value})} placeholder="Email" className="h-8 text-xs bg-slate-950 border-slate-800" />
                  
-                 <div className="space-y-1">
-                    <Label className="text-[9px] text-slate-500 uppercase tracking-widest">Asignar a:</Label>
-                    <Select value={memoryForm.assigned_to || "unassigned"} onValueChange={v => setMemoryForm({...memoryForm, assigned_to: v === "unassigned" ? null : v})}>
-                       <SelectTrigger className="h-8 text-xs bg-slate-950 border-slate-800"><SelectValue /></SelectTrigger>
-                       <SelectContent className="bg-slate-900 border-slate-800 text-white">
-                          <SelectItem value="unassigned">Sin Asignar (Bot Global)</SelectItem>
-                          {agents.map(a => <SelectItem key={a.id} value={a.id}>{a.full_name}</SelectItem>)}
-                       </SelectContent>
-                    </Select>
+                 <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1">
+                        <Label className="text-[9px] text-slate-500 uppercase tracking-widest">Asesor:</Label>
+                        <Select value={memoryForm.assigned_to || "unassigned"} onValueChange={v => setMemoryForm({...memoryForm, assigned_to: v === "unassigned" ? null : v})}>
+                        <SelectTrigger className="h-8 text-xs bg-slate-950 border-slate-800"><SelectValue /></SelectTrigger>
+                        <SelectContent className="bg-slate-900 border-slate-800 text-white">
+                            <SelectItem value="unassigned">Bot Global</SelectItem>
+                            {agents.map(a => <SelectItem key={a.id} value={a.id}>{a.full_name}</SelectItem>)}
+                        </SelectContent>
+                        </Select>
+                    </div>
+                    <div className="space-y-1">
+                        <Label className="text-[9px] text-slate-500 uppercase tracking-widest">Canal WA:</Label>
+                        <Select value={memoryForm.channel_id || "default"} onValueChange={v => setMemoryForm({...memoryForm, channel_id: v === "default" ? null : v})}>
+                        <SelectTrigger className="h-8 text-xs bg-slate-950 border-slate-800"><SelectValue /></SelectTrigger>
+                        <SelectContent className="bg-slate-900 border-slate-800 text-white">
+                            <SelectItem value="default">Instancia Principal</SelectItem>
+                            {channels.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                        </SelectContent>
+                        </Select>
+                    </div>
                  </div>
 
                  <Button onClick={onSave} disabled={saving} className="w-full bg-indigo-600 hover:bg-indigo-500 text-white h-9 text-xs font-bold rounded-lg">
@@ -132,9 +161,15 @@ export const MemoryPanel = ({
                  <AccordionItem value="tactico" className="border-0">
                     <AccordionTrigger className="text-[10px] font-bold text-slate-300 uppercase py-3 hover:no-underline hover:text-indigo-400">Resumen Táctico</AccordionTrigger>
                     <AccordionContent className="space-y-4 pt-1 pb-4">
-                       <div>
-                          <span className="text-[9px] text-slate-500 uppercase font-bold tracking-widest">Contacto</span>
-                          <p className="text-sm text-white font-bold mt-0.5">{currentAnalysis.nombre || currentAnalysis.telefono}</p>
+                       <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <span className="text-[9px] text-slate-500 uppercase font-bold tracking-widest">Agente</span>
+                                <p className="text-xs text-slate-300 mt-0.5 flex items-center gap-1.5"><User className="w-3.5 h-3.5 text-slate-500"/> {currentAgentName}</p>
+                            </div>
+                            <div>
+                                <span className="text-[9px] text-slate-500 uppercase font-bold tracking-widest">Canal</span>
+                                <p className="text-xs text-indigo-400 mt-0.5 flex items-center gap-1.5 font-bold"><Smartphone className="w-3.5 h-3.5"/> {currentChannelName}</p>
+                            </div>
                        </div>
                        <div>
                           <span className="text-[9px] text-slate-500 uppercase font-bold tracking-widest">Email</span>
@@ -143,16 +178,8 @@ export const MemoryPanel = ({
                           </p>
                        </div>
                        <div>
-                          <span className="text-[9px] text-slate-500 uppercase font-bold tracking-widest">Ciudad</span>
-                          <p className="text-xs text-slate-300 mt-0.5">{currentAnalysis.ciudad || 'Pendiente'}</p>
-                       </div>
-                       <div>
                           <span className="text-[9px] text-slate-500 uppercase font-bold tracking-widest">Perfil Psicográfico</span>
                           <p className="text-xs text-slate-400 italic mt-0.5">{currentAnalysis.perfil_psicologico || 'Analizando...'}</p>
-                       </div>
-                       <div>
-                          <span className="text-[9px] text-slate-500 uppercase font-bold tracking-widest">Agente</span>
-                          <p className="text-xs text-slate-300 mt-0.5 flex items-center gap-1.5"><User className="w-3.5 h-3.5 text-slate-500"/> {currentAgentName}</p>
                        </div>
                     </AccordionContent>
                  </AccordionItem>
