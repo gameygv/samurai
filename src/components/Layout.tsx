@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { 
   LayoutDashboard, Brain, Settings as SettingsIcon, Database, LogOut, 
-  Users, FileText, UserCircle, MessageSquare, 
+  Users, FileText, UserCircle, MessageSquare, Contact,
   GitBranch, Link as LinkIcon, Image, Sparkles, BookOpen, Clock,
   Archive, Globe, CreditCard, BarChart3, Zap, Trello, Menu, Activity, Search
 } from 'lucide-react';
@@ -62,6 +62,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
       items: [
         { icon: Trello, label: 'Pipeline Ventas', path: '/pipeline', roles: ['any'] },
         { icon: MessageSquare, label: 'Radar de Leads', path: '/leads', roles: ['any'] },
+        { icon: Contact, label: 'Contactos', path: '/contacts', roles: ['any'] },
         { icon: CreditCard, label: 'Pagos & Ventas', path: '/payments', roles: ['any'] },
         { icon: Archive, label: 'Archivo de Chats', path: '/archive', roles: ['any'] },
       ]
@@ -160,7 +161,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
                   className="pl-10 bg-slate-950/50 border-slate-800 h-9 text-xs focus-visible:ring-amber-500 rounded-full"
                   value={globalSearch}
                   onChange={(e) => setGlobalSearch(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && navigate(`/leads?search=${globalSearch}`)}
+                  onKeyDown={(e) => e.key === 'Enter' && navigate(`/contacts?search=${globalSearch}`)}
                />
             </div>
           </div>

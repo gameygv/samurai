@@ -16,6 +16,7 @@ import Logs from "./pages/Logs";
 import Profile from "./pages/Profile";
 import Settings from "./pages/Settings";
 import Leads from "./pages/Leads";
+import Contacts from "./pages/Contacts";
 import Archive from "./pages/Archive";
 import MediaManager from "./pages/MediaManager";
 import WebsiteContent from "./pages/WebsiteContent";
@@ -72,6 +73,7 @@ const App = () => (
             <Route path="/profile" element={<PrivateRoute><Profile /></PrivateRoute>} />
             <Route path="/activity" element={<PrivateRoute><Activity /></PrivateRoute>} />
             <Route path="/leads" element={<PrivateRoute><Leads /></PrivateRoute>} />
+            <Route path="/contacts" element={<PrivateRoute><Contacts /></PrivateRoute>} />
             <Route path="/pipeline" element={<PrivateRoute><Pipeline /></PrivateRoute>} />
             <Route path="/archive" element={<PrivateRoute><Archive /></PrivateRoute>} />
             <Route path="/payments" element={<PrivateRoute><Payments /></PrivateRoute>} />
