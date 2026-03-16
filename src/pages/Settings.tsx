@@ -9,11 +9,12 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
-import { Webhook, Key, Save, Loader2, ShoppingCart, Target, Building2, Store, Hash, Send, Clock, Play, DollarSign, MessageSquarePlus, Trash2, Plus, Sparkles, TerminalSquare, Download, Upload, ShieldAlert, AlertTriangle } from 'lucide-react';
+import { Webhook, Key, Save, Loader2, ShoppingCart, Target, Building2, Store, Hash, Send, Clock, Play, DollarSign, MessageSquarePlus, Trash2, Plus, Sparkles, TerminalSquare, Download, Upload, ShieldAlert, AlertTriangle, Tag } from 'lucide-react';
 import { toast } from 'sonner';
 import { sendEvolutionMessage } from '@/utils/messagingService';
 import { useAuth } from '@/context/AuthContext';
 import { cn } from '@/lib/utils';
+import { Badge } from '@/components/ui/badge';
 
 const Settings = () => {
   const { isAdmin, isDev } = useAuth();
@@ -22,6 +23,7 @@ const Settings = () => {
   
   const [configs, setConfigs] = useState<any[]>([]);
   const [quickReplies, setQuickReplies] = useState<{id: string, title: string, text: string}[]>([]);
+  const [globalTags, setGlobalTags] = useState<{id: string, text: string, color: string}[]>([]);
   const [wcProducts, setWcProducts] = useState<any[]>([]);
   
   const [followupConfig, setFollowupConfig] = useState<any>({
@@ -81,6 +83,7 @@ const Settings = () => {
         });
         
         try { setQuickReplies(JSON.parse(getC('quick_replies', '[]'))); } catch(e) { setQuickReplies([]); }
+        try { setGlobalTags(JSON.parse(getC('global_tags', '[]'))); } catch(e) { setGlobalTags([]); }
 
         const productsStr = getC('wc_products', '');
         if (productsStr) {
@@ -112,11 +115,14 @@ const Settings = () => {
   const handleAddQuickReply = () => setQuickReplies([...quickReplies, { id: Date.now().toString(), title: '', text: '' }]);
   const handleUpdateQuickReply = (id: string, field: string, value: string) => setQuickReplies(prev => prev.map(qr => qr.id === id ? { ...qr, [field]: value } : qr));
 
+  const handleAddTag = () => setGlobalTags([...globalTags, { id: Date.now().toString(), text: '', color: '#8b5cf6' }]);
+  const handleUpdateTag = (id: string, field: string, value: string) => setGlobalTags(prev => prev.map(tag => tag.id === id ? { ...tag, [field]: value } : tag));
+
   const handleSaveAll = async () => {
     setSaving(true);
     try {
       const excludedKeys = [
-          'global_bot_paused',
+          'global_bot_paused', 'global_tags',
           'sales_followup_enabled', 'sales_stage_1_delay', 'sales_stage_2_delay', 'sales_stage_3_delay', 
           'sales_stage_1_message', 'sales_stage_2_message', 'sales_stage_3_message', 
           'quick_replies', 'wc_products',
@@ -138,6 +144,7 @@ const Settings = () => {
         { key: 'sales_stage_2_message', value: salesConfig.stage_2_message, category: 'FOLLOWUP' },
         { key: 'sales_stage_3_message', value: salesConfig.stage_3_message, category: 'FOLLOWUP' },
         { key: 'quick_replies', value: JSON.stringify(quickReplies), category: 'SYSTEM' },
+        { key: 'global_tags', value: JSON.stringify(globalTags), category: 'SYSTEM' },
         { key: 'wc_products', value: JSON.stringify(wcProducts), category: 'WOOCOMMERCE' },
         
         { key: 'prompt_catalog_rules', value: kernelConfig.prompt_catalog_rules, category: 'KERNEL' },
@@ -169,31 +176,19 @@ const Settings = () => {
 
   const handleExportConfig = async () => {
      try {
-         // Backup Absolutamente Total
          const [
-             { data: appConfig },
-             { data: followupConfigData },
-             { data: profiles },
-             { data: mediaAssets },
-             { data: knowledgeBase },
-             { data: promptVersions }
+             { data: appConfig }, { data: followupConfigData }, { data: profiles },
+             { data: mediaAssets }, { data: knowledgeBase }, { data: promptVersions }
          ] = await Promise.all([
-             supabase.from('app_config').select('*'),
-             supabase.from('followup_config').select('*'),
-             supabase.from('profiles').select('*'),
-             supabase.from('media_assets').select('*'),
-             supabase.from('knowledge_documents').select('*'),
-             supabase.from('prompt_versions').select('*')
+             supabase.from('app_config').select('*'), supabase.from('followup_config').select('*'),
+             supabase.from('profiles').select('*'), supabase.from('media_assets').select('*'),
+             supabase.from('knowledge_documents').select('*'), supabase.from('prompt_versions').select('*')
          ]);
 
          const exportData = {
             metadata: { exported_at: new Date().toISOString(), version: '2.0', description: "Respaldo Total Integral" },
-            app_config: appConfig,
-            followup_config: followupConfigData,
-            profiles: profiles,
-            media_assets: mediaAssets,
-            knowledge_documents: knowledgeBase,
-            prompt_versions: promptVersions
+            app_config: appConfig, followup_config: followupConfigData, profiles: profiles,
+            media_assets: mediaAssets, knowledge_documents: knowledgeBase, prompt_versions: promptVersions
          };
 
          const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" });
@@ -205,9 +200,7 @@ const Settings = () => {
          link.click();
          document.body.removeChild(link);
          toast.success("Respaldo Total y Usuarios Descargado");
-     } catch (e) {
-         toast.error("Error al exportar todo el sistema");
-     }
+     } catch (e) { toast.error("Error al exportar todo el sistema"); }
   };
 
   const handleImportConfig = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -219,16 +212,11 @@ const Settings = () => {
          try {
              const json = JSON.parse(event.target?.result as string);
              if (!json.app_config) throw new Error("Formato inválido");
-             
-             // Por seguridad en la interfaz, solo se re-inyectan configuraciones (no usuarios ni DB para evitar conflictos de Foreign Keys)
              const { error } = await supabase.from('app_config').upsert(json.app_config, { onConflict: 'key' });
              if (error) throw error;
-             
              toast.success("Configuración Core inyectada con éxito. Recargando...");
              setTimeout(() => window.location.reload(), 1500);
-         } catch (err: any) {
-             toast.error("Error al importar: " + err.message);
-         }
+         } catch (err: any) { toast.error("Error al importar: " + err.message); }
      };
      reader.readAsText(file);
   };
@@ -239,11 +227,7 @@ const Settings = () => {
       try {
          await supabase.from('activity_logs').delete().neq('id', '00000000-0000-0000-0000-000000000000');
          toast.success("Todos los logs han sido purgados.");
-      } catch (err: any) {
-         toast.error("Fallo al vaciar logs: " + err.message);
-      } finally {
-         setClearingLogs(false);
-      }
+      } catch (err: any) { toast.error("Fallo al vaciar logs: " + err.message); } finally { setClearingLogs(false); }
   };
 
   const handleFactoryReset = async () => {
@@ -252,23 +236,14 @@ const Settings = () => {
           if (promptRes !== null) toast.error("Abortando: Palabra clave incorrecta.");
           return;
       }
-
       setWipingSystem(true);
       try {
-          const { data, error } = await supabase.functions.invoke('system-wipe', {
-              body: { confirmation: 'FACTORY_RESET' }
-          });
-          
+          const { data, error } = await supabase.functions.invoke('system-wipe', { body: { confirmation: 'FACTORY_RESET' } });
           if (error) throw error;
           if (data?.error) throw new Error(data.error);
-
           toast.success("SISTEMA DESTRUIDO CON ÉXITO. Limpiando cache...");
           setTimeout(() => window.location.reload(), 2000);
-      } catch (err: any) {
-          toast.error("Fallo durante Factory Reset: " + err.message);
-      } finally {
-          setWipingSystem(false);
-      }
+      } catch (err: any) { toast.error("Fallo durante Factory Reset: " + err.message); } finally { setWipingSystem(false); }
   };
 
   const handleTestMessage = async () => {
@@ -313,7 +288,7 @@ const Settings = () => {
         <Tabs value={activeTab} onValueChange={v => setSearchParams({ tab: v })}>
           <TabsList className="bg-slate-900 border border-slate-800 p-1 flex-wrap h-auto">
             <TabsTrigger value="mensajeria" className="gap-2"><Send className="w-4 h-4"/> Mensajería</TabsTrigger>
-            <TabsTrigger value="plantillas" className="gap-2"><MessageSquarePlus className="w-4 h-4"/> Plantillas</TabsTrigger>
+            <TabsTrigger value="plantillas" className="gap-2"><MessageSquarePlus className="w-4 h-4"/> Componentes UI</TabsTrigger>
             <TabsTrigger value="followup" className="gap-2"><Clock className="w-4 h-4"/> Retargeting</TabsTrigger>
             <TabsTrigger value="woocommerce" className="gap-2"><Store className="w-4 h-4"/> WooCommerce</TabsTrigger>
             <TabsTrigger value="pago_directo" className="gap-2"><Building2 className="w-4 h-4"/> Depósito</TabsTrigger>
@@ -321,6 +296,7 @@ const Settings = () => {
             {isDev && <TabsTrigger value="kernel" className="gap-2 bg-indigo-900/20 text-indigo-400 data-[state=active]:bg-indigo-600 data-[state=active]:text-white ml-auto"><TerminalSquare className="w-4 h-4"/> Kernel Dev</TabsTrigger>}
           </TabsList>
 
+          {/* ... (TABS KERNEL, FOLLOWUP, ETC) ... */}
           {isDev && (
              <TabsContent value="kernel" className="mt-6 space-y-6">
                 <Card className="bg-[#0D0B0A] border-slate-800 shadow-2xl rounded-2xl overflow-hidden border-l-4 border-l-indigo-500">
@@ -392,14 +368,47 @@ const Settings = () => {
              </TabsContent>
           )}
 
-          {/* MANTENER LOS OTROS TABS EXACTAMENTE IGUAL */}
           <TabsContent value="plantillas" className="mt-6 space-y-6">
+             <Card className="bg-slate-900 border-slate-800 border-l-4 border-l-amber-500">
+                <CardHeader className="flex flex-row items-center justify-between border-b border-slate-800 bg-slate-950/30">
+                   <div>
+                       <CardTitle className="text-white flex items-center gap-2"><Tag className="w-5 h-5 text-amber-500" /> Etiquetas Globales</CardTitle>
+                       <CardDescription className="text-xs">Estas etiquetas las verán y podrán usar todos los vendedores.</CardDescription>
+                   </div>
+                   <Button onClick={handleAddTag} className="bg-amber-600 hover:bg-amber-500 text-slate-900 h-9 text-xs rounded-xl shadow-lg font-bold"><Plus className="w-4 h-4 mr-2" /> Añadir Etiqueta</Button>
+                </CardHeader>
+                <CardContent className="space-y-4 pt-6">
+                   {globalTags.map((tag) => (
+                      <div key={tag.id} className="p-4 bg-slate-950 border border-slate-800 rounded-xl flex gap-4 items-center group">
+                         <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="space-y-1">
+                               <Label className="text-[10px] uppercase font-bold text-slate-500">Texto de la Etiqueta</Label>
+                               <Input value={tag.text} onChange={e => handleUpdateTag(tag.id, 'text', e.target.value.toUpperCase())} placeholder="Ej: URGENTE" className="bg-slate-900 border-slate-700 h-9 text-xs font-bold text-white uppercase" />
+                            </div>
+                            <div className="space-y-1">
+                               <Label className="text-[10px] uppercase font-bold text-slate-500">Color (Hex/Tailwind)</Label>
+                               <div className="flex items-center gap-2">
+                                  <input type="color" value={tag.color} onChange={e => handleUpdateTag(tag.id, 'color', e.target.value)} className="w-9 h-9 rounded cursor-pointer bg-slate-900 border border-slate-700 p-0" />
+                                  <Input value={tag.color} onChange={e => handleUpdateTag(tag.id, 'color', e.target.value)} className="bg-slate-900 border-slate-700 h-9 text-xs font-mono w-28" />
+                                  <Badge style={{ backgroundColor: tag.color + '20', color: tag.color, borderColor: tag.color + '50' }} className="ml-4 px-3 border shadow-sm">{tag.text || 'VISTA PREVIA'}</Badge>
+                               </div>
+                            </div>
+                         </div>
+                         <Button variant="ghost" size="icon" onClick={() => setGlobalTags(prev => prev.filter(t => t.id !== tag.id))} className="text-slate-500 hover:text-red-500 mt-5"><Trash2 className="w-4 h-4" /></Button>
+                      </div>
+                   ))}
+                </CardContent>
+             </Card>
+
              <Card className="bg-slate-900 border-slate-800 border-l-4 border-l-indigo-500">
-                <CardHeader className="flex flex-row items-center justify-between">
-                   <div><CardTitle className="text-white flex items-center gap-2"><MessageSquarePlus className="w-5 h-5 text-indigo-400" /> Respuestas Rápidas</CardTitle></div>
+                <CardHeader className="flex flex-row items-center justify-between border-b border-slate-800 bg-slate-950/30">
+                   <div>
+                       <CardTitle className="text-white flex items-center gap-2"><MessageSquarePlus className="w-5 h-5 text-indigo-400" /> Plantillas Globales</CardTitle>
+                       <CardDescription className="text-xs">Respuestas predeterminadas para todo el equipo.</CardDescription>
+                   </div>
                    <Button onClick={handleAddQuickReply} className="bg-indigo-900 hover:bg-indigo-800 text-amber-500 h-9 text-xs rounded-xl shadow-lg"><Plus className="w-4 h-4 mr-2" /> Añadir Plantilla</Button>
                 </CardHeader>
-                <CardContent className="space-y-4">
+                <CardContent className="space-y-4 pt-6">
                    {quickReplies.map((qr) => (
                       <div key={qr.id} className="p-4 bg-slate-950 border border-slate-800 rounded-xl flex gap-4 items-start group">
                          <div className="flex-1 space-y-3">
@@ -428,6 +437,7 @@ const Settings = () => {
           </TabsContent>
 
           <TabsContent value="followup" className="mt-6 space-y-6">
+              {/* OMITIDO POR BREVEDAD, ES IGUAL AL CÓDIGO ACTUAL */}
               <Card className="bg-slate-900 border-slate-800 shadow-xl">
                 <CardHeader className="bg-slate-950/30"><CardTitle className="text-white flex items-center gap-2 text-sm font-bold"><Clock className="w-4 h-4 text-indigo-400" /> Controlador Global de Tiempos</CardTitle></CardHeader>
                 <CardContent className="pt-6">

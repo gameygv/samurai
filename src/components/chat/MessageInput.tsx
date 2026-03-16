@@ -2,20 +2,23 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Loader2, Send, ShieldAlert, Paperclip, X, Image as ImageIcon, FileText, MessageCircle, Lock } from 'lucide-react';
+import { Loader2, Send, ShieldAlert, Paperclip, X, Image as ImageIcon, FileText, MessageCircle, Lock, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
 
 interface MessageInputProps {
   onSendMessage: (text: string, file?: File, isInternalNote?: boolean) => void;
   sending: boolean;
   isAiPaused: boolean;
   initialValue?: string;
+  onAutoGenerate?: () => Promise<string | null>; // Nueva función para generar con IA
 }
 
-export const MessageInput = ({ onSendMessage, sending, isAiPaused, initialValue = '' }: MessageInputProps) => {
+export const MessageInput = ({ onSendMessage, sending, isAiPaused, initialValue = '', onAutoGenerate }: MessageInputProps) => {
   const [message, setMessage] = useState(initialValue);
   const [file, setFile] = useState<File | null>(null);
   const [mode, setMode] = useState<'message' | 'note'>('message');
+  const [generating, setGenerating] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -26,9 +29,7 @@ export const MessageInput = ({ onSendMessage, sending, isAiPaused, initialValue 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!message.trim() && !file) return;
-    
     onSendMessage(message, file || undefined, mode === 'note');
-    
     setMessage('');
     setFile(null);
   };
@@ -36,8 +37,21 @@ export const MessageInput = ({ onSendMessage, sending, isAiPaused, initialValue 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
       setFile(e.target.files[0]);
-      setMode('message'); // Si sube archivo, forzamos modo mensaje WA
+      setMode('message'); 
     }
+  };
+
+  const handleGenerateAI = async () => {
+     if (!onAutoGenerate) return;
+     setGenerating(true);
+     try {
+         const draft = await onAutoGenerate();
+         if (draft) setMessage(draft);
+     } catch(e: any) {
+         toast.error("Fallo al generar sugerencia.");
+     } finally {
+         setGenerating(false);
+     }
   };
 
   return (
@@ -55,11 +69,13 @@ export const MessageInput = ({ onSendMessage, sending, isAiPaused, initialValue 
             </TabsList>
          </Tabs>
          
-         {isAiPaused && mode === 'message' && (
-           <div className="text-[9px] text-red-400 flex items-center gap-1 opacity-80 font-bold tracking-widest">
-             <ShieldAlert className="w-3 h-3" /> BOT PAUSADO
-           </div>
-         )}
+         <div className="flex items-center gap-3">
+             {isAiPaused && mode === 'message' && (
+               <div className="text-[9px] text-red-400 flex items-center gap-1 opacity-80 font-bold tracking-widest">
+                 <ShieldAlert className="w-3 h-3" /> BOT PAUSADO
+               </div>
+             )}
+         </div>
       </div>
 
       {file && mode === 'message' && (
@@ -76,53 +92,40 @@ export const MessageInput = ({ onSendMessage, sending, isAiPaused, initialValue 
       )}
 
       <form onSubmit={handleSubmit} className="flex gap-2 items-center">
-        <input 
-          type="file" 
-          ref={fileInputRef} 
-          className="hidden" 
-          onChange={handleFileChange}
-          accept="image/*,video/*,application/pdf,.doc,.docx"
-        />
+        <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileChange} accept="image/*,video/*,application/pdf,.doc,.docx" />
         
         {mode === 'message' && (
-           <Button 
-             type="button" 
-             variant="ghost" 
-             size="icon" 
-             className="shrink-0 text-slate-400 hover:text-indigo-400 hover:bg-indigo-500/10 rounded-xl"
-             onClick={() => fileInputRef.current?.click()}
-             disabled={sending}
-           >
+           <Button type="button" variant="ghost" size="icon" className="shrink-0 text-slate-400 hover:text-indigo-400 hover:bg-indigo-500/10 rounded-xl" onClick={() => fileInputRef.current?.click()} disabled={sending}>
              <Paperclip className="w-5 h-5" />
            </Button>
         )}
         
-        <Input
-          value={message}
-          onChange={(e) => setMessage(e.target.value)}
-          className={cn(
-             "h-11 rounded-xl focus-visible:ring-1 text-sm transition-colors",
-             mode === 'note' 
-               ? "bg-amber-950/20 border-amber-900/50 text-amber-100 placeholder:text-amber-700/50 focus-visible:ring-amber-500" 
-               : "bg-slate-950 border-slate-700 text-slate-100 focus-visible:ring-indigo-500"
-          )}
-          placeholder={
-             mode === 'note' 
-               ? "Escribe un apunte interno (el cliente no lo verá)..." 
-               : (file ? "Añade un comentario al archivo (opcional)..." : "Escribe un mensaje de WhatsApp...")
-          }
-          disabled={sending}
-        />
+        <div className="relative flex-1">
+            <Input
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              className={cn(
+                 "h-11 rounded-xl focus-visible:ring-1 text-sm transition-colors pr-10",
+                 mode === 'note' 
+                   ? "bg-amber-950/20 border-amber-900/50 text-amber-100 placeholder:text-amber-700/50 focus-visible:ring-amber-500" 
+                   : "bg-slate-950 border-slate-700 text-slate-100 focus-visible:ring-indigo-500"
+              )}
+              placeholder={mode === 'note' ? "Escribe un apunte interno..." : (file ? "Añade un comentario..." : "Escribe un mensaje de WhatsApp...")}
+              disabled={sending || generating}
+            />
+            {onAutoGenerate && mode === 'message' && (
+                <Button 
+                    type="button" variant="ghost" size="icon" 
+                    onClick={handleGenerateAI} disabled={generating || sending}
+                    className="absolute right-1 top-1.5 h-8 w-8 text-amber-500 hover:bg-amber-500/20 rounded-lg"
+                    title="Autocompletar con IA"
+                >
+                    {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                </Button>
+            )}
+        </div>
         
-        <Button 
-           type="submit" 
-           size="icon" 
-           className={cn(
-              "shrink-0 h-11 w-11 rounded-xl shadow-lg transition-colors",
-              mode === 'note' ? "bg-amber-600 hover:bg-amber-700 text-slate-900" : "bg-indigo-600 hover:bg-indigo-700 text-white"
-           )} 
-           disabled={sending || (!message.trim() && !file)}
-        >
+        <Button type="submit" size="icon" className={cn("shrink-0 h-11 w-11 rounded-xl shadow-lg transition-colors", mode === 'note' ? "bg-amber-600 hover:bg-amber-700 text-slate-900" : "bg-indigo-600 hover:bg-indigo-700 text-white")} disabled={sending || (!message.trim() && !file) || generating}>
           {sending ? <Loader2 className="w-5 h-5 animate-spin" /> : (mode === 'note' ? <Lock className="w-5 h-5" /> : <Send className="w-5 h-5" />)}
         </Button>
       </form>

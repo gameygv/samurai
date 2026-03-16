@@ -6,7 +6,7 @@ import { corsHeaders } from '../_shared/cors.ts'
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders })
 
-  console.log("[process-followups] Iniciando ciclo AI-Driven (Exploración & Ventas)...");
+  console.log("[process-followups] Iniciando ciclo AI-Driven (Exploración, Ventas & Alertas)...");
 
   try {
     const supabaseClient = createClient(
@@ -14,59 +14,97 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
-    // 1. OBTENER CONFIGURACIÓN GENERAL Y HORARIOS
-    const { data: fConfigData } = await supabaseClient.from('followup_config').select('*').limit(1).maybeSingle();
-    const fConfig = fConfigData || { enabled: false };
-
     const { data: configs } = await supabaseClient.from('app_config').select('key, value');
     const getConfig = (key) => configs?.find(c => c.key === key)?.value || null;
 
+    const evolutionApiUrl = getConfig('evolution_api_url');
+    const evolutionApiKey = getConfig('evolution_api_key');
+    const openAiKey = getConfig('openai_api_key');
+
+    const now = new Date();
+
+    // ========================================================
+    // 1. PROCESAR ALERTAS Y RECORDATORIOS PARA VENDEDORES
+    // ========================================================
+    if (evolutionApiUrl && evolutionApiKey) {
+        console.log("[process-followups] Revisando recordatorios activos...");
+        const { data: leadsWithRems } = await supabaseClient.from('leads').select('id, nombre, telefono, assigned_to, reminders').not('reminders', 'is', null);
+        
+        if (leadsWithRems) {
+            for (const lead of leadsWithRems) {
+                if (!lead.reminders || lead.reminders.length === 0) continue;
+                let modified = false;
+                
+                for (let r of lead.reminders) {
+                    if (r.notified || !r.datetime) continue;
+                    
+                    const remTime = new Date(r.datetime).getTime();
+                    const notifyMinutes = parseInt(r.notify_minutes || 0);
+                    const alertTime = remTime - (notifyMinutes * 60000);
+                    
+                    if (now.getTime() >= alertTime) {
+                        // Encontrar teléfono del vendedor
+                        let agentPhone = null;
+                        if (lead.assigned_to) {
+                           const { data: agent } = await supabaseClient.from('profiles').select('phone').eq('id', lead.assigned_to).maybeSingle();
+                           if (agent?.phone) agentPhone = agent.phone;
+                        }
+                        
+                        if (agentPhone) {
+                           const msg = `🔔 *RECORDATORIO SAMURAI*\n\nTienes una tarea pendiente con *${lead.nombre || lead.telefono}*.\n\n📌 *Tarea:* ${r.title}\n🕒 *Fecha programada:* ${new Date(r.datetime).toLocaleString('es-MX')}\n\nRevisa el CRM para darle seguimiento.`;
+                           
+                           await fetch(evolutionApiUrl, {
+                               method: 'POST',
+                               headers: { 'Content-Type': 'application/json', 'apikey': evolutionApiKey },
+                               body: JSON.stringify({ number: agentPhone, text: msg })
+                           }).catch(e => console.error("Error enviando alerta a vendedor", e));
+                        }
+                        
+                        r.notified = true;
+                        modified = true;
+                    }
+                }
+
+                if (modified) {
+                   await supabaseClient.from('leads').update({ reminders: lead.reminders }).eq('id', lead.id);
+                }
+            }
+        }
+    }
+
+    // ========================================================
+    // 2. PROCESAR RETARGETINGS AUTOMÁTICOS (AI-DRIVEN)
+    // ========================================================
+    const { data: fConfigData } = await supabaseClient.from('followup_config').select('*').limit(1).maybeSingle();
+    const fConfig = fConfigData || { enabled: false };
     const sEnabled = getConfig('sales_followup_enabled') === 'true';
     
     if (!fConfig.enabled && !sEnabled) {
         return new Response(JSON.stringify({ success: true, message: "Todos los retargeting desactivados." }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    // Verificar Horario Comercial
-    const now = new Date();
     const mxHour = (now.getUTCHours() - 6 + 24) % 24; 
-    
-    // Forzamos explícitamente a que sean números para evitar fallos de comparación de texto
     const startHour = Number(fConfig.start_hour ?? 9);
     const endHour = Number(fConfig.end_hour ?? 20);
 
     if (mxHour < startHour || mxHour >= endHour) {
-        return new Response(JSON.stringify({ 
-            success: true, 
-            message: `Fuera de horario laboral. Hora actual: ${mxHour}h (Configurado de: ${startHour}h a ${endHour}h)` 
-        }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        return new Response(JSON.stringify({ success: true, message: `Fuera de horario laboral. Hora actual: ${mxHour}h` }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
-
-    const evolutionApiUrl = getConfig('evolution_api_url');
-    const evolutionApiKey = getConfig('evolution_api_key');
-    const openAiKey = getConfig('openai_api_key');
 
     if (!openAiKey) throw new Error("Falta OpenAI API Key.");
 
-    // MATRIZ DE TIEMPOS EXPLORACIÓN
     const normalDelays = { 1: fConfig.stage_1_delay || 15, 2: fConfig.stage_2_delay || 60, 3: fConfig.stage_3_delay || 1440 };
     const normalMsgs = { 1: fConfig.stage_1_message, 2: fConfig.stage_2_message, 3: fConfig.stage_3_message };
 
-    // MATRIZ DE TIEMPOS VENTAS (CIERRE)
     const salesDelays = { 
         1: parseInt(getConfig('sales_stage_1_delay')) || 60, 
         2: parseInt(getConfig('sales_stage_2_delay')) || 1440, 
         3: parseInt(getConfig('sales_stage_3_delay')) || 2880 
     };
-    const salesMsgs = { 
-        1: getConfig('sales_stage_1_message'), 
-        2: getConfig('sales_stage_2_message'), 
-        3: getConfig('sales_stage_3_message') 
-    };
+    const salesMsgs = { 1: getConfig('sales_stage_1_message'), 2: getConfig('sales_stage_2_message'), 3: getConfig('sales_stage_3_message') };
 
     const results = [];
 
-    // Helper de Generación y Envío
     const generateAndSend = async (lead, triggerInstruction) => {
         try {
             const { data: kernelData } = await supabaseClient.functions.invoke('get-samurai-context', { body: { lead } });
@@ -101,18 +139,8 @@ serve(async (req) => {
             if (evolutionApiUrl && evolutionApiKey) {
                 const endpoint = mediaUrl ? evolutionApiUrl.replace('sendText', 'sendMedia') : evolutionApiUrl;
                 const payload = mediaUrl ? {
-                    number: lead.telefono,
-                    mediatype: "image",
-                    media: mediaUrl,
-                    caption: textToSend || "",
-                    mediaMessage: { mediatype: "image", media: mediaUrl, caption: textToSend || "" },
-                    delay: 1500
-                } : {
-                    number: lead.telefono,
-                    text: textToSend,
-                    delay: 1500,
-                    linkPreview: true
-                };
+                    number: lead.telefono, mediatype: "image", media: mediaUrl, caption: textToSend || "", mediaMessage: { mediatype: "image", media: mediaUrl, caption: textToSend || "" }, delay: 1500
+                } : { number: lead.telefono, text: textToSend, delay: 1500, linkPreview: true };
 
                 const response = await fetch(endpoint, {
                     method: 'POST',
@@ -120,18 +148,10 @@ serve(async (req) => {
                     body: JSON.stringify(payload)
                 });
 
-                if (!response.ok) {
-                    console.error("[process-followups] Evolution Error");
-                    return false;
-                }
+                if (!response.ok) return false;
             }
 
-            await supabaseClient.from('conversaciones').insert({ 
-                lead_id: lead.id, emisor: 'SAMURAI', 
-                mensaje: mediaUrl ? `[IMG: ${mediaUrl}] ${textToSend}` : textToSend, 
-                platform: 'AUTO_FOLLOWUP' 
-            });
-
+            await supabaseClient.from('conversaciones').insert({ lead_id: lead.id, emisor: 'SAMURAI', mensaje: mediaUrl ? `[IMG: ${mediaUrl}] ${textToSend}` : textToSend, platform: 'AUTO_FOLLOWUP' });
             return true;
         } catch (e) {
             console.error(`[process-followups] Error en ${lead.id}:`, e);
@@ -139,21 +159,13 @@ serve(async (req) => {
         }
     };
 
-    // BUSCAR LEADS ELEGIBLES (Ni comprados, ni con pago validado, ni pausados)
-    const { data: eligibleLeads } = await supabaseClient
-      .from('leads')
-      .select('*')
-      .eq('ai_paused', false)
-      .neq('buying_intent', 'COMPRADO')
-      .neq('payment_status', 'VALID')
-      .lt('followup_stage', 3);
+    const { data: eligibleLeads } = await supabaseClient.from('leads').select('*').eq('ai_paused', false).neq('buying_intent', 'COMPRADO').neq('payment_status', 'VALID').lt('followup_stage', 3);
 
     for (const lead of (eligibleLeads || [])) {
-       // Determinar Modo Operativo
        const isSalesMode = lead.buying_intent === 'ALTO';
        
-       if (isSalesMode && !sEnabled) continue; // Si es cierre y ventas está apagado, salta
-       if (!isSalesMode && !fConfig.enabled) continue; // Si es expl y normal está apagado, salta
+       if (isSalesMode && !sEnabled) continue; 
+       if (!isSalesMode && !fConfig.enabled) continue; 
 
        const delaysToUse = isSalesMode ? salesDelays : normalDelays;
        const msgsToUse = isSalesMode ? salesMsgs : normalMsgs;
@@ -164,19 +176,12 @@ serve(async (req) => {
 
        if (delaysToUse[nextStage] && diffMinutes >= delaysToUse[nextStage]) {
           const contextType = isSalesMode ? 'CIERRE DE VENTAS' : 'RE-ENGANCHE';
-          console.log(`[process-followups] Lead ${lead.telefono} | Modo: ${contextType} | FASE ${nextStage} (${Math.round(diffMinutes)} mins)`);
-          
-          const triggerInstruction = `[INSTRUCCIÓN INVISIBLE: RETARGETING AUTOMÁTICO FASE ${nextStage} - ${contextType}]: El cliente lleva ${Math.round(diffMinutes)} minutos sin responder. 
-Ejecuta ESTRICTAMENTE esta instrucción: "${msgsToUse[nextStage]}". 
-Escribe SOLAMENTE el mensaje que le enviarás, mantén tu tono humano, corto y amigable. NO repitas cosas que ya le dijiste.`;
+          const triggerInstruction = `[INSTRUCCIÓN INVISIBLE: RETARGETING AUTOMÁTICO FASE ${nextStage} - ${contextType}]: El cliente lleva ${Math.round(diffMinutes)} minutos sin responder. Ejecuta ESTRICTAMENTE esta instrucción: "${msgsToUse[nextStage]}". Escribe SOLAMENTE el mensaje que le enviarás, mantén tu tono humano, corto y amigable. NO repitas cosas que ya le dijiste.`;
           
           const sent = await generateAndSend(lead, triggerInstruction);
           
           if (sent) {
-              await supabaseClient.from('leads').update({ 
-                  followup_stage: nextStage, 
-                  last_message_at: now.toISOString() 
-              }).eq('id', lead.id);
+              await supabaseClient.from('leads').update({ followup_stage: nextStage, last_message_at: now.toISOString() }).eq('id', lead.id);
               results.push({ lead: lead.telefono, stage: nextStage, mode: contextType });
           }
        }

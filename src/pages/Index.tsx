@@ -104,24 +104,37 @@ const Index = () => {
         });
       }
 
-      // Tareas = Próximas acciones o followups
+      // Procesar Recordatorios JSONB
       const now = new Date().getTime();
-      const futureTasks = leads
-         .filter(l => l.next_followup_at)
-         .sort((a, b) => new Date(a.next_followup_at).getTime() - new Date(b.next_followup_at).getTime())
-         .slice(0, 8)
-         .map(f => {
-            const t = new Date(f.next_followup_at).getTime();
-            const isLate = t < now;
-            return {
-              id: f.id,
-              type: isLate ? 'ATRASADO' : 'PENDIENTE',
-              target: f.nombre || 'Lead Desconocido',
-              time: new Date(f.next_followup_at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }),
-              status: isLate ? 'running' : 'scheduled',
-              rawLead: f
-            };
-         });
+      let futureTasks: any[] = [];
+      
+      leads.forEach(l => {
+          let rems = [];
+          if (l.reminders) {
+             try { rems = typeof l.reminders === 'string' ? JSON.parse(l.reminders) : l.reminders; } catch(e){}
+          }
+          // Añadimos el legacy `next_followup_at` si existe
+          if (l.next_followup_at) {
+             rems.push({ title: 'Seguimiento Programado', datetime: l.next_followup_at });
+          }
+
+          rems.forEach((r: any) => {
+             if (r.datetime) {
+                const t = new Date(r.datetime).getTime();
+                futureTasks.push({
+                   id: l.id + r.datetime,
+                   type: t < now ? 'ATRASADO' : 'PENDIENTE',
+                   target: l.nombre || l.telefono,
+                   title: r.title,
+                   time: new Date(r.datetime).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }),
+                   sortTime: t,
+                   rawLead: l
+                });
+             }
+          });
+      });
+
+      futureTasks = futureTasks.sort((a, b) => a.sortTime - b.sortTime).slice(0, 10);
       setUpcomingTasks(futureTasks);
 
       setFunnelData([
@@ -195,17 +208,17 @@ const Index = () => {
                               {upcomingTasks.map((task) => (
                                  <div key={task.id} className="p-4 hover:bg-slate-800/30 transition-colors flex items-center justify-between group cursor-pointer" onClick={() => { setSelectedLead(task.rawLead); setIsChatOpen(true); }}>
                                     <div className="flex items-center gap-3">
-                                       <div className={cn("p-2 rounded-lg", task.status === 'running' ? 'bg-red-500/10 text-red-400' : 'bg-indigo-500/10 text-indigo-400')}>
-                                          <MessageSquare className="w-4 h-4" />
+                                       <div className={cn("p-2 rounded-lg shrink-0", task.type === 'ATRASADO' ? 'bg-red-500/10 text-red-400' : 'bg-amber-500/10 text-amber-400')}>
+                                          <CalendarClock className="w-4 h-4" />
                                        </div>
                                        <div className="flex flex-col">
-                                          <span className="text-sm font-bold text-slate-100 group-hover:text-amber-400 transition-colors">{task.target}</span>
-                                          <span className={cn("text-[10px] uppercase font-bold tracking-widest", task.status === 'running' ? 'text-red-500' : 'text-indigo-400')}>{task.type}</span>
+                                          <span className="text-sm font-bold text-slate-100 group-hover:text-amber-400 transition-colors truncate max-w-[150px] sm:max-w-[200px]">{task.title}</span>
+                                          <span className="text-[10px] text-slate-500 truncate max-w-[150px]">{task.target}</span>
                                        </div>
                                     </div>
                                     <div className="flex flex-col items-end gap-1">
-                                       <span className="text-xs text-slate-400 font-mono">{task.time}</span>
-                                       <ArrowRight className="w-4 h-4 text-slate-600 group-hover:text-amber-500 transition-transform group-hover:translate-x-1" />
+                                       <span className={cn("text-xs font-mono font-bold", task.type === 'ATRASADO' ? "text-red-400" : "text-slate-400")}>{task.time}</span>
+                                       <Badge variant="outline" className={cn("text-[8px] h-4 uppercase", task.type === 'ATRASADO' ? "border-red-500/50 text-red-400" : "border-amber-500/50 text-amber-400")}>{task.type}</Badge>
                                     </div>
                                  </div>
                               ))}
@@ -309,7 +322,44 @@ const Index = () => {
                   </CardContent>
                 </Card>
 
-                <TaskRadar tasks={upcomingTasks} />
+                {/* ADMIN TASK RADAR (Global) */}
+                <Card className="bg-slate-900 border-slate-800 shadow-xl overflow-hidden flex flex-col h-[320px] rounded-2xl">
+                   <CardHeader className="py-4 border-b border-slate-800 bg-slate-950/20 shrink-0">
+                      <CardTitle className="text-[10px] uppercase text-white tracking-widest flex items-center gap-2">
+                        <Clock className="w-4 h-4 text-blue-400" /> Recordatorios Activos
+                      </CardTitle>
+                   </CardHeader>
+                   <CardContent className="p-0 flex-1 overflow-y-auto custom-scrollbar">
+                      <div className="divide-y divide-slate-800">
+                        {upcomingTasks.length === 0 ? (
+                           <div className="p-8 text-center text-slate-600 italic text-xs flex flex-col items-center gap-2">
+                              <CalendarClock className="w-6 h-6 opacity-30" /> No hay tareas programadas.
+                           </div>
+                        ) : (
+                           upcomingTasks.map((task) => (
+                           <div key={task.id} className="p-3 flex items-center justify-between hover:bg-slate-800/30 transition-colors group cursor-default">
+                              <div className="flex items-center gap-3">
+                                 <div className={cn("p-1.5 rounded-lg shrink-0", task.type === 'ATRASADO' ? "bg-red-500/10 text-red-400" : "bg-blue-500/10 text-blue-400")}>
+                                 {task.type === 'ATRASADO' ? <MessageSquare className="w-3.5 h-3.5" /> : <Send className="w-3.5 h-3.5" />}
+                                 </div>
+                                 <div className="flex flex-col">
+                                    <span className="text-[10px] font-bold text-slate-200 truncate max-w-[120px]">{task.title}</span>
+                                    <span className="text-xs font-bold text-slate-400">{task.target}</span>
+                                 </div>
+                              </div>
+                              <div className="text-right flex items-center gap-3">
+                                 <div className="flex flex-col items-end">
+                                 <span className="text-[10px] font-bold text-slate-400">{task.time}</span>
+                                 <span className={cn("text-[8px] uppercase font-mono", task.type === 'ATRASADO' ? 'text-red-500' : 'text-slate-500')}>{task.type}</span>
+                                 </div>
+                              </div>
+                           </div>
+                           ))
+                        )}
+                      </div>
+                   </CardContent>
+                </Card>
+
              </div>
 
              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

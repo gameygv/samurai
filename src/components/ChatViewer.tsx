@@ -8,14 +8,7 @@ import { MemoryPanel } from './chat/MemoryPanel';
 import { AiSuggestions } from './chat/AiSuggestions';
 import { Button } from '@/components/ui/button';
 import { Zap, CreditCard, Link as LinkIcon, FileText, X, Menu, MessageSquarePlus, ShoppingCart } from 'lucide-react';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { toast } from 'sonner';
 import { sendEvolutionMessage } from '@/utils/messagingService';
 import { cn } from '@/lib/utils';
@@ -37,7 +30,11 @@ const ChatViewer = ({ lead: initialLead, open, onOpenChange }: ChatViewerProps) 
   
   const [showMemoryMobile, setShowMemoryMobile] = useState(false);
   const [quickActions, setQuickActions] = useState<any>({});
-  const [quickReplies, setQuickReplies] = useState<{id: string, title: string, text: string}[]>([]);
+  
+  // Combined Templates
+  const [globalReplies, setGlobalReplies] = useState<{id: string, title: string, text: string}[]>([]);
+  const [localReplies, setLocalReplies] = useState<{id: string, title: string, text: string}[]>([]);
+  
   const [products, setProducts] = useState<any[]>([]);
   const [suggestions, setSuggestions] = useState<any[]>([]);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
@@ -47,7 +44,7 @@ const ChatViewer = ({ lead: initialLead, open, onOpenChange }: ChatViewerProps) 
     nombre: '', apellido: '', email: '', summary: '', mood: 'NEUTRO', buying_intent: 'BAJO',
     followup_stage: 0, next_followup_at: null, ciudad: '', estado: '', cp: '', pais: 'mx',
     perfil_psicologico: '', main_pain: '', servicio_interes: '', origen_contacto: '', tiempo_compra: '', 
-    lead_score: 0, assigned_to: '', tags: [] as string[]
+    lead_score: 0, assigned_to: '', tags: [], reminders: []
   });
 
   useEffect(() => {
@@ -68,7 +65,6 @@ const ChatViewer = ({ lead: initialLead, open, onOpenChange }: ChatViewerProps) 
       
       const uniqueId = Math.random().toString(36).substring(7);
       
-      // 1. WebSockets
       leadChannel = supabase.channel(`lead-watch-${lead.id}-${uniqueId}`)
         .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'leads', filter: `id=eq.${lead.id}` }, (payload) => {
            setLead(payload.new);
@@ -77,22 +73,12 @@ const ChatViewer = ({ lead: initialLead, open, onOpenChange }: ChatViewerProps) 
         
       msgChannel = supabase.channel(`msg-watch-${lead.id}-${uniqueId}`)
         .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'conversaciones', filter: `lead_id=eq.${lead.id}` }, (payload) => {
-           setMessages(prev => {
-              if (prev.some(m => m.id === payload.new.id)) return prev;
-              return [...prev, payload.new];
-           });
+           setMessages(prev => prev.some(m => m.id === payload.new.id) ? prev : [...prev, payload.new]);
         }).subscribe();
 
-      // 2. Polling Forzado (Anti-bloqueo)
       pollInterval = setInterval(async () => {
-         const { data } = await supabase.from('conversaciones')
-             .select('*').eq('lead_id', lead.id).order('created_at', { ascending: true });
-         if (data) {
-             setMessages(prev => {
-                 if (prev.length === data.length) return prev;
-                 return data;
-             });
-         }
+         const { data } = await supabase.from('conversaciones').select('*').eq('lead_id', lead.id).order('created_at', { ascending: true });
+         if (data) setMessages(prev => prev.length === data.length ? prev : data);
       }, 2500);
     }
 
@@ -104,21 +90,24 @@ const ChatViewer = ({ lead: initialLead, open, onOpenChange }: ChatViewerProps) 
   }, [open, lead?.id]);
 
   const fetchQuickActions = async () => {
-     const { data } = await supabase.from('app_config').select('key, value').in('key', ['wc_url', 'bank_name', 'bank_account', 'bank_clabe', 'bank_holder', 'quick_replies', 'wc_products']);
+     if(!user) return;
+     const { data } = await supabase.from('app_config').select('key, value').in('key', ['wc_url', 'bank_name', 'bank_account', 'bank_clabe', 'bank_holder', 'quick_replies', 'wc_products', `agent_templates_${user.id}`]);
      if (data) {
         const config: any = data.reduce((acc, item) => ({...acc, [item.key]: item.value}), {});
-        
         setQuickActions({
            wcBaseUrl: config.wc_url || 'https://theelephantbowl.com',
            bankInfo: `Banco: ${config.bank_name}\nCuenta: ${config.bank_account}\nCLABE: ${config.bank_clabe}\nTitular: ${config.bank_holder}`
         });
-        
-        try { if (config.quick_replies) setQuickReplies(JSON.parse(config.quick_replies)); } catch (e) {}
+        try { if (config.quick_replies) setGlobalReplies(JSON.parse(config.quick_replies)); } catch (e) {}
+        try { if (config[`agent_templates_${user.id}`]) setLocalReplies(JSON.parse(config[`agent_templates_${user.id}`])); } catch (e) {}
         try { if (config.wc_products) setProducts(JSON.parse(config.wc_products)); } catch (e) {}
      }
   };
 
   const updateMemoryForm = (data: any) => {
+     let rems = [];
+     try { rems = data.reminders ? (typeof data.reminders === 'string' ? JSON.parse(data.reminders) : data.reminders) : []; } catch(e){}
+     
      setMemoryForm({
         nombre: data.nombre || '', apellido: data.apellido || '', email: data.email || '', summary: data.summary || '',
         mood: data.estado_emocional_actual || 'NEUTRO', buying_intent: data.buying_intent || 'BAJO',
@@ -127,7 +116,7 @@ const ChatViewer = ({ lead: initialLead, open, onOpenChange }: ChatViewerProps) 
         perfil_psicologico: data.perfil_psicologico || '', main_pain: data.main_pain || '',
         servicio_interes: data.servicio_interes || '', origen_contacto: data.origen_contacto || '',
         tiempo_compra: data.tiempo_compra || '', lead_score: data.lead_score || 0, assigned_to: data.assigned_to || '',
-        tags: data.tags || []
+        tags: data.tags || [], reminders: rems
      });
   };
 
@@ -146,13 +135,30 @@ const ChatViewer = ({ lead: initialLead, open, onOpenChange }: ChatViewerProps) 
     setLoadingSuggestions(true);
     try {
       const transcript = msgs.slice(-8).map(m => `${m.emisor}: ${m.mensaje}`).join('\n');
-      const { data, error } = await supabase.functions.invoke('get-ai-suggestions', {
-        body: { lead_id: lead.id, transcript }
-      });
+      const { data, error } = await supabase.functions.invoke('get-ai-suggestions', { body: { lead_id: lead.id, transcript } });
       if (!error && data?.suggestions) setSuggestions(data.suggestions);
-    } finally {
-      setLoadingSuggestions(false);
-    }
+    } finally { setLoadingSuggestions(false); }
+  };
+
+  // NUEVO: Generar respuesta directa con el Kernel (Simulate)
+  const handleAutoGenerate = async () => {
+      try {
+         // Cargamos historial formateado para simulate
+         const history = messages.slice(-15).map(m => ({ 
+             role: (m.emisor === 'IA' || m.emisor === 'SAMURAI' ? 'bot' : 'user'), 
+             text: m.mensaje 
+         }));
+
+         const { data, error } = await supabase.functions.invoke('simulate-samurai', {
+            body: { question: "Por favor genera la mejor respuesta corta y persuasiva para continuar esta conversación como un experto humano.", history, customPrompts: null }
+         });
+
+         if (error) throw error;
+         return data.answer as string;
+      } catch (e) {
+         console.error(e);
+         return null;
+      }
   };
 
   const handleDeleteLead = async () => {
@@ -162,127 +168,78 @@ const ChatViewer = ({ lead: initialLead, open, onOpenChange }: ChatViewerProps) 
        await supabase.from('leads').delete().eq('id', lead.id);
        toast.success("Prospecto eliminado correctamente.", { id: tid });
        onOpenChange(false);
-    } catch (err: any) {
-       toast.error("Error al eliminar: " + err.message, { id: tid });
-    }
+    } catch (err: any) { toast.error("Error al eliminar: " + err.message, { id: tid }); }
   };
 
   const handleSendMessage = async (text: string, file?: File, isInternalNote: boolean = false) => {
     setSending(true);
     try {
-      // 1. Intercepción de Comandos del Sistema
       if (text.trim() === '#STOP' || text.trim() === '#START') {
          const isPaused = text.trim() === '#STOP';
          await supabase.from('leads').update({ ai_paused: isPaused }).eq('id', lead.id);
-         
-         await supabase.from('conversaciones').insert({ 
-           lead_id: lead.id, 
-           mensaje: `IA ${isPaused ? 'Pausada' : 'Activada'} manualmente.`, 
-           emisor: 'NOTA', 
-           platform: 'PANEL_INTERNO' 
-         });
-         
+         await supabase.from('conversaciones').insert({ lead_id: lead.id, mensaje: `IA ${isPaused ? 'Pausada' : 'Activada'} manualmente.`, emisor: 'NOTA', platform: 'PANEL_INTERNO' });
          toast.success(`Samurai ${isPaused ? 'Pausado' : 'Activado'}`);
-         fetchMessages();
          setDraftMessage('');
          return;
       }
 
       if (isInternalNote) {
-         await supabase.from('conversaciones').insert({ 
-           lead_id: lead.id, 
-           mensaje: text, 
-           emisor: 'NOTA', 
-           platform: 'PANEL_INTERNO'
-         });
-         toast.success("Nota interna guardada.");
-         fetchMessages();
+         await supabase.from('conversaciones').insert({ lead_id: lead.id, mensaje: text, emisor: 'NOTA', platform: 'PANEL_INTERNO' });
+         toast.success("Nota guardada.");
          setDraftMessage('');
          return; 
       }
 
       let mediaData = undefined;
-
       if (file) {
         const ext = file.name.split('.').pop();
-        const path = `chat_uploads/${Date.now()}_${Math.random().toString(36).substring(7)}.${ext}`;
-        
+        const path = `chat_uploads/${Date.now()}.${ext}`;
         const { error: uploadErr } = await supabase.storage.from('media').upload(path, file);
         if (uploadErr) throw uploadErr;
-
         const { data: { publicUrl } } = supabase.storage.from('media').getPublicUrl(path);
-
         let type = 'document';
         if (file.type.startsWith('image/')) type = 'image';
         else if (file.type.startsWith('video/')) type = 'video';
-        else if (file.type.startsWith('audio/')) type = 'audio';
-
         mediaData = { url: publicUrl, type, mimetype: file.type, name: file.name };
       }
 
       const apiResponse = await sendEvolutionMessage(lead.telefono, text, mediaData);
-      
-      // Permitimos guardar el mensaje en la BD aunque la API falle (Modo Prueba / Simulación)
-      if (!apiResponse) {
-          toast.warning("Modo Prueba: Mensaje guardado en el CRM pero WhatsApp no está conectado.", { duration: 5000 });
-      }
-
       const textToSave = text || (file ? `[ARCHIVO ENVIADO: ${file.name}]` : '');
       const finalMessage = apiResponse ? textToSave : `[PRUEBA / WA DESCONECTADO] ${textToSave}`;
 
       await supabase.from('conversaciones').insert({ 
-        lead_id: lead.id, 
-        mensaje: finalMessage, 
-        emisor: 'HUMANO', 
-        platform: 'PANEL',
+        lead_id: lead.id, mensaje: finalMessage, emisor: 'HUMANO', platform: 'PANEL',
         metadata: mediaData ? { mediaUrl: mediaData.url, mediaType: mediaData.type, fileName: mediaData.name } : {}
       });
 
-      // DISPARO SILENCIOSO DE AUDITORÍA QA PARA VENDEDORES
-      if (user && text && !isInternalNote) {
-          supabase.functions.invoke('evaluate-agent', {
-              body: { agent_id: user.id, lead_id: lead.id, message_text: text }
-          }).catch(e => console.error("Error silencioso QA:", e));
+      if (user && text) {
+          supabase.functions.invoke('evaluate-agent', { body: { agent_id: user.id, lead_id: lead.id, message_text: text } }).catch(() => {});
       }
 
-      fetchMessages();
       setDraftMessage('');
-    } catch (err: any) {
-      toast.error('Error: ' + err.message);
-    } finally {
-      setSending(false);
-    }
+    } catch (err: any) { toast.error('Error: ' + err.message); } finally { setSending(false); }
   };
 
   const saveMemory = async () => {
      setSending(true);
      try {
         const { data: updatedLead, error } = await supabase.from('leads').update({
-              nombre: memoryForm.nombre, apellido: memoryForm.apellido,
-              email: memoryForm.email, summary: memoryForm.summary,
+              nombre: memoryForm.nombre, apellido: memoryForm.apellido, email: memoryForm.email, summary: memoryForm.summary,
               estado_emocional_actual: memoryForm.mood, buying_intent: memoryForm.buying_intent,
-              ciudad: memoryForm.ciudad, estado: memoryForm.estado,
-              cp: memoryForm.cp, pais: memoryForm.pais,
-              perfil_psicologico: memoryForm.perfil_psicologico,
-              main_pain: memoryForm.main_pain, servicio_interes: memoryForm.servicio_interes,
+              ciudad: memoryForm.ciudad, estado: memoryForm.estado, cp: memoryForm.cp, pais: memoryForm.pais,
+              perfil_psicologico: memoryForm.perfil_psicologico, main_pain: memoryForm.main_pain, servicio_interes: memoryForm.servicio_interes,
               origen_contacto: memoryForm.origen_contacto, tiempo_compra: memoryForm.tiempo_compra,
               lead_score: memoryForm.lead_score, assigned_to: memoryForm.assigned_to || null,
-              tags: memoryForm.tags
+              tags: memoryForm.tags, reminders: memoryForm.reminders
            }).eq('id', lead.id).select().single();
 
         if (error) throw error;
-
         if (updatedLead.email && !updatedLead.capi_lead_event_sent_at) {
            supabase.functions.invoke('analyze-leads', { body: { lead_id: lead.id, force: true } });
         }
-
-        toast.success('Memoria del Samurai actualizada');
+        toast.success('Memoria actualizada');
         setIsEditingMemory(false);
-     } catch (err: any) {
-        toast.error("Error al guardar: " + err.message);
-     } finally {
-        setSending(false);
-     }
+     } catch (err: any) { toast.error("Error al guardar: " + err.message); } finally { setSending(false); }
   };
 
   return (
@@ -299,31 +256,36 @@ const ChatViewer = ({ lead: initialLead, open, onOpenChange }: ChatViewerProps) 
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="bg-slate-900 border-slate-800 text-white w-64 max-h-[300px] overflow-y-auto custom-scrollbar">
                      <DropdownMenuLabel className="text-[10px] uppercase text-slate-500 font-bold">Catálogo de Cobro</DropdownMenuLabel>
-                     
                      {products.length === 0 ? (
                          <DropdownMenuItem disabled className="text-[10px] italic text-slate-500">Sin productos configurados</DropdownMenuItem>
                      ) : products.map(p => (
-                         <DropdownMenuItem 
-                            key={p.id} 
-                            onClick={() => setDraftMessage(`${quickActions.wcBaseUrl}/checkout/?add-to-cart=${p.wc_id}`)} 
-                            className="cursor-pointer hover:bg-indigo-600/20 text-xs"
-                         >
-                            <ShoppingCart className="w-3 h-3 mr-2 text-indigo-400 shrink-0" />
-                            <span className="truncate">{p.title}</span>
+                         <DropdownMenuItem key={p.id} onClick={() => setDraftMessage(`${quickActions.wcBaseUrl}/checkout/?add-to-cart=${p.wc_id}`)} className="cursor-pointer hover:bg-indigo-600/20 text-xs">
+                            <ShoppingCart className="w-3 h-3 mr-2 text-indigo-400 shrink-0" /><span className="truncate">{p.title}</span>
                          </DropdownMenuItem>
                      ))}
 
                      <DropdownMenuSeparator className="bg-slate-800 my-2"/>
                      <DropdownMenuItem onClick={() => setDraftMessage(quickActions.bankInfo)} className="cursor-pointer hover:bg-indigo-600/20 text-xs"><CreditCard className="w-3 h-3 mr-2 text-indigo-400" /> Datos Bancarios</DropdownMenuItem>
                      
-                     {quickReplies.length > 0 && (
+                     {globalReplies.length > 0 && (
                         <>
                            <DropdownMenuSeparator className="bg-slate-800 my-2"/>
-                           <DropdownMenuLabel className="text-[10px] uppercase text-slate-500 font-bold">Mis Plantillas</DropdownMenuLabel>
-                           {quickReplies.map((qr) => (
+                           <DropdownMenuLabel className="text-[10px] uppercase text-slate-500 font-bold">Plantillas Globales</DropdownMenuLabel>
+                           {globalReplies.map((qr) => (
                               <DropdownMenuItem key={qr.id} onClick={() => setDraftMessage(qr.text)} className="cursor-pointer hover:bg-indigo-600/20 text-xs">
-                                 <MessageSquarePlus className="w-3 h-3 mr-2 text-indigo-400 shrink-0" />
-                                 <span className="truncate">{qr.title}</span>
+                                 <MessageSquarePlus className="w-3 h-3 mr-2 text-indigo-400 shrink-0" /><span className="truncate">{qr.title}</span>
+                              </DropdownMenuItem>
+                           ))}
+                        </>
+                     )}
+
+                     {localReplies.length > 0 && (
+                        <>
+                           <DropdownMenuSeparator className="bg-slate-800 my-2"/>
+                           <DropdownMenuLabel className="text-[10px] uppercase text-slate-500 font-bold">Mis Plantillas Privadas</DropdownMenuLabel>
+                           {localReplies.map((qr) => (
+                              <DropdownMenuItem key={qr.id} onClick={() => setDraftMessage(qr.text)} className="cursor-pointer hover:bg-indigo-600/20 text-xs">
+                                 <MessageSquarePlus className="w-3 h-3 mr-2 text-amber-500 shrink-0" /><span className="truncate">{qr.title}</span>
                               </DropdownMenuItem>
                            ))}
                         </>
@@ -333,7 +295,7 @@ const ChatViewer = ({ lead: initialLead, open, onOpenChange }: ChatViewerProps) 
                <Button size="sm" variant="secondary" className="sm:hidden h-8 w-8 p-0 rounded-full border border-slate-700" onClick={() => setShowMemoryMobile(true)}><Menu className="w-4 h-4" /></Button>
             </div>
             <AiSuggestions suggestions={suggestions} loading={loadingSuggestions} onSelect={setDraftMessage} onRefresh={() => fetchAiSuggestions(messages)} />
-            <MessageInput onSendMessage={handleSendMessage} sending={sending} isAiPaused={lead.ai_paused} initialValue={draftMessage} />
+            <MessageInput onSendMessage={handleSendMessage} sending={sending} isAiPaused={lead.ai_paused} initialValue={draftMessage} onAutoGenerate={handleAutoGenerate} />
           </div>
         </div>
         <div className={cn("w-full sm:w-[380px] sm:min-w-[380px] flex-shrink-0 bg-slate-900/50 border-l border-slate-800 flex flex-col overflow-y-auto absolute sm:relative z-20 h-full transition-transform duration-300", showMemoryMobile ? "translate-x-0" : "translate-x-full sm:translate-x-0")}>

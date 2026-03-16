@@ -34,7 +34,10 @@ const Inbox = () => {
   const [sending, setSending] = useState(false);
   
   const [quickActions, setQuickActions] = useState<any>({});
-  const [quickReplies, setQuickReplies] = useState<any[]>([]);
+  
+  const [globalReplies, setGlobalReplies] = useState<any[]>([]);
+  const [localReplies, setLocalReplies] = useState<any[]>([]);
+
   const [products, setProducts] = useState<any[]>([]);
   const [suggestions, setSuggestions] = useState<any[]>([]);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
@@ -96,14 +99,16 @@ const Inbox = () => {
   };
 
   const fetchQuickActions = async () => {
-    const { data } = await supabase.from('app_config').select('key, value').in('key', ['wc_url', 'bank_name', 'bank_account', 'bank_clabe', 'bank_holder', 'quick_replies', 'wc_products']);
+    if(!user) return;
+    const { data } = await supabase.from('app_config').select('key, value').in('key', ['wc_url', 'bank_name', 'bank_account', 'bank_clabe', 'bank_holder', 'quick_replies', 'wc_products', `agent_templates_${user.id}`]);
     if (data) {
        const config: any = data.reduce((acc, item) => ({...acc, [item.key]: item.value}), {});
        setQuickActions({
           wcBaseUrl: config.wc_url || '',
           bankInfo: `Banco: ${config.bank_name}\nCuenta: ${config.bank_account}\nCLABE: ${config.bank_clabe}\nTitular: ${config.bank_holder}`
        });
-       try { if (config.quick_replies) setQuickReplies(JSON.parse(config.quick_replies)); } catch (e) {}
+       try { if (config.quick_replies) setGlobalReplies(JSON.parse(config.quick_replies)); } catch (e) {}
+       try { if (config[`agent_templates_${user.id}`]) setLocalReplies(JSON.parse(config[`agent_templates_${user.id}`])); } catch (e) {}
        try { if (config.wc_products) setProducts(JSON.parse(config.wc_products)); } catch (e) {}
     }
   };
@@ -119,6 +124,8 @@ const Inbox = () => {
   };
 
   const updateMemoryForm = (data: any) => {
+    let rems = [];
+    try { rems = data.reminders ? (typeof data.reminders === 'string' ? JSON.parse(data.reminders) : data.reminders) : []; } catch(e){}
     setMemoryForm({
        nombre: data.nombre || '', apellido: data.apellido || '', email: data.email || '', summary: data.summary || '',
        mood: data.estado_emocional_actual || 'NEUTRO', buying_intent: data.buying_intent || 'BAJO',
@@ -127,22 +134,18 @@ const Inbox = () => {
        perfil_psicologico: data.perfil_psicologico || '', main_pain: data.main_pain || '',
        servicio_interes: data.servicio_interes || '', origen_contacto: data.origen_contacto || '',
        tiempo_compra: data.tiempo_compra || '', lead_score: data.lead_score || 0, assigned_to: data.assigned_to || '',
-       tags: data.tags || []
+       tags: data.tags || [], reminders: rems
     });
   };
 
   const handleGlobalAiToggle = async (pause: boolean) => {
-    if (!confirm(`¿Seguro que quieres ${pause ? 'PAUSAR' : 'ACTIVAR'} la IA exclusivamente para TODOS TUS chats asignados?`)) return;
-    
-    // SIEMPRE afectará solo a los asignados a este usuario, sin importar si es Admin o no.
-    const { error } = await supabase.from('leads').update({ ai_paused: pause }).eq('assigned_to', user?.id);
-    
-    if (error) {
-       toast.error("Error ejecutando acción masiva.");
-    } else {
-       toast.success(`IA ${pause ? 'Pausada' : 'Activada'} masivamente en tus chats.`);
-       fetchLeads();
-    }
+    if (!confirm(`¿${pause ? 'PAUSAR' : 'ACTIVAR'} la IA para TODOS tus chats?`)) return;
+    let query = supabase.from('leads').update({ ai_paused: pause });
+    if (!isAdmin) query = query.eq('assigned_to', user?.id);
+    else query = query.neq('id', '00000000-0000-0000-0000-000000000000');
+    await query;
+    toast.success(`IA ${pause ? 'Pausada' : 'Activada'} masivamente.`);
+    fetchLeads();
   };
 
   const handleDeleteLead = async () => {
@@ -158,6 +161,23 @@ const Inbox = () => {
     } catch (err: any) {
        toast.error("Error al eliminar: " + err.message, { id: tid });
     }
+  };
+
+  const handleAutoGenerate = async () => {
+      try {
+         const history = messages.slice(-15).map(m => ({ 
+             role: (m.emisor === 'IA' || m.emisor === 'SAMURAI' ? 'bot' : 'user'), 
+             text: m.mensaje 
+         }));
+         const { data, error } = await supabase.functions.invoke('simulate-samurai', {
+            body: { question: "Genera la mejor respuesta corta y natural para continuar esta conversación de venta.", history, customPrompts: null }
+         });
+         if (error) throw error;
+         return data.answer as string;
+      } catch (e) {
+         console.error(e);
+         return null;
+      }
   };
 
   const handleSendMessage = async (text: string, file?: File, isInternalNote: boolean = false) => {
@@ -224,7 +244,7 @@ const Inbox = () => {
              ciudad: memoryForm.ciudad, estado: memoryForm.estado, cp: memoryForm.cp, pais: memoryForm.pais,
              perfil_psicologico: memoryForm.perfil_psicologico, main_pain: memoryForm.main_pain, servicio_interes: memoryForm.servicio_interes,
              origen_contacto: memoryForm.origen_contacto, tiempo_compra: memoryForm.tiempo_compra,
-             lead_score: memoryForm.lead_score, assigned_to: memoryForm.assigned_to || null, tags: memoryForm.tags
+             lead_score: memoryForm.lead_score, assigned_to: memoryForm.assigned_to || null, tags: memoryForm.tags, reminders: memoryForm.reminders
           }).eq('id', activeLead.id).select().single();
        if (error) throw error;
        if (updatedLead.email && !updatedLead.capi_lead_event_sent_at) {
@@ -260,15 +280,13 @@ const Inbox = () => {
                   <h2 className="text-sm font-bold text-white uppercase tracking-widest flex items-center gap-2"><MessageCircle className="w-4 h-4 text-indigo-400"/> Bandeja</h2>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                       <Button variant="outline" className="border-slate-700 text-slate-300 bg-slate-900 hover:bg-slate-800 h-8 rounded-xl px-3 shadow-md">
-                          <Bot className="w-4 h-4 mr-2 text-indigo-400"/> Mis Chats
-                       </Button>
+                       <Button variant="outline" size="icon" className="h-7 w-7 border-slate-700 bg-slate-950 text-slate-400 hover:text-indigo-400"><Bot className="w-3.5 h-3.5"/></Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent className="bg-slate-900 border-slate-800 text-white" align="end">
-                       <DropdownMenuLabel className="text-[10px] text-slate-500 uppercase">Control IA (Tus Asignados)</DropdownMenuLabel>
+                       <DropdownMenuLabel className="text-[10px] text-slate-500 uppercase">Control IA</DropdownMenuLabel>
                        <DropdownMenuSeparator className="bg-slate-800" />
-                       <DropdownMenuItem onClick={() => handleGlobalAiToggle(false)} className="text-emerald-400 cursor-pointer text-xs"><Play className="w-3.5 h-3.5 mr-2"/> Activar en mis chats</DropdownMenuItem>
-                       <DropdownMenuItem onClick={() => handleGlobalAiToggle(true)} className="text-red-400 cursor-pointer text-xs"><Pause className="w-3.5 h-3.5 mr-2"/> Pausar en mis chats</DropdownMenuItem>
+                       <DropdownMenuItem onClick={() => handleGlobalAiToggle(false)} className="text-emerald-400 cursor-pointer text-xs"><Play className="w-3.5 h-3.5 mr-2"/> Activar a Todos</DropdownMenuItem>
+                       <DropdownMenuItem onClick={() => handleGlobalAiToggle(true)} className="text-red-400 cursor-pointer text-xs"><Pause className="w-3.5 h-3.5 mr-2"/> Pausar a Todos</DropdownMenuItem>
                     </DropdownMenuContent>
                  </DropdownMenu>
                </div>
@@ -355,18 +373,30 @@ const Inbox = () => {
                              ))}
                              <DropdownMenuSeparator className="bg-slate-800 my-2"/>
                              <DropdownMenuItem onClick={() => setDraftMessage(quickActions.bankInfo)} className="cursor-pointer text-xs"><CreditCard className="w-3 h-3 mr-2 text-indigo-400" /> Datos Bancarios</DropdownMenuItem>
-                             {quickReplies.length > 0 && <>
+                             
+                             {globalReplies.length > 0 && <>
                                 <DropdownMenuSeparator className="bg-slate-800 my-2"/>
-                                {quickReplies.map((qr) => (
+                                <DropdownMenuLabel className="text-[10px] uppercase text-slate-500 font-bold">Plantillas Globales</DropdownMenuLabel>
+                                {globalReplies.map((qr) => (
                                    <DropdownMenuItem key={qr.id} onClick={() => setDraftMessage(qr.text)} className="cursor-pointer text-xs">
                                       <MessageSquarePlus className="w-3 h-3 mr-2 text-indigo-400 shrink-0" /><span className="truncate">{qr.title}</span>
+                                   </DropdownMenuItem>
+                                ))}
+                             </>}
+
+                             {localReplies.length > 0 && <>
+                                <DropdownMenuSeparator className="bg-slate-800 my-2"/>
+                                <DropdownMenuLabel className="text-[10px] uppercase text-slate-500 font-bold">Mis Plantillas</DropdownMenuLabel>
+                                {localReplies.map((qr) => (
+                                   <DropdownMenuItem key={qr.id} onClick={() => setDraftMessage(qr.text)} className="cursor-pointer text-xs">
+                                      <MessageSquarePlus className="w-3 h-3 mr-2 text-amber-500 shrink-0" /><span className="truncate">{qr.title}</span>
                                    </DropdownMenuItem>
                                 ))}
                              </>}
                           </DropdownMenuContent>
                        </DropdownMenu>
                     </div>
-                    <MessageInput onSendMessage={handleSendMessage} sending={sending} isAiPaused={activeLead.ai_paused} initialValue={draftMessage} />
+                    <MessageInput onSendMessage={handleSendMessage} sending={sending} isAiPaused={activeLead.ai_paused} initialValue={draftMessage} onAutoGenerate={handleAutoGenerate} />
                  </div>
               </>
            )}
