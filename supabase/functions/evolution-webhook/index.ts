@@ -7,10 +7,11 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-// CONSTANTES MAESTRAS GOWA
 const GOWA_BASE_URL = "https://gowa.poesis.net";
 const GOWA_AUTH_HEADER = "Basic Z293YTpHMHc0UzNjdXIzITIwMjY=";
 const GOWA_DEVICE_ID = "gowa";
+
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 serve(async (req) => {
   const url = new URL(req.url);
@@ -39,43 +40,16 @@ serve(async (req) => {
     let payload;
     try { payload = JSON.parse(payloadText); } catch (e) { return new Response("Invalid JSON", { status: 400 }); }
     
-    // --- 1. RESOLVER CANAL ---
-    let channel = null;
-    const deviceJid = payload.device_id;
-
-    if (channelIdParam) {
-       const { data } = await supabaseClient.from('whatsapp_channels').select('*').eq('id', channelIdParam).limit(1);
-       if (data && data.length > 0) channel = data[0];
-    }
-    if (!channel && deviceJid) {
-       const deviceNum = deviceJid.split('@')[0];
-       const { data } = await supabaseClient.from('whatsapp_channels').select('*').or(`instance_id.eq.${deviceNum},instance_id.eq.gowa`).limit(1);
-       if (data && data.length > 0) channel = data[0];
-    }
-    if (!channel) {
-       const { data: defConfig } = await supabaseClient.from('app_config').select('value').eq('key', 'default_notification_channel').limit(1);
-       if (defConfig && defConfig.length > 0) {
-           const { data } = await supabaseClient.from('whatsapp_channels').select('*').eq('id', defConfig[0].value).limit(1);
-           if (data && data.length > 0) channel = data[0];
-       }
-    }
-    if (!channel) {
-       const { data } = await supabaseClient.from('whatsapp_channels').select('*').eq('is_active', true).limit(1);
-       if (data && data.length > 0) channel = data[0];
-    }
-    if (!channel) return new Response('invalid_channel', { status: 200 });
-
+    // --- 1. RESOLVER CANAL Y DATOS BÁSICOS ---
     let phone, text = '', pushName = 'Cliente WA', mediaType = null, messageId = null;
 
-    // --- 2. PARSEAR MENSAJE GOWA ---
     if (payload.device_id && payload.event) { 
        if (payload.event !== 'message') return new Response('ignored_event', { status: 200 });
        const p = payload.payload;
        if (!p || p.is_from_me) return new Response('ignored_self', { status: 200 });
 
        phone = p.from;
-       // GOWA puede enviar el ID en la raíz o dentro del payload
-       messageId = payload.id || p.id; 
+       messageId = p.id;
        pushName = p.from_name || 'Lead Gowa';
 
        if (p.image) { text = p.body || "[Imagen]"; mediaType = 'image'; } 
@@ -83,84 +57,56 @@ serve(async (req) => {
        else if (p.audio) { text = "[Audio]"; mediaType = 'audio'; } 
        else if (p.document) { text = p.body || "[Documento]"; mediaType = 'document'; } 
        else if (p.body) { text = p.body; mediaType = 'text'; }
-    } else { 
-       // Fallback
-       if (payload.event && payload.event !== 'messages.upsert') return new Response('ignored_event', { status: 200 });
-       const msg = payload.data?.[0] || payload.data || payload;
-       if (msg?.key?.fromMe || payload.fromMe) return new Response('ignored_self', { status: 200 });
-       
-       phone = msg?.key?.remoteJid?.split('@')[0] || payload.phone || payload.sender;
-       pushName = payload.pushName || msg?.pushName || 'Lead WA';
-       messageId = msg?.key?.id || payload.id;
-       
-       if (msg?.message?.audioMessage) { text = "[Audio]"; mediaType = 'audio'; } 
-       else { text = msg?.message?.conversation || msg?.message?.extendedTextMessage?.text || msg?.text || payload.message || ''; }
+    } else {
+       return new Response('unknown_payload', { status: 200 });
     }
 
-    if (!phone) return new Response('invalid_phone', { status: 200 });
+    if (!phone || !messageId) return new Response('invalid_data', { status: 200 });
+    let senderPhone = phone.split('@')[0].replace(/\D/g, '');
 
-    let cleanPhone = phone.split('@')[0].replace(/\D/g, '');
-    if (cleanPhone.startsWith('52') && cleanPhone.length === 12 && cleanPhone[2] !== '1') cleanPhone = '521' + cleanPhone.substring(2);
+    // --- 2. DEDUPLICACIÓN ---
+    const { data: existingMsg } = await supabaseClient
+        .from('conversaciones')
+        .select('id')
+        .contains('metadata', { msgId: messageId })
+        .limit(1)
+        .maybeSingle();
+    
+    if (existingMsg) return new Response('duplicate', { status: 200 });
 
-    // --- 3. DEDUPLICACIÓN SEGURA ---
-    if (messageId) {
-        const { data: existingMsgs } = await supabaseClient
-            .from('conversaciones')
-            .select('id')
-            .contains('metadata', { msgId: messageId })
-            .limit(1);
-        
-        if (existingMsgs && existingMsgs.length > 0) {
-            console.log(`[webhook] Mensaje duplicado (${messageId}). Ignorando.`);
-            return new Response('duplicate', { status: 200 });
-        }
-    }
-
-    // --- 4. DESCARGA GOWA EN 2-PASOS ---
+    // --- 3. DESCARGA GOWA 2-PASOS ---
+    let downloadedBlob = null;
     let finalMediaUrl = null;
-    let downloadedBlob = null; 
 
-    if (mediaType && mediaType !== 'text' && channel.provider === 'gowa' && messageId) {
+    if (mediaType && mediaType !== 'text') {
         try {
-            const GOWA_URL = channel.api_url.endsWith('/') ? channel.api_url.slice(0, -1) : channel.api_url;
-            const headers = {
-                "Authorization": channel.api_key.startsWith('Basic ') ? channel.api_key : `Basic ${channel.api_key}`,
-                "X-Device-Id": channel.instance_id
-            };
+            const headers = { "Authorization": GOWA_AUTH_HEADER, "X-Device-Id": GOWA_DEVICE_ID };
+            
+            if (mediaType === 'audio') await sleep(1500); // Dar tiempo a GOWA para grabar el audio
 
-            await logTrace(`Iniciando Trigger GOWA para ${messageId}...`);
-            const triggerUrl = `${GOWA_URL}/message/${messageId}/download?phone=${cleanPhone}`;
+            const triggerUrl = `${GOWA_BASE_URL}/message/${messageId}/download?phone=${senderPhone}`;
             const triggerRes = await fetch(triggerUrl, { headers });
             const triggerData = await triggerRes.json();
 
             if (triggerData.code === "SUCCESS" && triggerData.results?.file_path) {
                 const realPath = triggerData.results.file_path;
-                const binaryUrl = `${GOWA_URL}/${realPath}`;
+                const binaryUrl = `${GOWA_BASE_URL}/${realPath}`;
                 
                 const binaryRes = await fetch(binaryUrl, { headers });
                 if (binaryRes.ok) {
                     downloadedBlob = await binaryRes.blob();
-                    await logTrace(`¡Archivo recuperado con éxito desde GOWA!`);
+                    const fileName = `inbound/${Date.now()}_${messageId.substring(0,8)}.${mediaType === 'audio' ? 'ogg' : 'bin'}`;
+                    const { data: uploadData } = await supabaseClient.storage.from('media').upload(fileName, downloadedBlob, { contentType: downloadedBlob.type });
+                    if (uploadData) finalMediaUrl = supabaseClient.storage.from('media').getPublicUrl(fileName).data.publicUrl;
                 }
-            } else {
-                await logTrace(`Fallo trigger GOWA: ${JSON.stringify(triggerData)}`, true);
             }
-        } catch (e) { await logTrace(`Error en flujo GOWA: ${e.message}`, true); }
+        } catch (e) { await logTrace(`Error en descarga: ${e.message}`, true); }
     }
 
-    if (downloadedBlob) {
-        try {
-            const ext = mediaType === 'audio' ? 'ogg' : 'bin';
-            const fileName = `inbound/${Date.now()}_${messageId.substring(0,8)}.${ext}`;
-            const { data: uploadData } = await supabaseClient.storage.from('media').upload(fileName, downloadedBlob, { contentType: downloadedBlob.type });
-            if (uploadData) finalMediaUrl = supabaseClient.storage.from('media').getPublicUrl(fileName).data.publicUrl;
-        } catch(e) { await logTrace(`Error Storage: ${e.message}`, true); }
-    }
-
-    // WHISPER
+    // --- 4. WHISPER ---
     if (mediaType === 'audio' && downloadedBlob) {
-        const { data: conf } = await supabaseClient.from('app_config').select('value').eq('key', 'openai_api_key').limit(1);
-        if (conf && conf.length > 0 && conf[0].value) {
+        const { data: conf } = await supabaseClient.from('app_config').select('value').eq('key', 'openai_api_key').maybeSingle();
+        if (conf?.value) {
             const formData = new FormData();
             formData.append('file', downloadedBlob, 'voice_note.ogg'); 
             formData.append('model', 'whisper-1');
@@ -168,55 +114,23 @@ serve(async (req) => {
 
             const whisperRes = await fetch("https://api.openai.com/v1/audio/transcriptions", {
                 method: 'POST',
-                headers: { 'Authorization': `Bearer ${conf[0].value}` },
+                headers: { 'Authorization': `Bearer ${conf.value}` },
                 body: formData
             });
-
             if (whisperRes.ok) {
                 const whisperData = await whisperRes.json();
-                if (whisperData.text) {
-                    text = `[TRANSCRIPCIÓN DE NOTA DE VOZ]: "${whisperData.text}"`;
-                    await logTrace("Audio transcrito con éxito.");
-                }
+                if (whisperData.text) text = `[TRANSCRIPCIÓN DE NOTA DE VOZ]: "${whisperData.text}"`;
             }
         }
     }
 
-    // --- 5. ACTUALIZAR CRM (BLINDADO CONTRA DUPLICADOS) ---
-    const { data: foundLeads, error: findErr } = await supabaseClient
-        .from('leads')
-        .select('*')
-        .ilike('telefono', `%${cleanPhone.slice(-10)}%`)
-        .order('created_at', { ascending: false })
-        .limit(1);
-    
-    if (findErr) await logTrace(`Error buscando lead: ${findErr.message}`, true);
-
-    let lead = foundLeads?.[0] || null;
-
+    // --- 5. ACTUALIZAR CRM ---
+    let { data: lead } = await supabaseClient.from('leads').select('*').or(`telefono.ilike.%${senderPhone.slice(-10)}%`).limit(1).maybeSingle();
     if (!lead) {
-      const { data: nl, error: insertErr } = await supabaseClient.from('leads').insert({ 
-          nombre: pushName, 
-          telefono: cleanPhone, 
-          channel_id: channel.id 
-      }).select().single();
-      
-      if (insertErr) {
-          await logTrace(`Fallo al crear Lead: ${insertErr.message}`, true);
-          throw new Error(`Lead Insert Error: ${insertErr.message}`);
-      }
+      const { data: nl } = await supabaseClient.from('leads').insert({ nombre: pushName, telefono: senderPhone, channel_id: channelIdParam || '8681577e-2e06-444a-8743-34e8f1725b82' }).select().single();
       lead = nl;
     } else {
-      const { error: updErr } = await supabaseClient.from('leads').update({ 
-          last_message_at: new Date().toISOString(), 
-          channel_id: channel.id 
-      }).eq('id', lead.id);
-      
-      if (updErr) await logTrace(`Fallo al actualizar Lead: ${updErr.message}`, true);
-    }
-
-    if (!lead || !lead.id) {
-        throw new Error("No se pudo obtener un ID de Lead válido para registrar la conversación.");
+      await supabaseClient.from('leads').update({ last_message_at: new Date().toISOString() }).eq('id', lead.id);
     }
 
     await supabaseClient.from('conversaciones').insert({ 
@@ -224,7 +138,15 @@ serve(async (req) => {
         metadata: { msgId: messageId, mediaUrl: finalMediaUrl, mediaType }
     });
 
-    // --- 6. LÓGICA IA ---
+    // --- 6. AUTO-ANÁLISIS INSTANTÁNEO EN BACKGROUND ---
+    // Disparamos la extracción de datos y CAPI sin bloquear la respuesta de la función
+    fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/analyze-leads`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${Deno.env.get('SUPABASE_ANON_KEY')}` },
+        body: JSON.stringify({ lead_id: lead.id })
+    }).catch(() => {});
+
+    // --- 7. LÓGICA IA ---
     if (!lead.ai_paused) {
        const { data: configs } = await supabaseClient.from('app_config').select('key, value');
        const configMap = configs?.reduce((acc, item) => ({...acc, [item.key]: item.value}), {});
@@ -253,7 +175,7 @@ serve(async (req) => {
              await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/send-message-v3`, {
                 method: 'POST',
                 headers: { 'Authorization': `Bearer ${Deno.env.get('SUPABASE_ANON_KEY')}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ channel_id: lead.channel_id || channel.id, phone: cleanPhone, message: aiText, mediaData: mediaUrlToSend ? { url: mediaUrlToSend, type: 'image' } : undefined })
+                body: JSON.stringify({ channel_id: lead.channel_id, phone: senderPhone, message: aiText, mediaData: mediaUrlToSend ? { url: mediaUrlToSend, type: 'image' } : undefined })
              });
 
              await supabaseClient.from('conversaciones').insert({ 
@@ -266,7 +188,7 @@ serve(async (req) => {
 
     return new Response('ok', { headers: corsHeaders });
   } catch (err) {
-    await logTrace(`ERROR CRÍTICO CAPTURADO: ${err.message}`, true);
+    await logTrace(`ERROR CRÍTICO: ${err.message}`, true);
     return new Response(err.message, { status: 200, headers: corsHeaders });
   }
 });

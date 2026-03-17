@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { 
   Search, Loader2, MessageCircle, Bot, Zap, 
-  CreditCard, MessageSquarePlus, Play, Pause, X, Menu, ShoppingCart, User, AlertTriangle
+  CreditCard, MessageSquarePlus, Play, Pause, X, Menu, ShoppingCart, User, AlertTriangle, MapPin, Mail, Tag
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -28,7 +28,7 @@ import {
 } from "@/components/ui/dialog";
 
 const Inbox = () => {
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin, isDev } = useAuth();
   const [leads, setLeads] = useState<any[]>([]);
   const [filteredLeads, setFilteredLeads] = useState<any[]>([]);
   const [activeLead, setActiveLead] = useState<any>(null);
@@ -52,6 +52,8 @@ const Inbox = () => {
   const [isEditingMemory, setIsEditingMemory] = useState(false);
   const [showMemoryMobile, setShowMemoryMobile] = useState(false);
   const [memoryForm, setMemoryForm] = useState<any>({});
+  
+  const [localTags, setLocalTags] = useState<{id: string, text: string, color: string}[]>([]);
 
   const { messages, loading: loadingMessages, refetch: refetchMessages } = useRealtimeMessages(
     activeLead?.id || null,
@@ -61,9 +63,11 @@ const Inbox = () => {
   useEffect(() => {
     fetchLeads();
     fetchQuickActions();
+    if (user) fetchLocalTags();
+    
     const channel = supabase.channel('inbox-leads-watch').on('postgres_changes', { event: '*', schema: 'public', table: 'leads' }, () => fetchLeads(false)).subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, []);
+  }, [user]);
 
   useEffect(() => {
     if (activeLead) {
@@ -74,13 +78,19 @@ const Inbox = () => {
 
   useEffect(() => {
     const term = searchTerm.toLowerCase();
-    setFilteredLeads(leads.filter(l => l.nombre?.toLowerCase().includes(term) || l.telefono?.includes(term)));
+    setFilteredLeads(leads.filter(l => 
+      l.nombre?.toLowerCase().includes(term) || 
+      l.telefono?.includes(term) || 
+      l.ciudad?.toLowerCase().includes(term) ||
+      (l.tags && l.tags.some((t: string) => t.toLowerCase().includes(term)))
+    ));
   }, [searchTerm, leads]);
 
   const fetchLeads = async (showLoader = true) => {
     if (showLoader) setLoadingLeads(true);
     let query = supabase.from('leads').select('*').order('last_message_at', { ascending: false });
-    if (!isAdmin) query = query.eq('assigned_to', user?.id);
+    if (!isAdmin && !isDev) query = query.eq('assigned_to', user?.id);
+    
     const { data } = await query;
     if (data) {
        setLeads(data);
@@ -90,6 +100,14 @@ const Inbox = () => {
        }
     }
     if (showLoader) setLoadingLeads(false);
+  };
+
+  const fetchLocalTags = async () => {
+     if(!user) return;
+     const { data } = await supabase.from('app_config').select('value').eq('key', `agent_tags_${user.id}`).maybeSingle();
+     if (data?.value) {
+        try { setLocalTags(JSON.parse(data.value)); } catch(e) {}
+     }
   };
 
   const fetchQuickActions = async () => {
@@ -120,7 +138,6 @@ const Inbox = () => {
      const tid = toast.loading("Procesando entrada de cliente...");
      
      try {
-        // 1. Inyectar mensaje como si viniera de WhatsApp
         const { error: msgErr } = await supabase.from('conversaciones').insert({
            lead_id: activeLead.id,
            emisor: 'CLIENTE',
@@ -129,7 +146,6 @@ const Inbox = () => {
         });
         if (msgErr) throw msgErr;
 
-        // 2. Llamar al procesador de respuesta de Samurai pasando parámetros en la URL
         await supabase.functions.invoke(`process-samurai-response?phone=${activeLead.telefono}&client_message=${encodeURIComponent(manualClientText)}`, {
             body: {}
         });
@@ -168,7 +184,6 @@ const Inbox = () => {
         mediaData = { url: publicUrl, type: file.type.startsWith('image/') ? 'image' : 'document', mimetype: file.type, name: file.name };
       }
       
-      // CORRECCIÓN AQUÍ: activeLead.id posicionado correctamente antes de mediaData
       const apiResponse = await sendEvolutionMessage(activeLead.telefono, text, activeLead.id, mediaData);
       
       await supabase.from('conversaciones').insert({ 
@@ -220,14 +235,14 @@ const Inbox = () => {
       <div className="h-[calc(100vh-64px)] -m-4 md:-m-8 flex overflow-hidden bg-slate-950 border-t border-slate-800">
         
         {/* COLUMNA 1: LISTA */}
-        <div className={cn("w-full md:w-80 flex-shrink-0 border-r border-slate-800 bg-[#0d0a08] flex flex-col", activeLead ? "hidden md:flex" : "flex")}>
+        <div className={cn("w-full md:w-[340px] flex-shrink-0 border-r border-slate-800 bg-[#0d0a08] flex flex-col", activeLead ? "hidden md:flex" : "flex")}>
            <div className="p-4 border-b border-slate-800 bg-slate-900/50 shrink-0">
                <div className="flex items-center justify-between mb-3">
                   <h2 className="text-sm font-bold text-white uppercase tracking-widest flex items-center gap-2"><MessageCircle className="w-4 h-4 text-indigo-400"/> Bandeja</h2>
                </div>
                <div className="relative">
                   <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-500" />
-                  <Input placeholder="Buscar..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="pl-9 h-9 bg-slate-950 border-slate-800 text-xs rounded-xl"/>
+                  <Input placeholder="Buscar nombre, ciudad, tag..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="pl-9 h-9 bg-slate-950 border-slate-800 text-xs rounded-xl"/>
                </div>
            </div>
            <ScrollArea className="flex-1">
@@ -243,7 +258,18 @@ const Inbox = () => {
                              <div className="flex justify-between items-baseline mb-0.5">
                                 <span className={cn("font-bold truncate text-sm flex-1", activeLead?.id === lead.id ? "text-indigo-400" : "text-slate-200")}>{lead.nombre || lead.telefono}</span>
                              </div>
-                             <p className="text-[11px] line-clamp-1 text-slate-400">{lead.summary || 'Sin interacción...'}</p>
+                             <div className="flex items-center gap-2 text-[10px] text-slate-400 mt-0.5">
+                                {lead.ciudad && <span className="flex items-center gap-1 font-bold text-indigo-300"><MapPin className="w-2.5 h-2.5"/>{lead.ciudad}</span>}
+                                {lead.email && <span className="flex items-center gap-1 text-emerald-400"><Mail className="w-2.5 h-2.5"/>OK</span>}
+                             </div>
+                             {lead.tags && lead.tags.length > 0 && (
+                                <div className="flex gap-1 mt-1.5 flex-wrap">
+                                   {lead.tags.map((t: string) => {
+                                      const tagConf = localTags.find(lt => lt.text === t);
+                                      return <Badge key={t} variant="outline" className="text-[8px] h-3.5 px-1 font-medium" style={tagConf ? { backgroundColor: tagConf.color+'20', color: tagConf.color, borderColor: tagConf.color+'50' } : {}}>{t}</Badge>
+                                   })}
+                                </div>
+                             )}
                           </div>
                        </button>
                     ))}
@@ -274,7 +300,52 @@ const Inbox = () => {
 
                  <div className="p-3 bg-slate-900/80 border-t border-slate-800 shrink-0">
                     <AiSuggestions suggestions={suggestions} loading={loadingSuggestions} onSelect={setDraftMessage} onRefresh={() => fetchAiSuggestions(activeLead.id, messages)} />
-                    <MessageInput onSendMessage={handleSendMessage} sending={sending} isAiPaused={activeLead.ai_paused} initialValue={draftMessage} onAutoGenerate={handleAutoGenerate} />
+                    <MessageInput 
+                        onSendMessage={handleSendMessage} 
+                        sending={sending} 
+                        isAiPaused={activeLead.ai_paused} 
+                        initialValue={draftMessage} 
+                        onAutoGenerate={handleAutoGenerate}
+                        toolbarAction={
+                           <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                 <Button size="sm" variant="outline" className="h-8 text-[10px] bg-slate-950 border-slate-700 text-amber-500 uppercase font-bold tracking-widest rounded-lg">
+                                    <Zap className="w-3 h-3 mr-1.5" /> Plantillas
+                                 </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="start" className="bg-slate-900 border-slate-800 text-white w-64 max-h-[300px] overflow-y-auto">
+                                 <DropdownMenuLabel className="text-[10px] uppercase text-slate-500 font-bold">Catálogo</DropdownMenuLabel>
+                                 {products.map(p => (
+                                     <DropdownMenuItem key={p.id} onClick={() => setDraftMessage(`${quickActions.wcBaseUrl}/checkout/?add-to-cart=${p.wc_id}`)} className="cursor-pointer text-xs">
+                                        <ShoppingCart className="w-3 h-3 mr-2 text-indigo-400 shrink-0" /><span className="truncate">{p.title}</span>
+                                     </DropdownMenuItem>
+                                 ))}
+                                 <DropdownMenuSeparator className="bg-slate-800 my-2"/>
+                                 <DropdownMenuItem onClick={() => setDraftMessage(quickActions.bankInfo)} className="cursor-pointer text-xs"><CreditCard className="w-3 h-3 mr-2 text-indigo-400" /> Datos Bancarios</DropdownMenuItem>
+                                 
+                                 {globalReplies.length > 0 && <>
+                                    <DropdownMenuSeparator className="bg-slate-800 my-2"/>
+                                    <DropdownMenuLabel className="text-[10px] uppercase text-slate-500 font-bold">Plantillas Globales</DropdownMenuLabel>
+                                    {globalReplies.map((qr) => (
+                                       <DropdownMenuItem key={qr.id} onClick={() => setDraftMessage(qr.text)} className="cursor-pointer text-xs">
+                                          <MessageSquarePlus className="w-3 h-3 mr-2 text-indigo-400 shrink-0" /><span className="truncate">{qr.title}</span>
+                                       </DropdownMenuItem>
+                                    ))}
+                                 </>}
+
+                                 {localReplies.length > 0 && <>
+                                    <DropdownMenuSeparator className="bg-slate-800 my-2"/>
+                                    <DropdownMenuLabel className="text-[10px] uppercase text-slate-500 font-bold">Mis Plantillas</DropdownMenuLabel>
+                                    {localReplies.map((qr) => (
+                                       <DropdownMenuItem key={qr.id} onClick={() => setDraftMessage(qr.text)} className="cursor-pointer text-xs">
+                                          <MessageSquarePlus className="w-3 h-3 mr-2 text-amber-500 shrink-0" /><span className="truncate">{qr.title}</span>
+                                       </DropdownMenuItem>
+                                    ))}
+                                 </>}
+                              </DropdownMenuContent>
+                           </DropdownMenu>
+                        }
+                    />
                  </div>
               </>
            )}
@@ -283,7 +354,17 @@ const Inbox = () => {
         {/* COLUMNA 3: FICHA TÁCTICA */}
         {activeLead && (
            <div className={cn("w-full xl:w-[350px] flex-shrink-0 bg-slate-900 border-l border-slate-800 flex flex-col absolute xl:relative z-20 h-full transition-transform duration-300", showMemoryMobile ? "translate-x-0" : "translate-x-full xl:translate-x-0")}>
-              <MemoryPanel currentAnalysis={activeLead} isEditing={isEditingMemory} setIsEditing={setIsEditingMemory} memoryForm={memoryForm} setMemoryForm={setMemoryForm} onSave={saveMemory} saving={sending} onReset={() => {}} onToggleFollowup={() => handleSendMessage(activeLead.ai_paused ? '#START' : '#STOP')} />
+              <MemoryPanel 
+                currentAnalysis={activeLead} 
+                isEditing={isEditingMemory} 
+                setIsEditing={setIsEditingMemory} 
+                memoryForm={memoryForm} 
+                setMemoryForm={setMemoryForm} 
+                onSave={saveMemory} 
+                saving={sending} 
+                onReset={() => {}} 
+                onToggleFollowup={() => handleSendMessage(activeLead.ai_paused ? '#START' : '#STOP')} 
+              />
            </div>
         )}
       </div>
@@ -292,7 +373,7 @@ const Inbox = () => {
       <Dialog open={isEmergencyOpen} onOpenChange={setIsEmergencyOpen}>
          <DialogContent className="bg-slate-900 border-slate-800 text-white max-w-lg">
             <DialogHeader>
-               <DialogTitle className="text-red-400 flex items-center gap-2"><AlertTriangle className="w-5 h-5"/> Modo Emergencia: Forzar Entrada Cliente</DialogTitle>
+               <DialogTitle className="text-red-400 flex items-center gap-2"><AlertTriangle className="w-5 h-5"/> Modo Emergencia</DialogTitle>
                <DialogDescription className="text-slate-400">
                   Usa esto si la API de WhatsApp no está enviando los mensajes a Samurai. Escribe lo que el cliente te puso y Sam responderá aquí.
                </DialogDescription>
@@ -301,15 +382,14 @@ const Inbox = () => {
                <textarea 
                   value={manualClientText}
                   onChange={e => setManualClientText(e.target.value)}
-                  placeholder="Pega aquí lo que el cliente escribió en WhatsApp..."
+                  placeholder="Pega aquí lo que el cliente escribió..."
                   className="w-full h-32 bg-slate-950 border border-slate-800 rounded-xl p-4 text-sm text-slate-200 focus:border-indigo-500 focus:ring-0 outline-none resize-none"
                />
             </div>
             <DialogFooter>
                <Button variant="ghost" onClick={() => setIsEmergencyOpen(false)}>Cancelar</Button>
                <Button onClick={handleManualClientInput} disabled={processingManual || !manualClientText.trim()} className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-6">
-                  {processingManual ? <Loader2 className="w-4 h-4 animate-spin mr-2"/> : <User className="w-4 h-4 mr-2"/>}
-                  Procesar como Cliente
+                  {processingManual ? <Loader2 className="w-4 h-4 animate-spin mr-2"/> : <User className="w-4 h-4 mr-2"/>} Procesar
                </Button>
             </DialogFooter>
          </DialogContent>

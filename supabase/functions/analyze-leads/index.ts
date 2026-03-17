@@ -24,27 +24,26 @@ serve(async (req) => {
     const transcript = messages?.map(m => `[${m.emisor}]: ${m.mensaje}`).join('\n') || '';
 
     const systemPrompt = `
-Eres el Analista de Datos de The Elephant Bowl. Tu misión es extraer inteligencia y asignar responsables.
+Eres el Analista de Datos de Inteligencia del CRM. Tu única misión es extraer datos críticos del chat.
+
+=== EXTRACCIÓN CRÍTICA ===
+1. NOMBRE: Si el cliente dice "Soy Pedro", "Me llamo Laura", etc., extrae el nombre.
+2. CIUDAD: Si menciona una ciudad, estado, país o municipio, extraelo (Ej: "León, Guanajuato", "CDMX", "Bogotá").
+3. EMAIL: Busca correos electrónicos.
 
 === REGLAS DE ROUTING (GEOPROXIMIDAD) ===
-Tu tarea es decidir quién atiende este lead basándote en su CIUDAD. 
-Lista de Agentes y Zonas:
+Asigna un responsable basado en la CIUDAD extraída:
 ${agentsContext}
+Si la ciudad del cliente coincide con la zona de un agente, devuelve su ID en 'suggested_agent_id'.
 
-INSTRUCCIÓN DE GPS IA: 
-1. Si el cliente dice "Zapopan" y un agente tiene "Guadalajara" o "Jalisco", ASÍGNALO A ÉL.
-2. Si la ciudad es pequeña, busca la ciudad grande más cercana (ej: San Pedro -> Monterrey).
-3. Si no hay una relación geográfica clara, asígnalo al agente que tenga cobertura 'GLOBAL' o deja en null.
-
-=== PERFILAMIENTO PSICOGRÁFICO ===
-Extrae por qué le interesa el curso: ¿Manejo de estrés? ¿Es terapeuta (profesional)? ¿Busca una experiencia mística? Resume en 15 palabras.
-
-RESPONDE SOLO JSON:
+RESPONDE SOLO EN ESTE FORMATO JSON:
 {
-  "nombre": "string", "email": "string", "ciudad": "string",
+  "nombre": "string o null", 
+  "email": "string o null", 
+  "ciudad": "string o null",
   "intent": "BAJO|MEDIO|ALTO|COMPRADO",
-  "perfil_psicologico": "string",
-  "suggested_agent_id": "UUID o null"
+  "perfil_psicologico": "Resumen de su necesidad (Max 15 palabras)",
+  "suggested_agent_id": "UUID del agente o null"
 }
 `;
 
@@ -53,7 +52,7 @@ RESPONDE SOLO JSON:
         headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
             model: "gpt-4o",
-            messages: [{ role: "system", content: systemPrompt }, { role: "user", content: `Chat del Lead:\n\n${transcript}` }],
+            messages: [{ role: "system", content: systemPrompt }, { role: "user", content: `Chat:\n\n${transcript}` }],
             response_format: { type: "json_object" },
             temperature: 0
         })
@@ -80,7 +79,12 @@ RESPONDE SOLO JSON:
 
     await supabaseClient.from('leads').update(updates).eq('id', lead_id);
 
-    if (result.email && !lead.capi_lead_event_sent_at) {
+    // Disparar CAPI si tenemos datos significativos (Ya no es obligatorio el email, Nombre + Ciudad basta para Meta)
+    const hasMeaningfulData = (result.email && result.email !== 'null') || 
+                              (result.ciudad && result.ciudad !== 'null') || 
+                              (result.nombre && result.nombre !== 'null' && !result.nombre.includes('Cliente WA'));
+
+    if (hasMeaningfulData && !lead.capi_lead_event_sent_at) {
         fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/meta-capi-sender`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${Deno.env.get('SUPABASE_ANON_KEY')}` },
