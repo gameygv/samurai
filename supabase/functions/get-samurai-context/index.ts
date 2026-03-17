@@ -30,6 +30,28 @@ serve(async (req) => {
     let mediaContext = "\n=== BÓVEDA VISUAL (POSTERS) ===\nINSTRUCCIÓN CRÍTICA: Para enviar un poster usa EXACTAMENTE este formato en tu respuesta: <<MEDIA:url_del_poster>>\n";
     mediaAssets?.forEach(m => { mediaContext += `- ${m.title}: ${m.ai_instructions} -> <<MEDIA:${m.url}>>\n`; });
 
+    // --- CARGAR CATÁLOGO DE WOOCOMMERCE ---
+    let wcContext = "";
+    const wcProductsRaw = getConfig('wc_products');
+    if (wcProductsRaw) {
+        try {
+            const wcProducts = JSON.parse(wcProductsRaw);
+            const wcUrl = getConfig('wc_url', '').replace(/\/$/, ''); // Quita barra final si existe
+            let wcCheckout = getConfig('wc_checkout_path', '/checkout/');
+            if (!wcCheckout.startsWith('/')) wcCheckout = '/' + wcCheckout;
+
+            if (wcProducts.length > 0) {
+                wcContext = "\n=== CATÁLOGO DE PRODUCTOS (TIENDA ONLINE WOOCOMMERCE) ===\n";
+                wcProducts.forEach(p => {
+                    const link = `${wcUrl}${wcCheckout}?add-to-cart=${p.wc_id}`;
+                    wcContext += `- PRODUCTO: ${p.title}\n  PRECIO: $${p.price}\n  LINK DE COMPRA: ${link}\n  REGLA DE VENTA E INSTRUCCIÓN IA: ${p.prompt}\n\n`;
+                });
+            }
+        } catch (e) {
+            console.error("Error parsing wc_products", e);
+        }
+    }
+
     const bankInfo = `Banco: ${getConfig('bank_name')}\nCuenta: ${getConfig('bank_account')}\nCLABE: ${getConfig('bank_clabe')}\nTitular: ${getConfig('bank_holder')}`;
 
     const voiceInstruction = `
@@ -52,6 +74,7 @@ ${getConfig('prompt_relearning')}
 ${masterTruth}
 ${kbContext}
 ${mediaContext}
+${wcContext}
 
 === DATOS DE PAGO ===
 ${bankInfo}

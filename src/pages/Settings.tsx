@@ -31,6 +31,7 @@ const Settings = () => {
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [testingWc, setTestingWc] = useState(false);
 
   useEffect(() => { fetchAllData(); }, []);
 
@@ -95,6 +96,35 @@ const Settings = () => {
     }
   };
 
+  const handleTestWcConnection = async () => {
+      const wcUrl = getValue('wc_url');
+      const wcKey = getValue('wc_consumer_key');
+      const wcSecret = getValue('wc_consumer_secret');
+      
+      if (!wcUrl || !wcKey || !wcSecret) {
+         toast.error("Completa URL, Key y Secret para probar la conexión.");
+         return;
+      }
+
+      setTestingWc(true);
+      const tid = toast.loading("Conectando con WooCommerce...");
+      
+      try {
+         const { data, error } = await supabase.functions.invoke('test-wc-connection', {
+            body: { wc_url: wcUrl, wc_key: wcKey, wc_secret: wcSecret }
+         });
+
+         if (error) throw error;
+         if (!data.success) throw new Error(data.error);
+
+         toast.success(`Conexión exitosa a la tienda.`, { id: tid });
+      } catch (err: any) {
+         toast.error(`Fallo: ${err.message}`, { id: tid });
+      } finally {
+         setTestingWc(false);
+      }
+  };
+
   const getValue = (key: string) => configs.find(c => c.key === key)?.value || '';
   const updateConfigValue = (key: string, value: string) => {
       const exists = configs.find(c => c.key === key);
@@ -155,6 +185,8 @@ const Settings = () => {
                 onAddProduct={handleAddProduct}
                 onUpdateProduct={handleUpdateProduct}
                 onRemoveProduct={handleRemoveProduct}
+                onTestConnection={handleTestWcConnection}
+                isTesting={testingWc}
              />
           </TabsContent>
 

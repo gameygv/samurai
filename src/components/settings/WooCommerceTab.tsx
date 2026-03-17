@@ -4,7 +4,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { ShoppingCart, Target, Plus, Hash, DollarSign, Sparkles, Trash2, Key } from 'lucide-react';
+import { ShoppingCart, Target, Plus, Hash, DollarSign, Sparkles, Trash2, Key, Zap, Loader2 } from 'lucide-react';
 
 interface WooCommerceTabProps {
   getValue: (key: string) => string;
@@ -13,10 +13,12 @@ interface WooCommerceTabProps {
   onAddProduct: () => void;
   onUpdateProduct: (id: string, field: string, value: string) => void;
   onRemoveProduct: (id: string) => void;
+  onTestConnection: () => void;
+  isTesting: boolean;
 }
 
 export const WooCommerceTab = ({
-  getValue, onChange, wcProducts, onAddProduct, onUpdateProduct, onRemoveProduct
+  getValue, onChange, wcProducts, onAddProduct, onUpdateProduct, onRemoveProduct, onTestConnection, isTesting
 }: WooCommerceTabProps) => {
   return (
     <div className="space-y-6">
@@ -32,7 +34,12 @@ export const WooCommerceTab = ({
             </div>
             
             <div className="pt-4 border-t border-slate-800">
-               <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2"><Key className="w-4 h-4" /> API REST (Para validación automática)</h4>
+               <div className="flex justify-between items-center mb-4">
+                  <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2"><Key className="w-4 h-4" /> API REST (Validación)</h4>
+                  <Button onClick={onTestConnection} disabled={isTesting} variant="outline" className="border-pink-500/30 text-pink-500 hover:bg-pink-500/10 h-8 text-[10px] font-bold uppercase tracking-widest">
+                     {isTesting ? <Loader2 className="w-3 h-3 animate-spin mr-2"/> : <Zap className="w-3 h-3 mr-2"/>} Probar Conexión
+                  </Button>
+               </div>
                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="space-y-2">
                      <Label className="text-[10px] uppercase text-slate-500">Consumer Key (ck_...)</Label>
@@ -70,7 +77,7 @@ export const WooCommerceTab = ({
                     </div>
                     <div className="space-y-2">
                         <Label className="text-[10px] uppercase font-bold text-indigo-400">Instrucción para IA</Label>
-                        <Textarea value={prod.prompt} onChange={e => onUpdateProduct(prod.id, 'prompt', e.target.value)} className="bg-slate-900 border-slate-700 text-xs min-h-[80px]" />
+                        <Textarea value={prod.prompt} onChange={e => onUpdateProduct(prod.id, 'prompt', e.target.value)} placeholder="Ej: Ofrece este producto SOLO si el cliente dice que tiene problemas para dormir..." className="bg-slate-900 border-slate-700 text-xs min-h-[80px]" />
                     </div>
                 </div>
             ))}
