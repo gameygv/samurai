@@ -27,77 +27,51 @@ serve(async (req) => {
 
   try {
     const payload = await req.json();
+    console.log(`[webhook] Recibido evento de Gowa para canal ${channelId}:`, JSON.stringify(payload));
+    
+    // Log de auditoría para diagnóstico
+    await supabaseClient.from('activity_logs').insert({
+        action: 'UPDATE',
+        resource: 'SYSTEM',
+        description: `Webhook Hit: ${payload.event || 'desconocido'}`,
+        status: 'OK',
+        metadata: { payload_raw: payload }
+    });
+
     let phone, text = '', pushName = 'Cliente WA', mediaUrl = null, mediaType = null;
 
     // --- 1. PROCESAR CANAL ---
     const { data: channel } = await supabaseClient.from('whatsapp_channels').select('*').eq('id', channelId).single();
     if (!channel) return new Response('invalid_channel');
 
-    // --- 2. DETECCIÓN DE FORMATO (META vs EVOLUTION vs GOWA) ---
-    
-    // A. FORMATO GOWA (Detectado en logs)
-    if (payload.event === 'message' && payload.payload) {
+    // --- 2. DETECCIÓN DE FORMATO GOWA ---
+    if (payload.payload && payload.event === 'message') {
        const data = payload.payload;
-       if (data.is_from_me) return new Response('ignored');
+       if (data.is_from_me) return new Response('ignored_self');
        
        phone = data.from; // Viene como 521... @s.whatsapp.net
        pushName = data.from_name || 'Lead Gowa';
        text = data.body || '';
-       
-       // Nota: Gowa usa 'type' para media, aquí un ejemplo básico:
-       if (data.type && data.type !== 'text') {
-           mediaType = data.type;
-           mediaUrl = data.url; // URL temporal de la media
-       }
-    }
-    // B. FORMATO META CLOUD API
-    else if (payload.object === 'whatsapp_business_account') {
-       const message = payload.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
-       const contact = payload.entry?.[0]?.changes?.[0]?.value?.contacts?.[0];
-       if (!message) return new Response('no_msg');
-       
-       phone = message.from;
-       pushName = contact?.profile?.name || 'Lead Meta';
-       
-       if (message.type === 'text') {
-           text = message.text.body;
-       } else if (['image', 'audio', 'video', 'document'].includes(message.type)) {
-           mediaType = message.type;
-           const mediaId = message[mediaType].id;
-           text = `[${mediaType.toUpperCase()} RECIBIDO]`;
-           const metaRes = await fetch(`https://graph.facebook.com/v19.0/${mediaId}`, {
-               headers: { 'Authorization': `Bearer ${channel.api_key}` }
-           });
-           const metaData = await metaRes.json();
-           mediaUrl = metaData.url;
-       }
     } 
-    // C. FORMATO EVOLUTION API (Legacy)
+    // Otros formatos (Evolution/Meta)
     else {
        const msg = payload.data?.[0] || payload.data || payload;
        if (msg?.key?.fromMe) return new Response('ignored');
        phone = msg?.key?.remoteJid?.split('@')[0] || payload.phone || payload.sender;
        pushName = payload.pushName || msg?.pushName || 'Lead WA';
        text = msg?.message?.conversation || msg?.message?.extendedTextMessage?.text || msg?.text || payload.message || '';
-       
-       if (msg?.message?.imageMessage || payload.type === 'image') {
-          mediaType = 'image';
-          mediaUrl = msg?.message?.imageMessage?.url || payload.url;
-          text = text || "[IMAGEN]";
-       } else if (msg?.message?.audioMessage || payload.type === 'audio') {
-          mediaType = 'audio';
-          mediaUrl = msg?.message?.audioMessage?.url || payload.url;
-          text = text || "[AUDIO]";
-       }
     }
 
     if (!phone) return new Response('invalid_data');
     
-    // Limpieza de teléfono (quitar @s.whatsapp.net y caracteres no numéricos)
-    const cleanPhone = phone.split('@')[0].replace(/\D/g, '');
+    // Limpieza de teléfono (Mexican 1-digit fix)
+    let cleanPhone = phone.split('@')[0].replace(/\D/g, '');
+    if (cleanPhone.startsWith('52') && cleanPhone.length === 12 && cleanPhone[2] !== '1') {
+        cleanPhone = '521' + cleanPhone.substring(2);
+    }
 
     // --- 3. ACTUALIZAR CRM ---
-    let { data: lead } = await supabaseClient.from('leads').select('*').or(`telefono.ilike.%${cleanPhone}%`).limit(1).maybeSingle();
+    let { data: lead } = await supabaseClient.from('leads').select('*').or(`telefono.ilike.%${cleanPhone.slice(-10)}%`).limit(1).maybeSingle();
     
     if (!lead) {
       const { data: nl } = await supabaseClient.from('leads').insert({ 
@@ -114,18 +88,17 @@ serve(async (req) => {
       }).eq('id', lead.id);
     }
 
-    // Guardar el mensaje en el historial
+    // Guardar mensaje
     await supabaseClient.from('conversaciones').insert({ 
         lead_id: lead.id, 
         emisor: 'CLIENTE', 
         mensaje: text, 
-        platform: 'WHATSAPP',
-        metadata: { mediaUrl, mediaType, provider: channel.provider }
+        platform: 'WHATSAPP'
     });
 
-    // --- 4. LANZAR IA (Respuesta automática) ---
+    // --- 4. LANZAR IA ---
     if (!lead.ai_paused) {
-       fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/process-samurai-response?phone=${cleanPhone}&client_message=${encodeURIComponent(text)}&media_url=${encodeURIComponent(mediaUrl || '')}&media_type=${mediaType || ''}`, {
+       fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/process-samurai-response?phone=${cleanPhone}&client_message=${encodeURIComponent(text)}`, {
            method: 'POST',
            headers: { 'Authorization': `Bearer ${Deno.env.get('SUPABASE_ANON_KEY')}` }
        }).catch(() => {});

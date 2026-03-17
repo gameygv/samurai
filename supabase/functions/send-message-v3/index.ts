@@ -14,22 +14,21 @@ serve(async (req) => {
     const { channel_id, phone, message, mediaData } = await req.json();
     const supabaseClient = createClient(Deno.env.get('SUPABASE_URL'), Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'));
 
-    // 1. Obtener configuración del canal
     const { data: channel, error: chError } = await supabaseClient
-      .from('whatsapp_channels')
-      .select('*')
-      .eq('id', channel_id)
-      .single();
+      .from('whatsapp_channels').select('*').eq('id', channel_id).single();
 
     if (chError || !channel) throw new Error("Canal no encontrado");
 
     const provider = channel.provider || 'gowa';
-    const cleanPhone = phone.replace(/\D/g, '');
+    let cleanPhone = phone.replace(/\D/g, '');
+    
+    // Fix para números de México en Gowa
+    if (cleanPhone.startsWith('52') && cleanPhone.length === 10) cleanPhone = '521' + cleanPhone;
+
     let endpoint = channel.api_url;
     let payload = {};
     let headers = { 'Content-Type': 'application/json' };
 
-    // --- LÓGICA POR PROVEEDOR ---
     if (provider === 'gowa') {
       headers['Authorization'] = `Bearer ${channel.api_key}`;
       const baseUrl = channel.api_url.endsWith('/') ? channel.api_url.slice(0, -1) : channel.api_url;
@@ -48,21 +47,19 @@ serve(async (req) => {
       payload = { messaging_product: "whatsapp", to: cleanPhone, type: "text", text: { body: message } };
     } 
     else {
-      // Evolution
       headers['apikey'] = channel.api_key;
-      const baseUrl = channel.api_url.endsWith('/') ? channel.api_url.slice(0, -1) : channel.api_url;
-      endpoint = `${baseUrl}/message/sendText/${channel.instance_id}`;
+      endpoint = `${channel.api_url}/message/sendText/${channel.instance_id}`;
       payload = { number: cleanPhone, text: message };
     }
 
-    console.log(`[send-message-v3] Enviando via ${provider} a ${endpoint}`);
+    console.log(`[send-message] To: ${cleanPhone} via ${provider}`);
 
     const response = await fetch(endpoint, { method: 'POST', headers, body: JSON.stringify(payload) });
-    const resData = await response.json();
+    const resData = await response.json().catch(() => ({}));
 
     if (!response.ok) {
-       return new Response(JSON.stringify({ success: false, error: resData }), { 
-         status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+       return new Response(JSON.stringify({ success: false, error: resData, status: response.status }), { 
+         status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
        });
     }
 
@@ -72,7 +69,7 @@ serve(async (req) => {
 
   } catch (error: any) {
     return new Response(JSON.stringify({ success: false, error: error.message }), { 
-      status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+      status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
     });
   }
 })
