@@ -30,14 +30,17 @@ const Contacts = () => {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [contactToDelete, setContactToDelete] = useState<any>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [localTags, setLocalTags] = useState<{id: string, text: string, color: string}[]>([]);
 
   useEffect(() => {
     fetchContacts();
+    if (user) fetchLocalTags();
+
     const channel = supabase.channel('contacts-live')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'contacts' }, () => fetchContacts())
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, []);
+  }, [user]);
 
   const fetchContacts = async () => {
     setLoading(true);
@@ -56,6 +59,14 @@ const Contacts = () => {
       setContacts(data || []);
     }
     setLoading(false);
+  };
+
+  const fetchLocalTags = async () => {
+     if(!user) return;
+     const { data } = await supabase.from('app_config').select('value').eq('key', `agent_tags_${user.id}`).maybeSingle();
+     if (data?.value) {
+        try { setLocalTags(JSON.parse(data.value)); } catch(e) {}
+     }
   };
 
   const handleDeleteContact = async (contact: any) => {
@@ -96,13 +107,14 @@ const Contacts = () => {
 
   const filteredContacts = contacts.filter(c => {
     const term = searchTerm.toLowerCase();
+    const l = c.leads || {};
     return (
       c.nombre?.toLowerCase().includes(term) ||
       c.apellido?.toLowerCase().includes(term) ||
       c.telefono?.includes(term) ||
       c.email?.toLowerCase().includes(term) ||
       c.ciudad?.toLowerCase().includes(term) ||
-      (c.tags && c.tags.some((t: string) => t.toLowerCase().includes(term)))
+      (l.tags && l.tags.some((t: string) => t.toLowerCase().includes(term)))
     );
   });
 
@@ -146,7 +158,7 @@ const Contacts = () => {
               <TableHeader>
                 <TableRow className="border-slate-800 bg-slate-900/20">
                   <TableHead className="text-slate-500 text-[10px] uppercase font-bold pl-6">Nombre y Contacto</TableHead>
-                  <TableHead className="text-slate-500 text-[10px] uppercase font-bold">Ubicación & Email</TableHead>
+                  <TableHead className="text-slate-500 text-[10px] uppercase font-bold">Ubicación & Data</TableHead>
                   <TableHead className="text-slate-500 text-[10px] uppercase font-bold">Estado en Pipeline</TableHead>
                   <TableHead className="text-slate-500 text-[10px] uppercase font-bold text-right pr-6">Acciones</TableHead>
                 </TableRow>
@@ -175,13 +187,26 @@ const Contacts = () => {
                         </div>
                       </TableCell>
                       <TableCell>
-                        <div className="flex flex-col gap-1">
+                        <div className="flex flex-col gap-1.5">
                           <span className={cn("text-[10px] flex items-center gap-1.5", contact.email ? "text-emerald-400" : "text-slate-600 italic")}>
                             <Mail className="w-3 h-3" /> {contact.email || 'Sin email'}
                           </span>
                           <span className={cn("text-[10px] flex items-center gap-1.5", contact.ciudad ? "text-slate-300" : "text-slate-600 italic")}>
                             <MapPin className="w-3 h-3 text-slate-500" /> {contact.ciudad || 'Sin ciudad'}
                           </span>
+                          {l?.tags && l.tags.length > 0 && (
+                             <div className="flex flex-wrap gap-1 mt-1">
+                                {l.tags.map((t: string) => {
+                                   const tagConf = localTags.find(lt => lt.text === t);
+                                   const style = tagConf ? { backgroundColor: tagConf.color+'20', color: tagConf.color, borderColor: tagConf.color+'50' } : {};
+                                   return (
+                                      <Badge key={t} variant="outline" className="text-[8px] h-3.5 px-1 font-medium" style={style}>
+                                         {t}
+                                      </Badge>
+                                   );
+                                })}
+                             </div>
+                          )}
                         </div>
                       </TableCell>
                       <TableCell>

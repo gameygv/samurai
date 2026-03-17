@@ -27,6 +27,7 @@ const Pipeline = () => {
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [agentsMap, setAgentsMap] = useState<Record<string, string>>({});
+  const [localTags, setLocalTags] = useState<{id: string, text: string, color: string}[]>([]);
   
   const [draggedLeadId, setDraggedLeadId] = useState<string | null>(null);
   const [filterAgent, setFilterAgent] = useState<string>('ALL');
@@ -43,6 +44,8 @@ const Pipeline = () => {
 
   useEffect(() => {
     fetchLeads();
+    if (user) fetchLocalTags();
+
     supabase.from('profiles').select('id, full_name, role').in('role', ['admin', 'dev', 'sales']).then(({data}) => {
        if (data) {
           const map: any = {};
@@ -53,7 +56,7 @@ const Pipeline = () => {
 
     const channel = supabase.channel('pipeline-live').on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'leads' }, () => fetchLeads()).subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, []);
+  }, [user]);
 
   const fetchLeads = async () => {
     setLoading(true);
@@ -64,6 +67,14 @@ const Pipeline = () => {
     const { data } = await query;
     if (data) setLeads(data);
     setLoading(false);
+  };
+
+  const fetchLocalTags = async () => {
+     if(!user) return;
+     const { data } = await supabase.from('app_config').select('value').eq('key', `agent_tags_${user.id}`).maybeSingle();
+     if (data?.value) {
+        try { setLocalTags(JSON.parse(data.value)); } catch(e) {}
+     }
   };
 
   const handleGlobalAiToggle = async (pause: boolean) => {
@@ -210,9 +221,15 @@ const Pipeline = () => {
                             </div>
 
                             <div className="flex gap-1.5 flex-wrap mt-1">
-                               {lead.tags?.map((t: string) => (
-                                 <Badge key={t} variant="outline" className="text-[8px] h-4 px-1.5 border-amber-900/50 bg-amber-900/10 text-amber-500 font-medium"><Tag className="w-2 h-2 mr-1"/>{t}</Badge>
-                               ))}
+                               {lead.tags?.map((t: string) => {
+                                  const tagConf = localTags.find(lt => lt.text === t);
+                                  const style = tagConf ? { backgroundColor: tagConf.color+'20', color: tagConf.color, borderColor: tagConf.color+'50' } : {};
+                                  return (
+                                     <Badge key={t} variant="outline" className="text-[8px] h-4 px-1.5 font-medium" style={style}>
+                                        <Tag className="w-2 h-2 mr-1"/>{t}
+                                     </Badge>
+                                  );
+                               })}
                             </div>
 
                             <div className="flex gap-1.5 flex-wrap mt-1">
