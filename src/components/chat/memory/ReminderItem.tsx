@@ -17,15 +17,15 @@ export const ReminderItem = ({ reminder, onUpdate, onRemove }: ReminderItemProps
     <Input 
       value={reminder.title} 
       onChange={e => onUpdate(reminder.id, 'title', e.target.value)} 
-      placeholder="Título..." 
-      className="h-7 text-xs bg-slate-950 border-slate-800" 
+      placeholder="Hito (ej: Llamar para cierre)" 
+      className="h-7 text-xs bg-slate-950 border-slate-800 text-slate-100" 
     />
     <div className="flex gap-2">
       <Input 
         type="datetime-local" 
         value={reminder.datetime} 
         onChange={e => onUpdate(reminder.id, 'datetime', e.target.value)} 
-        className="h-7 text-xs bg-slate-950 border-slate-800 flex-1" 
+        className="h-7 text-[10px] bg-slate-950 border-slate-800 flex-1 text-indigo-400" 
       />
       <div className="flex items-center gap-1 bg-slate-950 border-slate-800 border rounded-md px-2 shrink-0">
         <Bell className="w-3 h-3 text-slate-500" />
@@ -34,9 +34,9 @@ export const ReminderItem = ({ reminder, onUpdate, onRemove }: ReminderItemProps
           min="0" 
           value={reminder.notify_minutes} 
           onChange={e => onUpdate(reminder.id, 'notify_minutes', parseInt(e.target.value))} 
-          className="h-5 w-10 p-0 text-xs bg-transparent border-0 text-center font-mono" 
+          className="h-5 w-8 p-0 text-[10px] bg-transparent border-0 text-center font-mono text-amber-500" 
         />
-        <span className="text-[9px] text-slate-500">min</span>
+        <span className="text-[8px] text-slate-600 font-bold">min</span>
       </div>
     </div>
   </div>

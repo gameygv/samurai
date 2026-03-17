@@ -13,7 +13,7 @@ import { cn } from '@/lib/utils';
 const Index = () => {
   const { user, isAdmin, profile } = useAuth();
   const [loading, setLoading] = useState(true);
-  const [stats, setStats] = useState<any>({ totalLeads: 0, wonSales: 0, capiReady: 0, recentLogs: [] });
+  const [stats, setStats] = useState<any>({ totalLeads: 0, wonSales: 0, capiReady: 0, recentLogs: [], tasks: [] });
 
   useEffect(() => {
     fetchData();
@@ -22,15 +22,42 @@ const Index = () => {
   }, [user]);
 
   const fetchData = async () => {
+    // Cargar Leads y sus recordatorios
     const { data: leads } = await supabase.from('leads').select('*');
-    const { data: logs } = await supabase.from('activity_logs').select('*').order('created_at', { ascending: false }).limit(10);
+    const { data: logs } = await supabase.from('activity_logs').select('*').order('created_at', { ascending: false }).limit(20);
     
     if (leads) {
+      // Extraer recordatorios activos de todos los leads
+      const allTasks: any[] = [];
+      leads.forEach(l => {
+         if (l.reminders && Array.isArray(l.reminders)) {
+            l.reminders.forEach((r: any) => {
+               if (r.datetime) {
+                  const remDate = new Date(r.datetime);
+                  const now = new Date();
+                  allTasks.push({
+                     id: r.id,
+                     target: l.nombre || l.telefono,
+                     time: remDate.toLocaleString([], { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }),
+                     type: remDate < now ? 'ATRASADO' : 'PROGRAMADO',
+                     status: 'pending',
+                     rawDate: remDate,
+                     rawLead: l
+                  });
+               }
+            });
+         }
+      });
+
+      // Ordenar por fecha (más cercanos primero)
+      allTasks.sort((a, b) => a.rawDate.getTime() - b.rawDate.getTime());
+
       setStats({
         totalLeads: leads.length,
         wonSales: leads.filter(l => l.buying_intent === 'COMPRADO').length,
         capiReady: leads.filter(l => l.email && l.email.includes('@')).length,
-        recentLogs: logs || []
+        recentLogs: logs || [],
+        tasks: allTasks.slice(0, 10) // Mostrar top 10
       });
     }
     setLoading(false);
@@ -61,7 +88,8 @@ const Index = () => {
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
           <div className="lg:col-span-8 space-y-8">
-            <TaskRadar tasks={[]} />
+            <TaskRadar tasks={stats.tasks} />
+            
             <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-tactical">
               <div className="p-4 bg-slate-950/40 border-b border-slate-800 flex items-center gap-2">
                 <Terminal className="w-4 h-4 text-slate-500" />
