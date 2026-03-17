@@ -96,13 +96,49 @@ const Contacts = () => {
   };
 
   const handleOpenChat = async (contact: any) => {
-    const leadId = contact.lead_id || contact.id;
+    let leadId = contact.lead_id;
+    
+    // Si el contacto fue importado por CSV pero nunca ha chateado, creamos el Lead al vuelo
+    if (!leadId) {
+       const tid = toast.loading("Creando entorno de chat para este contacto...");
+       try {
+           const { data: newLead, error } = await supabase.from('leads').insert({
+               nombre: contact.nombre || 'Contacto Importado',
+               telefono: contact.telefono,
+               email: contact.email,
+               ciudad: contact.ciudad,
+               estado: contact.estado,
+               cp: contact.cp,
+               pais: contact.pais,
+               tags: contact.tags,
+               buying_intent: 'BAJO',
+               ai_paused: true, // Lo pausamos para que el humano escriba primero sin que la IA intervenga
+               summary: 'Prospecto iniciado desde importación de Contactos.'
+           }).select().single();
+
+           if (error) throw error;
+           
+           // Enlazamos el contacto con su nuevo lead_id
+           await supabase.from('contacts').update({ lead_id: newLead.id }).eq('id', contact.id);
+
+           toast.success("Entorno de chat listo.", { id: tid });
+           setSelectedLead(newLead);
+           setIsChatOpen(true);
+           fetchContacts();
+           return;
+       } catch (err: any) {
+           toast.error("Error al iniciar chat: " + err.message, { id: tid });
+           return;
+       }
+    }
+
+    // Si ya tiene lead_id, simplemente lo abrimos
     const { data: lead } = await supabase.from('leads').select('*').eq('id', leadId).maybeSingle();
     if (lead) {
       setSelectedLead(lead);
       setIsChatOpen(true);
     } else {
-      toast.info("Este contacto no tiene una conversación activa en el CRM.");
+      toast.error("No se encontró el entorno de chat asociado.");
     }
   };
 
@@ -222,9 +258,9 @@ const Contacts = () => {
                       )}
                       <TableCell className="text-right pr-6">
                         <div className="flex justify-end gap-2">
-                          <Button size="sm" variant="ghost" className="h-8 text-[10px] text-indigo-400 hover:bg-indigo-900/20"
+                          <Button size="sm" variant="ghost" className="h-8 text-[10px] text-indigo-400 hover:bg-indigo-900/20 font-bold"
                             onClick={() => handleOpenChat(contact)}>
-                            <ExternalLink className="w-3 h-3 mr-1.5" /> CHAT
+                            <ExternalLink className="w-3 h-3 mr-1.5" /> {contact.lead_id ? 'ABRIR CHAT' : 'INICIAR CHAT'}
                           </Button>
                           {isManager && (
                              <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-slate-600 hover:text-red-500"
