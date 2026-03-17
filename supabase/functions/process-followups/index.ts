@@ -16,17 +16,11 @@ serve(async (req) => {
 
     const { data: configs } = await supabaseClient.from('app_config').select('key, value');
     const getConfig = (key) => configs?.find(c => c.key === key)?.value || null;
-
-    const evolutionApiUrl = getConfig('evolution_api_url');
-    const evolutionApiKey = getConfig('evolution_api_key');
-    const openAiKey = getConfig('openai_api_key');
     
     // WooCommerce Keys
     const wcUrl = getConfig('wc_url');
     const wcKey = getConfig('wc_consumer_key');
     const wcSecret = getConfig('wc_consumer_secret');
-
-    const now = new Date();
 
     // ========================================================
     // 1. WOOCOMMERCE WATCHER: ¿Ya pagaron?
@@ -35,13 +29,12 @@ serve(async (req) => {
        console.log("[process-followups] Verificando pagos pendientes en WooCommerce...");
        const { data: highIntentLeads } = await supabaseClient
           .from('leads')
-          .select('*')
+          .select('id, nombre, email, telefono, channel_id')
           .eq('buying_intent', 'ALTO')
           .not('email', 'is', null);
 
        for (const lead of (highIntentLeads || [])) {
           try {
-             // Limpiar URL de WC
              const apiBase = wcUrl.endsWith('/') ? wcUrl.slice(0, -1) : wcUrl;
              const endpoint = `${apiBase}/wp-json/wc/v3/orders?customer=${encodeURIComponent(lead.email)}`;
              
@@ -52,31 +45,33 @@ serve(async (req) => {
 
              if (wcRes.ok) {
                 const orders = await wcRes.json();
-                // Buscamos algún pedido pagado (processing o completed)
                 const paidOrder = orders.find(o => o.status === 'processing' || o.status === 'completed');
 
                 if (paidOrder) {
                    console.log(`[process-followups] ¡VENTA DETECTADA! Lead: ${lead.nombre} (${lead.email})`);
                    
-                   // 1. Marcar como GANADO en CRM
                    await supabaseClient.from('leads').update({
                       buying_intent: 'COMPRADO',
                       payment_status: 'VALID',
                       summary: `VENTA AUTOMÁTICA DETECTADA EN WC. Pedido: #${paidOrder.id}`
                    }).eq('id', lead.id);
 
-                   // 2. Enviar mensaje de agradecimiento
                    const thanksMsg = `¡Hola *${lead.nombre}*! 👋 He detectado tu pago correctamente. ¡Muchas gracias por tu confianza! \n\nEn breve recibirás más detalles por correo. ¡Estamos muy felices de que te unas! 😊`;
                    
-                   if (evolutionApiUrl && evolutionApiKey) {
-                      await fetch(evolutionApiUrl, {
-                         method: 'POST',
-                         headers: { 'Content-Type': 'application/json', 'apikey': evolutionApiKey },
-                         body: JSON.stringify({ number: lead.telefono, text: thanksMsg })
-                      });
-                   }
+                   // ENVIAR POR EL TÚNEL MULTICANAL MANTENIENDO EL CANAL ORIGINAL DEL LEAD
+                   await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/send-message-v3`, {
+                      method: 'POST',
+                      headers: { 
+                         'Authorization': `Bearer ${Deno.env.get('SUPABASE_ANON_KEY')}`, 
+                         'Content-Type': 'application/json' 
+                      },
+                      body: JSON.stringify({ 
+                          channel_id: lead.channel_id,
+                          phone: lead.telefono, 
+                          message: thanksMsg 
+                      })
+                   });
 
-                   // 3. Log de éxito
                    await supabaseClient.from('activity_logs').insert({
                       action: 'UPDATE', resource: 'LEADS', 
                       description: `💰 Venta cerrada AUTO: ${lead.nombre} via WooCommerce`,
@@ -89,16 +84,6 @@ serve(async (req) => {
           }
        }
     }
-
-    // ========================================================
-    // 2. PROCESAR ALERTAS Y RECORDATORIOS
-    // ========================================================
-    // ... (Mantener lógica de recordatorios existente)
-
-    // ========================================================
-    // 3. PROCESAR RETARGETINGS AUTOMÁTICOS
-    // ========================================================
-    // ... (Mantener lógica de retargeting existente)
 
     return new Response(JSON.stringify({ success: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 

@@ -28,19 +28,16 @@ serve(async (req) => {
     let headers = { 'Content-Type': 'application/json' };
     let bodyContent: any;
 
-    // --- LÓGICA GOWA ESTRICTA SEGÚN REPORTE ---
+    // ====================================================================
+    // 1. GOWA API (Multipart Form-Data para Media)
+    // ====================================================================
     if (provider === 'gowa') {
-      // 1. Basic Auth
       const authHeader = channel.api_key.startsWith('Basic ') ? channel.api_key : `Basic ${channel.api_key}`;
       headers['Authorization'] = authHeader;
-      
-      // 2. X-Device-Id Header
       headers['X-Device-Id'] = channel.instance_id;
       
       if (mediaData?.url) {
-        // 3. Enviar Media como multipart/form-data
-        delete headers['Content-Type']; // fetch lo asigna automáticamente para form-data
-        
+        delete headers['Content-Type']; 
         const fileRes = await fetch(mediaData.url);
         const fileBlob = await fileRes.blob();
         
@@ -65,24 +62,58 @@ serve(async (req) => {
         endpoint = `${endpoint}/send/${endpointSuffix}`;
         bodyContent = formData;
       } else {
-        // Enviar texto normal
         endpoint = `${endpoint}/send/message`;
         bodyContent = JSON.stringify({ phone: cleanPhone, message: message });
       }
     } 
+    // ====================================================================
+    // 2. META CLOUD API OFICIAL (JSON Payload)
+    // ====================================================================
     else if (provider === 'meta') {
-      endpoint = `https://graph.facebook.com/v19.0/${channel.instance_id}/messages`;
+      endpoint = `https://graph.facebook.com/v20.0/${channel.instance_id}/messages`;
       headers['Authorization'] = `Bearer ${channel.api_key}`;
-      bodyContent = JSON.stringify({ messaging_product: "whatsapp", to: cleanPhone, type: "text", text: { body: message } });
+      
+      if (mediaData?.url) {
+         const typeMap = { image: 'image', video: 'video', audio: 'audio', document: 'document' };
+         const metaType = typeMap[mediaData.type] || 'document';
+         
+         bodyContent = JSON.stringify({
+            messaging_product: "whatsapp",
+            to: cleanPhone,
+            type: metaType,
+            [metaType]: { link: mediaData.url, caption: message || '' }
+         });
+      } else {
+         bodyContent = JSON.stringify({
+            messaging_product: "whatsapp",
+            to: cleanPhone,
+            type: "text",
+            text: { body: message }
+         });
+      }
     } 
+    // ====================================================================
+    // 3. EVOLUTION API STANDARD (v1/v2)
+    // ====================================================================
     else {
-      // Evolution Standard
       headers['apikey'] = channel.api_key;
-      endpoint = `${endpoint}/message/sendText/${channel.instance_id}`;
-      bodyContent = JSON.stringify({ number: cleanPhone, text: message });
+      
+      if (mediaData?.url) {
+         endpoint = `${endpoint}/message/sendMedia/${channel.instance_id}`;
+         const evoType = mediaData.type === 'image' ? 'image' : mediaData.type === 'video' ? 'video' : mediaData.type === 'audio' ? 'audio' : 'document';
+         bodyContent = JSON.stringify({
+             number: cleanPhone,
+             mediatype: evoType,
+             media: mediaData.url,
+             caption: message || ''
+         });
+      } else {
+         endpoint = `${endpoint}/message/sendText/${channel.instance_id}`;
+         bodyContent = JSON.stringify({ number: cleanPhone, text: message });
+      }
     }
 
-    console.log(`[send-message] Ejecutando POST a: ${endpoint}`);
+    console.log(`[send-message] Ejecutando POST a: ${endpoint} via ${provider}`);
 
     const response = await fetch(endpoint, { 
         method: 'POST', 
@@ -96,10 +127,10 @@ serve(async (req) => {
     try { resData = JSON.parse(resText); } catch(e) { resData = { rawResponse: resText }; }
 
     if (!response.ok) {
-       console.error("[send-message] Error de servidor Gowa:", resText);
+       console.error(`[send-message] Error de servidor (${provider}):`, resText);
        return new Response(JSON.stringify({ 
          success: false, 
-         error: resData.message || resData.error || resText || "Error del servidor Gowa",
+         error: resData.message || resData.error || resText || "Error del proveedor de WhatsApp",
          status: response.status 
        }), { 
          status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
