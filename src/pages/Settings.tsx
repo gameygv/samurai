@@ -25,6 +25,10 @@ const Settings = () => {
   const [followupConfig, setFollowupConfig] = useState<any>({ enabled: false });
   const [salesConfig, setSalesConfig] = useState<any>({ enabled: false });
   
+  // Global Tags & Templates State
+  const [globalTags, setGlobalTags] = useState<{id: string, text: string, color: string}[]>([]);
+  const [globalReplies, setGlobalReplies] = useState<{id: string, title: string, text: string}[]>([]);
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -33,9 +37,17 @@ const Settings = () => {
   const fetchAllData = async () => {
     setLoading(true);
     try {
-      // Cargar App Config (Keys, Banco, etc)
+      // Cargar App Config
       const { data: appData } = await supabase.from('app_config').select('*');
-      if (appData) setConfigs(appData);
+      if (appData) {
+         setConfigs(appData);
+         
+         const tagsStr = appData.find(c => c.key === 'global_tags')?.value;
+         if (tagsStr) { try { setGlobalTags(JSON.parse(tagsStr)); } catch(e){} }
+         
+         const repliesStr = appData.find(c => c.key === 'quick_replies')?.value;
+         if (repliesStr) { try { setGlobalReplies(JSON.parse(repliesStr)); } catch(e){} }
+      }
 
       // Cargar Retargeting Config
       const { data: flpData } = await supabase.from('followup_config').select('*');
@@ -55,16 +67,20 @@ const Settings = () => {
   const handleSaveAll = async () => {
     setSaving(true);
     try {
-      // 1. Guardar App Config
       const updates = configs.map(c => ({ 
         key: c.key, 
         value: c.value, 
         category: c.category || 'SYSTEM',
         updated_at: new Date().toISOString()
       }));
+
+      // Añadir Global Tags & Replies al payload de guardado
+      updates.push({ key: 'global_tags', value: JSON.stringify(globalTags), category: 'SYSTEM', updated_at: new Date().toISOString() });
+      updates.push({ key: 'quick_replies', value: JSON.stringify(globalReplies), category: 'SYSTEM', updated_at: new Date().toISOString() });
+
       await supabase.from('app_config').upsert(updates, { onConflict: 'key' });
 
-      // 2. Guardar Followups
+      // Guardar Followups
       if (followupConfig.id) {
          await supabase.from('followup_config').update({ ...followupConfig, updated_at: new Date().toISOString() }).eq('id', followupConfig.id);
       }
@@ -72,7 +88,7 @@ const Settings = () => {
          await supabase.from('followup_config').update({ ...salesConfig, updated_at: new Date().toISOString() }).eq('id', salesConfig.id);
       }
       
-      toast.success('Configuración guardada correctamente.');
+      toast.success('Configuración maestra guardada correctamente.');
       fetchAllData();
     } catch (err: any) {
       toast.error(err.message);
@@ -102,7 +118,7 @@ const Settings = () => {
           <TabsList className="bg-slate-900 border border-slate-800 p-1 flex-wrap h-auto rounded-xl">
             <TabsTrigger value="canales" className="gap-2 px-4 py-2">Canales</TabsTrigger>
             <TabsTrigger value="followup" className="gap-2 px-4 py-2"><Clock className="w-4 h-4"/> Retargeting (IA)</TabsTrigger>
-            <TabsTrigger value="plantillas" className="gap-2 px-4 py-2">Plantillas</TabsTrigger>
+            <TabsTrigger value="plantillas" className="gap-2 px-4 py-2">Plantillas y Etiquetas</TabsTrigger>
             <TabsTrigger value="secrets" className="gap-2 px-4 py-2">API Keys</TabsTrigger>
             {isDev && <TabsTrigger value="kernel" className="gap-2 bg-indigo-900/20 text-indigo-400 ml-auto"><TerminalSquare className="w-4 h-4"/> Kernel Dev</TabsTrigger>}
           </TabsList>
@@ -120,8 +136,15 @@ const Settings = () => {
 
           <TabsContent value="plantillas" className="mt-6">
              <TemplatesTab 
-                globalTags={[]} onAddTag={()=>{}} onUpdateTag={()=>{}} onRemoveTag={()=>{}}
-                quickReplies={[]} onAddQuickReply={()=>{}} onUpdateQuickReply={()=>{}} onRemoveQuickReply={()=>{}}
+                globalTags={globalTags} 
+                onAddTag={() => setGlobalTags([...globalTags, { id: Date.now().toString(), text: '', color: '#D4AF37' }])} 
+                onUpdateTag={(id, field, val) => setGlobalTags(globalTags.map(t => t.id === id ? {...t, [field]: val} : t))} 
+                onRemoveTag={(id) => setGlobalTags(globalTags.filter(t => t.id !== id))}
+                
+                quickReplies={globalReplies} 
+                onAddQuickReply={() => setGlobalReplies([...globalReplies, { id: Date.now().toString(), title: '', text: '' }])} 
+                onUpdateQuickReply={(id, field, val) => setGlobalReplies(globalReplies.map(r => r.id === id ? {...r, [field]: val} : r))} 
+                onRemoveQuickReply={(id) => setGlobalReplies(globalReplies.filter(r => r.id !== id))}
              />
           </TabsContent>
 
