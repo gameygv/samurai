@@ -98,7 +98,6 @@ const Contacts = () => {
   const handleOpenChat = async (contact: any) => {
     let leadId = contact.lead_id;
     
-    // Si el contacto fue importado por CSV pero nunca ha chateado, creamos el Lead al vuelo
     if (!leadId) {
        const tid = toast.loading("Creando entorno de chat para este contacto...");
        try {
@@ -112,13 +111,12 @@ const Contacts = () => {
                pais: contact.pais,
                tags: contact.tags,
                buying_intent: 'BAJO',
-               ai_paused: true, // Lo pausamos para que el humano escriba primero sin que la IA intervenga
+               ai_paused: true,
                summary: 'Prospecto iniciado desde importación de Contactos.'
            }).select().single();
 
            if (error) throw error;
            
-           // Enlazamos el contacto con su nuevo lead_id
            await supabase.from('contacts').update({ lead_id: newLead.id }).eq('id', contact.id);
 
            toast.success("Entorno de chat listo.", { id: tid });
@@ -132,7 +130,6 @@ const Contacts = () => {
        }
     }
 
-    // Si ya tiene lead_id, simplemente lo abrimos
     const { data: lead } = await supabase.from('leads').select('*').eq('id', leadId).maybeSingle();
     if (lead) {
       setSelectedLead(lead);
@@ -142,9 +139,15 @@ const Contacts = () => {
     }
   };
 
+  // Safe check for tags filtering
+  const getSafeTags = (tags: any) => Array.isArray(tags) ? tags : [];
+
   const filteredContacts = contacts.filter(c => {
     const term = searchTerm.toLowerCase();
     const l = c.leads || {};
+    const contactTags = getSafeTags(c.tags);
+    const leadTags = getSafeTags(l.tags);
+    
     return (
       c.nombre?.toLowerCase().includes(term) ||
       c.apellido?.toLowerCase().includes(term) ||
@@ -152,8 +155,8 @@ const Contacts = () => {
       c.email?.toLowerCase().includes(term) ||
       c.ciudad?.toLowerCase().includes(term) ||
       c.financial_status?.toLowerCase().includes(term) ||
-      (c.tags && c.tags.some((t: string) => t.toLowerCase().includes(term))) ||
-      (l.tags && l.tags.some((t: string) => t.toLowerCase().includes(term)))
+      contactTags.some((t: string) => t.toLowerCase().includes(term)) ||
+      leadTags.some((t: string) => t.toLowerCase().includes(term))
     );
   });
 
@@ -212,7 +215,9 @@ const Contacts = () => {
                   <TableRow><TableCell colSpan={isManager ? 4 : 3} className="h-40 text-center text-slate-500 italic">No hay registros que coincidan.</TableCell></TableRow>
                 ) : filteredContacts.map((contact) => {
                   const l = leadData(contact);
-                  const combinedTags = Array.from(new Set([...(contact.tags || []), ...(l?.tags || [])]));
+                  // Merge safe arrays
+                  const combinedTags = Array.from(new Set([...getSafeTags(contact.tags), ...getSafeTags(l?.tags)]));
+                  
                   return (
                     <TableRow key={contact.id} className="border-slate-800 hover:bg-slate-800/40 transition-colors">
                       <TableCell className="pl-6 py-4">

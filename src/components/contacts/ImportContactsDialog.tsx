@@ -36,35 +36,40 @@ export const ImportContactsDialog = ({ open, onOpenChange, onSuccess }: ImportCo
       complete: async (results) => {
         const rows = results.data as any[];
         
-        // Mapeo automático y recolección de etiquetas dinámicas
         const formattedContacts = rows.map(row => {
-            const cleanPhone = row.phone ? String(row.phone).replace(/\D/g, '') : null;
+            // Normalización robusta de teléfono
+            let cleanPhone = row.phone ? String(row.phone).replace(/\D/g, '') : null;
             if (!cleanPhone || cleanPhone.length < 10) return null;
+            
+            // Si el teléfono tiene exactamente 10 dígitos, asumimos que es de México (+52)
+            if (cleanPhone.length === 10) {
+               cleanPhone = '52' + cleanPhone;
+            }
 
             let tags: string[] = [];
             const stdKeys = ['phone', 'email', 'fn', 'ln', 'ct', 'st', 'zip', 'country', 'add_to_messaging_customer_base_for_whatsapp', 'value', 'dob', 'gen', 'age', 'madid', 'uid'];
             
-            // Todas las demás columnas que tengan datos se vuelven etiquetas
+            // Auto-tagging: Cualquier columna no estándar se convierte en Etiqueta
             Object.entries(row).forEach(([k, v]) => {
                 if (!stdKeys.includes(k.toLowerCase()) && v && String(v).trim() !== '') {
                     tags.push(String(v).trim());
                 }
             });
             
-            // Extraer campos específicos si el usuario los llenó
+            // Extraer campos específicos de marketing
             if (row.add_to_messaging_customer_base_for_whatsapp) tags.push(String(row.add_to_messaging_customer_base_for_whatsapp).trim());
             if (row.value) tags.push(`Nivel: ${row.value}`);
             if (row.madid) tags.push(String(row.madid).trim());
 
             return {
                 telefono: cleanPhone,
-                email: row.email || null,
-                nombre: row.fn || 'Desconocido',
-                apellido: row.ln || null,
-                ciudad: row.ct || null,
-                estado: row.st || null,
-                cp: row.zip || null,
-                pais: row.country || 'mx',
+                email: row.email ? String(row.email).trim() : null,
+                nombre: row.fn ? String(row.fn).trim() : 'Desconocido',
+                apellido: row.ln ? String(row.ln).trim() : null,
+                ciudad: row.ct ? String(row.ct).trim() : null,
+                estado: row.st ? String(row.st).trim() : null,
+                cp: row.zip ? String(row.zip).trim() : null,
+                pais: row.country ? String(row.country).trim() : 'mx',
                 tags: tags.filter(Boolean)
             };
         }).filter(Boolean);
@@ -72,7 +77,7 @@ export const ImportContactsDialog = ({ open, onOpenChange, onSuccess }: ImportCo
         setProgress({ total: formattedContacts.length, processed: 0 });
 
         if (formattedContacts.length === 0) {
-            toast.error("No se encontraron contactos válidos (se requiere número de teléfono).");
+            toast.error("No se encontraron contactos válidos. Verifica la columna 'phone'.");
             setUploading(false);
             return;
         }
@@ -83,12 +88,13 @@ export const ImportContactsDialog = ({ open, onOpenChange, onSuccess }: ImportCo
         try {
             for (let i = 0; i < formattedContacts.length; i += batchSize) {
                const batch = formattedContacts.slice(i, i + batchSize);
+               // onConflict actualizará los datos si el teléfono ya existe
                const { error } = await supabase.from('contacts').upsert(batch, { onConflict: 'telefono' });
                if (error) throw error;
                successCount += batch.length;
                setProgress(prev => ({ ...prev, processed: successCount }));
             }
-            toast.success(`Importación finalizada. ${successCount} contactos procesados.`);
+            toast.success(`Importación finalizada. ${successCount} contactos listos.`);
             onSuccess();
             onOpenChange(false);
             setFile(null);
@@ -109,7 +115,7 @@ export const ImportContactsDialog = ({ open, onOpenChange, onSuccess }: ImportCo
              <FileSpreadsheet className="w-5 h-5" /> Importación Masiva (CSV)
           </DialogTitle>
           <DialogDescription className="text-slate-400 text-xs">
-             Sube un archivo .csv. Las columnas no reconocidas se convertirán automáticamente en etiquetas de segmentación.
+             Sube un archivo .csv. Las columnas no reconocidas se convertirán en etiquetas. <br/>Los números a 10 dígitos se les agregará "52" automáticamente.
           </DialogDescription>
         </DialogHeader>
         
@@ -127,7 +133,7 @@ export const ImportContactsDialog = ({ open, onOpenChange, onSuccess }: ImportCo
                     <>
                        <Upload className="w-8 h-8 text-slate-500 mb-2" />
                        <span className="text-sm font-medium text-slate-300">Seleccionar archivo CSV</span>
-                       <p className="text-[10px] text-slate-500 mt-2">Cabeceras esperadas: phone, email, fn, ln...</p>
+                       <p className="text-[10px] text-slate-500 mt-2">Cabeceras recomendadas: phone, email, fn, ct</p>
                     </>
                  )}
               </label>
@@ -136,7 +142,7 @@ export const ImportContactsDialog = ({ open, onOpenChange, onSuccess }: ImportCo
            {uploading && (
               <div className="space-y-2">
                  <div className="flex justify-between text-xs text-slate-400 font-mono">
-                    <span>Procesando lotes...</span>
+                    <span>Insertando en Base de Datos...</span>
                     <span>{progress.processed} / {progress.total}</span>
                  </div>
                  <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
