@@ -129,16 +129,9 @@ const Inbox = () => {
         });
         if (msgErr) throw msgErr;
 
-        // 2. Llamar al procesador de respuesta de Samurai
-        const { error: resErr } = await supabase.functions.invoke('evolution-webhook', {
-            body: { 
-                event: 'messages.upsert',
-                data: [{
-                    key: { remoteJid: `${activeLead.telefono}@s.whatsapp.net`, fromMe: false },
-                    message: { conversation: manualClientText },
-                    pushName: activeLead.nombre
-                }]
-            }
+        // 2. Llamar al procesador de respuesta de Samurai pasando parámetros en la URL
+        await supabase.functions.invoke(`process-samurai-response?phone=${activeLead.telefono}&client_message=${encodeURIComponent(manualClientText)}`, {
+            body: {}
         });
 
         toast.success("Mensaje procesado. Sam responderá en unos segundos.", { id: tid });

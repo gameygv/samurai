@@ -22,24 +22,24 @@ serve(async (req) => {
     const provider = channel.provider || 'gowa';
     let cleanPhone = phone.replace(/\D/g, '');
     
-    // Normalización de números para Gowa (JID)
-    const phoneJid = cleanPhone.includes('@') ? cleanPhone : `${cleanPhone}@s.whatsapp.net`;
-
     let endpoint = channel.api_url;
     if (endpoint.endsWith('/')) endpoint = endpoint.slice(0, -1);
 
     let payload = {};
     let headers = { 'Content-Type': 'application/json' };
 
+    // --- LÓGICA GOWA (Fix Unauthorized) ---
     if (provider === 'gowa') {
-      headers['Authorization'] = `Bearer ${channel.api_key}`;
+      // Gowa suele usar 'apikey' directamente en el header
+      headers['apikey'] = channel.api_key;
+      headers['Authorization'] = `Bearer ${channel.api_key}`; // Redundancia
       
       if (mediaData?.url) {
         endpoint = `${endpoint}/send-media`;
         payload = { 
-            phone: cleanPhone, // Algunos prefieren numero limpio
-            device_id: channel.instance_id, // Gowa suele usar device_id
-            instance_id: channel.instance_id, // Fallback
+            phone: cleanPhone,
+            device_id: channel.instance_id,
+            instance_id: channel.instance_id,
             media_url: mediaData.url, 
             caption: message || "", 
             type: mediaData.type 
@@ -60,12 +60,13 @@ serve(async (req) => {
       payload = { messaging_product: "whatsapp", to: cleanPhone, type: "text", text: { body: message } };
     } 
     else {
+      // Evolution Standard
       headers['apikey'] = channel.api_key;
       endpoint = `${endpoint}/message/sendText/${channel.instance_id}`;
       payload = { number: cleanPhone, text: message };
     }
 
-    console.log(`[send-message] Enviando a: ${endpoint} | Payload:`, JSON.stringify(payload));
+    console.log(`[send-message] Enviando a: ${endpoint}`);
 
     const response = await fetch(endpoint, { 
         method: 'POST', 
@@ -79,10 +80,9 @@ serve(async (req) => {
     try { resData = JSON.parse(resText); } catch(e) { resData = { rawResponse: resText }; }
 
     if (!response.ok) {
-       console.error("[send-message] Error del servidor:", resText);
        return new Response(JSON.stringify({ 
          success: false, 
-         error: resData.message || resData.error || resText || "Error desconocido del servidor Gowa",
+         error: resData.message || resData.error || resText || "Error de credenciales (401)",
          status: response.status 
        }), { 
          status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
@@ -94,7 +94,6 @@ serve(async (req) => {
     });
 
   } catch (error: any) {
-    console.error("[send-message] Error crítico:", error.message);
     return new Response(JSON.stringify({ success: false, error: error.message }), { 
       status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
     });
