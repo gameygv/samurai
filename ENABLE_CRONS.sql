@@ -1,47 +1,60 @@
--- Habilitar la extensión pg_cron (Necesario para tareas programadas)
+-- ========================================================
+-- SCRIPT MAESTRO DE AUTOMATIZACIONES (CRON JOBS)
+-- ========================================================
+
+-- 1. Habilitar extensiones necesarias
+CREATE EXTENSION IF NOT EXISTS pg_net;
 CREATE EXTENSION IF NOT EXISTS pg_cron;
 
--- 1. CRON DE FOLLOW-UPS (Cada hora)
--- Revisa leads en 'ALTO' interés, verifica WooCommerce y envía recordatorios.
-SELECT cron.schedule(
-  'samurai-followups-hourly', -- Nombre único del cron
-  '0 * * * *',                -- Se ejecuta en el minuto 0 de cada hora
-  $$
-  SELECT
-    net.http_post(
-        url:='https://giwoovmvwlddaizorizk.supabase.co/functions/v1/process-followups',
-        headers:='{"Content-Type": "application/json", "Authorization": "Bearer SERVICE_ROLE_KEY_AQUI"}'::jsonb,
-        body:='{}'::jsonb
-    ) as request_id;
-  $$
+-- 2. Limpieza de trabajos anteriores (evita errores y duplicados)
+DO $$
+BEGIN
+  PERFORM cron.unschedule(jobid) FROM cron.job WHERE jobname = 'daily_credit_collections';
+  PERFORM cron.unschedule(jobid) FROM cron.job WHERE jobname = 'batch_analyze_leads';
+  PERFORM cron.unschedule(jobid) FROM cron.job WHERE jobname = 'process_retargeting';
+  PERFORM cron.unschedule(jobid) FROM cron.job WHERE jobname = 'scrape_master_truth';
+  PERFORM cron.unschedule(jobid) FROM cron.job WHERE jobname = 'analyze_pending_leads';
+  PERFORM cron.unschedule(jobid) FROM cron.job WHERE jobname = 'auto_followup_routine';
+EXCEPTION WHEN OTHERS THEN
+  -- Ignorar si las tablas aún no existen
+END $$;
+
+-- ========================================================
+-- 3. CREACIÓN DE LOS 4 MOTORES CRÍTICOS
+-- ========================================================
+
+-- A. Motor de Análisis de Leads (Meta CAPI, Nombres, Routing) - CADA 5 MINUTOS
+SELECT cron.schedule('batch_analyze_leads', '*/5 * * * *',
+    $$ SELECT net.http_post(
+        url := 'https://giwoovmvwlddaizorizk.supabase.co/functions/v1/analyze-leads',
+        headers := '{"Content-Type": "application/json", "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imdpd29vdm12d2xkZGFpem9yaXprIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEwNDQzOTAsImV4cCI6MjA4NjYyMDM5MH0.5U_gkRRScbW8iOCk_3HC2V3ZcQVkWvl0n5ZLgccR1qo"}'::jsonb,
+        body := '{"force": false}'::jsonb
+    ) $$
 );
 
--- 2. CRON DE ACTUALIZACIÓN WEB (Diario a las 3:00 AM GMT)
--- Re-escanea theelephantbowl.com para mantener la Verdad Maestra al día.
-SELECT cron.schedule(
-  'samurai-web-scrape-daily',
-  '0 3 * * *',
-  $$
-  SELECT
-    net.http_post(
-        url:='https://giwoovmvwlddaizorizk.supabase.co/functions/v1/scrape-main-website',
-        headers:='{"Content-Type": "application/json", "Authorization": "Bearer SERVICE_ROLE_KEY_AQUI"}'::jsonb,
-        body:='{}'::jsonb
-    ) as request_id;
-  $$
+-- B. Motor de Retargeting y WooCommerce Watcher - CADA 15 MINUTOS
+SELECT cron.schedule('process_retargeting', '*/15 * * * *',
+    $$ SELECT net.http_post(
+        url := 'https://giwoovmvwlddaizorizk.supabase.co/functions/v1/process-followups',
+        headers := '{"Content-Type": "application/json", "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imdpd29vdm12d2xkZGFpem9yaXprIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEwNDQzOTAsImV4cCI6MjA4NjYyMDM5MH0.5U_gkRRScbW8iOCk_3HC2V3ZcQVkWvl0n5ZLgccR1qo"}'::jsonb,
+        body := '{}'::jsonb
+    ) $$
 );
 
--- 3. CRON DE ANÁLISIS DE LEADS (Cada 30 minutos)
--- Revisa chats recientes para extraer emails/nombres que se nos hayan pasado.
-SELECT cron.schedule(
-  'samurai-lead-analysis',
-  '*/30 * * * *',
-  $$
-  SELECT
-    net.http_post(
-        url:='https://giwoovmvwlddaizorizk.supabase.co/functions/v1/analyze-leads',
-        headers:='{"Content-Type": "application/json", "Authorization": "Bearer SERVICE_ROLE_KEY_AQUI"}'::jsonb,
-        body:='{}'::jsonb
-    ) as request_id;
-  $$
+-- C. Motor de Verdad Maestra (Scraping Web) - 1 VEZ AL DÍA (03:00 AM UTC)
+SELECT cron.schedule('scrape_master_truth', '0 3 * * *',
+    $$ SELECT net.http_post(
+        url := 'https://giwoovmvwlddaizorizk.supabase.co/functions/v1/scrape-main-website',
+        headers := '{"Content-Type": "application/json", "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imdpd29vdm12d2xkZGFpem9yaXprIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEwNDQzOTAsImV4cCI6MjA4NjYyMDM5MH0.5U_gkRRScbW8iOCk_3HC2V3ZcQVkWvl0n5ZLgccR1qo"}'::jsonb,
+        body := '{}'::jsonb
+    ) $$
+);
+
+-- D. Motor de Cobranza (Recordatorios de Crédito A/B/C/D) - 1 VEZ AL DÍA (09:00 AM UTC)
+SELECT cron.schedule('daily_credit_collections', '0 9 * * *',
+    $$ SELECT net.http_post(
+        url := 'https://giwoovmvwlddaizorizk.supabase.co/functions/v1/process-credit-reminders',
+        headers := '{"Content-Type": "application/json", "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imdpd29vdm12d2xkZGFpem9yaXprIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEwNDQzOTAsImV4cCI6MjA4NjYyMDM5MH0.5U_gkRRScbW8iOCk_3HC2V3ZcQVkWvl0n5ZLgccR1qo"}'::jsonb,
+        body := '{}'::jsonb
+    ) $$
 );
