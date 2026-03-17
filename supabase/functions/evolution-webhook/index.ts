@@ -67,7 +67,7 @@ serve(async (req) => {
        
        // CARGAR CONTEXTO DINÁMICO (POSTERS)
        const { data: posters } = await supabaseClient.from('media_assets').select('title, url, ai_instructions').eq('category', 'POSTER');
-       let postersCtx = "\n=== BÓVEDA VISUAL (POSTERS) ===\nINSTRUCCIÓN: Si el cliente menciona una CIUDAD, busca el poster que coincida y envíalo usando <<MEDIA:url>>. Ejemplo: '¡Claro! Aquí tienes la info de Guadalajara: <<MEDIA:https://url.jpg>>'\n";
+       let postersCtx = "\n=== BÓVEDA VISUAL (POSTERS) ===\nINSTRUCCIÓN DE ALTA PRIORIDAD: Si el cliente menciona una CIUDAD o LUGAR, debes buscar el poster que coincida y enviarlo usando <<MEDIA:url>> al inicio de tu respuesta. Ejemplo: '¡Hola! Qué bien que seas de Guadalajara. Aquí tienes los detalles: <<MEDIA:https://url.jpg>>'\n";
        posters?.forEach(m => { postersCtx += `- ${m.title}: ${m.ai_instructions} -> <<MEDIA:${m.url}>>\n`; });
 
        const systemPrompt = `${configMap['prompt_alma_samurai']}\n${configMap['prompt_adn_core']}\n${postersCtx}\n${configMap['prompt_behavior_rules']}`;
@@ -100,7 +100,7 @@ serve(async (req) => {
             body: JSON.stringify({ channel_id: channel.id, phone: cleanPhone, message: aiText, mediaData: mediaUrl ? { url: mediaUrl, type: 'image', name: 'poster.jpg' } : undefined })
           });
 
-          // GUARDAR EN CRM CON EMISOR 'SAMURAI'
+          // GUARDAR EN CRM CON EMISOR 'SAMURAI' (Estandarizado para el visor)
           await supabaseClient.from('conversaciones').insert({ 
              lead_id: lead.id, emisor: 'SAMURAI', mensaje: aiText || "[Poster Enviado]", platform: 'WHATSAPP',
              metadata: mediaUrl ? { mediaUrl, mediaType: 'image' } : {}
