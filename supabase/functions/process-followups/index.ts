@@ -6,7 +6,7 @@ import { corsHeaders } from '../_shared/cors.ts'
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders })
 
-  console.log("[process-followups] Iniciando ciclo AI-Driven + WooCommerce Watcher...");
+  console.log("[process-followups] Iniciando ciclo AI-Driven + WooCommerce Watcher + Auto-Routing...");
 
   try {
     const supabaseClient = createClient(
@@ -26,7 +26,6 @@ serve(async (req) => {
     // 1. WOOCOMMERCE WATCHER: ¿Ya pagaron?
     // ========================================================
     if (wcUrl && wcKey && wcSecret) {
-       console.log("[process-followups] Verificando pagos pendientes en WooCommerce...");
        const { data: highIntentLeads } = await supabaseClient
           .from('leads')
           .select('id, nombre, email, telefono, channel_id')
@@ -48,7 +47,7 @@ serve(async (req) => {
                 const paidOrder = orders.find(o => o.status === 'processing' || o.status === 'completed');
 
                 if (paidOrder) {
-                   console.log(`[process-followups] ¡VENTA DETECTADA! Lead: ${lead.nombre} (${lead.email})`);
+                   console.log(`[process-followups] ¡VENTA DETECTADA! Lead: ${lead.nombre}`);
                    
                    await supabaseClient.from('leads').update({
                       buying_intent: 'COMPRADO',
@@ -58,18 +57,10 @@ serve(async (req) => {
 
                    const thanksMsg = `¡Hola *${lead.nombre}*! 👋 He detectado tu pago correctamente. ¡Muchas gracias por tu confianza! \n\nEn breve recibirás más detalles por correo. ¡Estamos muy felices de que te unas! 😊`;
                    
-                   // ENVIAR POR EL TÚNEL MULTICANAL MANTENIENDO EL CANAL ORIGINAL DEL LEAD
                    await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/send-message-v3`, {
                       method: 'POST',
-                      headers: { 
-                         'Authorization': `Bearer ${Deno.env.get('SUPABASE_ANON_KEY')}`, 
-                         'Content-Type': 'application/json' 
-                      },
-                      body: JSON.stringify({ 
-                          channel_id: lead.channel_id,
-                          phone: lead.telefono, 
-                          message: thanksMsg 
-                      })
+                      headers: { 'Authorization': `Bearer ${Deno.env.get('SUPABASE_ANON_KEY')}`, 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ channel_id: lead.channel_id, phone: lead.telefono, message: thanksMsg })
                    });
 
                    await supabaseClient.from('activity_logs').insert({
@@ -80,15 +71,43 @@ serve(async (req) => {
                 }
              }
           } catch (e) {
-             console.error(`[WC-Watcher] Error revisando lead ${lead.email}:`, e.message);
+             console.error(`[WC-Watcher] Error:`, e.message);
           }
        }
+    }
+
+    // ========================================================
+    // 2. AUTO-ROUTING BATCH (Asignación de huérfanos)
+    // ========================================================
+    console.log("[process-followups] Revisando leads huérfanos para asignación...");
+    const { data: orphanLeads } = await supabaseClient.from('leads').select('id, ciudad').is('assigned_to', null).not('ciudad', 'is', null);
+    const { data: activeAgents } = await supabaseClient.from('profiles').select('id, territories').eq('is_active', true);
+    
+    if (orphanLeads && orphanLeads.length > 0 && activeAgents) {
+        for (const ol of orphanLeads) {
+            const cityNorm = ol.ciudad.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+            for (const agent of activeAgents) {
+                if (!agent.territories) continue;
+                const match = agent.territories.some(t => {
+                    const tNorm = t.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+                    return cityNorm.includes(tNorm) || tNorm.includes(cityNorm);
+                });
+                if (match) {
+                    await supabaseClient.from('leads').update({ assigned_to: agent.id }).eq('id', ol.id);
+                    await supabaseClient.from('activity_logs').insert({
+                        action: 'UPDATE', resource: 'USERS',
+                        description: `Auto-Routing Batch: Lead asignado por proximidad en '${ol.ciudad}'.`,
+                        status: 'OK'
+                    });
+                    break;
+                }
+            }
+        }
     }
 
     return new Response(JSON.stringify({ success: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
   } catch (error: any) {
-    console.error("[process-followups] Error crítico:", error.message);
     return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: corsHeaders });
   }
 })
