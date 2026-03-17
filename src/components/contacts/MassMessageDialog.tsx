@@ -7,10 +7,11 @@ import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Send, Megaphone, ShieldAlert, Save, Clock, Users, Play, Pause, AlertTriangle, BookTemplate, Image as ImageIcon, X, UploadCloud, Info } from 'lucide-react';
+import { Loader2, Send, Megaphone, ShieldAlert, Save, Clock, Users, Play, Pause, AlertTriangle, BookTemplate, Image as ImageIcon, X, UploadCloud, Info, Eye } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { sendEvolutionMessage } from '@/utils/messagingService';
+import { logActivity } from '@/utils/logger';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
@@ -26,11 +27,10 @@ export const MassMessageDialog = ({ open, onOpenChange, targetContacts }: MassMe
   const [templates, setTemplates] = useState<{id: string, name: string, text: string}[]>([]);
   const [templateName, setTemplateName] = useState('');
   
-  // Novedad: Soporte Multimedia
   const [mediaFile, setMediaFile] = useState<File | null>(null);
   const [mediaPreview, setMediaPreview] = useState<string | null>(null);
 
-  const [speed, setSpeed] = useState('SAFE'); // Por defecto SEGURO
+  const [speed, setSpeed] = useState('SAFE');
   const [sending, setSending] = useState(false);
   const [paused, setPaused] = useState(false);
   const [progress, setProgress] = useState({ current: 0, total: 0, success: 0, failed: 0 });
@@ -49,7 +49,6 @@ export const MassMessageDialog = ({ open, onOpenChange, targetContacts }: MassMe
       abortRef.current = false;
       calculateEta(targetContacts.length, speed);
       
-      // Limpiar multimedia previa
       setMediaFile(null);
       setMediaPreview(null);
     }
@@ -73,7 +72,7 @@ export const MassMessageDialog = ({ open, onOpenChange, targetContacts }: MassMe
   };
 
   const calculateEta = (count: number, spd: string) => {
-     let avgSeconds = 12; // Normal
+     let avgSeconds = 12; 
      if (spd === 'SAFE') avgSeconds = 25;
      if (spd === 'FAST') avgSeconds = 6;
      setEta(Math.ceil((count * avgSeconds) / 60));
@@ -159,7 +158,7 @@ export const MassMessageDialog = ({ open, onOpenChange, targetContacts }: MassMe
          
          // LÓGICA ANTI-BAN
          if (i < targetContacts.length - 1) {
-             let minDelay = 8000, maxDelay = 15000; // NORMAL
+             let minDelay = 8000, maxDelay = 15000;
              if (speed === 'SAFE') { minDelay = 15000; maxDelay = 35000; }
              if (speed === 'FAST') { minDelay = 3000; maxDelay = 8000; }
              
@@ -170,6 +169,15 @@ export const MassMessageDialog = ({ open, onOpenChange, targetContacts }: MassMe
      
      if (!abortRef.current) {
         toast.success(`Campaña finalizada: ${successCount} entregados, ${failCount} fallidos.`);
+        
+        // Registrar en la bitácora de actividad
+        await logActivity({
+           action: 'UPDATE',
+           resource: 'LEADS',
+           description: `📣 Campaña enviada a ${targetContacts.length} contactos. Éxitos: ${successCount} | Errores: ${failCount}.`,
+           status: failCount > 0 ? 'ERROR' : 'OK'
+        });
+
         setSending(false);
      }
   };
@@ -180,6 +188,12 @@ export const MassMessageDialog = ({ open, onOpenChange, targetContacts }: MassMe
      setPaused(false);
      toast.info("Campaña abortada.");
   };
+
+  // Lógica de Vista Previa
+  const previewContact = targetContacts.length > 0 ? targetContacts[0] : { nombre: 'Juan Pérez', ciudad: 'Monterrey' };
+  const previewMessage = message
+     .replace(/{nombre}/g, previewContact.nombre?.split(' ')[0] || 'amigo')
+     .replace(/{ciudad}/g, previewContact.ciudad || 'tu ciudad');
 
   const progressPercent = progress.total > 0 ? Math.round((progress.current / progress.total) * 100) : 0;
 
@@ -278,7 +292,7 @@ export const MassMessageDialog = ({ open, onOpenChange, targetContacts }: MassMe
               )}
 
               <ScrollArea className="flex-1 p-6">
-                 <div className="max-w-2xl mx-auto space-y-6">
+                 <div className="max-w-2xl mx-auto space-y-6 pb-6">
                     
                     {/* ZONA DE MULTIMEDIA */}
                     <div className="space-y-2">
@@ -317,7 +331,7 @@ export const MassMessageDialog = ({ open, onOpenChange, targetContacts }: MassMe
                           value={message}
                           onChange={e => setMessage(e.target.value)}
                           placeholder="Escribe tu mensaje persuasivo aquí. Puedes usar las variables de abajo para personalizarlo..."
-                          className="bg-[#121214] border-[#222225] text-sm min-h-[250px] focus:border-indigo-500 rounded-2xl resize-y custom-scrollbar text-slate-200 leading-relaxed p-5"
+                          className="bg-[#121214] border-[#222225] text-sm min-h-[180px] focus:border-indigo-500 rounded-2xl resize-y custom-scrollbar text-slate-200 leading-relaxed p-5"
                           disabled={sending}
                        />
                        <div className="flex flex-wrap gap-2 pt-2">
@@ -325,6 +339,30 @@ export const MassMessageDialog = ({ open, onOpenChange, targetContacts }: MassMe
                           <Badge variant="outline" className="text-[10px] py-1.5 px-3 border-[#333336] bg-[#161618] text-slate-400 cursor-pointer hover:bg-indigo-500/20 hover:text-indigo-400 transition-colors" onClick={() => setMessage(m => m + '{ciudad}')}>+ Inyectar Ciudad <code>{"{ciudad}"}</code></Badge>
                        </div>
                     </div>
+
+                    {/* VISTA PREVIA EN TIEMPO REAL */}
+                    {message.trim() && (
+                       <div className="mt-8 pt-6 border-t border-[#1a1a1a] animate-in fade-in duration-300">
+                          <Label className="text-[10px] uppercase font-bold text-indigo-400 flex items-center gap-2 mb-4">
+                             <Eye className="w-3.5 h-3.5" /> Vista Previa (Simulando entrega a {previewContact.nombre?.split(' ')[0] || 'Cliente'})
+                          </Label>
+                          <div className="flex justify-end w-full">
+                             <div className="max-w-[85%] flex flex-col items-end">
+                                <div className="p-4 bg-emerald-950/40 border border-emerald-500/40 text-emerald-50 rounded-2xl rounded-br-sm shadow-lg">
+                                   {mediaPreview && (
+                                      <div className="mb-3">
+                                         <img src={mediaPreview} alt="Preview Adjunto" className="w-full max-w-[280px] rounded-lg border border-white/10" />
+                                      </div>
+                                   )}
+                                   <p className="whitespace-pre-wrap text-sm leading-relaxed">{previewMessage}</p>
+                                </div>
+                                <span className="text-[9px] font-bold uppercase tracking-widest text-slate-600 mt-2 px-2">
+                                   VISTA PREVIA • AHORA
+                                </span>
+                             </div>
+                          </div>
+                       </div>
+                    )}
                  </div>
               </ScrollArea>
            </div>
