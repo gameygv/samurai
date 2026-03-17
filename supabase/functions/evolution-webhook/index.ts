@@ -26,10 +26,18 @@ serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
   try {
-    const payload = await req.json();
-    console.log(`[webhook] Recibido evento de Gowa para canal ${channelId}:`, JSON.stringify(payload));
+    const payloadText = await req.text();
+    let payload;
+    try {
+      payload = JSON.parse(payloadText);
+    } catch (e) {
+      console.error("Payload no es JSON válido:", payloadText);
+      return new Response("Invalid JSON", { status: 400 });
+    }
+
+    console.log(`[webhook] Recibido evento GOWA/Evo para canal ${channelId}`);
     
-    // Log de auditoría para diagnóstico
+    // Log para auditoría
     await supabaseClient.from('activity_logs').insert({
         action: 'UPDATE',
         resource: 'SYSTEM',
@@ -38,39 +46,36 @@ serve(async (req) => {
         metadata: { payload_raw: payload }
     });
 
-    let phone, text = '', pushName = 'Cliente WA', mediaUrl = null, mediaType = null;
+    let phone, text = '', pushName = 'Cliente WA';
 
-    // --- 1. PROCESAR CANAL ---
-    const { data: channel } = await supabaseClient.from('whatsapp_channels').select('*').eq('id', channelId).single();
-    if (!channel) return new Response('invalid_channel');
+    // --- LÓGICA GOWA EXACTA SEGÚN REPORTE ---
+    if (payload.device_id && payload.event) {
+       if (payload.event !== 'message') return new Response('ok_ignored_event');
+       if (!payload.payload) return new Response('ok_no_payload');
+       if (payload.payload.is_from_me) return new Response('ok_self_msg');
 
-    // --- 2. DETECCIÓN DE FORMATO GOWA ---
-    if (payload.payload && payload.event === 'message') {
-       const data = payload.payload;
-       if (data.is_from_me) return new Response('ignored_self');
-       
-       phone = data.from; // Viene como 521... @s.whatsapp.net
-       pushName = data.from_name || 'Lead Gowa';
-       text = data.body || '';
+       phone = payload.payload.from;
+       pushName = payload.payload.from_name || 'Lead Gowa';
+       text = payload.payload.body || '';
     } 
-    // Otros formatos (Evolution/Meta)
+    // --- LÓGICA EVOLUTION LEGACY ---
     else {
        const msg = payload.data?.[0] || payload.data || payload;
-       if (msg?.key?.fromMe) return new Response('ignored');
+       if (msg?.key?.fromMe) return new Response('ok_ignored_self');
        phone = msg?.key?.remoteJid?.split('@')[0] || payload.phone || payload.sender;
        pushName = payload.pushName || msg?.pushName || 'Lead WA';
        text = msg?.message?.conversation || msg?.message?.extendedTextMessage?.text || msg?.text || payload.message || '';
     }
 
-    if (!phone) return new Response('invalid_data');
+    if (!phone) return new Response('invalid_phone_data');
     
-    // Limpieza de teléfono (Mexican 1-digit fix)
+    // Limpieza de teléfono (Cortar el @s.whatsapp.net y Fix de México)
     let cleanPhone = phone.split('@')[0].replace(/\D/g, '');
     if (cleanPhone.startsWith('52') && cleanPhone.length === 12 && cleanPhone[2] !== '1') {
         cleanPhone = '521' + cleanPhone.substring(2);
     }
 
-    // --- 3. ACTUALIZAR CRM ---
+    // --- ACTUALIZAR CRM ---
     let { data: lead } = await supabaseClient.from('leads').select('*').or(`telefono.ilike.%${cleanPhone.slice(-10)}%`).limit(1).maybeSingle();
     
     if (!lead) {
@@ -96,7 +101,7 @@ serve(async (req) => {
         platform: 'WHATSAPP'
     });
 
-    // --- 4. LANZAR IA ---
+    // --- LANZAR IA ---
     if (!lead.ai_paused) {
        fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/process-samurai-response?phone=${cleanPhone}&client_message=${encodeURIComponent(text)}`, {
            method: 'POST',

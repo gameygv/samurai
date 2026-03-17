@@ -4,7 +4,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-device-id',
 }
 
 serve(async (req) => {
@@ -25,53 +25,69 @@ serve(async (req) => {
     let endpoint = channel.api_url;
     if (endpoint.endsWith('/')) endpoint = endpoint.slice(0, -1);
 
-    let payload = {};
     let headers = { 'Content-Type': 'application/json' };
+    let bodyContent: any;
 
-    // --- LÓGICA GOWA (Fix Unauthorized) ---
+    // --- LÓGICA GOWA ESTRICTA SEGÚN REPORTE ---
     if (provider === 'gowa') {
-      // Gowa suele usar 'apikey' directamente en el header
-      headers['apikey'] = channel.api_key;
-      headers['Authorization'] = `Bearer ${channel.api_key}`; // Redundancia
+      // 1. Basic Auth
+      const authHeader = channel.api_key.startsWith('Basic ') ? channel.api_key : `Basic ${channel.api_key}`;
+      headers['Authorization'] = authHeader;
+      
+      // 2. X-Device-Id Header
+      headers['X-Device-Id'] = channel.instance_id;
       
       if (mediaData?.url) {
-        endpoint = `${endpoint}/send-media`;
-        payload = { 
-            phone: cleanPhone,
-            device_id: channel.instance_id,
-            instance_id: channel.instance_id,
-            media_url: mediaData.url, 
-            caption: message || "", 
-            type: mediaData.type 
-        };
+        // 3. Enviar Media como multipart/form-data
+        delete headers['Content-Type']; // fetch lo asigna automáticamente para form-data
+        
+        const fileRes = await fetch(mediaData.url);
+        const fileBlob = await fileRes.blob();
+        
+        const formData = new FormData();
+        formData.append('phone', cleanPhone);
+        if (message) formData.append('caption', message);
+        
+        let endpointSuffix = 'file';
+        if (mediaData.type === 'image') {
+            endpointSuffix = 'image';
+            formData.append('image', fileBlob, mediaData.name || 'image.jpg');
+        } else if (mediaData.type === 'video') {
+            endpointSuffix = 'video';
+            formData.append('video', fileBlob, mediaData.name || 'video.mp4');
+        } else if (mediaData.type === 'audio') {
+            endpointSuffix = 'audio';
+            formData.append('audio', fileBlob, mediaData.name || 'audio.mp3');
+        } else {
+            formData.append('file', fileBlob, mediaData.name || 'document.pdf');
+        }
+
+        endpoint = `${endpoint}/send/${endpointSuffix}`;
+        bodyContent = formData;
       } else {
-        endpoint = `${endpoint}/send-message`;
-        payload = { 
-            phone: cleanPhone,
-            device_id: channel.instance_id,
-            instance_id: channel.instance_id,
-            message: message 
-        };
+        // Enviar texto normal
+        endpoint = `${endpoint}/send/message`;
+        bodyContent = JSON.stringify({ phone: cleanPhone, message: message });
       }
     } 
     else if (provider === 'meta') {
       endpoint = `https://graph.facebook.com/v19.0/${channel.instance_id}/messages`;
       headers['Authorization'] = `Bearer ${channel.api_key}`;
-      payload = { messaging_product: "whatsapp", to: cleanPhone, type: "text", text: { body: message } };
+      bodyContent = JSON.stringify({ messaging_product: "whatsapp", to: cleanPhone, type: "text", text: { body: message } });
     } 
     else {
       // Evolution Standard
       headers['apikey'] = channel.api_key;
       endpoint = `${endpoint}/message/sendText/${channel.instance_id}`;
-      payload = { number: cleanPhone, text: message };
+      bodyContent = JSON.stringify({ number: cleanPhone, text: message });
     }
 
-    console.log(`[send-message] Enviando a: ${endpoint}`);
+    console.log(`[send-message] Ejecutando POST a: ${endpoint}`);
 
     const response = await fetch(endpoint, { 
         method: 'POST', 
         headers, 
-        body: JSON.stringify(payload),
+        body: bodyContent,
         signal: AbortSignal.timeout(15000)
     });
 
@@ -80,9 +96,10 @@ serve(async (req) => {
     try { resData = JSON.parse(resText); } catch(e) { resData = { rawResponse: resText }; }
 
     if (!response.ok) {
+       console.error("[send-message] Error de servidor Gowa:", resText);
        return new Response(JSON.stringify({ 
          success: false, 
-         error: resData.message || resData.error || resText || "Error de credenciales (401)",
+         error: resData.message || resData.error || resText || "Error del servidor Gowa",
          status: response.status 
        }), { 
          status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
@@ -94,6 +111,7 @@ serve(async (req) => {
     });
 
   } catch (error: any) {
+    console.error("[send-message] Excepción capturada:", error.message);
     return new Response(JSON.stringify({ success: false, error: error.message }), { 
       status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
     });
