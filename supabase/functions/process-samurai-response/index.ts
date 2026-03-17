@@ -32,16 +32,8 @@ serve(async (req) => {
        finalInput = `[TRANSCRIPCIÓN DE AUDIO]: ${clientMessage} (El cliente envió una nota de voz)`;
     }
 
-    // --- 1. OBTENER CONTEXTO ---
-    const { data: context } = await supabaseClient.functions.invoke('get-samurai-context', {
-        body: { lead, platform: lead.platform }
-    });
-
-    const { data: history } = await supabaseClient.from('conversaciones')
-        .select('emisor, mensaje')
-        .eq('lead_id', lead.id)
-        .order('created_at', { ascending: true })
-        .limit(15);
+    const { data: context } = await supabaseClient.functions.invoke('get-samurai-context', { body: { lead, platform: lead.platform } });
+    const { data: history } = await supabaseClient.from('conversaciones').select('emisor, mensaje').eq('lead_id', lead.id).order('created_at', { ascending: true }).limit(15);
 
     const messages = [
         { role: 'system', content: context.system_prompt },
@@ -49,7 +41,6 @@ serve(async (req) => {
         { role: 'user', content: finalInput }
     ];
 
-    // --- 2. GENERAR RESPUESTA ---
     const aiRes = await fetch("https://api.openai.com/v1/chat/completions", {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${openaiKey}`, 'Content-Type': 'application/json' },
@@ -60,7 +51,6 @@ serve(async (req) => {
     let aiText = aiData.choices?.[0]?.message?.content || '';
 
     if (aiText) {
-        // Extraer si la IA decidió mandar un poster (<<MEDIA:url>>)
         let mediaUrlToSend = null;
         let mediaTypeToSend = 'image';
         const mediaRegex = /<<MEDIA:\s*(.+?)\s*>>/i;
@@ -74,39 +64,18 @@ serve(async (req) => {
         const { data: channel } = await supabaseClient.from('whatsapp_channels').select('id').eq('id', lead.channel_id).single();
         if (!channel) return new Response('no_channel');
 
-        // Construir payload de envío
-        const payload: any = {
-            channel_id: channel.id,
-            phone: cleanPhone,
-            message: aiText
-        };
+        const payload: any = { channel_id: channel.id, phone: cleanPhone, message: aiText };
+        if (mediaUrlToSend) payload.mediaData = { url: mediaUrlToSend, type: mediaTypeToSend, name: 'poster.jpg' };
 
-        if (mediaUrlToSend) {
-            payload.mediaData = { url: mediaUrlToSend, type: mediaTypeToSend, name: 'poster.jpg' };
-        }
+        await supabaseClient.functions.invoke('send-message-v3', { body: payload });
 
-        // --- 3. ENVIAR POR EL TÚNEL ---
-        const sendRes = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/send-message-v3`, {
-            method: 'POST',
-            headers: { 'Authorization': `Bearer ${Deno.env.get('SUPABASE_ANON_KEY')}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        });
-
-        // Registrar SIEMPRE en la base de datos, aunque falle la entrega a WhatsApp
         await supabaseClient.from('conversaciones').insert({ 
-            lead_id: lead.id, 
-            emisor: 'IA', 
-            mensaje: aiText || '[Poster Enviado]', 
-            platform: 'WHATSAPP',
+            lead_id: lead.id, emisor: 'IA', mensaje: aiText || '[Poster Enviado]', platform: 'WHATSAPP',
             metadata: mediaUrlToSend ? { mediaUrl: mediaUrlToSend, mediaType: mediaTypeToSend } : {}
         });
 
-        // Forzar análisis del lead en background
-        fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/analyze-leads`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${Deno.env.get('SUPABASE_ANON_KEY')}` },
-            body: JSON.stringify({ lead_id: lead.id })
-        }).catch(() => {});
+        // Esperar seguro
+        await supabaseClient.functions.invoke('analyze-leads', { body: { lead_id: lead.id } });
     }
 
     return new Response('ok', { headers: corsHeaders });

@@ -79,26 +79,21 @@ RESPONDE SOLO EN ESTE FORMATO JSON:
 
     await supabaseClient.from('leads').update(updates).eq('id', lead_id);
 
-    // Disparar CAPI si tenemos datos significativos (Ya no es obligatorio el email, Nombre + Ciudad basta para Meta)
+    // Disparar CAPI de forma SEGURA (Awaiting la promesa)
     const hasMeaningfulData = (result.email && result.email !== 'null') || 
                               (result.ciudad && result.ciudad !== 'null') || 
-                              (result.nombre && result.nombre !== 'null' && !result.nombre.includes('Cliente WA'));
+                              (result.nombre && result.nombre !== 'null' && !result.nombre.includes('Cliente WA') && !result.nombre.includes('Lead Gowa'));
 
     if (hasMeaningfulData && !lead.capi_lead_event_sent_at) {
-        fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/meta-capi-sender`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${Deno.env.get('SUPABASE_ANON_KEY')}` },
-            body: JSON.stringify({
+        await supabaseClient.functions.invoke('meta-capi-sender', {
+            body: {
                 eventData: {
                     event_name: 'Lead', lead_id,
                     user_data: { em: result.email, ph: lead.telefono, fn: result.nombre || lead.nombre, ct: result.ciudad || lead.ciudad }
                 },
-                config: { 
-                    pixel_id: configMap['meta_pixel_id'], 
-                    access_token: configMap['meta_access_token'] 
-                }
-            })
-        }).catch(() => {});
+                config: { pixel_id: configMap['meta_pixel_id'], access_token: configMap['meta_access_token'] }
+            }
+        });
         await supabaseClient.from('leads').update({ capi_lead_event_sent_at: new Date().toISOString() }).eq('id', lead_id);
     }
 
