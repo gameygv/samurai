@@ -7,8 +7,6 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-
 serve(async (req) => {
   const url = new URL(req.url);
   const channelIdParam = url.searchParams.get('channel_id');
@@ -57,30 +55,30 @@ serve(async (req) => {
        }
     }
     if (!channel) {
-       const { data: firstActive } = await supabaseClient.from('whatsapp_channels').select('*').eq('is_active', true).limit(1).maybeSingle();
-       if (data) channel = firstActive;
+       const { data } = await supabaseClient.from('whatsapp_channels').select('*').eq('is_active', true).limit(1).maybeSingle();
+       if (data) channel = data;
     }
     if (!channel) return new Response('invalid_channel', { status: 200 });
 
-    let phone, text = '', pushName = 'Cliente WA', mediaUrl = null, mediaType = null, base64String = null;
+    let phone, text = '', pushName = 'Cliente WA', mediaType = null, messageId = null;
 
-    // --- 2. PARSEAR MENSAJE ---
+    // --- 2. PARSEAR MENSAJE GOWA ---
     if (payload.device_id && payload.event) { 
        if (payload.event !== 'message') return new Response('ignored_event', { status: 200 });
        if (!payload.payload || payload.payload.is_from_me) return new Response('ignored_self', { status: 200 });
 
        const p = payload.payload;
        phone = p.from;
+       messageId = p.id;
        pushName = p.from_name || 'Lead Gowa';
-       const GOWA_BASE_URL = channel.api_url.endsWith('/') ? channel.api_url.slice(0, -1) : channel.api_url;
 
-       if (p.image) { text = p.body || "[Imagen]"; mediaType = 'image'; if (p.image.startsWith('data:')) base64String = p.image; else mediaUrl = `${GOWA_BASE_URL}/${p.image}`; } 
-       else if (p.video) { text = p.body || "[Video]"; mediaType = 'video'; if (p.video.startsWith('data:')) base64String = p.video; else mediaUrl = `${GOWA_BASE_URL}/${p.video}`; } 
-       else if (p.audio) { text = "[Audio]"; mediaType = 'audio'; if (p.audio.startsWith('data:')) base64String = p.audio; else { const audioPath = p.audio.split(";")[0].trim(); mediaUrl = `${GOWA_BASE_URL}/${audioPath}`; } } 
-       else if (p.document) { text = p.body || "[Documento]"; mediaType = 'document'; if (p.document.startsWith('data:')) base64String = p.document; else mediaUrl = `${GOWA_BASE_URL}/${p.document}`; } 
+       if (p.image) { text = p.body || "[Imagen]"; mediaType = 'image'; } 
+       else if (p.video) { text = p.body || "[Video]"; mediaType = 'video'; } 
+       else if (p.audio) { text = "[Audio]"; mediaType = 'audio'; } 
+       else if (p.document) { text = p.body || "[Documento]"; mediaType = 'document'; } 
        else if (p.body) { text = p.body; mediaType = 'text'; }
     } else { 
-       if (payload.event && payload.event !== 'messages.upsert') return new Response('ignored_event', { status: 200 });
+       // Fallback Evolution
        const msg = payload.data?.[0] || payload.data || payload;
        if (msg?.key?.fromMe || payload.fromMe) return new Response('ignored_self', { status: 200 });
        phone = msg?.key?.remoteJid?.split('@')[0] || payload.phone || payload.sender;
@@ -94,43 +92,39 @@ serve(async (req) => {
     let cleanPhone = phone.split('@')[0].replace(/\D/g, '');
     if (cleanPhone.startsWith('52') && cleanPhone.length === 12 && cleanPhone[2] !== '1') cleanPhone = '521' + cleanPhone.substring(2);
 
-    // --- 3. BÚSQUEDA PROFUNDA DE AUDIO (RETRY LOOP) ---
+    // --- 3. DESCARGA DEFINITIVA (SOLUCIÓN 2 PASOS GOWA) ---
     let finalMediaUrl = null;
     let downloadedBlob = null; 
 
-    if (base64String) {
-        const arr = base64String.split(',');
-        const bstr = atob(arr[1]);
-        let n = bstr.length; const u8arr = new Uint8Array(n);
-        while(n--){ u8arr[n] = bstr.charCodeAt(n); }
-        downloadedBlob = new Blob([u8arr], {type: mediaType === 'audio' ? 'audio/ogg' : 'application/octet-stream'});
-    } else if (mediaUrl) {
-        let attempts = 0;
-        const maxAttempts = 4;
-        const authHeader = channel.api_key.startsWith('Basic ') ? channel.api_key : `Basic ${channel.api_key}`;
+    if (mediaType && mediaType !== 'text' && channel.provider === 'gowa' && messageId) {
+        try {
+            const GOWA_BASE_URL = channel.api_url.endsWith('/') ? channel.api_url.slice(0, -1) : channel.api_url;
+            const headers = {
+                "Authorization": channel.api_key.startsWith('Basic ') ? channel.api_key : `Basic ${channel.api_key}`,
+                "X-Device-Id": channel.instance_id
+            };
 
-        while (attempts < maxAttempts && !downloadedBlob) {
-            try {
-                attempts++;
-                const waitTime = attempts === 1 ? 1500 : 2500; // Espera más en cada intento
-                await logTrace(`Intento ${attempts}/${maxAttempts} de descarga de audio. Esperando ${waitTime}ms...`);
-                await sleep(waitTime);
+            // PASO 1: Trigger de descarga
+            await logTrace(`Triggering GOWA download for ${messageId}...`);
+            const triggerUrl = `${GOWA_BASE_URL}/message/${messageId}/download?phone=${cleanPhone}`;
+            const triggerRes = await fetch(triggerUrl, { headers });
+            const triggerData = await triggerRes.json();
 
-                const mediaRes = await fetch(mediaUrl, { headers: { 'Authorization': authHeader } });
-                if (mediaRes.ok) {
-                    downloadedBlob = await mediaRes.blob();
-                    await logTrace(`¡Audio recuperado con éxito en el intento ${attempts}!`);
-                } else {
-                    await logTrace(`Fallo intento ${attempts}: HTTP ${mediaRes.status}`, true);
+            if (triggerData.code === "SUCCESS" && triggerData.results?.file_path) {
+                // PASO 2: Descargar binario real
+                const realPath = triggerData.results.file_path;
+                const binaryUrl = `${GOWA_BASE_URL}/${realPath}`;
+                await logTrace(`Downloading binary from ${realPath}...`);
+                
+                const binaryRes = await fetch(binaryUrl, { headers });
+                if (binaryRes.ok) {
+                    downloadedBlob = await binaryRes.blob();
+                    await logTrace(`¡Archivo recuperado con éxito!`);
                 }
-            } catch (e) { await logTrace(`Error en intento ${attempts}: ${e.message}`, true); }
-        }
-    }
-
-    // SI DESPUÉS DE TODO NO HAY AUDIO, CAMBIAMOS EL TEXTO PARA LA IA
-    if (mediaType === 'audio' && !downloadedBlob) {
-       text = "[ERROR TÉCNICO: Tu audio llegó con problemas de conexión y no pude escucharlo. ¿Podrías repetirlo o escribirme tu duda?]";
-       await logTrace("Audio irrecuperable tras 4 intentos. Notificando a Sam.", true);
+            } else {
+                await logTrace(`Fallo trigger GOWA: ${JSON.stringify(triggerData)}`, true);
+            }
+        } catch (e) { await logTrace(`Error en flujo GOWA: ${e.message}`, true); }
     }
 
     if (downloadedBlob) {
