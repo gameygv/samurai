@@ -27,9 +27,10 @@ serve(async (req) => {
 Eres el Analista de Datos de Inteligencia del CRM. Tu única misión es extraer datos críticos del chat.
 
 === EXTRACCIÓN CRÍTICA ===
-1. NOMBRE: Si el cliente dice "Soy Pedro", "Me llamo Laura", etc., extrae el nombre.
-2. CIUDAD: Si menciona una ciudad, estado, país o municipio, extraelo (Ej: "León, Guanajuato", "CDMX", "Bogotá").
+1. NOMBRE: Si el cliente dice "Soy Pedro", "Me llamo Laura", extrae el nombre.
+2. CIUDAD: Si menciona una ciudad, estado, país o municipio, extraelo.
 3. EMAIL: Busca correos electrónicos.
+CRÍTICO: Si no encuentras un dato, debes devolver exactamente null (no uses "N/A", "Desconocido", ni "No especificado").
 
 === REGLAS DE ROUTING (GEOPROXIMIDAD) ===
 Asigna un responsable basado en la CIUDAD extraída:
@@ -62,27 +63,33 @@ RESPONDE SOLO EN ESTE FORMATO JSON:
     const result = JSON.parse(aiData.choices[0].message.content);
 
     const updates: any = { last_ai_analysis: new Date().toISOString() };
-    if (result.nombre && result.nombre !== 'null') updates.nombre = result.nombre;
-    if (result.email && result.email !== 'null') updates.email = result.email;
-    if (result.ciudad && result.ciudad !== 'null') updates.ciudad = result.ciudad;
+    
+    // Asignación segura de variables
+    if (result.nombre && result.nombre !== 'null' && result.nombre !== null) updates.nombre = result.nombre;
+    if (result.email && result.email !== 'null' && result.email !== null) updates.email = result.email;
+    if (result.ciudad && result.ciudad !== 'null' && result.ciudad !== null) updates.ciudad = result.ciudad;
     if (result.intent) updates.buying_intent = result.intent;
     if (result.perfil_psicologico) updates.perfil_psicologico = result.perfil_psicologico;
     
-    if (result.suggested_agent_id && !lead.assigned_to) {
-        updates.assigned_to = result.suggested_agent_id;
-        await supabaseClient.from('activity_logs').insert({
-            action: 'UPDATE', resource: 'USERS', 
-            description: `Routing IA: Lead asignado a agente por proximidad en '${result.ciudad}'.`,
-            status: 'OK'
-        });
+    // BLINDAJE: Verificación de Integridad Referencial
+    if (result.suggested_agent_id && result.suggested_agent_id !== 'null' && result.suggested_agent_id !== null && !lead.assigned_to) {
+        // Confirmar que el ID que inventó la IA realmente existe en la BD
+        if (agents.some(a => a.id === result.suggested_agent_id)) {
+            updates.assigned_to = result.suggested_agent_id;
+            await supabaseClient.from('activity_logs').insert({
+                action: 'UPDATE', resource: 'USERS', 
+                description: `Routing IA: Lead asignado a agente por proximidad en '${result.ciudad}'.`,
+                status: 'OK'
+            });
+        }
     }
 
     await supabaseClient.from('leads').update(updates).eq('id', lead_id);
 
-    // Disparar CAPI de forma SEGURA (Awaiting la promesa)
-    const hasMeaningfulData = (result.email && result.email !== 'null') || 
-                              (result.ciudad && result.ciudad !== 'null') || 
-                              (result.nombre && result.nombre !== 'null' && !result.nombre.includes('Cliente WA') && !result.nombre.includes('Lead Gowa'));
+    // Disparar CAPI (await para asegurar que no se mate el hilo)
+    const hasMeaningfulData = (result.email && result.email !== 'null' && result.email !== null) || 
+                              (result.ciudad && result.ciudad !== 'null' && result.ciudad !== null) || 
+                              (result.nombre && result.nombre !== 'null' && result.nombre !== null && !result.nombre.includes('Cliente WA') && !result.nombre.includes('Lead Gowa'));
 
     if (hasMeaningfulData && !lead.capi_lead_event_sent_at) {
         await supabaseClient.functions.invoke('meta-capi-sender', {

@@ -118,7 +118,11 @@ export const MemoryPanel = ({
   };
 
   const handleAddTag = async (tagText: string) => {
-      const newTags = [...(memoryForm.tags || []), tagText];
+      // BLINDAJE: Evitar tags duplicados
+      const currentTags = memoryForm.tags || [];
+      if (currentTags.includes(tagText)) return;
+
+      const newTags = [...currentTags, tagText];
       setMemoryForm({...memoryForm, tags: newTags});
       await supabase.from('leads').update({ tags: newTags }).eq('id', currentAnalysis.id);
   };
