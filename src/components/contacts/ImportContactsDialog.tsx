@@ -1,12 +1,13 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Papa from 'papaparse';
 import { supabase } from '@/integrations/supabase/client';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import { Upload, Loader2, FileSpreadsheet, CheckCircle2 } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Upload, Loader2, FileSpreadsheet, CheckCircle2, Users } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface ImportContactsDialogProps {
@@ -19,6 +20,24 @@ export const ImportContactsDialog = ({ open, onOpenChange, onSuccess }: ImportCo
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState<{ total: number, processed: number }>({ total: 0, processed: 0 });
+  
+  const [groupName, setGroupName] = useState("");
+  const [existingGroups, setExistingGroups] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (open) {
+      setFile(null);
+      setGroupName("");
+      setProgress({ total: 0, processed: 0 });
+      // Cargar grupos existentes para autocompletar
+      supabase.from('contacts').select('grupo').not('grupo', 'is', null).then(({data}) => {
+        if (data) {
+          const unique = Array.from(new Set(data.map(d => d.grupo)));
+          setExistingGroups(unique as string[]);
+        }
+      });
+    }
+  }, [open]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
@@ -37,11 +56,9 @@ export const ImportContactsDialog = ({ open, onOpenChange, onSuccess }: ImportCo
         const rows = results.data as any[];
         
         const formattedContacts = rows.map(row => {
-            // Normalización robusta de teléfono
             let cleanPhone = row.phone ? String(row.phone).replace(/\D/g, '') : null;
             if (!cleanPhone || cleanPhone.length < 10) return null;
             
-            // Si el teléfono tiene exactamente 10 dígitos, asumimos que es de México (+52)
             if (cleanPhone.length === 10) {
                cleanPhone = '52' + cleanPhone;
             }
@@ -49,14 +66,12 @@ export const ImportContactsDialog = ({ open, onOpenChange, onSuccess }: ImportCo
             let tags: string[] = [];
             const stdKeys = ['phone', 'email', 'fn', 'ln', 'ct', 'st', 'zip', 'country', 'add_to_messaging_customer_base_for_whatsapp', 'value', 'dob', 'gen', 'age', 'madid', 'uid'];
             
-            // Auto-tagging: Cualquier columna no estándar se convierte en Etiqueta
             Object.entries(row).forEach(([k, v]) => {
                 if (!stdKeys.includes(k.toLowerCase()) && v && String(v).trim() !== '') {
                     tags.push(String(v).trim());
                 }
             });
             
-            // Extraer campos específicos de marketing
             if (row.add_to_messaging_customer_base_for_whatsapp) tags.push(String(row.add_to_messaging_customer_base_for_whatsapp).trim());
             if (row.value) tags.push(`Nivel: ${row.value}`);
             if (row.madid) tags.push(String(row.madid).trim());
@@ -70,7 +85,8 @@ export const ImportContactsDialog = ({ open, onOpenChange, onSuccess }: ImportCo
                 estado: row.st ? String(row.st).trim() : null,
                 cp: row.zip ? String(row.zip).trim() : null,
                 pais: row.country ? String(row.country).trim() : 'mx',
-                tags: tags.filter(Boolean)
+                tags: tags.filter(Boolean),
+                grupo: groupName.trim() || null // Asignamos el grupo seleccionado
             };
         }).filter(Boolean);
 
@@ -82,22 +98,19 @@ export const ImportContactsDialog = ({ open, onOpenChange, onSuccess }: ImportCo
             return;
         }
 
-        // Subir en Lotes (Batches)
         const batchSize = 500;
         let successCount = 0;
         try {
             for (let i = 0; i < formattedContacts.length; i += batchSize) {
                const batch = formattedContacts.slice(i, i + batchSize);
-               // onConflict actualizará los datos si el teléfono ya existe
                const { error } = await supabase.from('contacts').upsert(batch, { onConflict: 'telefono' });
                if (error) throw error;
                successCount += batch.length;
                setProgress(prev => ({ ...prev, processed: successCount }));
             }
-            toast.success(`Importación finalizada. ${successCount} contactos listos.`);
+            toast.success(`Importación finalizada. ${successCount} contactos en el grupo ${groupName || 'General'}.`);
             onSuccess();
             onOpenChange(false);
-            setFile(null);
         } catch (err: any) {
             toast.error("Error durante la importación: " + err.message);
         } finally {
@@ -115,11 +128,30 @@ export const ImportContactsDialog = ({ open, onOpenChange, onSuccess }: ImportCo
              <FileSpreadsheet className="w-5 h-5" /> Importación Masiva (CSV)
           </DialogTitle>
           <DialogDescription className="text-slate-400 text-xs">
-             Sube un archivo .csv. Las columnas no reconocidas se convertirán en etiquetas. <br/>Los números a 10 dígitos se les agregará "52" automáticamente.
+             Sube tu archivo .csv y asígnales un grupo de campaña.
           </DialogDescription>
         </DialogHeader>
         
-        <div className="py-6 space-y-4">
+        <div className="py-4 space-y-5">
+           
+           <div className="space-y-2 bg-indigo-950/20 p-4 border border-indigo-500/20 rounded-xl">
+              <Label className="text-xs uppercase font-bold text-indigo-400 flex items-center gap-2">
+                 <Users className="w-4 h-4"/> Grupo de Usuarios (Opcional)
+              </Label>
+              <Input
+                list="existing-groups"
+                value={groupName}
+                onChange={e => setGroupName(e.target.value)}
+                placeholder="Ej: Campaña Noviembre, Nivel 1..."
+                className="bg-slate-950 border-slate-800 h-10 text-slate-200"
+                disabled={uploading}
+              />
+              <datalist id="existing-groups">
+                {existingGroups.map(g => <option key={g} value={g} />)}
+              </datalist>
+              <p className="text-[10px] text-slate-500 italic">Escribe un nombre nuevo o selecciona uno existente de la lista para agrupar estos contactos.</p>
+           </div>
+
            <div className="border-2 border-dashed border-slate-700 rounded-xl p-8 text-center hover:border-indigo-500 transition-colors bg-slate-950/50">
               <input type="file" id="csv-upload" className="hidden" accept=".csv" onChange={handleFileChange} disabled={uploading} />
               <label htmlFor="csv-upload" className="cursor-pointer flex flex-col items-center justify-center w-full h-full">
@@ -133,7 +165,6 @@ export const ImportContactsDialog = ({ open, onOpenChange, onSuccess }: ImportCo
                     <>
                        <Upload className="w-8 h-8 text-slate-500 mb-2" />
                        <span className="text-sm font-medium text-slate-300">Seleccionar archivo CSV</span>
-                       <p className="text-[10px] text-slate-500 mt-2">Cabeceras recomendadas: phone, email, fn, ct</p>
                     </>
                  )}
               </label>

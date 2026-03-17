@@ -6,6 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { 
   Contact, Search, Loader2, MapPin, Mail, Phone, ExternalLink, 
   UserPlus, Tag, Trash2, RefreshCw, Users, FileSpreadsheet, Megaphone
@@ -26,6 +27,9 @@ import {
 const Contacts = () => {
   const { user, isManager } = useAuth();
   const [contacts, setContacts] = useState<any[]>([]);
+  const [groups, setGroups] = useState<string[]>([]);
+  const [selectedGroup, setSelectedGroup] = useState<string>('ALL');
+  
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   
@@ -56,8 +60,11 @@ const Contacts = () => {
       .select('*, leads(id, buying_intent, payment_status, lead_score, ai_paused, summary, telefono, nombre, apellido, email, ciudad, estado, cp, pais, tags)')
       .order('updated_at', { ascending: false });
 
-    if (!error) {
-      setContacts(data || []);
+    if (!error && data) {
+      setContacts(data);
+      // Extraer grupos únicos
+      const uniqueGroups = Array.from(new Set(data.map(d => d.grupo).filter(Boolean))) as string[];
+      setGroups(uniqueGroups);
     }
     setLoading(false);
   };
@@ -112,7 +119,7 @@ const Contacts = () => {
                tags: contact.tags,
                buying_intent: 'BAJO',
                ai_paused: true,
-               summary: 'Prospecto iniciado desde importación de Contactos.'
+               summary: `Prospecto iniciado desde importación de Contactos. ${contact.grupo ? 'Grupo: '+contact.grupo : ''}`
            }).select().single();
 
            if (error) throw error;
@@ -139,7 +146,6 @@ const Contacts = () => {
     }
   };
 
-  // Safe check for tags filtering
   const getSafeTags = (tags: any) => Array.isArray(tags) ? tags : [];
 
   const filteredContacts = contacts.filter(c => {
@@ -148,7 +154,7 @@ const Contacts = () => {
     const contactTags = getSafeTags(c.tags);
     const leadTags = getSafeTags(l.tags);
     
-    return (
+    const matchesSearch = 
       c.nombre?.toLowerCase().includes(term) ||
       c.apellido?.toLowerCase().includes(term) ||
       c.telefono?.includes(term) ||
@@ -156,8 +162,11 @@ const Contacts = () => {
       c.ciudad?.toLowerCase().includes(term) ||
       c.financial_status?.toLowerCase().includes(term) ||
       contactTags.some((t: string) => t.toLowerCase().includes(term)) ||
-      leadTags.some((t: string) => t.toLowerCase().includes(term))
-    );
+      leadTags.some((t: string) => t.toLowerCase().includes(term));
+      
+    const matchesGroup = selectedGroup === 'ALL' || c.grupo === selectedGroup;
+
+    return matchesSearch && matchesGroup;
   });
 
   const leadData = (c: any) => c.leads || null;
@@ -176,6 +185,16 @@ const Contacts = () => {
             <p className="text-slate-400 text-sm mt-1">Gestión de base de datos, segmentaciones y envíos masivos.</p>
           </div>
           <div className="flex gap-2 items-center flex-wrap">
+            <Select value={selectedGroup} onValueChange={setSelectedGroup}>
+               <SelectTrigger className="w-[160px] bg-slate-900 border-slate-800 h-10 rounded-xl text-indigo-300 font-bold">
+                  <SelectValue placeholder="Todos los Grupos" />
+               </SelectTrigger>
+               <SelectContent className="bg-slate-900 border-slate-800 text-white rounded-xl">
+                  <SelectItem value="ALL">Todos los Grupos</SelectItem>
+                  {groups.map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}
+               </SelectContent>
+            </Select>
+
             <Button onClick={() => setIsMassMessageOpen(true)} variant="secondary" className="bg-amber-600/20 text-amber-500 hover:bg-amber-600/30 border border-amber-500/30 h-10">
               <Megaphone className="w-4 h-4 mr-2" /> Difusión ({filteredContacts.length})
             </Button>
@@ -215,7 +234,6 @@ const Contacts = () => {
                   <TableRow><TableCell colSpan={isManager ? 4 : 3} className="h-40 text-center text-slate-500 italic">No hay registros que coincidan.</TableCell></TableRow>
                 ) : filteredContacts.map((contact) => {
                   const l = leadData(contact);
-                  // Merge safe arrays
                   const combinedTags = Array.from(new Set([...getSafeTags(contact.tags), ...getSafeTags(l?.tags)]));
                   
                   return (
@@ -234,26 +252,30 @@ const Contacts = () => {
                         </div>
                       </TableCell>
                       <TableCell>
-                        <div className="flex flex-col gap-1.5">
+                        <div className="flex flex-col gap-1.5 items-start">
                           <span className={cn("text-[10px] flex items-center gap-1.5", contact.email ? "text-emerald-400" : "text-slate-600 italic")}>
                             <Mail className="w-3 h-3" /> {contact.email || 'Sin email'}
                           </span>
                           <span className={cn("text-[10px] flex items-center gap-1.5", contact.ciudad ? "text-slate-300" : "text-slate-600 italic")}>
                             <MapPin className="w-3 h-3 text-slate-500" /> {contact.ciudad || 'Sin ciudad'}
                           </span>
-                          {combinedTags.length > 0 && (
-                             <div className="flex flex-wrap gap-1 mt-1">
-                                {combinedTags.map((t: string) => {
-                                   const tagConf = localTags.find(lt => lt.text === t);
-                                   const style = tagConf ? { backgroundColor: tagConf.color+'20', color: tagConf.color, borderColor: tagConf.color+'50' } : {};
-                                   return (
-                                      <Badge key={t} variant="outline" className="text-[8px] h-3.5 px-1 font-medium max-w-[120px] truncate" style={style}>
-                                         {t}
-                                      </Badge>
-                                   );
-                                })}
-                             </div>
-                          )}
+                          
+                          <div className="flex flex-wrap gap-1 mt-1">
+                             {contact.grupo && (
+                                <Badge className="bg-purple-900/30 text-purple-400 border-purple-500/30 text-[9px] px-1.5">
+                                   <Users className="w-2.5 h-2.5 mr-1"/> {contact.grupo}
+                                </Badge>
+                             )}
+                             {combinedTags.map((t: string) => {
+                                const tagConf = localTags.find(lt => lt.text === t);
+                                const style = tagConf ? { backgroundColor: tagConf.color+'20', color: tagConf.color, borderColor: tagConf.color+'50' } : {};
+                                return (
+                                   <Badge key={t} variant="outline" className="text-[8px] h-3.5 px-1 font-medium max-w-[120px] truncate" style={style}>
+                                      {t}
+                                   </Badge>
+                                );
+                             })}
+                          </div>
                         </div>
                       </TableCell>
                       {isManager && (
