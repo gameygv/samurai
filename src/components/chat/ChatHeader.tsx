@@ -4,7 +4,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { SheetHeader } from '@/components/ui/sheet';
 import { Play, Pause, Target, ShieldCheck } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { useAuth } from '@/context/AuthContext';
 
 interface ChatHeaderProps {
   lead: any;
@@ -14,6 +14,7 @@ interface ChatHeaderProps {
 }
 
 export const ChatHeader = ({ lead, isAiPaused, sending, onSendCommand }: ChatHeaderProps) => {
+  const { isManager } = useAuth();
   const initials = (lead?.nombre?.substring(0, 2) || 'CL').toUpperCase();
 
   const getIntentBadge = (intent: string) => {
@@ -44,7 +45,7 @@ export const ChatHeader = ({ lead, isAiPaused, sending, onSendCommand }: ChatHea
              <span className="text-[10px] text-slate-500 font-mono">{lead?.telefono}</span>
              <div className="hidden sm:flex items-center gap-1.5 ml-2">
                 {getIntentBadge(lead?.buying_intent)}
-                {lead?.payment_status === 'VALID' && (
+                {isManager && lead?.payment_status === 'VALID' && (
                    <Badge className="bg-emerald-900/30 text-emerald-400 border-emerald-500/30 text-[9px] uppercase h-5"><ShieldCheck className="w-2.5 h-2.5 mr-1"/> Pago OK</Badge>
                 )}
              </div>
@@ -60,7 +61,7 @@ export const ChatHeader = ({ lead, isAiPaused, sending, onSendCommand }: ChatHea
             onClick={() => onSendCommand('#START')}
             disabled={sending}
           >
-            <Play className="w-3 h-3 sm:mr-2" /> <span className="hidden sm:inline">Activar IA (Este Chat)</span>
+            <Play className="w-3 h-3 sm:mr-2" /> <span className="hidden sm:inline">Activar IA</span>
           </Button>
         ) : (
           <Button
@@ -70,7 +71,7 @@ export const ChatHeader = ({ lead, isAiPaused, sending, onSendCommand }: ChatHea
             onClick={() => onSendCommand('#STOP')}
             disabled={sending}
           >
-            <Pause className="w-3 h-3 sm:mr-2" /> <span className="hidden sm:inline">Pausar IA (Este Chat)</span>
+            <Pause className="w-3 h-3 sm:mr-2" /> <span className="hidden sm:inline">Pausar IA</span>
           </Button>
         )}
       </div>
