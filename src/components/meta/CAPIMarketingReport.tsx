@@ -164,6 +164,24 @@ export const CAPIMarketingReport = ({ event }: CAPIMarketingReportProps) => {
         </CardContent>
       </Card>
 
+      {/* Notificación proactiva de Samurai IA si faltan datos */}
+      {missingFields.length > 0 && (
+        <Card className="bg-slate-900 border-amber-500/30 rounded-2xl overflow-hidden border-l-4 border-l-amber-500 shadow-xl">
+          <CardContent className="p-5 space-y-4">
+            <h4 className="text-xs font-bold text-amber-400 uppercase tracking-widest flex items-center gap-2">
+              <Brain className="w-5 h-5" /> Samurai IA: Recolección Activa
+            </h4>
+            <div className="bg-amber-950/20 border border-amber-900/50 p-4 rounded-xl">
+               <p className="text-[11px] text-amber-200 leading-relaxed">
+                  Faltan datos prioritarios para asegurar el <strong>Event Match Quality (EMQ)</strong>, principalmente el <strong className="text-white">Email</strong>. Samurai seguirá conversando estratégicamente con el lead para extraer esta información. 
+                  <br/><br/>
+                  Adicionalmente, el <strong>Perfil Psicográfico</strong> se está analizando en tiempo real y se empaquetará dentro del parámetro <code className="bg-black/50 px-1 rounded">custom_data</code> del evento para enriquecer la inteligencia del algoritmo de Meta.
+               </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Impacto en Audiencias */}
       <Card className="bg-slate-900 border-slate-800 rounded-2xl overflow-hidden">
         <CardHeader className="border-b border-slate-800 bg-slate-950/30 py-4">
@@ -204,24 +222,6 @@ export const CAPIMarketingReport = ({ event }: CAPIMarketingReportProps) => {
           )}
         </CardContent>
       </Card>
-
-      {missingFields.length > 0 && (
-        <Card className="bg-slate-900 border-amber-500/20 rounded-2xl overflow-hidden border-l-4 border-l-amber-500">
-          <CardContent className="p-5 space-y-3">
-            <h4 className="text-xs font-bold text-amber-400 uppercase tracking-widest flex items-center gap-2">
-              <Brain className="w-4 h-4" /> Recomendaciones para Mejorar el EMQ
-            </h4>
-            <div className="space-y-2">
-              {missingFields.slice(0, 3).map(f => (
-                <div key={f.key} className="flex items-start gap-3 text-[11px] text-slate-300">
-                  <ArrowRight className="w-3.5 h-3.5 text-amber-500 shrink-0 mt-0.5" />
-                  <span>Captura el <strong className="text-amber-400">{f.label}</strong> del prospecto para aumentar la precisión en un ~{f.weight === 'Alta' ? '25%' : f.weight === 'Media' ? '15%' : '8%'}.</span>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
     </div>
   );
 };

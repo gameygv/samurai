@@ -19,7 +19,7 @@ export const PayloadViewer = ({ open, onOpenChange, event }: PayloadViewerProps)
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="bg-slate-950 border-slate-800 text-white max-w-4xl max-h-[90vh] flex flex-col p-0 overflow-hidden rounded-2xl shadow-2xl">
-        <DialogHeader className="p-6 bg-slate-900 border-b border-slate-800">
+        <DialogHeader className="p-6 bg-slate-900 border-b border-slate-800 shrink-0">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               <div className={cn("p-2 rounded-xl", event.status === 'OK' ? 'bg-emerald-900/30 text-emerald-400' : 'bg-red-900/30 text-red-400')}>
@@ -41,7 +41,7 @@ export const PayloadViewer = ({ open, onOpenChange, event }: PayloadViewerProps)
         </DialogHeader>
 
         <Tabs defaultValue="marketing" className="flex-1 flex flex-col min-h-0">
-          <div className="px-6 bg-slate-900/50 border-b border-slate-800">
+          <div className="px-6 bg-slate-900/50 border-b border-slate-800 shrink-0">
             <TabsList className="bg-transparent border-0 gap-2 h-12">
               <TabsTrigger value="marketing" className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white gap-2 text-xs rounded-lg px-4">
                 <TrendingUp className="w-3.5 h-3.5" /> Informe Marketing
@@ -58,10 +58,11 @@ export const PayloadViewer = ({ open, onOpenChange, event }: PayloadViewerProps)
             </TabsList>
           </div>
 
-          <div className="flex-1 overflow-hidden">
+          {/* El contenedor principal de TabsContent debe ser flex-1 y min-h-0 para permitir scroll */}
+          <div className="flex-1 overflow-hidden flex flex-col">
             {/* TAB: INFORME MARKETING */}
-            <TabsContent value="marketing" className="h-full m-0 animate-in fade-in duration-300">
-              <ScrollArea className="h-full">
+            <TabsContent value="marketing" className="flex-1 flex flex-col min-h-0 m-0 animate-in fade-in duration-300">
+              <ScrollArea className="flex-1 w-full">
                 <div className="p-6">
                   <CAPIMarketingReport event={event} />
                 </div>
@@ -69,9 +70,9 @@ export const PayloadViewer = ({ open, onOpenChange, event }: PayloadViewerProps)
             </TabsContent>
 
             {/* TAB: RAW DATA */}
-            <TabsContent value="raw" className="h-full m-0 p-6 animate-in fade-in duration-300">
+            <TabsContent value="raw" className="flex-1 flex flex-col min-h-0 m-0 p-6 animate-in fade-in duration-300">
               <div className="space-y-4 h-full flex flex-col">
-                <div className="flex items-center justify-between text-[10px] text-slate-500 uppercase font-bold tracking-widest">
+                <div className="flex items-center justify-between text-[10px] text-slate-500 uppercase font-bold tracking-widest shrink-0">
                   <span>Información original extraída del chat</span>
                   <span className="text-indigo-400">Analista CAPI v2.0</span>
                 </div>
@@ -80,16 +81,16 @@ export const PayloadViewer = ({ open, onOpenChange, event }: PayloadViewerProps)
                     {JSON.stringify(event.unhashed_data || { msg: "Datos no capturados" }, null, 2)}
                   </pre>
                 </ScrollArea>
-                <div className="p-3 bg-indigo-900/10 border border-indigo-500/20 rounded-xl">
+                <div className="p-3 bg-indigo-900/10 border border-indigo-500/20 rounded-xl shrink-0">
                   <p className="text-[10px] text-indigo-300 italic">Datos legibles antes del protocolo de privacidad SHA-256.</p>
                 </div>
               </div>
             </TabsContent>
 
             {/* TAB: HASHED PAYLOAD */}
-            <TabsContent value="hashed" className="h-full m-0 p-6 animate-in fade-in duration-300">
+            <TabsContent value="hashed" className="flex-1 flex flex-col min-h-0 m-0 p-6 animate-in fade-in duration-300">
               <div className="space-y-4 h-full flex flex-col">
-                <div className="flex items-center justify-between text-[10px] text-slate-500 uppercase font-bold tracking-widest">
+                <div className="flex items-center justify-between text-[10px] text-slate-500 uppercase font-bold tracking-widest shrink-0">
                   <span>Payload de Producción (Encriptado)</span>
                   <span className="text-amber-500">Security: SHA-256 Active</span>
                 </div>
@@ -98,16 +99,16 @@ export const PayloadViewer = ({ open, onOpenChange, event }: PayloadViewerProps)
                     {JSON.stringify(event.payload_sent, null, 2)}
                   </pre>
                 </ScrollArea>
-                <div className="p-3 bg-amber-900/10 border border-amber-500/20 rounded-xl">
+                <div className="p-3 bg-amber-900/10 border border-amber-500/20 rounded-xl shrink-0">
                   <p className="text-[10px] text-amber-500 italic">PII hasheados con SHA-256 antes de enviarse a la Graph API.</p>
                 </div>
               </div>
             </TabsContent>
 
             {/* TAB: SERVER RESPONSE */}
-            <TabsContent value="response" className="h-full m-0 p-6 animate-in fade-in duration-300">
+            <TabsContent value="response" className="flex-1 flex flex-col min-h-0 m-0 p-6 animate-in fade-in duration-300">
               <div className="space-y-4 h-full flex flex-col">
-                <div className="flex items-center justify-between text-[10px] text-slate-500 uppercase font-bold tracking-widest">
+                <div className="flex items-center justify-between text-[10px] text-slate-500 uppercase font-bold tracking-widest shrink-0">
                   <span>Respuesta del Servidor de Meta</span>
                   <span className={cn("font-mono", event.status === 'OK' ? 'text-emerald-500' : 'text-red-500')}>
                     HTTP: {event.status === 'OK' ? '200 OK' : 'ERROR'}

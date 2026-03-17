@@ -97,7 +97,6 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
       items: [
         { icon: Users, label: 'Equipo', path: '/users', roles: ['admin', 'dev'] },
         { icon: BarChart3, label: 'Meta CAPI', path: '/meta-capi', roles: ['admin', 'dev'] },
-        { icon: AlertCircle, label: 'Diagnóstico Mensajes', path: '/webhook-diag', roles: ['admin', 'dev'] },
         { icon: SettingsIcon, label: 'Ajustes', path: '/settings', roles: ['admin', 'dev'] },
       ]
     }

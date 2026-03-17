@@ -102,7 +102,15 @@ RESPONDE SOLO JSON: {"nombre": "...", "email": "...", "ciudad": "...", "intent":
              try {
                  await supabaseClient.functions.invoke('meta-capi-sender', {
                     body: {
-                        eventData: { event_name: 'Lead', lead_id: lead.id, user_data: { em: updates.email || lead.email, ph: lead.telefono, fn: updates.nombre || lead.nombre, ct: updates.ciudad || lead.ciudad } },
+                        eventData: { 
+                           event_name: 'Lead', 
+                           lead_id: lead.id, 
+                           user_data: { em: updates.email || lead.email, ph: lead.telefono, fn: updates.nombre || lead.nombre, ct: updates.ciudad || lead.ciudad },
+                           custom_data: { 
+                              perfil_psicologico: updates.perfil_psicologico || lead.perfil_psicologico || 'Perfil en evaluación por IA',
+                              intencion_compra: updates.buying_intent || lead.buying_intent || 'BAJO'
+                           }
+                        },
                         config: { pixel_id: configMap['meta_pixel_id'], access_token: configMap['meta_access_token'] }
                     }
                  });
