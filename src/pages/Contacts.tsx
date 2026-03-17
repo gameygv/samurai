@@ -14,9 +14,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { 
   Search, Loader2, MapPin, Phone, Trash2, 
   RefreshCw, Users, FileSpreadsheet, Megaphone, X, Mail, Edit3, FolderInput,
-  UserPlus, ExternalLink, Filter, Wallet, DollarSign, CheckSquare
+  UserPlus, ExternalLink, Filter, Wallet, DollarSign, CheckSquare, Download
 } from 'lucide-react';
 import { toast } from 'sonner';
+import Papa from 'papaparse';
 import ChatViewer from '@/components/ChatViewer';
 import { CreateLeadDialog } from '@/components/leads/CreateLeadDialog';
 import { ImportContactsDialog } from '@/components/contacts/ImportContactsDialog';
@@ -35,7 +36,7 @@ const Contacts = () => {
   const { user, isManager } = useAuth();
   const [contacts, setContacts] = useState<any[]>([]);
   const [groups, setGroups] = useState<string[]>([]);
-  const [cities, setCities] = useState<string[]>([]); // Nuevo estado para ciudades
+  const [cities, setCities] = useState<string[]>([]); 
   
   // Tag System
   const [globalTags, setGlobalTags] = useState<{id: string, text: string, color: string}[]>([]);
@@ -45,7 +46,7 @@ const Contacts = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedGroup, setSelectedGroup] = useState<string>('ALL');
   const [selectedTagFilter, setSelectedTagFilter] = useState<string>('ALL');
-  const [selectedCity, setSelectedCity] = useState<string>('ALL'); // Nuevo filtro de ciudad
+  const [selectedCity, setSelectedCity] = useState<string>('ALL'); 
   const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>('ALL');
   const [debtFilter, setDebtFilter] = useState<string>('ALL'); 
   
@@ -183,6 +184,41 @@ const Contacts = () => {
     if (lead) { setSelectedLead(lead); setIsChatOpen(true); } else { toast.error("Chat no encontrado."); }
   };
 
+  const handleExportCSV = (dataToExport: any[]) => {
+      if (dataToExport.length === 0) return toast.error("No hay datos para exportar.");
+      const tid = toast.loading("Generando archivo CSV...");
+      
+      try {
+          const exportFormat = dataToExport.map(c => ({
+              Nombre: c.nombre || '',
+              Apellido: c.apellido || '',
+              Telefono: c.telefono || '',
+              Email: c.email || '',
+              Ciudad: c.ciudad || '',
+              Estado: c.estado || '',
+              CP: c.cp || '',
+              Grupo: c.grupo || '',
+              Etiquetas: c.tags ? c.tags.join(', ') : '',
+              Estatus_Financiero: c.financial_status || 'Sin transacción',
+              Deuda_Total: c.total_debt || 0,
+              Intencion_Compra: c.leads?.buying_intent || 'N/A'
+          }));
+
+          const csv = Papa.unparse(exportFormat);
+          const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.setAttribute('download', `audiencia_samurai_${new Date().toISOString().split('T')[0]}.csv`);
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          toast.success("Audiencia exportada con éxito.", { id: tid });
+      } catch (err: any) {
+          toast.error("Error al exportar: " + err.message, { id: tid });
+      }
+  };
+
   const filteredContacts = contacts.filter(c => {
     const term = searchTerm.toLowerCase();
     const contactTags = Array.isArray(c.tags) ? c.tags : [];
@@ -218,9 +254,14 @@ const Contacts = () => {
             <Button onClick={() => setIsMassMessageOpen(true)} variant="outline" className="bg-amber-900/20 border-amber-500/30 text-amber-500 hover:bg-amber-900/40 h-11 rounded-xl font-bold uppercase tracking-widest text-[10px]">
                <Megaphone className="w-4 h-4 mr-2" /> Campañas ({filteredContacts.length})
             </Button>
-            <Button onClick={() => setIsImportOpen(true)} variant="outline" className="h-11 border-[#333336] bg-[#0a0a0c] hover:bg-[#161618] text-slate-300 rounded-xl font-bold uppercase tracking-widest text-[10px]">
-               <FileSpreadsheet className="w-4 h-4 mr-2" /> Importar
-            </Button>
+            <div className="flex bg-[#0a0a0c] border border-[#333336] rounded-xl overflow-hidden h-11">
+                <Button onClick={() => setIsImportOpen(true)} variant="ghost" className="h-full rounded-none hover:bg-[#161618] text-slate-300 font-bold uppercase tracking-widest text-[10px] border-r border-[#333336]">
+                   <FileSpreadsheet className="w-4 h-4 mr-2" /> Importar
+                </Button>
+                <Button onClick={() => handleExportCSV(filteredContacts)} variant="ghost" className="h-full rounded-none hover:bg-[#161618] text-slate-300 font-bold uppercase tracking-widest text-[10px]">
+                   <Download className="w-4 h-4 mr-2" /> Exportar CSV
+                </Button>
+            </div>
             <Button onClick={() => setIsCreateOpen(true)} className="bg-indigo-600 hover:bg-indigo-500 text-white h-11 px-6 font-bold rounded-xl shadow-lg uppercase tracking-widest text-[10px]">
                <UserPlus className="w-4 h-4 mr-2" /> NUEVO
             </Button>
@@ -434,6 +475,10 @@ const Contacts = () => {
                  </div>
                  
                  <div className="flex items-center gap-3">
+                    <Button variant="outline" onClick={() => handleExportCSV(contacts.filter(c => selectedIds.includes(c.id)))} className="bg-emerald-900/20 border-emerald-500/30 text-emerald-500 hover:bg-emerald-600 hover:text-slate-900 h-10 px-4 rounded-xl font-bold uppercase tracking-widest text-[10px]">
+                       <Download className="w-4 h-4 mr-2" /> Exportar
+                    </Button>
+
                     <Button variant="outline" onClick={() => setIsMassMessageOpen(true)} className="bg-amber-900/20 border-amber-500/30 text-amber-500 hover:bg-amber-600 hover:text-slate-900 h-10 px-4 rounded-xl font-bold uppercase tracking-widest text-[10px]">
                        <Megaphone className="w-4 h-4 mr-2" /> Lanzar Campaña
                     </Button>
