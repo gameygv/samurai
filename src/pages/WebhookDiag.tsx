@@ -27,10 +27,11 @@ const WebhookDiag = () => {
       .order('created_at', { ascending: false })
       .limit(50);
 
+    // Buscar el último log de intento de webhook
     const { data: logs } = await supabase
       .from('activity_logs')
       .select('*')
-      .eq('description', 'Webhook Hit: unknown_event')
+      .ilike('description', '%Webhook Hit%')
       .order('created_at', { ascending: false })
       .limit(1);
 

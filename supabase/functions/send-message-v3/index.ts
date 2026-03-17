@@ -17,28 +17,41 @@ serve(async (req) => {
     const { data: channel, error: chError } = await supabaseClient
       .from('whatsapp_channels').select('*').eq('id', channel_id).single();
 
-    if (chError || !channel) throw new Error("Canal no encontrado");
+    if (chError || !channel) throw new Error("Canal no encontrado en la base de datos.");
 
     const provider = channel.provider || 'gowa';
     let cleanPhone = phone.replace(/\D/g, '');
     
-    // Fix para números de México en Gowa
-    if (cleanPhone.startsWith('52') && cleanPhone.length === 10) cleanPhone = '521' + cleanPhone;
+    // Normalización de números para Gowa (JID)
+    const phoneJid = cleanPhone.includes('@') ? cleanPhone : `${cleanPhone}@s.whatsapp.net`;
 
     let endpoint = channel.api_url;
+    if (endpoint.endsWith('/')) endpoint = endpoint.slice(0, -1);
+
     let payload = {};
     let headers = { 'Content-Type': 'application/json' };
 
     if (provider === 'gowa') {
       headers['Authorization'] = `Bearer ${channel.api_key}`;
-      const baseUrl = channel.api_url.endsWith('/') ? channel.api_url.slice(0, -1) : channel.api_url;
       
       if (mediaData?.url) {
-        endpoint = `${baseUrl}/send-media`;
-        payload = { phone: cleanPhone, media_url: mediaData.url, caption: message || "", type: mediaData.type, instance_id: channel.instance_id };
+        endpoint = `${endpoint}/send-media`;
+        payload = { 
+            phone: cleanPhone, // Algunos prefieren numero limpio
+            device_id: channel.instance_id, // Gowa suele usar device_id
+            instance_id: channel.instance_id, // Fallback
+            media_url: mediaData.url, 
+            caption: message || "", 
+            type: mediaData.type 
+        };
       } else {
-        endpoint = `${baseUrl}/send-message`;
-        payload = { phone: cleanPhone, message: message, instance_id: channel.instance_id };
+        endpoint = `${endpoint}/send-message`;
+        payload = { 
+            phone: cleanPhone,
+            device_id: channel.instance_id,
+            instance_id: channel.instance_id,
+            message: message 
+        };
       }
     } 
     else if (provider === 'meta') {
@@ -48,17 +61,30 @@ serve(async (req) => {
     } 
     else {
       headers['apikey'] = channel.api_key;
-      endpoint = `${channel.api_url}/message/sendText/${channel.instance_id}`;
+      endpoint = `${endpoint}/message/sendText/${channel.instance_id}`;
       payload = { number: cleanPhone, text: message };
     }
 
-    console.log(`[send-message] To: ${cleanPhone} via ${provider}`);
+    console.log(`[send-message] Enviando a: ${endpoint} | Payload:`, JSON.stringify(payload));
 
-    const response = await fetch(endpoint, { method: 'POST', headers, body: JSON.stringify(payload) });
-    const resData = await response.json().catch(() => ({}));
+    const response = await fetch(endpoint, { 
+        method: 'POST', 
+        headers, 
+        body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(15000)
+    });
+
+    const resText = await response.text();
+    let resData = {};
+    try { resData = JSON.parse(resText); } catch(e) { resData = { rawResponse: resText }; }
 
     if (!response.ok) {
-       return new Response(JSON.stringify({ success: false, error: resData, status: response.status }), { 
+       console.error("[send-message] Error del servidor:", resText);
+       return new Response(JSON.stringify({ 
+         success: false, 
+         error: resData.message || resData.error || resText || "Error desconocido del servidor Gowa",
+         status: response.status 
+       }), { 
          status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
        });
     }
@@ -68,6 +94,7 @@ serve(async (req) => {
     });
 
   } catch (error: any) {
+    console.error("[send-message] Error crítico:", error.message);
     return new Response(JSON.stringify({ success: false, error: error.message }), { 
       status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
     });
