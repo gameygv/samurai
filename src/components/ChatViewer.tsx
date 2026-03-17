@@ -7,12 +7,13 @@ import { MessageInput } from './chat/MessageInput';
 import { MemoryPanel } from './chat/MemoryPanel';
 import { AiSuggestions } from './chat/AiSuggestions';
 import { Button } from '@/components/ui/button';
-import { Zap, CreditCard, Link as LinkIcon, FileText, X, Menu, MessageSquarePlus, ShoppingCart } from 'lucide-react';
+import { Zap, CreditCard, X, Menu, MessageSquarePlus, ShoppingCart } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { toast } from 'sonner';
 import { sendEvolutionMessage } from '@/utils/messagingService';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/context/AuthContext';
+import { useRealtimeMessages } from '@/hooks/useRealtimeMessages';
 
 interface ChatViewerProps {
   lead: any;
@@ -23,8 +24,6 @@ interface ChatViewerProps {
 const ChatViewer = ({ lead: initialLead, open, onOpenChange }: ChatViewerProps) => {
   const { user } = useAuth();
   const [lead, setLead] = useState(initialLead);
-  const [messages, setMessages] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [isEditingMemory, setIsEditingMemory] = useState(false);
   
@@ -47,6 +46,9 @@ const ChatViewer = ({ lead: initialLead, open, onOpenChange }: ChatViewerProps) 
     lead_score: 0, assigned_to: '', tags: [], reminders: []
   });
 
+  // Consumir el motor en tiempo real optimizado
+  const { messages, loading: loadingMessages, refetch: refetchMessages } = useRealtimeMessages(lead?.id || null, open);
+
   useEffect(() => {
      if (initialLead) {
         setLead(initialLead);
@@ -55,39 +57,26 @@ const ChatViewer = ({ lead: initialLead, open, onOpenChange }: ChatViewerProps) 
      fetchQuickActions();
   }, [initialLead]);
 
+  // Actualizar lead en tiempo real (si cambian los datos en otra pestaña)
   useEffect(() => {
     let leadChannel: any;
-    let msgChannel: any;
-    let pollInterval: NodeJS.Timeout;
-
     if (open && lead?.id) {
-      fetchMessages();
-      
       const uniqueId = Math.random().toString(36).substring(7);
-      
       leadChannel = supabase.channel(`lead-watch-${lead.id}-${uniqueId}`)
         .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'leads', filter: `id=eq.${lead.id}` }, (payload) => {
            setLead(payload.new);
            updateMemoryForm(payload.new);
         }).subscribe();
-        
-      msgChannel = supabase.channel(`msg-watch-${lead.id}-${uniqueId}`)
-        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'conversaciones', filter: `lead_id=eq.${lead.id}` }, (payload) => {
-           setMessages(prev => prev.some(m => m.id === payload.new.id) ? prev : [...prev, payload.new]);
-        }).subscribe();
-
-      pollInterval = setInterval(async () => {
-         const { data } = await supabase.from('conversaciones').select('*').eq('lead_id', lead.id).order('created_at', { ascending: true });
-         if (data) setMessages(prev => prev.length === data.length ? prev : data);
-      }, 2500);
     }
-
-    return () => { 
-        if (leadChannel) supabase.removeChannel(leadChannel); 
-        if (msgChannel) supabase.removeChannel(msgChannel);
-        if (pollInterval) clearInterval(pollInterval);
-    };
+    return () => { if (leadChannel) supabase.removeChannel(leadChannel); };
   }, [open, lead?.id]);
+
+  // Cuando cambien los mensajes, buscamos sugerencias de la IA
+  useEffect(() => {
+     if (messages.length > 0) {
+         fetchAiSuggestions(messages);
+     }
+  }, [messages.length]);
 
   const fetchQuickActions = async () => {
      if(!user) return;
@@ -118,16 +107,6 @@ const ChatViewer = ({ lead: initialLead, open, onOpenChange }: ChatViewerProps) 
         tiempo_compra: data.tiempo_compra || '', lead_score: data.lead_score || 0, assigned_to: data.assigned_to || '',
         tags: data.tags || [], reminders: rems
      });
-  };
-
-  const fetchMessages = async () => {
-    setLoading(true);
-    const { data } = await supabase.from('conversaciones').select('*').eq('lead_id', lead.id).order('created_at', { ascending: true });
-    if (data) {
-      setMessages(data);
-      fetchAiSuggestions(data);
-    }
-    setLoading(false);
   };
 
   const fetchAiSuggestions = async (msgs: any[]) => {
@@ -199,7 +178,6 @@ const ChatViewer = ({ lead: initialLead, open, onOpenChange }: ChatViewerProps) 
         mediaData = { url: publicUrl, type, mimetype: file.type, name: file.name };
       }
 
-      // CORRECCIÓN AQUÍ: lead.id posicionado correctamente antes de mediaData
       const apiResponse = await sendEvolutionMessage(lead.telefono, text, lead.id, mediaData);
       
       const textToSave = text || (file ? `[ARCHIVO ENVIADO: ${file.name}]` : '');
@@ -245,7 +223,8 @@ const ChatViewer = ({ lead: initialLead, open, onOpenChange }: ChatViewerProps) 
       <SheetContent className="w-full sm:max-w-6xl flex flex-col sm:flex-row bg-slate-950 border-l border-slate-800 text-white p-0 overflow-hidden">
         <div className={cn("flex-1 min-w-0 flex flex-col h-full bg-slate-950 transition-all", showMemoryMobile ? "hidden sm:flex" : "flex")}>
           <ChatHeader lead={lead} isAiPaused={lead.ai_paused} sending={sending} onSendCommand={(cmd) => handleSendMessage(cmd)} />
-          <MessageList messages={messages} loading={loading} />
+          
+          <MessageList messages={messages} loading={loadingMessages} />
           
           <div className="p-3 bg-slate-900/80 border-t border-slate-800 shrink-0">
              <AiSuggestions suggestions={suggestions} loading={loadingSuggestions} onSelect={setDraftMessage} onRefresh={() => fetchAiSuggestions(messages)} />
@@ -315,7 +294,7 @@ const ChatViewer = ({ lead: initialLead, open, onOpenChange }: ChatViewerProps) 
               saving={sending} 
               onReset={() => {}} 
               onToggleFollowup={() => handleSendMessage(lead.ai_paused ? '#START' : '#STOP')} 
-              onAnalysisComplete={() => fetchMessages()} 
+              onAnalysisComplete={() => refetchMessages()} 
               onDeleteLead={handleDeleteLead}
            />
         </div>

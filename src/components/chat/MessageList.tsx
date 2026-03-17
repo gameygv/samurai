@@ -15,6 +15,18 @@ export const MessageList = ({ messages, loading }: MessageListProps) => {
     if (scrollRef.current) scrollRef.current.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  const formatMessageTime = (dateStr: string) => {
+    const date = new Date(dateStr);
+    const today = new Date();
+    const isToday = date.getDate() === today.getDate() && 
+                    date.getMonth() === today.getMonth() && 
+                    date.getFullYear() === today.getFullYear();
+    
+    const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    if (isToday) return timeStr;
+    return `${date.toLocaleDateString([], { day: '2-digit', month: '2-digit' })} ${timeStr}`;
+  };
+
   const renderMessageContent = (msg: any) => {
     let text = msg.mensaje || '';
     let imageUrl = null;
@@ -128,7 +140,7 @@ export const MessageList = ({ messages, loading }: MessageListProps) => {
                       {renderMessageContent(msg)}
                    </div>
                    <span className="text-[9px] font-bold uppercase tracking-widest text-slate-600 mt-2 px-2">
-                      {isClient ? 'CLIENTE' : isAI ? 'SAMURAI AI' : 'VENDEDOR'} • {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      {isClient ? 'CLIENTE' : isAI ? 'SAMURAI AI' : 'VENDEDOR'} • {formatMessageTime(msg.created_at)}
                    </span>
                 </div>
               </div>
