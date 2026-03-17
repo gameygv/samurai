@@ -32,7 +32,6 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
        if (data?.value) setBrandName(data.value);
     });
 
-    // Event Listener para Ctrl+K / Cmd+K
     const down = (e: KeyboardEvent) => {
       if (e.key === "k" && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
@@ -120,13 +119,24 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
 
       <ScrollArea className="flex-1 px-4">
         <div className="space-y-6 py-4">
-          {menuGroups.map((group, i) => (
+          {menuGroups.map((group, i) => {
+            // Filtramos los items permitidos para este usuario
+            const visibleItems = group.items.filter(item => 
+               item.roles.includes('any') || 
+               (isAdmin && item.roles.includes('admin')) || 
+               (isDev && item.roles.includes('dev'))
+            );
+
+            // Si el grupo no tiene items visibles (ej. Agente viendo "SISTEMA"), ocultamos el título completo
+            if (visibleItems.length === 0) return null;
+
+            return (
               <div key={i}>
                 <h4 className="mb-2 px-2 text-[9px] font-bold text-[#7A8A9E] uppercase tracking-widest">
                   {group.title}
                 </h4>
                 <div className="space-y-1">
-                  {group.items.filter(item => item.roles.includes('any') || (isAdmin && item.roles.includes('admin')) || (isDev && item.roles.includes('dev'))).map((item) => {
+                  {visibleItems.map((item) => {
                     const Icon = item.icon;
                     const isActive = location.pathname === item.path;
                     return (
@@ -148,21 +158,25 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
                   })}
                 </div>
               </div>
-          ))}
+            );
+          })}
         </div>
       </ScrollArea>
       
       <div className="p-4 border-t border-[#1a1a1a]">
-         <div className="bg-[#121214] rounded-xl p-3 border border-[#222225] hover:border-[#333336] transition-colors cursor-pointer" onClick={() => navigate('/profile')}>
+         {/* BOTÓN DE PERFIL MEJORADO */}
+         <div className="bg-[#121214] rounded-xl p-3 border border-[#222225] hover:border-indigo-500/50 hover:bg-[#161618] transition-colors cursor-pointer group" onClick={() => navigate('/profile')}>
             <div className="flex items-center gap-3">
-               <div className="w-8 h-8 rounded-full bg-[#1a1a1a] flex items-center justify-center text-[10px] font-bold text-indigo-400 border border-[#222225]">
+               <div className="w-8 h-8 rounded-full bg-[#1a1a1a] flex items-center justify-center text-[10px] font-bold text-indigo-400 border border-[#222225] shadow-inner shrink-0">
                   {profile?.full_name?.substring(0, 2).toUpperCase() || '??'}
                </div>
                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-bold text-slate-200 truncate">{profile?.full_name || 'Usuario'}</p>
-                  <p className="text-[9px] text-slate-500 uppercase font-mono">{profile?.role || 'dev'}</p>
+                  <p className="text-xs font-bold text-slate-200 truncate group-hover:text-white transition-colors">{profile?.full_name || 'Usuario'}</p>
+                  <p className="text-[9px] text-indigo-400 uppercase font-bold tracking-widest mt-0.5 flex items-center gap-1">
+                    <UserCircle className="w-3 h-3" /> Mi Perfil / Ajustes
+                  </p>
                </div>
-               <button onClick={(e) => { e.stopPropagation(); handleLogout(); }} title="Cerrar Sesión" className="text-slate-600 hover:text-red-400 transition-colors p-1">
+               <button onClick={(e) => { e.stopPropagation(); handleLogout(); }} title="Cerrar Sesión" className="text-slate-600 hover:text-red-400 transition-colors p-2 z-10 relative bg-[#0a0a0c] rounded-lg border border-[#222225]">
                   <LogOut className="w-4 h-4" />
                </button>
             </div>
@@ -219,7 +233,6 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
         </div>
       </main>
 
-      {/* COMMAND PALETTE DIALOG */}
       <Dialog open={searchOpen} onOpenChange={setSearchOpen}>
          <DialogContent className="p-0 border-0 bg-transparent shadow-2xl sm:max-w-2xl top-[20%] translate-y-0">
             <div className="bg-[#0f0f11] border border-[#222225] rounded-2xl overflow-hidden shadow-[0_0_50px_-12px_rgba(0,0,0,0.8)]">
@@ -247,7 +260,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
                            {searchResults.map(res => (
                               <button 
                                  key={res.id} 
-                                 onClick={() => { setSearchOpen(false); navigate(`/inbox`); /* Ideally navigate and select lead */ }}
+                                 onClick={() => { setSearchOpen(false); navigate(`/inbox`); }}
                                  className="w-full flex items-center gap-3 px-3 py-3 hover:bg-[#161618] rounded-xl text-left transition-colors group"
                               >
                                  <div className="w-8 h-8 rounded-full bg-[#121214] border border-[#222225] flex items-center justify-center text-indigo-400 shrink-0">

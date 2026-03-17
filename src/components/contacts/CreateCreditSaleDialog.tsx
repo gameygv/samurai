@@ -7,11 +7,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
-import { Badge } from '@/components/ui/badge';
 import { 
-  Loader2, DollarSign, CalendarDays, Wallet, User, Save, 
-  ListChecks, Calculator, ChevronRight, BellRing, MessageSquare, AlertTriangle, ShieldAlert,
-  ArrowRight, Clock
+  Loader2, DollarSign, Calculator, ListChecks, ArrowRight, Clock, Wallet, User, Save, AlertTriangle, ShieldAlert
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -58,6 +55,7 @@ export const CreateCreditSaleDialog = ({ open, onOpenChange, contact, onSuccess 
     }
   }, [open]);
 
+  // FIX: Lógica estricta de fechas para evitar saltos por zonas horarias
   const updateDefaultDates = (freq: string) => {
       const now = new Date();
       if (freq === 'MENSUAL') {
@@ -65,15 +63,18 @@ export const CreateCreditSaleDialog = ({ open, onOpenChange, contact, onSuccess 
           now.setDate(1);
           setDayOfMonth('1');
       } else if (freq === 'QUINCENAL') {
-          if (now.getDate() < 15) now.setDate(15);
+          if (now.getDate() < 15) { now.setDate(15); }
           else { now.setMonth(now.getMonth() + 1); now.setDate(1); }
       } else if (freq === 'SEMANAL') {
           const day = now.getDay();
-          const diff = (5 - day + 7) % 7 || 7; 
+          const diff = (5 - day + 7) % 7 || 7; // Busca el próximo viernes (5)
           now.setDate(now.getDate() + diff);
       }
-      const localStr = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().split('T')[0];
-      setStartDate(localStr);
+      
+      const year = now.getFullYear();
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const dayStr = String(now.getDate()).padStart(2, '0');
+      setStartDate(`${year}-${month}-${dayStr}`);
   };
 
   const handleFrequencyChange = (newFreq: string) => {
@@ -92,6 +93,7 @@ export const CreateCreditSaleDialog = ({ open, onOpenChange, contact, onSuccess 
      return Math.max(0, total - abono);
   };
 
+  // FIX: Lógica de cálculo matemático estricto (Iterador de meses sin desbordamiento)
   const handleGeneratePlan = () => {
       const financed = getFinancedAmount();
       const payments = parseInt(numberOfPayments);
@@ -104,35 +106,43 @@ export const CreateCreditSaleDialog = ({ open, onOpenChange, contact, onSuccess 
       const generated = [];
 
       let parts = startDate.split('-');
-      let currentYear = parseInt(parts[0]);
-      let currentMonth = parseInt(parts[1]) - 1;
-      let currentDay = parseInt(parts[2]);
+      let currentYear = parseInt(parts[0], 10);
+      let currentMonth = parseInt(parts[1], 10) - 1; // 0-indexed
+      let currentDay = parseInt(parts[2], 10);
 
       for (let i = 0; i < payments; i++) {
-          let paymentDate = new Date(currentYear, currentMonth, currentDay, 12, 0, 0);
-
           if (i > 0) {
               if (frequency === 'MENSUAL') {
-                  currentMonth += 1;
-                  paymentDate = new Date(currentYear, currentMonth, parseInt(dayOfMonth), 12, 0, 0);
-                  currentYear = paymentDate.getFullYear();
-                  currentMonth = paymentDate.getMonth();
+                  currentMonth++;
+                  if (currentMonth > 11) { currentMonth = 0; currentYear++; }
+                  currentDay = parseInt(dayOfMonth) || 1;
               } else if (frequency === 'QUINCENAL') {
-                  if (currentDay <= 14) { currentDay = 15; } 
-                  else { currentMonth += 1; currentDay = 1; }
-                  paymentDate = new Date(currentYear, currentMonth, currentDay, 12, 0, 0);
-                  currentYear = paymentDate.getFullYear();
-                  currentMonth = paymentDate.getMonth();
-                  currentDay = paymentDate.getDate();
+                  if (currentDay === 1) {
+                      currentDay = 15;
+                  } else if (currentDay === 15) {
+                      currentDay = 1;
+                      currentMonth++;
+                      if (currentMonth > 11) { currentMonth = 0; currentYear++; }
+                  } else {
+                      if (currentDay < 15) { currentDay = 15; }
+                      else { currentDay = 1; currentMonth++; if (currentMonth > 11) { currentMonth = 0; currentYear++; } }
+                  }
               } else if (frequency === 'SEMANAL') {
-                  paymentDate.setDate(paymentDate.getDate() + 7);
-                  currentYear = paymentDate.getFullYear();
-                  currentMonth = paymentDate.getMonth();
-                  currentDay = paymentDate.getDate();
+                  const tempDate = new Date(currentYear, currentMonth, currentDay);
+                  tempDate.setDate(tempDate.getDate() + 7);
+                  currentYear = tempDate.getFullYear();
+                  currentMonth = tempDate.getMonth();
+                  currentDay = tempDate.getDate();
               }
           }
 
-          generated.push({ id: `temp-${i}`, amount: amountPerPayment, date: paymentDate.toISOString().split('T')[0] });
+          // Armamos la cadena ISO manual para evitar mutaciones de Javascript
+          const yStr = currentYear;
+          const mStr = String(currentMonth + 1).padStart(2, '0');
+          const dStr = String(currentDay).padStart(2, '0');
+          const finalDateStr = `${yStr}-${mStr}-${dStr}`;
+
+          generated.push({ id: `temp-${i}`, amount: amountPerPayment, date: finalDateStr });
       }
 
       setInstallments(generated);
@@ -302,10 +312,11 @@ export const CreateCreditSaleDialog = ({ open, onOpenChange, contact, onSuccess 
                      </div>
                   </div>
 
-                  <div className="border border-[#222225] rounded-2xl overflow-hidden bg-[#161618] flex flex-col max-h-[400px]">
+                  <div className="border border-[#222225] rounded-2xl bg-[#161618] flex flex-col h-[300px]">
                      <div className="bg-[#222225]/50 p-3 border-b border-[#222225] flex justify-between items-center shrink-0">
                         <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2"><ListChecks className="w-4 h-4"/> Tabla de Amortización (Editable)</span>
                      </div>
+                     {/* FIX: ScrollArea con altura explícita para evitar recortes */}
                      <ScrollArea className="flex-1 custom-scrollbar">
                         <Table>
                            <TableHeader>
@@ -337,71 +348,74 @@ export const CreateCreditSaleDialog = ({ open, onOpenChange, contact, onSuccess 
             )}
 
             {step === 3 && (
-               <div className="space-y-6 animate-in fade-in slide-in-from-right-4 max-w-3xl mx-auto pb-8">
-                  <div className="text-center space-y-2">
+               <div className="animate-in fade-in slide-in-from-right-4 max-w-3xl mx-auto h-[450px] flex flex-col">
+                  <div className="text-center space-y-2 mb-6 shrink-0">
                      <h3 className="text-lg font-bold text-white">Cronograma de Cobranza (A/B/C/D)</h3>
-                     <p className="text-xs text-slate-400">Define los intervalos y mensajes automáticos. Si el cliente no paga tras el último ciclo, será etiquetado como <strong className="text-red-400">Abandonado</strong> automáticamente.</p>
+                     <p className="text-xs text-slate-400">Define los intervalos y mensajes automáticos. Si el cliente no paga tras el último ciclo, será etiquetado como <strong className="text-red-400">Abandonado</strong>.</p>
                   </div>
 
-                  <div className="relative space-y-6 pl-4 before:absolute before:inset-0 before:ml-[23px] before:-translate-x-px md:before:mx-auto md:before:translate-x-0 before:h-full before:w-0.5 before:bg-gradient-to-b before:from-emerald-500/50 before:via-amber-500/50 before:to-red-500/50">
-                     
-                     <div className="relative flex items-center justify-between md:justify-normal md:odd:flex-row-reverse group">
-                        <div className="flex items-center justify-center w-8 h-8 rounded-full bg-[#121214] border-2 border-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.3)] text-emerald-500 shrink-0 md:order-1 md:group-odd:-translate-x-1/2 md:group-even:translate-x-1/2 z-10 font-bold text-xs">A</div>
-                        <div className="w-[calc(100%-3rem)] md:w-[calc(50%-2rem)] p-4 rounded-2xl bg-[#121214] border border-[#222225] group-hover:border-emerald-500/50 transition-colors shadow-lg">
-                           <div className="flex items-center justify-between mb-3">
-                              <span className="text-[10px] uppercase font-bold text-emerald-500 tracking-widest flex items-center gap-1.5"><Clock className="w-3.5 h-3.5"/> Pre-Aviso</span>
-                              <div className="flex items-center gap-1.5 bg-[#0a0a0c] px-2 py-1 rounded-md border border-[#222225]">
-                                 <Input type="number" min="1" value={seqPreDays} onChange={e => setSeqPreDays(e.target.value)} className="w-10 h-6 p-0 text-center bg-transparent border-0 text-[10px] font-bold text-white focus-visible:ring-0" />
-                                 <span className="text-[9px] text-slate-500">días antes</span>
+                  {/* FIX: ScrollArea agregada para el timeline A/B/C/D */}
+                  <ScrollArea className="flex-1 custom-scrollbar pr-4">
+                     <div className="relative space-y-6 pl-4 before:absolute before:inset-0 before:ml-[23px] before:-translate-x-px md:before:mx-auto md:before:translate-x-0 before:h-full before:w-0.5 before:bg-gradient-to-b before:from-emerald-500/50 before:via-amber-500/50 before:to-red-500/50 pb-8">
+                        
+                        <div className="relative flex items-center justify-between md:justify-normal md:odd:flex-row-reverse group">
+                           <div className="flex items-center justify-center w-8 h-8 rounded-full bg-[#121214] border-2 border-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.3)] text-emerald-500 shrink-0 md:order-1 md:group-odd:-translate-x-1/2 md:group-even:translate-x-1/2 z-10 font-bold text-xs">A</div>
+                           <div className="w-[calc(100%-3rem)] md:w-[calc(50%-2rem)] p-4 rounded-2xl bg-[#121214] border border-[#222225] group-hover:border-emerald-500/50 transition-colors shadow-lg">
+                              <div className="flex items-center justify-between mb-3">
+                                 <span className="text-[10px] uppercase font-bold text-emerald-500 tracking-widest flex items-center gap-1.5"><Clock className="w-3.5 h-3.5"/> Pre-Aviso</span>
+                                 <div className="flex items-center gap-1.5 bg-[#0a0a0c] px-2 py-1 rounded-md border border-[#222225]">
+                                    <Input type="number" min="1" value={seqPreDays} onChange={e => setSeqPreDays(e.target.value)} className="w-10 h-6 p-0 text-center bg-transparent border-0 text-[10px] font-bold text-white focus-visible:ring-0" />
+                                    <span className="text-[9px] text-slate-500">días antes</span>
+                                 </div>
                               </div>
+                              <Textarea value={msgPre} onChange={e => setMsgPre(e.target.value)} className="bg-[#0a0a0c] border-[#222225] h-20 text-[11px] rounded-xl text-slate-300 resize-none" />
                            </div>
-                           <Textarea value={msgPre} onChange={e => setMsgPre(e.target.value)} className="bg-[#0a0a0c] border-[#222225] h-20 text-[11px] rounded-xl text-slate-300 resize-none" />
                         </div>
-                     </div>
 
-                     <div className="relative flex items-center justify-between md:justify-normal md:odd:flex-row-reverse group">
-                        <div className="flex items-center justify-center w-8 h-8 rounded-full bg-[#121214] border-2 border-amber-400 shadow-[0_0_10px_rgba(251,191,36,0.3)] text-amber-400 shrink-0 md:order-1 md:group-odd:-translate-x-1/2 md:group-even:translate-x-1/2 z-10 font-bold text-xs">B</div>
-                        <div className="w-[calc(100%-3rem)] md:w-[calc(50%-2rem)] p-4 rounded-2xl bg-[#121214] border border-[#222225] group-hover:border-amber-500/50 transition-colors shadow-lg">
-                           <div className="flex items-center justify-between mb-3">
-                              <span className="text-[10px] uppercase font-bold text-amber-400 tracking-widest flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5"/> 1er Atraso</span>
-                              <div className="flex items-center gap-1.5 bg-[#0a0a0c] px-2 py-1 rounded-md border border-[#222225]">
-                                 <Input type="number" min="1" value={seqPost1Days} onChange={e => setSeqPost1Days(e.target.value)} className="w-10 h-6 p-0 text-center bg-transparent border-0 text-[10px] font-bold text-white focus-visible:ring-0" />
-                                 <span className="text-[9px] text-slate-500">días desp.</span>
+                        <div className="relative flex items-center justify-between md:justify-normal md:odd:flex-row-reverse group">
+                           <div className="flex items-center justify-center w-8 h-8 rounded-full bg-[#121214] border-2 border-amber-400 shadow-[0_0_10px_rgba(251,191,36,0.3)] text-amber-400 shrink-0 md:order-1 md:group-odd:-translate-x-1/2 md:group-even:translate-x-1/2 z-10 font-bold text-xs">B</div>
+                           <div className="w-[calc(100%-3rem)] md:w-[calc(50%-2rem)] p-4 rounded-2xl bg-[#121214] border border-[#222225] group-hover:border-amber-500/50 transition-colors shadow-lg">
+                              <div className="flex items-center justify-between mb-3">
+                                 <span className="text-[10px] uppercase font-bold text-amber-400 tracking-widest flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5"/> 1er Atraso</span>
+                                 <div className="flex items-center gap-1.5 bg-[#0a0a0c] px-2 py-1 rounded-md border border-[#222225]">
+                                    <Input type="number" min="1" value={seqPost1Days} onChange={e => setSeqPost1Days(e.target.value)} className="w-10 h-6 p-0 text-center bg-transparent border-0 text-[10px] font-bold text-white focus-visible:ring-0" />
+                                    <span className="text-[9px] text-slate-500">días desp.</span>
+                                 </div>
                               </div>
+                              <Textarea value={msgPost1} onChange={e => setMsgPost1(e.target.value)} className="bg-[#0a0a0c] border-[#222225] h-20 text-[11px] rounded-xl text-slate-300 resize-none" />
                            </div>
-                           <Textarea value={msgPost1} onChange={e => setMsgPost1(e.target.value)} className="bg-[#0a0a0c] border-[#222225] h-20 text-[11px] rounded-xl text-slate-300 resize-none" />
                         </div>
-                     </div>
 
-                     <div className="relative flex items-center justify-between md:justify-normal md:odd:flex-row-reverse group">
-                        <div className="flex items-center justify-center w-8 h-8 rounded-full bg-[#121214] border-2 border-orange-500 shadow-[0_0_10px_rgba(249,115,22,0.3)] text-orange-500 shrink-0 md:order-1 md:group-odd:-translate-x-1/2 md:group-even:translate-x-1/2 z-10 font-bold text-xs">C</div>
-                        <div className="w-[calc(100%-3rem)] md:w-[calc(50%-2rem)] p-4 rounded-2xl bg-[#121214] border border-[#222225] group-hover:border-orange-500/50 transition-colors shadow-lg">
-                           <div className="flex items-center justify-between mb-3">
-                              <span className="text-[10px] uppercase font-bold text-orange-500 tracking-widest flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5"/> 2do Atraso</span>
-                              <div className="flex items-center gap-1.5 bg-[#0a0a0c] px-2 py-1 rounded-md border border-[#222225]">
-                                 <Input type="number" min="2" value={seqPost2Days} onChange={e => setSeqPost2Days(e.target.value)} className="w-10 h-6 p-0 text-center bg-transparent border-0 text-[10px] font-bold text-white focus-visible:ring-0" />
-                                 <span className="text-[9px] text-slate-500">días desp.</span>
+                        <div className="relative flex items-center justify-between md:justify-normal md:odd:flex-row-reverse group">
+                           <div className="flex items-center justify-center w-8 h-8 rounded-full bg-[#121214] border-2 border-orange-500 shadow-[0_0_10px_rgba(249,115,22,0.3)] text-orange-500 shrink-0 md:order-1 md:group-odd:-translate-x-1/2 md:group-even:translate-x-1/2 z-10 font-bold text-xs">C</div>
+                           <div className="w-[calc(100%-3rem)] md:w-[calc(50%-2rem)] p-4 rounded-2xl bg-[#121214] border border-[#222225] group-hover:border-orange-500/50 transition-colors shadow-lg">
+                              <div className="flex items-center justify-between mb-3">
+                                 <span className="text-[10px] uppercase font-bold text-orange-500 tracking-widest flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5"/> 2do Atraso</span>
+                                 <div className="flex items-center gap-1.5 bg-[#0a0a0c] px-2 py-1 rounded-md border border-[#222225]">
+                                    <Input type="number" min="2" value={seqPost2Days} onChange={e => setSeqPost2Days(e.target.value)} className="w-10 h-6 p-0 text-center bg-transparent border-0 text-[10px] font-bold text-white focus-visible:ring-0" />
+                                    <span className="text-[9px] text-slate-500">días desp.</span>
+                                 </div>
                               </div>
+                              <Textarea value={msgPost2} onChange={e => setMsgPost2(e.target.value)} className="bg-[#0a0a0c] border-[#222225] h-20 text-[11px] rounded-xl text-slate-300 resize-none" />
                            </div>
-                           <Textarea value={msgPost2} onChange={e => setMsgPost2(e.target.value)} className="bg-[#0a0a0c] border-[#222225] h-20 text-[11px] rounded-xl text-slate-300 resize-none" />
                         </div>
-                     </div>
 
-                     <div className="relative flex items-center justify-between md:justify-normal md:odd:flex-row-reverse group">
-                        <div className="flex items-center justify-center w-8 h-8 rounded-full bg-[#121214] border-2 border-red-500 shadow-[0_0_10px_rgba(239,68,68,0.5)] text-red-500 shrink-0 md:order-1 md:group-odd:-translate-x-1/2 md:group-even:translate-x-1/2 z-10 font-bold text-xs">D</div>
-                        <div className="w-[calc(100%-3rem)] md:w-[calc(50%-2rem)] p-4 rounded-2xl bg-red-950/20 border border-red-900/50 group-hover:border-red-500/50 transition-colors shadow-lg">
-                           <div className="flex items-center justify-between mb-3">
-                              <span className="text-[10px] uppercase font-bold text-red-500 tracking-widest flex items-center gap-1.5"><ShieldAlert className="w-3.5 h-3.5"/> Quiebre</span>
-                              <div className="flex items-center gap-1.5 bg-[#0a0a0c] px-2 py-1 rounded-md border border-red-900/50">
-                                 <Input type="number" min="3" value={seqAbandonDays} onChange={e => setSeqAbandonDays(e.target.value)} className="w-10 h-6 p-0 text-center bg-transparent border-0 text-[10px] font-bold text-red-400 focus-visible:ring-0" />
-                                 <span className="text-[9px] text-slate-500">días desp.</span>
+                        <div className="relative flex items-center justify-between md:justify-normal md:odd:flex-row-reverse group">
+                           <div className="flex items-center justify-center w-8 h-8 rounded-full bg-[#121214] border-2 border-red-500 shadow-[0_0_10px_rgba(239,68,68,0.5)] text-red-500 shrink-0 md:order-1 md:group-odd:-translate-x-1/2 md:group-even:translate-x-1/2 z-10 font-bold text-xs">D</div>
+                           <div className="w-[calc(100%-3rem)] md:w-[calc(50%-2rem)] p-4 rounded-2xl bg-red-950/20 border border-red-900/50 group-hover:border-red-500/50 transition-colors shadow-lg">
+                              <div className="flex items-center justify-between mb-3">
+                                 <span className="text-[10px] uppercase font-bold text-red-500 tracking-widest flex items-center gap-1.5"><ShieldAlert className="w-3.5 h-3.5"/> Quiebre</span>
+                                 <div className="flex items-center gap-1.5 bg-[#0a0a0c] px-2 py-1 rounded-md border border-red-900/50">
+                                    <Input type="number" min="3" value={seqAbandonDays} onChange={e => setSeqAbandonDays(e.target.value)} className="w-10 h-6 p-0 text-center bg-transparent border-0 text-[10px] font-bold text-red-400 focus-visible:ring-0" />
+                                    <span className="text-[9px] text-slate-500">días desp.</span>
+                                 </div>
                               </div>
+                              <p className="text-[10px] text-slate-400 mb-2">Mensaje al Gestor:</p>
+                              <Textarea value={msgAbandonAgent} onChange={e => setMsgAbandonAgent(e.target.value)} className="bg-[#0a0a0c] border-red-900/30 h-16 text-[11px] rounded-xl text-red-300 resize-none" />
                            </div>
-                           <p className="text-[10px] text-slate-400 mb-2">Mensaje al Gestor (El sistema etiquetará al cliente automáticamente como Abandonado):</p>
-                           <Textarea value={msgAbandonAgent} onChange={e => setMsgAbandonAgent(e.target.value)} className="bg-[#0a0a0c] border-red-900/30 h-16 text-[11px] rounded-xl text-red-300 resize-none" />
                         </div>
                      </div>
-                  </div>
+                  </ScrollArea>
                </div>
             )}
         </ScrollArea>
@@ -426,7 +440,7 @@ export const CreateCreditSaleDialog = ({ open, onOpenChange, contact, onSuccess 
 
              {step === 3 && (
                <Button onClick={handleSaveSale} disabled={loading} className="bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold h-11 px-8 rounded-xl shadow-lg uppercase tracking-widest text-[10px]">
-                 {loading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />} ACTIVAR CRÉDITO Y AVISOS
+                 {loading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />} ACTIVAR CRÉDITO
                </Button>
              )}
           </div>
