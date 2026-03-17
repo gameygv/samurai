@@ -6,7 +6,12 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Loader2, DollarSign, CalendarDays, Wallet, User, Save, ListChecks, Calculator, ChevronRight } from 'lucide-react';
+import { Textarea } from '@/components/ui/textarea';
+import { Badge } from '@/components/ui/badge';
+import { 
+  Loader2, DollarSign, CalendarDays, Wallet, User, Save, 
+  ListChecks, Calculator, ChevronRight, BellRing, MessageSquare, AlertTriangle, ShieldAlert
+} from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
@@ -22,19 +27,23 @@ export const CreateCreditSaleDialog = ({ open, onOpenChange, contact, onSuccess 
   const [step, setStep] = useState(1);
   const [agents, setAgents] = useState<any[]>([]);
 
-  // Configuración de la Venta
+  // STEP 1: Configuración de la Venta
   const [concept, setConcept] = useState('');
   const [totalAmount, setTotalAmount] = useState('');
   const [responsibleId, setResponsibleId] = useState('');
-
-  // Configuración del Plan de Pagos
   const [frequency, setFrequency] = useState('MENSUAL');
   const [numberOfPayments, setNumberOfPayments] = useState('1');
   const [startDate, setStartDate] = useState('');
-  const [dayOfMonth, setDayOfMonth] = useState('1'); // Para mensual
+  const [dayOfMonth, setDayOfMonth] = useState('1'); 
   
-  // Parcialidades Generadas (Editables)
+  // STEP 2: Parcialidades Generadas
   const [installments, setInstallments] = useState<{ id: string; amount: string; date: string; }[]>([]);
+
+  // STEP 3: Notificaciones & Cobranza
+  const [reminderDays, setReminderDays] = useState('1'); // Días previos (ej: "1" o "1, 3")
+  const [overdueInterval, setOverdueInterval] = useState('3'); // Ciclo de emergencia (días)
+  const [msgClient, setMsgClient] = useState('👋 Hola {nombre}, te recordamos amablemente que tu próximo pago por *${monto}* vence el *{fecha}*. Cualquier duda, estamos a tu disposición.');
+  const [msgAgent, setMsgAgent] = useState('⚠️ RECORDATORIO COBRANZA: El pago de *${monto}* del cliente *{nombre}* vence el *{fecha}*. Por favor, da seguimiento.');
 
   useEffect(() => {
     if (open) {
@@ -67,29 +76,19 @@ export const CreateCreditSaleDialog = ({ open, onOpenChange, contact, onSuccess 
           if (i > 0) {
              if (frequency === 'MENSUAL') {
                  currentDate.setMonth(currentDate.getMonth() + 1);
-                 // Ajustar al día configurado
                  const targetDay = parseInt(dayOfMonth);
                  const lastDayOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).getDate();
                  currentDate.setDate(Math.min(targetDay, lastDayOfMonth));
              } else if (frequency === 'QUINCENAL') {
-                 // Lógica simple: Sumar 15 días aprox.
                  const currentDay = currentDate.getDate();
-                 if (currentDay <= 15) {
-                     currentDate.setDate(currentDate.getDate() + 15);
-                 } else {
-                     currentDate.setMonth(currentDate.getMonth() + 1);
-                     currentDate.setDate(1);
-                 }
+                 if (currentDay <= 15) currentDate.setDate(currentDate.getDate() + 15);
+                 else { currentDate.setMonth(currentDate.getMonth() + 1); currentDate.setDate(1); }
              } else if (frequency === 'SEMANAL') {
                  currentDate.setDate(currentDate.getDate() + 7);
              }
           }
 
-          generated.push({
-              id: `temp-${i}`,
-              amount: amountPerPayment,
-              date: currentDate.toISOString().split('T')[0]
-          });
+          generated.push({ id: `temp-${i}`, amount: amountPerPayment, date: currentDate.toISOString().split('T')[0] });
       }
 
       setInstallments(generated);
@@ -106,7 +105,6 @@ export const CreateCreditSaleDialog = ({ open, onOpenChange, contact, onSuccess 
       if (!concept) return toast.error("El concepto es obligatorio.");
       if (!responsibleId) return toast.error("Debes asignar un responsable de cobranza.");
 
-      // Validar que la suma coincida
       const sum = installments.reduce((acc, curr) => acc + parseFloat(curr.amount || '0'), 0);
       if (Math.abs(sum - parseFloat(totalAmount)) > 1) {
           return toast.error(`La suma de las parcialidades ($${sum}) no coincide con el total ($${totalAmount}).`);
@@ -114,12 +112,19 @@ export const CreateCreditSaleDialog = ({ open, onOpenChange, contact, onSuccess 
 
       setLoading(true);
       try {
+          const rDaysArray = reminderDays.split(',').map(d => parseInt(d.trim())).filter(d => !isNaN(d));
+          if (rDaysArray.length === 0) rDaysArray.push(1);
+
           // 1. Crear Venta Maestra
           const { data: sale, error: saleError } = await supabase.from('credit_sales').insert({
               contact_id: contact.id,
               responsible_id: responsibleId,
               concept: concept,
-              total_amount: parseFloat(totalAmount)
+              total_amount: parseFloat(totalAmount),
+              reminder_days_before: rDaysArray,
+              overdue_reminder_interval: parseInt(overdueInterval) || 3,
+              msg_template_client: msgClient,
+              msg_template_agent: msgAgent
           }).select().single();
 
           if (saleError) throw saleError;
@@ -135,11 +140,11 @@ export const CreateCreditSaleDialog = ({ open, onOpenChange, contact, onSuccess 
           const { error: instError } = await supabase.from('credit_installments').insert(installmentsData);
           if (instError) throw instError;
 
-          toast.success("Venta a crédito registrada correctamente. Los recordatorios automáticos han sido activados.");
+          toast.success("Crédito registrado y notificaciones automatizadas programadas.");
           onSuccess();
           onOpenChange(false);
       } catch (err: any) {
-          toast.error("Error al registrar venta: " + err.message);
+          toast.error("Error al registrar: " + err.message);
       } finally {
           setLoading(false);
       }
@@ -149,17 +154,27 @@ export const CreateCreditSaleDialog = ({ open, onOpenChange, contact, onSuccess 
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="bg-[#0f0f11] border-[#222225] text-white max-w-3xl rounded-3xl p-0 overflow-hidden shadow-2xl">
         <DialogHeader className="p-6 bg-[#161618] border-b border-[#222225]">
-          <DialogTitle className="flex items-center gap-3 text-amber-500 text-lg">
-            <div className="p-2 bg-amber-500/10 rounded-xl border border-amber-500/20"><Wallet className="w-5 h-5" /></div>
-            Aperturar Línea de Crédito
-          </DialogTitle>
-          <DialogDescription className="text-slate-400 text-xs mt-1">
-             Cliente: <strong className="text-white">{contact?.nombre} {contact?.apellido}</strong>
-          </DialogDescription>
+          <div className="flex justify-between items-center">
+             <div>
+                <DialogTitle className="flex items-center gap-3 text-amber-500 text-lg">
+                  <div className="p-2 bg-amber-500/10 rounded-xl border border-amber-500/20"><Wallet className="w-5 h-5" /></div>
+                  Aperturar Línea de Crédito
+                </DialogTitle>
+                <DialogDescription className="text-slate-400 text-xs mt-1">
+                   Cliente: <strong className="text-white">{contact?.nombre} {contact?.apellido}</strong>
+                </DialogDescription>
+             </div>
+             <div className="flex gap-1.5">
+                <div className={`w-2.5 h-2.5 rounded-full ${step >= 1 ? 'bg-amber-500' : 'bg-slate-700'}`} />
+                <div className={`w-2.5 h-2.5 rounded-full ${step >= 2 ? 'bg-amber-500' : 'bg-slate-700'}`} />
+                <div className={`w-2.5 h-2.5 rounded-full ${step >= 3 ? 'bg-amber-500' : 'bg-slate-700'}`} />
+             </div>
+          </div>
         </DialogHeader>
 
         <div className="p-6 bg-[#0a0a0c]">
-            {step === 1 ? (
+            {/* --- PASO 1: DATOS GENERALES --- */}
+            {step === 1 && (
                <div className="space-y-6 animate-in fade-in slide-in-from-left-4">
                   <div className="grid grid-cols-2 gap-6">
                      <div className="space-y-2">
@@ -215,7 +230,10 @@ export const CreateCreditSaleDialog = ({ open, onOpenChange, contact, onSuccess 
                      </div>
                   </div>
                </div>
-            ) : (
+            )}
+
+            {/* --- PASO 2: PARCIALIDADES --- */}
+            {step === 2 && (
                <div className="space-y-4 animate-in fade-in slide-in-from-right-4">
                   <div className="flex justify-between items-center bg-[#121214] p-4 rounded-xl border border-[#222225]">
                      <div className="space-y-1">
@@ -259,31 +277,77 @@ export const CreateCreditSaleDialog = ({ open, onOpenChange, contact, onSuccess 
                         </Table>
                      </ScrollArea>
                   </div>
-                  
-                  <div className="flex items-center gap-2 p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-amber-500 text-[10px]">
-                     <CalendarDays className="w-4 h-4 shrink-0" />
-                     <p>Al guardar, el sistema agendará los recordatorios para el gestor y enviará las notificaciones automáticas al cliente en las fechas establecidas.</p>
+               </div>
+            )}
+
+            {/* --- PASO 3: NOTIFICACIONES (NUEVO) --- */}
+            {step === 3 && (
+               <div className="space-y-6 animate-in fade-in slide-in-from-right-4">
+                  <div className="p-4 bg-[#121214] border border-[#222225] rounded-xl flex items-start gap-4">
+                     <div className="p-2 bg-amber-500/10 rounded-lg border border-amber-500/20 shrink-0"><BellRing className="w-5 h-5 text-amber-500"/></div>
+                     <div>
+                        <h4 className="text-xs font-bold text-white uppercase tracking-widest">Motor de Cobranza Automatizado</h4>
+                        <p className="text-[11px] text-slate-400 mt-1">El sistema enviará WhatsApps al cliente y al gestor asignado automáticamente basándose en las fechas estipuladas.</p>
+                     </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-6">
+                     <div className="space-y-2">
+                        <Label className="text-[10px] uppercase font-bold text-slate-500 ml-1 flex items-center gap-1.5"><CalendarDays className="w-3.5 h-3.5 text-indigo-400"/> Avisos Previos (Días)</Label>
+                        <Input value={reminderDays} onChange={e => setReminderDays(e.target.value)} className="bg-[#161618] border-[#222225] h-10 rounded-xl" placeholder="Ej: 1, 3 (Separa por comas)" />
+                        <p className="text-[9px] text-slate-600">¿Cuántos días ANTES del vencimiento avisamos? Ej: "1" = Un día antes.</p>
+                     </div>
+                     <div className="space-y-2">
+                        <Label className="text-[10px] uppercase font-bold text-red-500 ml-1 flex items-center gap-1.5"><ShieldAlert className="w-3.5 h-3.5"/> Alerta de Vencido (Ciclo)</Label>
+                        <Input type="number" value={overdueInterval} onChange={e => setOverdueInterval(e.target.value)} className="bg-[#161618] border-red-900/30 h-10 rounded-xl text-red-400" />
+                        <p className="text-[9px] text-slate-600">Si no pagan, ¿cada cuántos días insistimos? (Ej: "3" = Cada 3 días).</p>
+                     </div>
+                  </div>
+
+                  <div className="space-y-4 pt-2 border-t border-[#222225]">
+                     <div className="space-y-2">
+                        <Label className="text-[10px] uppercase font-bold text-slate-400 ml-1 flex items-center gap-1.5"><MessageSquare className="w-3.5 h-3.5 text-emerald-500"/> Mensaje para el Cliente</Label>
+                        <Textarea value={msgClient} onChange={e => setMsgClient(e.target.value)} className="bg-[#161618] border-[#222225] h-20 text-xs rounded-xl" />
+                        <div className="flex gap-2">
+                           <Badge variant="outline" className="text-[9px] border-[#333336] bg-[#0a0a0c]">{"{nombre}"}</Badge>
+                           <Badge variant="outline" className="text-[9px] border-[#333336] bg-[#0a0a0c]">{"{monto}"}</Badge>
+                           <Badge variant="outline" className="text-[9px] border-[#333336] bg-[#0a0a0c]">{"{fecha}"}</Badge>
+                        </div>
+                     </div>
+
+                     <div className="space-y-2">
+                        <Label className="text-[10px] uppercase font-bold text-slate-400 ml-1 flex items-center gap-1.5"><User className="w-3.5 h-3.5 text-indigo-400"/> Mensaje para el Gestor (Tú)</Label>
+                        <Textarea value={msgAgent} onChange={e => setMsgAgent(e.target.value)} className="bg-[#161618] border-[#222225] h-20 text-xs rounded-xl text-indigo-300" />
+                     </div>
                   </div>
                </div>
             )}
         </div>
 
-        <DialogFooter className="p-6 bg-[#161618] border-t border-[#222225]">
-          {step === 1 ? (
-             <>
-               <Button type="button" variant="ghost" onClick={() => onOpenChange(false)} className="h-11 rounded-xl">Cancelar</Button>
+        <DialogFooter className="p-6 bg-[#161618] border-t border-[#222225] flex justify-between">
+          <Button type="button" variant="ghost" onClick={() => onOpenChange(false)} className="h-11 rounded-xl">Cancelar</Button>
+          
+          <div className="flex gap-2">
+             {step > 1 && <Button type="button" variant="outline" onClick={() => setStep(step - 1)} className="h-11 rounded-xl border-[#333336] bg-[#0a0a0c]">Atrás</Button>}
+             
+             {step === 1 && (
                <Button onClick={handleGeneratePlan} className="bg-amber-600 hover:bg-amber-500 text-slate-950 font-bold h-11 px-8 rounded-xl shadow-lg uppercase tracking-widest text-[10px]">
                  Calcular Plan <ChevronRight className="w-4 h-4 ml-2" />
                </Button>
-             </>
-          ) : (
-             <>
-               <Button type="button" variant="ghost" onClick={() => setStep(1)} className="h-11 rounded-xl">Atrás</Button>
-               <Button onClick={handleSaveSale} disabled={loading} className="bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold h-11 px-8 rounded-xl shadow-lg uppercase tracking-widest text-[10px]">
-                 {loading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />} APROBAR CRÉDITO
+             )}
+             
+             {step === 2 && (
+               <Button onClick={() => setStep(3)} className="bg-amber-600 hover:bg-amber-500 text-slate-950 font-bold h-11 px-8 rounded-xl shadow-lg uppercase tracking-widest text-[10px]">
+                 Configurar Alertas <ChevronRight className="w-4 h-4 ml-2" />
                </Button>
-             </>
-          )}
+             )}
+
+             {step === 3 && (
+               <Button onClick={handleSaveSale} disabled={loading} className="bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold h-11 px-8 rounded-xl shadow-lg uppercase tracking-widest text-[10px]">
+                 {loading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />} FINALIZAR Y APROBAR CRÉDITO
+               </Button>
+             )}
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>
