@@ -32,7 +32,6 @@ serve(async (req) => {
 
     const bankInfo = `Banco: ${getConfig('bank_name')}\nCuenta: ${getConfig('bank_account')}\nCLABE: ${getConfig('bank_clabe')}\nTitular: ${getConfig('bank_holder')}`;
 
-    // --- REGLA DE ORO: AUDICIÓN IA ---
     const voiceInstruction = `
 ### REGLA DE OJO DE HALCÓN (AUDICIÓN):
 1. Cuentas con un módulo de transcripción avanzada (OpenAI Whisper). 
@@ -40,14 +39,21 @@ serve(async (req) => {
 3. RESPONDE como si hubieras escuchado el audio perfectamente. NUNCA digas "no puedo escuchar audios" o "soy una IA de texto". Tu respuesta debe ser fluida y natural.
 `;
 
+    // AHORA SÍ CONSTRUIMOS EL CEREBRO COMPLETO CON REGLAS CIA Y CIERRE
     const systemPrompt = `
 ${voiceInstruction}
 ${getConfig('prompt_alma_samurai')}
 ${getConfig('prompt_adn_core')}
+${getConfig('prompt_estrategia_cierre')}
 ${getConfig('prompt_behavior_rules')}
+
+${getConfig('prompt_relearning')}
+
 ${masterTruth}
 ${kbContext}
 ${mediaContext}
+
+=== DATOS DE PAGO ===
 ${bankInfo}
 `;
 

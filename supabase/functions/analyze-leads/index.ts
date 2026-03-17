@@ -12,13 +12,11 @@ serve(async (req) => {
     const supabaseClient = createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '');
     const { lead_id, force } = await req.json();
 
-    // Si viene lead_id, procesamos uno. Si no, buscamos huérfanos (Modo Batch)
     let leadsToProcess = [];
     if (lead_id) {
        const { data: l } = await supabaseClient.from('leads').select('*').eq('id', lead_id).single();
        if (l) leadsToProcess = [l];
     } else {
-       // Buscar hasta 5 leads que les falte info crítica y no hayan sido analizados en la última hora
        const { data: batch } = await supabaseClient.from('leads')
           .select('*')
           .or('email.is.null,ciudad.is.null,assigned_to.is.null')
@@ -40,6 +38,9 @@ serve(async (req) => {
 
     const results = [];
 
+    // REGEX para validar que el agente sugerido por la IA sea un UUID real
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
     for (const lead of leadsToProcess) {
         const { data: messagesData } = await supabaseClient
             .from('conversaciones')
@@ -57,7 +58,7 @@ DATOS:
 1. NOMBRE: Nombre real.
 2. CIUDAD: Ciudad/Estado en México.
 3. EMAIL: Correos.
-ROUTING: Elige el ID del agente según la ciudad:
+ROUTING: Elige EXACTAMENTE el ID del agente según la ciudad:
 ${agentsContext}
 RESPONDE SOLO JSON: {"nombre": "...", "email": "...", "ciudad": "...", "intent": "BAJO|MEDIO|ALTO", "perfil": "...", "suggested_agent_id": "UUID"}`;
 
@@ -82,28 +83,38 @@ RESPONDE SOLO JSON: {"nombre": "...", "email": "...", "ciudad": "...", "intent":
         if (result.intent) updates.buying_intent = result.intent;
         if (result.perfil) updates.perfil_psicologico = result.perfil;
         
-        // Routing Geográfico Automático
+        // Routing Geográfico Automático con Validación Estricta
         if (!lead.assigned_to) {
             let finalAgentId = result.suggested_agent_id;
-            if ((!finalAgentId || finalAgentId === 'null') && updates.ciudad) {
+            
+            // Si la IA no devuelve un UUID válido, buscamos manualmente por la ciudad
+            if (!uuidRegex.test(finalAgentId) && updates.ciudad) {
                 const cityNorm = updates.ciudad.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
                 const match = agents.find(a => a.territories?.some(t => cityNorm.includes(t.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, ""))));
                 if (match) finalAgentId = match.id;
             }
-            if (finalAgentId && finalAgentId !== 'null') updates.assigned_to = finalAgentId;
+
+            // Solo asignamos si estamos 100% seguros de que es un UUID válido de Postgres
+            if (uuidRegex.test(finalAgentId)) {
+                updates.assigned_to = finalAgentId;
+            }
         }
 
         await supabaseClient.from('leads').update(updates).eq('id', lead.id);
         
-        // Disparo Meta CAPI si hay datos nuevos
+        // Disparo Meta CAPI aislado (Si falla, no rompe el proceso de los demás leads)
         if ((updates.email || updates.ciudad) && !lead.capi_lead_event_sent_at) {
-             await supabaseClient.functions.invoke('meta-capi-sender', {
-                body: {
-                    eventData: { event_name: 'Lead', lead_id: lead.id, user_data: { em: updates.email || lead.email, ph: lead.telefono, fn: updates.nombre || lead.nombre, ct: updates.ciudad || lead.ciudad } },
-                    config: { pixel_id: configMap['meta_pixel_id'], access_token: configMap['meta_access_token'] }
-                }
-            });
-            await supabaseClient.from('leads').update({ capi_lead_event_sent_at: new Date().toISOString() }).eq('id', lead.id);
+             try {
+                 await supabaseClient.functions.invoke('meta-capi-sender', {
+                    body: {
+                        eventData: { event_name: 'Lead', lead_id: lead.id, user_data: { em: updates.email || lead.email, ph: lead.telefono, fn: updates.nombre || lead.nombre, ct: updates.ciudad || lead.ciudad } },
+                        config: { pixel_id: configMap['meta_pixel_id'], access_token: configMap['meta_access_token'] }
+                    }
+                 });
+                 await supabaseClient.from('leads').update({ capi_lead_event_sent_at: new Date().toISOString() }).eq('id', lead.id);
+             } catch (capiError) {
+                 console.error("Fallo silencioso al enviar a CAPI:", capiError);
+             }
         }
         results.push({ id: lead.id, updates });
     }

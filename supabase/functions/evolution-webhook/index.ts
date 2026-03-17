@@ -7,10 +7,6 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-const GOWA_BASE_URL = "https://gowa.poesis.net";
-const GOWA_AUTH_HEADER = "Basic Z293YTpHMHc0UzNjdXIzITIwMjY=";
-const GOWA_DEVICE_ID = "gowa";
-
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 serve(async (req) => {
@@ -40,7 +36,6 @@ serve(async (req) => {
     let payload;
     try { payload = JSON.parse(payloadText); } catch (e) { return new Response("Invalid JSON", { status: 400 }); }
     
-    // --- 1. RESOLVER CANAL Y DATOS BÁSICOS ---
     let phone, text = '', pushName = 'Cliente WA', mediaType = null, messageId = null;
 
     if (payload.device_id && payload.event) { 
@@ -64,32 +59,29 @@ serve(async (req) => {
     if (!phone || !messageId) return new Response('invalid_data', { status: 200 });
     let senderPhone = phone.split('@')[0].replace(/\D/g, '');
 
-    // --- 2. DEDUPLICACIÓN ---
-    const { data: existingMsg } = await supabaseClient
-        .from('conversaciones')
-        .select('id')
-        .contains('metadata', { msgId: messageId })
-        .limit(1)
-        .maybeSingle();
-    
+    const { data: existingMsg } = await supabaseClient.from('conversaciones').select('id').contains('metadata', { msgId: messageId }).limit(1).maybeSingle();
     if (existingMsg) return new Response('duplicate', { status: 200 });
 
-    // --- 3. DESCARGA GOWA 2-PASOS ---
+    // BUSCAR CREDENCIALES DEL CANAL PARA DESCARGA DINÁMICA
+    const { data: channelData } = await supabaseClient.from('whatsapp_channels').select('*').eq('id', channelIdParam).maybeSingle();
     let downloadedBlob = null;
     let finalMediaUrl = null;
 
-    if (mediaType && mediaType !== 'text') {
+    if (mediaType && mediaType !== 'text' && channelData) {
         try {
-            const headers = { "Authorization": GOWA_AUTH_HEADER, "X-Device-Id": GOWA_DEVICE_ID };
+            const apiBaseUrl = channelData.api_url.endsWith('/') ? channelData.api_url.slice(0, -1) : channelData.api_url;
+            const authHeader = channelData.api_key.startsWith('Basic ') ? channelData.api_key : `Basic ${channelData.api_key}`;
+            const headers = { "Authorization": authHeader, "X-Device-Id": channelData.instance_id };
+            
             if (mediaType === 'audio') await sleep(1500);
 
-            const triggerUrl = `${GOWA_BASE_URL}/message/${messageId}/download?phone=${senderPhone}`;
+            const triggerUrl = `${apiBaseUrl}/message/${messageId}/download?phone=${senderPhone}`;
             const triggerRes = await fetch(triggerUrl, { headers });
             const triggerData = await triggerRes.json();
 
             if (triggerData.code === "SUCCESS" && triggerData.results?.file_path) {
                 const realPath = triggerData.results.file_path;
-                const binaryUrl = `${GOWA_BASE_URL}/${realPath}`;
+                const binaryUrl = `${apiBaseUrl}/${realPath}`;
                 
                 const binaryRes = await fetch(binaryUrl, { headers });
                 if (binaryRes.ok) {
@@ -99,10 +91,10 @@ serve(async (req) => {
                     if (uploadData) finalMediaUrl = supabaseClient.storage.from('media').getPublicUrl(fileName).data.publicUrl;
                 }
             }
-        } catch (e) { await logTrace(`Error en descarga: ${e.message}`, true); }
+        } catch (e) { await logTrace(`Error en descarga multimedia: ${e.message}`, true); }
     }
 
-    // --- 4. WHISPER ---
+    // WHISPER (Si es audio)
     if (mediaType === 'audio' && downloadedBlob) {
         const { data: conf } = await supabaseClient.from('app_config').select('value').eq('key', 'openai_api_key').maybeSingle();
         if (conf?.value) {
@@ -111,11 +103,7 @@ serve(async (req) => {
             formData.append('model', 'whisper-1');
             formData.append('language', 'es');
 
-            const whisperRes = await fetch("https://api.openai.com/v1/audio/transcriptions", {
-                method: 'POST',
-                headers: { 'Authorization': `Bearer ${conf.value}` },
-                body: formData
-            });
+            const whisperRes = await fetch("https://api.openai.com/v1/audio/transcriptions", { method: 'POST', headers: { 'Authorization': `Bearer ${conf.value}` }, body: formData });
             if (whisperRes.ok) {
                 const whisperData = await whisperRes.json();
                 if (whisperData.text) text = `[TRANSCRIPCIÓN DE NOTA DE VOZ]: "${whisperData.text}"`;
@@ -123,22 +111,12 @@ serve(async (req) => {
         }
     }
 
-    // --- 5. ACTUALIZAR CRM ---
     let { data: lead } = await supabaseClient.from('leads').select('*').or(`telefono.ilike.%${senderPhone.slice(-10)}%`).limit(1).maybeSingle();
     if (!lead) {
-      const { data: nl } = await supabaseClient.from('leads').insert({ nombre: pushName, telefono: senderPhone, channel_id: channelIdParam || '8681577e-2e06-444a-8743-34e8f1725b82' }).select().single();
+      const { data: nl } = await supabaseClient.from('leads').insert({ nombre: pushName, telefono: senderPhone, channel_id: channelIdParam || null }).select().single();
       lead = nl;
     } else {
-      await supabaseClient.from('leads').update({ last_message_at: new Date().toISOString() }).eq('id', lead.id);
-      
-      // NUEVO: ALERTA DE COBRANZA (Si responde alguien con deuda)
-      const { data: contactCheck } = await supabaseClient.from('contacts').select('financial_status').eq('lead_id', lead.id).maybeSingle();
-      if (contactCheck && (contactCheck.financial_status === 'Atrasado' || contactCheck.financial_status === 'Muy atrasado' || contactCheck.financial_status === 'Abandonado')) {
-          await supabaseClient.from('activity_logs').insert({
-              action: 'ERROR', resource: 'SYSTEM',
-              description: `🚨 COBRANZA: El cliente moroso '${lead.nombre}' acaba de enviar un mensaje en WhatsApp.`, status: 'ERROR'
-          });
-      }
+      await supabaseClient.from('leads').update({ last_message_at: new Date().toISOString(), followup_stage: 0 }).eq('id', lead.id);
     }
 
     await supabaseClient.from('conversaciones').insert({ 
@@ -146,7 +124,6 @@ serve(async (req) => {
         metadata: { msgId: messageId, mediaUrl: finalMediaUrl, mediaType }
     });
 
-    // --- 6. PROCESOS PARALELOS SEGUROS ---
     const analyzeTask = supabaseClient.functions.invoke('analyze-leads', { body: { lead_id: lead.id, force: false } });
     let aiTask = Promise.resolve();
 
@@ -163,8 +140,7 @@ serve(async (req) => {
               const messages = [ { role: 'system', content: context.system_prompt }, ...history.map(h => ({ role: (['IA', 'SAMURAI', 'BOT'].includes(h.emisor)) ? 'assistant' : 'user', content: h.mensaje })) ];
 
               const aiRes = await fetch("https://api.openai.com/v1/chat/completions", {
-                method: 'POST',
-                headers: { 'Authorization': `Bearer ${openaiKey}`, 'Content-Type': 'application/json' },
+                method: 'POST', headers: { 'Authorization': `Bearer ${openaiKey}`, 'Content-Type': 'application/json' },
                 body: JSON.stringify({ model: "gpt-4o", messages, temperature: 0.4 })
               });
 
@@ -190,7 +166,6 @@ serve(async (req) => {
     }
 
     await Promise.allSettled([analyzeTask, aiTask]);
-
     return new Response('ok', { headers: corsHeaders });
   } catch (err) {
     await logTrace(`ERROR CRÍTICO: ${err.message}`, true);
