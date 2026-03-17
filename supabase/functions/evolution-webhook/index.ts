@@ -7,6 +7,9 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+// Función auxiliar para esperar
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
 serve(async (req) => {
   const url = new URL(req.url);
   const channelIdParam = url.searchParams.get('channel_id');
@@ -55,8 +58,8 @@ serve(async (req) => {
        }
     }
     if (!channel) {
-       const { data } = await supabaseClient.from('whatsapp_channels').select('*').eq('is_active', true).limit(1).maybeSingle();
-       if (data) channel = data;
+       const { data: firstActive } = await supabaseClient.from('whatsapp_channels').select('*').eq('is_active', true).limit(1).maybeSingle();
+       if (data) channel = firstActive;
     }
     if (!channel) return new Response('invalid_channel', { status: 200 });
 
@@ -91,6 +94,7 @@ serve(async (req) => {
          text = p.body; mediaType = 'text';
        }
     } else { 
+       // Fallback para otros proveedores
        if (payload.event && payload.event !== 'messages.upsert') return new Response('ignored_event', { status: 200 });
        const msg = payload.data?.[0] || payload.data || payload;
        if (msg?.key?.fromMe || payload.fromMe) return new Response('ignored_self', { status: 200 });
@@ -98,15 +102,8 @@ serve(async (req) => {
        phone = msg?.key?.remoteJid?.split('@')[0] || payload.phone || payload.sender;
        pushName = payload.pushName || msg?.pushName || 'Lead WA';
        
-       if (msg?.message?.imageMessage) { 
-           text = msg?.message?.imageMessage?.caption || "[Imagen]"; mediaType = 'image'; 
-       } 
-       else if (msg?.message?.audioMessage) { 
-           text = "[Audio]"; mediaType = 'audio'; 
-       } 
-       else { 
-           text = msg?.message?.conversation || msg?.message?.extendedTextMessage?.text || msg?.text || payload.message || ''; 
-       }
+       if (msg?.message?.audioMessage) { text = "[Audio]"; mediaType = 'audio'; } 
+       else { text = msg?.message?.conversation || msg?.message?.extendedTextMessage?.text || msg?.text || payload.message || ''; }
     }
 
     if (!phone) return new Response('invalid_phone', { status: 200 });
@@ -114,7 +111,7 @@ serve(async (req) => {
     let cleanPhone = phone.split('@')[0].replace(/\D/g, '');
     if (cleanPhone.startsWith('52') && cleanPhone.length === 12 && cleanPhone[2] !== '1') cleanPhone = '521' + cleanPhone.substring(2);
 
-    // --- 3. DESCARGA Y WHISPER ---
+    // --- 3. DESCARGA Y WHISPER (CON RETRY PARA 404) ---
     let finalMediaUrl = null;
     let downloadedBlob = null; 
 
@@ -127,10 +124,25 @@ serve(async (req) => {
         downloadedBlob = new Blob([u8arr], {type: mediaType === 'audio' ? 'audio/ogg' : 'application/octet-stream'});
     } else if (mediaUrl) {
         try {
+            // REGLA DE ORO: Si es audio de Gowa, esperar 1.5s para evitar el 404 del servidor de origen
+            if (mediaType === 'audio' && channel.provider === 'gowa') {
+               await logTrace("Esperando 1.5s para que Gowa escriba el archivo...");
+               await sleep(1500);
+            }
+
             const authHeader = channel.api_key.startsWith('Basic ') ? channel.api_key : `Basic ${channel.api_key}`;
             const mediaRes = await fetch(mediaUrl, { headers: { 'Authorization': authHeader } });
-            if (mediaRes.ok) downloadedBlob = await mediaRes.blob();
-        } catch (e) { await logTrace(`Error descargando adjunto: ${e.message}`, true); }
+            
+            if (mediaRes.ok) {
+                downloadedBlob = await mediaRes.blob();
+            } else {
+                await logTrace(`Fallo descarga (${mediaRes.status}). Intentando segundo intento en 2s...`, true);
+                await sleep(2000);
+                const secondTry = await fetch(mediaUrl, { headers: { 'Authorization': authHeader } });
+                if (secondTry.ok) downloadedBlob = await secondTry.blob();
+                else await logTrace(`Error definitivo descarga: ${secondTry.status}`, true);
+            }
+        } catch (e) { await logTrace(`Excepción descarga: ${e.message}`, true); }
     }
 
     if (downloadedBlob) {
@@ -144,7 +156,7 @@ serve(async (req) => {
 
     // WHISPER
     if (mediaType === 'audio' && downloadedBlob) {
-        await logTrace("Audio listo. Llamando a motor Whisper...");
+        await logTrace("Iniciando motor Whisper...");
         const { data: conf } = await supabaseClient.from('app_config').select('value').eq('key', 'openai_api_key').maybeSingle();
         if (conf?.value) {
             const formData = new FormData();
@@ -165,8 +177,7 @@ serve(async (req) => {
                     await logTrace("Transcripción exitosa.");
                 }
             } else {
-                const errorData = await whisperRes.json();
-                await logTrace(`Fallo Whisper: ${JSON.stringify(errorData)}`, true);
+                await logTrace(`Error Whisper API: ${await whisperRes.text()}`, true);
             }
         }
     }
@@ -182,7 +193,7 @@ serve(async (req) => {
     }
 
     await supabaseClient.from('conversaciones').insert({ 
-        lead_id: lead.id, emisor: 'CLIENTE', mensaje: text || "[Nota de voz sin texto]", platform: 'WHATSAPP',
+        lead_id: lead.id, emisor: 'CLIENTE', mensaje: text || "[Audio sin procesar]", platform: 'WHATSAPP',
         metadata: finalMediaUrl ? { mediaUrl: finalMediaUrl, mediaType } : {}
     });
 
