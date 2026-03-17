@@ -37,9 +37,17 @@ export const ChannelsTab = () => {
   };
 
   const handleSetDefault = async (id: string) => {
-    setDefaultNotifyId(id);
-    await supabase.from('app_config').upsert({ key: 'default_notification_channel', value: id, category: 'SYSTEM' }, { onConflict: 'key' });
-    toast.success("Canal de notificaciones actualizado");
+    if (defaultNotifyId === id) {
+       // Si ya era el default, lo desactivamos
+       setDefaultNotifyId('');
+       await supabase.from('app_config').delete().eq('key', 'default_notification_channel');
+       toast.success("Alertas desactivadas para este canal.");
+    } else {
+       // Activamos este como el único canal de alertas
+       setDefaultNotifyId(id);
+       await supabase.from('app_config').upsert({ key: 'default_notification_channel', value: id, category: 'SYSTEM' }, { onConflict: 'key' });
+       toast.success("Canal de alertas maestro actualizado.");
+    }
   };
 
   const handleAddChannel = () => {
@@ -108,9 +116,12 @@ export const ChannelsTab = () => {
             <CardHeader className="py-4 border-b border-slate-800/50 flex flex-row items-center justify-between bg-slate-950/20">
                <div className="flex items-center gap-4 flex-1">
                   <Input value={ch.name} onChange={e => setChannels(channels.map(c => c.id === ch.id ? {...c, name: e.target.value} : c))} className="bg-transparent border-0 font-bold text-slate-100 p-0 h-auto text-lg focus-visible:ring-0" placeholder="Nombre de la cuenta (Ej: WhatsApp Principal)" />
-                  {defaultNotifyId === ch.id && <Badge className="bg-amber-600 text-white uppercase text-[9px] font-bold"><BellRing className="w-3 h-3 mr-1"/> Canal de Sistema</Badge>}
+                  {defaultNotifyId === ch.id && <Badge className="bg-amber-600 text-white uppercase text-[9px] font-bold shrink-0"><BellRing className="w-3 h-3 mr-1"/> Canal de Alertas</Badge>}
                </div>
-               <div className="flex gap-2">
+               <div className="flex gap-2 shrink-0">
+                  {!ch.is_new && defaultNotifyId === ch.id && (
+                     <Button variant="outline" size="sm" onClick={() => handleSetDefault(ch.id)} className="text-[10px] border-amber-500/50 text-amber-500 hover:bg-amber-900/20 uppercase font-bold">Desactivar Alertas</Button>
+                  )}
                   {!ch.is_new && defaultNotifyId !== ch.id && (
                      <Button variant="ghost" size="sm" onClick={() => handleSetDefault(ch.id)} className="text-[10px] text-slate-400 hover:text-amber-500 uppercase font-bold">Usar para Alertas</Button>
                   )}
@@ -148,7 +159,7 @@ export const ChannelsTab = () => {
 
                   <div className="space-y-2">
                      <Label className="text-[10px] uppercase font-bold text-slate-500 tracking-widest">Instance ID / Dispositivo</Label>
-                     <Input value={ch.instance_id} onChange={e => setChannels(channels.map(c => c.id === ch.id ? {...c, instance_id: e.target.value} : c))} className="bg-slate-950 border-slate-800 h-11" placeholder="Nombre de tu instancia en Gowa" />
+                     <Input value={ch.instance_id} onChange={e => setChannels(channels.map(c => c.id === ch.id ? {...c, instance_id: e.target.value} : c))} className="bg-slate-950 border-slate-800 h-11" placeholder="Nombre de tu instancia" />
                   </div>
                </div>
 

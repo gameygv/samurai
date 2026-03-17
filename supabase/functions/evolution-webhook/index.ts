@@ -12,7 +12,6 @@ serve(async (req) => {
   const channelIdParam = url.searchParams.get('channel_id');
   const supabaseClient = createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '');
 
-  // Validación para Meta Webhook
   if (req.method === 'GET') {
     const mode = url.searchParams.get("hub.mode");
     const token = url.searchParams.get("hub.verify_token");
@@ -48,14 +47,6 @@ serve(async (req) => {
        const { data } = await supabaseClient.from('whatsapp_channels').select('*').or(`instance_id.eq.${deviceNum},instance_id.eq.gowa`).limit(1).maybeSingle();
        if (data) channel = data;
     }
-    // Si Meta, usar el phone_number_id para inferir instancia
-    if (!channel && payload.object === 'whatsapp_business_account') {
-       const phoneId = payload.entry?.[0]?.changes?.[0]?.value?.metadata?.phone_number_id;
-       if (phoneId) {
-          const { data } = await supabaseClient.from('whatsapp_channels').select('*').eq('instance_id', phoneId).maybeSingle();
-          if (data) channel = data;
-       }
-    }
     if (!channel) {
        const { data: defConfig } = await supabaseClient.from('app_config').select('value').eq('key', 'default_notification_channel').maybeSingle();
        if (defConfig?.value) {
@@ -69,32 +60,10 @@ serve(async (req) => {
     }
     if (!channel) return new Response('invalid_channel', { status: 200 });
 
-    let phone, text = '', pushName = 'Cliente WA', mediaUrl = null, mediaType = null;
+    let phone, text = '', pushName = 'Cliente WA', mediaUrl = null, mediaType = null, base64String = null;
 
-    // --- 2. PARSEAR MENSAJES (3 PROVEEDORES) ---
-    
-    // A. META CLOUD API
-    if (payload.object === 'whatsapp_business_account') {
-        const entry = payload.entry?.[0];
-        const change = entry?.changes?.[0]?.value;
-        if (!change?.messages) return new Response('ignored_status', { status: 200 }); // Ignorar recibos de lectura
-        
-        const msg = change.messages[0];
-        phone = msg.from;
-        pushName = change.contacts?.[0]?.profile?.name || 'Lead Meta';
-        
-        if (msg.type === 'text') {
-            text = msg.text?.body || '';
-        } else if (msg.type === 'image') {
-            text = msg.image?.caption || '[Imagen]'; mediaType = 'image';
-        } else if (msg.type === 'audio') {
-            text = '[Audio]'; mediaType = 'audio';
-        } else if (msg.type === 'document') {
-            text = msg.document?.caption || '[Documento]'; mediaType = 'document';
-        }
-    } 
-    // B. GOWA API
-    else if (payload.device_id && payload.event) { 
+    // --- 2. PARSEAR MENSAJE GOWA / EVOLUTION ---
+    if (payload.device_id && payload.event) { 
        if (payload.event !== 'message') return new Response('ignored_event', { status: 200 });
        if (!payload.payload || payload.payload.is_from_me) return new Response('ignored_self', { status: 200 });
 
@@ -103,15 +72,29 @@ serve(async (req) => {
        pushName = p.from_name || 'Lead Gowa';
        const GOWA_BASE_URL = channel.api_url.endsWith('/') ? channel.api_url.slice(0, -1) : channel.api_url;
 
-       if (p.image) { text = p.body || "[Imagen]"; mediaUrl = `${GOWA_BASE_URL}/${p.image}`; mediaType = 'image'; } 
-       else if (p.video) { text = p.body || "[Video]"; mediaUrl = `${GOWA_BASE_URL}/${p.video}`; mediaType = 'video'; } 
-       else if (p.audio) { text = "[Audio]"; const audioPath = p.audio.split(";")[0].trim(); mediaUrl = `${GOWA_BASE_URL}/${audioPath}`; mediaType = 'audio'; } 
-       else if (p.document) { text = p.body || "[Documento]"; mediaUrl = `${GOWA_BASE_URL}/${p.document}`; mediaType = 'document'; } 
-       else if (p.sticker) { text = "[Sticker]"; mediaUrl = `${GOWA_BASE_URL}/${p.sticker}`; mediaType = 'image'; } 
-       else if (p.body) { text = p.body; mediaType = 'text'; }
-    } 
-    // C. EVOLUTION API V1/V2
-    else { 
+       if (p.image) {
+         text = p.body || "[Imagen]"; mediaType = 'image';
+         if (p.image.startsWith('data:')) base64String = p.image; else mediaUrl = `${GOWA_BASE_URL}/${p.image}`;
+       } else if (p.video) {
+         text = p.body || "[Video]"; mediaType = 'video';
+         if (p.video.startsWith('data:')) base64String = p.video; else mediaUrl = `${GOWA_BASE_URL}/${p.video}`;
+       } else if (p.audio) {
+         text = "[Audio]"; mediaType = 'audio';
+         if (p.audio.startsWith('data:')) base64String = p.audio; else {
+            const audioPath = p.audio.split(";")[0].trim();
+            mediaUrl = `${GOWA_BASE_URL}/${audioPath}`;
+         }
+       } else if (p.document) {
+         text = p.body || "[Documento]"; mediaType = 'document';
+         if (p.document.startsWith('data:')) base64String = p.document; else mediaUrl = `${GOWA_BASE_URL}/${p.document}`;
+       } else if (p.sticker) {
+         text = "[Sticker]"; mediaType = 'image';
+         if (p.sticker.startsWith('data:')) base64String = p.sticker; else mediaUrl = `${GOWA_BASE_URL}/${p.sticker}`;
+       } else if (p.body) {
+         text = p.body; mediaType = 'text';
+       }
+    } else { 
+       // Evolution API o similar
        if (payload.event && payload.event !== 'messages.upsert') return new Response('ignored_event', { status: 200 });
        const msg = payload.data?.[0] || payload.data || payload;
        if (msg?.key?.fromMe || payload.fromMe) return new Response('ignored_self', { status: 200 });
@@ -119,45 +102,93 @@ serve(async (req) => {
        phone = msg?.key?.remoteJid?.split('@')[0] || payload.phone || payload.sender;
        pushName = payload.pushName || msg?.pushName || 'Lead WA';
        
-       if (msg?.message?.imageMessage) { text = msg?.message?.imageMessage?.caption || "[Imagen]"; mediaType = 'image'; } 
-       else if (msg?.message?.audioMessage) { text = "[Audio]"; mediaType = 'audio'; } 
-       else { text = msg?.message?.conversation || msg?.message?.extendedTextMessage?.text || msg?.text || payload.message || ''; }
+       if (msg?.message?.imageMessage) { 
+           text = msg?.message?.imageMessage?.caption || "[Imagen]"; mediaType = 'image'; 
+           if (payload.data?.message?.base64) base64String = `data:image/jpeg;base64,${payload.data.message.base64}`;
+       } 
+       else if (msg?.message?.videoMessage) { 
+           text = msg?.message?.videoMessage?.caption || "[Video]"; mediaType = 'video'; 
+       }
+       else if (msg?.message?.audioMessage) { 
+           text = "[Audio]"; mediaType = 'audio'; 
+           if (payload.data?.message?.base64) base64String = `data:audio/ogg;base64,${payload.data.message.base64}`;
+       } 
+       else { 
+           text = msg?.message?.conversation || msg?.message?.extendedTextMessage?.text || msg?.text || payload.message || ''; 
+       }
     }
 
     if (!phone) return new Response('invalid_phone', { status: 200 });
 
-    if (!text.trim() && !mediaUrl && !mediaType) {
-        await logTrace(`IGNORADO: Evento vacío de ${phone}`);
+    if (!text.trim() && !mediaUrl && !mediaType && !base64String) {
+        await logTrace(`IGNORADO: Evento de sistema sin contenido para ${phone}`);
         return new Response('empty_message_ignored', { status: 200 });
     }
 
     let cleanPhone = phone.split('@')[0].replace(/\D/g, '');
     if (cleanPhone.startsWith('52') && cleanPhone.length === 12 && cleanPhone[2] !== '1') cleanPhone = '521' + cleanPhone.substring(2);
 
-    // --- 3. DESCARGA MULTIMEDIA Y MÓDULO AUDITIVO (WHISPER) ---
+    // --- 3. DESCARGA MULTIMEDIA Y WHISPER ---
     let finalMediaUrl = null;
     let downloadedBlob = null; 
 
-    if (mediaUrl) {
+    // Procesar Base64 si existe
+    if (base64String) {
         try {
+            await logTrace(`Procesando archivo Base64...`);
+            const arr = base64String.split(',');
+            const mimeMatch = arr[0].match(/:(.*?);/);
+            const mime = mimeMatch ? mimeMatch[1] : (mediaType === 'audio' ? 'audio/ogg' : 'application/octet-stream');
+            const bstr = atob(arr[1]);
+            let n = bstr.length;
+            const u8arr = new Uint8Array(n);
+            while(n--){ u8arr[n] = bstr.charCodeAt(n); }
+            downloadedBlob = new Blob([u8arr], {type: mime});
+        } catch(e) { await logTrace(`Error procesando Base64: ${e.message}`, true); }
+    } 
+    // Procesar URL si no hay Base64
+    else if (mediaUrl) {
+        try {
+            await logTrace(`Descargando archivo desde URL: ${mediaUrl}`);
             const authHeader = channel.api_key.startsWith('Basic ') ? channel.api_key : `Basic ${channel.api_key}`;
             const mediaRes = await fetch(mediaUrl, { headers: { 'Authorization': authHeader } });
             if (mediaRes.ok) {
                 downloadedBlob = await mediaRes.blob();
-                const ext = mediaUrl.split('.').pop()?.split('?')[0] || 'bin';
-                const fileName = `inbound/${Date.now()}_${Math.random().toString(36).substring(7)}.${ext}`;
-                const { data: uploadData } = await supabaseClient.storage.from('media').upload(fileName, downloadedBlob, { contentType: downloadedBlob.type });
-                if (uploadData) finalMediaUrl = supabaseClient.storage.from('media').getPublicUrl(fileName).data.publicUrl;
+            } else {
+                await logTrace(`Error HTTP al descargar adjunto: ${mediaRes.status}`, true);
             }
-        } catch (e) { await logTrace(`Error bajando adjunto: ${e.message}`, true); }
+        } catch (e) { await logTrace(`Error bajando adjunto URL: ${e.message}`, true); }
     }
 
+    // Subir a Storage
+    if (downloadedBlob) {
+        try {
+            let ext = 'bin';
+            if (mediaType === 'audio') ext = 'ogg';
+            if (mediaType === 'image') ext = 'jpg';
+            if (mediaType === 'video') ext = 'mp4';
+            if (mediaType === 'document') ext = 'pdf';
+
+            const fileName = `inbound/${Date.now()}_${Math.random().toString(36).substring(7)}.${ext}`;
+            const { data: uploadData, error: uploadError } = await supabaseClient.storage.from('media').upload(fileName, downloadedBlob, { contentType: downloadedBlob.type });
+            if (uploadError) throw uploadError;
+            if (uploadData) finalMediaUrl = supabaseClient.storage.from('media').getPublicUrl(fileName).data.publicUrl;
+        } catch(e) {
+            await logTrace(`Error subiendo Blob a Storage: ${e.message}`, true);
+        }
+    }
+
+    // TRANSCRIPCIÓN WHISPER (Con File API seguro)
     if (mediaType === 'audio' && downloadedBlob) {
         try {
+            await logTrace("Audio descargado. Iniciando Whisper...");
             const { data: conf } = await supabaseClient.from('app_config').select('value').eq('key', 'openai_api_key').maybeSingle();
+            
             if (conf?.value) {
                 const formData = new FormData();
-                formData.append('file', downloadedBlob, 'voice_note.ogg'); 
+                // OpenAI API prefiere File objects nativos sobre Blobs crudos para la extensión
+                const file = new File([downloadedBlob], 'voice_note.ogg', { type: 'audio/ogg' });
+                formData.append('file', file); 
                 formData.append('model', 'whisper-1');
                 formData.append('language', 'es');
 
@@ -171,20 +202,27 @@ serve(async (req) => {
                     const whisperData = await whisperRes.json();
                     if (whisperData.text) {
                         text = `[TRANSCRIPCIÓN DE NOTA DE VOZ]: "${whisperData.text}"`;
+                        await logTrace(`Audio transcrito con éxito.`);
                     }
+                } else {
+                    const err = await whisperRes.text();
+                    await logTrace(`Fallo Whisper API: ${err}`, true);
                 }
+            } else {
+                await logTrace(`Error Whisper: API Key no configurada`, true);
             }
-        } catch (err) { await logTrace(`Excepción Whisper: ${err.message}`, true); }
+        } catch (err) {
+            await logTrace(`Excepción en Whisper: ${err.message}`, true);
+        }
     }
 
-    // --- 4. ACTUALIZAR CRM MANTENIENDO CANAL ---
+    // --- 4. ACTUALIZAR CRM ---
     let { data: lead } = await supabaseClient.from('leads').select('*').or(`telefono.ilike.%${cleanPhone.slice(-10)}%`).limit(1).maybeSingle();
     
     if (!lead) {
       const { data: nl } = await supabaseClient.from('leads').insert({ nombre: pushName, telefono: cleanPhone, channel_id: channel.id }).select().single();
       lead = nl;
     } else {
-      // ESTO ES CLAVE: Si el lead me habla por otro canal, actualizo el channel_id
       await supabaseClient.from('leads').update({ last_message_at: new Date().toISOString(), channel_id: channel.id }).eq('id', lead.id);
     }
 
@@ -193,15 +231,19 @@ serve(async (req) => {
         metadata: finalMediaUrl ? { mediaUrl: finalMediaUrl, mediaType } : {}
     });
 
-    await logTrace(`Mensaje de ${lead.nombre} guardado vía Canal: ${channel.name}`);
+    await logTrace(`Mensaje de ${lead.nombre} guardado.`);
 
     // --- 5. LÓGICA IA ---
     if (!lead.ai_paused) {
+       await logTrace(`Iniciando Cerebro Samurai para ${lead.nombre}...`);
+
        const { data: configs } = await supabaseClient.from('app_config').select('key, value');
        const configMap = configs?.reduce((acc, item) => ({...acc, [item.key]: item.value}), {});
        const openaiKey = configMap['openai_api_key'];
 
-       if (openaiKey) {
+       if (!openaiKey) {
+          await logTrace("ERROR: OpenAI Key no configurada", true);
+       } else {
           const { data: webPages } = await supabaseClient.from('main_website_content').select('title, content').eq('scrape_status', 'success');
           let masterTruth = "\n=== VERDAD MAESTRA (SITIO WEB) ===\n";
           webPages?.forEach(p => { if(p.content) masterTruth += `\n[PÁGINA: ${p.title}]\n${p.content.substring(0, 1500)}\n`; });
@@ -212,15 +254,31 @@ serve(async (req) => {
 
           const bankInfo = `Banco: ${configMap['bank_name']}\nCuenta: ${configMap['bank_account']}\nCLABE: ${configMap['bank_clabe']}\nTitular: ${configMap['bank_holder']}`;
 
-          const systemPrompt = `${configMap['prompt_alma_samurai']} \n ${configMap['prompt_adn_core']} \n ${configMap['prompt_behavior_rules']} \n ${masterTruth} \n ${mediaContext} \n === DATOS DE PAGO === \n ${bankInfo}`;
+          const systemPrompt = `
+            ${configMap['prompt_alma_samurai']}
+            ${configMap['prompt_adn_core']}
+            ${configMap['prompt_behavior_rules']}
+            ${masterTruth}
+            ${mediaContext}
+            === DATOS DE PAGO ===
+            ${bankInfo}
+          `;
 
-          const { data: historyData } = await supabaseClient.from('conversaciones').select('emisor, mensaje').eq('lead_id', lead.id).order('created_at', { ascending: false }).limit(12);
+          const { data: historyData } = await supabaseClient.from('conversaciones')
+             .select('emisor, mensaje')
+             .eq('lead_id', lead.id)
+             .order('created_at', { ascending: false })
+             .limit(12);
+
           const history = (historyData || []).reverse();
           const messages = [ { role: 'system', content: systemPrompt } ];
 
           history.forEach(h => {
-             if (h.emisor === 'CLIENTE') messages.push({ role: 'user', content: h.mensaje || '[Adjunto]' });
-             else if (['IA', 'SAMURAI', 'HUMANO'].includes(h.emisor)) messages.push({ role: 'assistant', content: h.mensaje || '[Archivo Enviado]' });
+             if (h.emisor === 'CLIENTE') {
+                 messages.push({ role: 'user', content: h.mensaje || '[Adjunto]' });
+             } else if (['IA', 'SAMURAI', 'HUMANO'].includes(h.emisor)) {
+                 messages.push({ role: 'assistant', content: h.mensaje || '[Archivo Enviado]' });
+             }
           });
 
           const aiRes = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -240,7 +298,6 @@ serve(async (req) => {
                 aiText = aiText.replace(match[0], '').trim();
              }
 
-             // ENVÍO POR EL TÚNEL USANDO EL CANAL CORRECTO
              await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/send-message-v3`, {
                 method: 'POST',
                 headers: { 'Authorization': `Bearer ${Deno.env.get('SUPABASE_ANON_KEY')}`, 'Content-Type': 'application/json' },
@@ -262,7 +319,7 @@ serve(async (req) => {
 
     return new Response('ok', { headers: corsHeaders });
   } catch (err) {
-    await logTrace(`ERROR CRÍTICO: ${err.message}`, true);
+    await logTrace(`ERROR CRÍTICO WEBHOOK: ${err.message}`, true);
     return new Response(err.message, { status: 200, headers: corsHeaders });
   }
 });
