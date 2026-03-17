@@ -9,7 +9,7 @@ import { TaskRadar } from '@/components/dashboard/TaskRadar';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { CheckCircle2, DollarSign, Users2, Fingerprint, Terminal, Loader2, Zap, Activity, TrendingUp } from 'lucide-react';
-import { ScrollArea } from '@/components/ui/scroll-area';
+import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer } from 'recharts';
 import { cn } from '@/lib/utils';
 
@@ -135,25 +135,31 @@ const Index = () => {
                      <TrendingUp className="w-4 h-4 text-indigo-400"/> Flujo de Ingreso de Leads (7 Días)
                   </CardTitle>
                </CardHeader>
-               <CardContent className="p-6 h-[300px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                      <defs>
-                        <linearGradient id="colorLeads" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3}/>
-                          <stop offset="95%" stopColor="#6366f1" stopOpacity={0}/>
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" vertical={false} />
-                      <XAxis dataKey="name" stroke="#475569" fontSize={10} tickLine={false} axisLine={false} />
-                      <YAxis stroke="#475569" fontSize={10} tickLine={false} axisLine={false} />
-                      <RechartsTooltip 
-                        contentStyle={{ backgroundColor: '#0f0f11', borderColor: '#1f2937', borderRadius: '12px', color: '#f8fafc', fontSize: '12px' }}
-                        itemStyle={{ color: '#818cf8', fontWeight: 'bold' }}
-                      />
-                      <Area type="monotone" dataKey="Leads" stroke="#818cf8" strokeWidth={3} fillOpacity={1} fill="url(#colorLeads)" />
-                    </AreaChart>
-                  </ResponsiveContainer>
+               <CardContent className="p-0">
+                  <ScrollArea className="w-full">
+                     {/* Se fuerza un ancho mínimo para que la gráfica no se apriete y muestre el scroll horizontal si es necesario */}
+                     <div className="min-w-[600px] h-[300px] p-6 pr-8">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                            <defs>
+                              <linearGradient id="colorLeads" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3}/>
+                                <stop offset="95%" stopColor="#6366f1" stopOpacity={0}/>
+                              </linearGradient>
+                            </defs>
+                            <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" vertical={false} />
+                            <XAxis dataKey="name" stroke="#475569" fontSize={10} tickLine={false} axisLine={false} />
+                            <YAxis stroke="#475569" fontSize={10} tickLine={false} axisLine={false} />
+                            <RechartsTooltip 
+                              contentStyle={{ backgroundColor: '#0f0f11', borderColor: '#1f2937', borderRadius: '12px', color: '#f8fafc', fontSize: '12px' }}
+                              itemStyle={{ color: '#818cf8', fontWeight: 'bold' }}
+                            />
+                            <Area type="monotone" dataKey="Leads" stroke="#818cf8" strokeWidth={3} fillOpacity={1} fill="url(#colorLeads)" />
+                          </AreaChart>
+                        </ResponsiveContainer>
+                     </div>
+                     <ScrollBar orientation="horizontal" className="bg-[#121214]" />
+                  </ScrollArea>
                </CardContent>
             </Card>
 

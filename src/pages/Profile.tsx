@@ -106,11 +106,11 @@ const Profile = () => {
 
   return (
     <Layout>
-      <div className="max-w-5xl mx-auto space-y-6 pb-12">
+      <div className="max-w-5xl mx-auto space-y-6 pb-12 animate-in fade-in duration-300">
         <h1 className="text-3xl font-bold text-white mb-2">Mi Perfil y Entorno</h1>
 
         <Tabs defaultValue="perfil" className="w-full">
-           <TabsList className="bg-[#161618] border border-[#222225] p-1 mb-6 rounded-xl">
+           <TabsList className="bg-[#161618] border border-[#222225] p-1 mb-6 rounded-xl flex-wrap h-auto">
               <TabsTrigger value="perfil" className="gap-2 data-[state=active]:bg-indigo-600 data-[state=active]:text-white"><UserCircle className="w-4 h-4"/> Perfil Operativo</TabsTrigger>
               <TabsTrigger value="plantillas" className="gap-2 data-[state=active]:bg-indigo-600 data-[state=active]:text-white"><MessageSquarePlus className="w-4 h-4"/> Mis Plantillas</TabsTrigger>
               <TabsTrigger value="etiquetas" className="gap-2 data-[state=active]:bg-indigo-600 data-[state=active]:text-white"><Tag className="w-4 h-4"/> Mis Etiquetas</TabsTrigger>
@@ -118,11 +118,11 @@ const Profile = () => {
 
            <TabsContent value="perfil" className="mt-0">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                 <Card className="bg-[#0f0f11] border-[#222225]">
+                 <Card className="bg-[#0f0f11] border-[#222225] shadow-xl">
                    <CardHeader className="flex flex-row items-center justify-between border-b border-[#161618] bg-[#161618] px-6 py-5">
                      <CardTitle className="text-white flex items-center gap-2"><UserCircle className="w-5 h-5 text-indigo-400" /> Información Personal</CardTitle>
                      {!isEditing ? (
-                        <Button variant="outline" size="sm" className="h-8 border-[#333336] text-slate-300 hover:text-white" onClick={() => setIsEditing(true)}><Edit className="w-3 h-3 mr-2" /> Editar</Button>
+                        <Button variant="outline" size="sm" className="h-8 border-[#333336] bg-[#0a0a0c] text-slate-300 hover:text-white" onClick={() => setIsEditing(true)}><Edit className="w-3 h-3 mr-2" /> Editar</Button>
                      ) : (
                         <Button variant="ghost" size="sm" className="h-8 text-slate-400 hover:text-white" onClick={() => setIsEditing(false)}><X className="w-3 h-3 mr-2" /> Cancelar</Button>
                      )}
@@ -157,7 +157,7 @@ const Profile = () => {
                    </form>
                  </Card>
 
-                 <Card className="bg-[#0f0f11] border-[#222225] h-fit">
+                 <Card className="bg-[#0f0f11] border-[#222225] h-fit shadow-xl">
                    <CardHeader className="border-b border-[#161618] bg-[#161618] px-6 py-5">
                      <CardTitle className="text-white flex items-center gap-2 text-base"><Key className="w-5 h-5 text-red-500" /> Cambiar Contraseña</CardTitle>
                    </CardHeader>
