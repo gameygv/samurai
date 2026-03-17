@@ -10,7 +10,7 @@ serve(async (req) => {
 
   try {
     const supabaseClient = createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '');
-    const { lead_id, force } = await req.json();
+    const { lead_id } = await req.json();
 
     const { data: lead } = await supabaseClient.from('leads').select('*').eq('id', lead_id).single();
     if (!lead) throw new Error("Lead no encontrado");
@@ -20,41 +20,39 @@ serve(async (req) => {
     const apiKey = configMap['openai_api_key'];
 
     const { data: agents } = await supabaseClient.from('profiles').select('id, full_name, territories').eq('is_active', true);
-    const agentsContext = agents?.map(a => `- Agente ID: ${a.id}, Nombre: ${a.full_name}, Cobertura: ${a.territories?.join(', ') || 'GLOBAL'}`).join('\n');
+    const agentsContext = agents?.map(a => `- ID: ${a.id}, Nombre: ${a.full_name}, Zonas: ${a.territories?.join(', ') || 'GLOBAL'}`).join('\n');
 
-    // FIX: Obtener los últimos 20 mensajes correctamente (descendente y luego revertir)
     const { data: messagesData } = await supabaseClient
         .from('conversaciones')
         .select('emisor, mensaje')
         .eq('lead_id', lead_id)
         .order('created_at', { ascending: false })
-        .limit(20);
+        .limit(15);
         
     const transcript = (messagesData || []).reverse().map(m => `[${m.emisor}]: ${m.mensaje}`).join('\n');
 
     const systemPrompt = `
-Eres el Analista de Datos de Inteligencia del CRM. Tu única misión es extraer datos críticos del chat.
-Lee TODO el contexto, prestando especial atención a los textos marcados como [TRANSCRIPCIÓN DE NOTA DE VOZ].
+Eres el Analista Maestro del CRM. Tu misión es extraer datos de identidad.
+REGLA DE ORO: Si el usuario dice "Me llamo X" o "Soy X", extrae ese nombre y apellidos. 
+ESTO DEBE SOBREESCRIBIR cualquier nombre provisional que tenga el sistema.
 
-=== EXTRACCIÓN CRÍTICA ===
-1. NOMBRE: Extrae el nombre real de la persona si se presenta (ej: "Soy Pedro", "Me llamo Laura"). IGNORA nombres de sistema o apodos raros si la persona dice su nombre real.
-2. CIUDAD: Si menciona una ciudad, estado, país o municipio (ej: "Guanajuato", "León"), extráelo.
-3. EMAIL: Busca correos electrónicos.
-CRÍTICO: Si no encuentras un dato explícito en la conversación, debes devolver exactamente null (no uses "N/A", "Desconocido").
+DATOS A BUSCAR:
+1. NOMBRE: Nombre real de la persona.
+2. CIUDAD: Ciudad, Estado o Municipio de México.
+3. EMAIL: Correos electrónicos.
 
-=== REGLAS DE ROUTING (GEOPROXIMIDAD) ===
-Asigna un responsable basado en la CIUDAD extraída analizando esta lista de agentes:
+ROUTING:
+Asigna al agente cuya zona coincida con la ciudad:
 ${agentsContext}
-Si la ciudad del cliente coincide con la zona de un agente, devuelve su ID en 'suggested_agent_id'.
 
-RESPONDE SOLO EN ESTE FORMATO JSON:
+RESPONDE SOLO JSON:
 {
-  "nombre": "string o null", 
-  "email": "string o null", 
-  "ciudad": "string o null",
+  "nombre": "Pedro Torres", 
+  "email": "pedro@ejemplo.com", 
+  "ciudad": "Guanajuato",
   "intent": "BAJO|MEDIO|ALTO|COMPRADO",
-  "perfil_psicologico": "Resumen de su necesidad (Max 15 palabras)",
-  "suggested_agent_id": "UUID del agente o null"
+  "perfil_psicologico": "Breve descripción",
+  "suggested_agent_id": "UUID"
 }
 `;
 
@@ -63,7 +61,7 @@ RESPONDE SOLO EN ESTE FORMATO JSON:
         headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
             model: "gpt-4o",
-            messages: [{ role: "system", content: systemPrompt }, { role: "user", content: `Chat Reciente:\n\n${transcript}` }],
+            messages: [{ role: "system", content: systemPrompt }, { role: "user", content: `Chat:\n${transcript}` }],
             response_format: { type: "json_object" },
             temperature: 0
         })
@@ -74,45 +72,29 @@ RESPONDE SOLO EN ESTE FORMATO JSON:
 
     const updates: any = { last_ai_analysis: new Date().toISOString() };
     
-    // Asignación segura
-    if (result.nombre && result.nombre !== 'null' && result.nombre !== null) updates.nombre = result.nombre;
-    if (result.email && result.email !== 'null' && result.email !== null) updates.email = result.email;
-    if (result.ciudad && result.ciudad !== 'null' && result.ciudad !== null) updates.ciudad = result.ciudad;
+    // Solo actualizar si el dato es real y nuevo
+    if (result.nombre && result.nombre !== 'null') updates.nombre = result.nombre;
+    if (result.email && result.email !== 'null') updates.email = result.email;
+    if (result.ciudad && result.ciudad !== 'null') updates.ciudad = result.ciudad;
     if (result.intent) updates.buying_intent = result.intent;
     if (result.perfil_psicologico) updates.perfil_psicologico = result.perfil_psicologico;
     
-    // --- FALLBACK JS: ROUTING DE AGENTES ---
-    // Si la IA no mapeó el UUID pero sí extrajo la ciudad, hacemos el match manualmente
+    // Routing Manual de Seguridad
     let finalAgentId = result.suggested_agent_id;
-    if ((!finalAgentId || finalAgentId === 'null') && updates.ciudad && !lead.assigned_to) {
+    if (!finalAgentId && updates.ciudad && !lead.assigned_to) {
         const cityNorm = updates.ciudad.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
         for (const agent of agents) {
-            if (!agent.territories) continue;
-            const match = agent.territories.some(t => {
-                const tNorm = t.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-                return cityNorm.includes(tNorm) || tNorm.includes(cityNorm);
-            });
+            const match = agent.territories?.some(t => cityNorm.includes(t.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")));
             if (match) { finalAgentId = agent.id; break; }
         }
     }
 
-    if (finalAgentId && finalAgentId !== 'null' && finalAgentId !== null && !lead.assigned_to) {
-        if (agents.some(a => a.id === finalAgentId)) {
-            updates.assigned_to = finalAgentId;
-            await supabaseClient.from('activity_logs').insert({
-                action: 'UPDATE', resource: 'USERS', 
-                description: `Routing IA: Lead asignado por proximidad en '${updates.ciudad}'.`,
-                status: 'OK'
-            });
-        }
-    }
+    if (finalAgentId && !lead.assigned_to) updates.assigned_to = finalAgentId;
 
     await supabaseClient.from('leads').update(updates).eq('id', lead_id);
 
-    // --- DISPARAR META CAPI ---
-    const hasMeaningfulData = (updates.email) || (updates.ciudad) || (updates.nombre && updates.nombre !== lead.nombre && !updates.nombre.includes('Cliente'));
-
-    if (hasMeaningfulData && !lead.capi_lead_event_sent_at) {
+    // Disparo Meta CAPI
+    if ((updates.email || updates.ciudad) && !lead.capi_lead_event_sent_at) {
         await supabaseClient.functions.invoke('meta-capi-sender', {
             body: {
                 eventData: {
@@ -125,9 +107,10 @@ RESPONDE SOLO EN ESTE FORMATO JSON:
         await supabaseClient.from('leads').update({ capi_lead_event_sent_at: new Date().toISOString() }).eq('id', lead_id);
     }
 
-    return new Response(JSON.stringify({ success: true, result: updates }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    console.log(`[analyze-leads] Proceso finalizado para ${lead_id}. Datos extraídos: ${JSON.stringify(updates)}`);
+    return new Response(JSON.stringify({ success: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
   } catch (error) {
-    return new Response(JSON.stringify({ success: false, error: error.message }), { status: 200, headers: corsHeaders });
+    return new Response(JSON.stringify({ error: error.message }), { status: 200, headers: corsHeaders });
   }
 })

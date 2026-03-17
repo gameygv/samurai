@@ -14,31 +14,32 @@ serve(async (req) => {
   const url = new URL(req.url);
   const phone = url.searchParams.get('phone');
   const clientMessage = url.searchParams.get('client_message') || '';
-  const mediaUrl = url.searchParams.get('media_url');
-  const mediaType = url.searchParams.get('media_type');
 
   try {
     const cleanPhone = phone?.replace(/\D/g, '');
     const { data: lead } = await supabaseClient.from('leads').select('*').eq('telefono', cleanPhone).single();
     
-    if (!lead || lead.ai_paused) return new Response('skipped');
+    if (!lead) return new Response('lead_not_found');
 
+    // 1. SIEMPRE DISPARAR LA INTELIGENCIA (Extraer datos)
+    // No importa si la IA está pausada, queremos capturar nombres y ciudades.
+    await supabaseClient.functions.invoke('analyze-leads', { body: { lead_id: lead.id } });
+
+    // 2. SI EL BOT ESTÁ PAUSADO, AQUÍ TERMINAMOS (No responde al cliente)
+    if (lead.ai_paused) return new Response('skipped_due_to_pause');
+
+    // 3. GENERAR RESPUESTA IA (Solo si no está pausado)
     const { data: configs } = await supabaseClient.from('app_config').select('key, value');
     const configMap = configs?.reduce((acc, item) => ({...acc, [item.key]: item.value}), {});
     const openaiKey = configMap['openai_api_key'];
-
-    let finalInput = clientMessage;
-    if (mediaType === 'audio' && mediaUrl) {
-       finalInput = `[TRANSCRIPCIÓN DE AUDIO]: ${clientMessage} (El cliente envió una nota de voz)`;
-    }
 
     const { data: context } = await supabaseClient.functions.invoke('get-samurai-context', { body: { lead, platform: lead.platform } });
     const { data: history } = await supabaseClient.from('conversaciones').select('emisor, mensaje').eq('lead_id', lead.id).order('created_at', { ascending: true }).limit(15);
 
     const messages = [
         { role: 'system', content: context.system_prompt },
-        ...history.map(h => ({ role: (h.emisor === 'IA' || h.emisor === 'SAMURAI' || h.emisor === 'BOT') ? 'assistant' : 'user', content: h.mensaje })),
-        { role: 'user', content: finalInput }
+        ...history.map(h => ({ role: (['IA', 'SAMURAI', 'BOT'].includes(h.emisor)) ? 'assistant' : 'user', content: h.mensaje })),
+        { role: 'user', content: clientMessage }
     ];
 
     const aiRes = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -48,40 +49,21 @@ serve(async (req) => {
     });
 
     const aiData = await aiRes.json();
-    let aiText = aiData.choices?.[0]?.message?.content || '';
+    const aiText = aiData.choices?.[0]?.message?.content || '';
 
     if (aiText) {
-        let mediaUrlToSend = null;
-        let mediaTypeToSend = 'image';
-        const mediaRegex = /<<MEDIA:\s*(.+?)\s*>>/i;
-        const match = aiText.match(mediaRegex);
-        
-        if (match) {
-            mediaUrlToSend = match[1].trim();
-            aiText = aiText.replace(mediaRegex, '').trim();
-        }
-
-        const { data: channel } = await supabaseClient.from('whatsapp_channels').select('id').eq('id', lead.channel_id).single();
-        if (!channel) return new Response('no_channel');
-
-        const payload: any = { channel_id: channel.id, phone: cleanPhone, message: aiText };
-        if (mediaUrlToSend) payload.mediaData = { url: mediaUrlToSend, type: mediaTypeToSend, name: 'poster.jpg' };
-
-        await supabaseClient.functions.invoke('send-message-v3', { body: payload });
-
-        await supabaseClient.from('conversaciones').insert({ 
-            lead_id: lead.id, emisor: 'IA', mensaje: aiText || '[Poster Enviado]', platform: 'WHATSAPP',
-            metadata: mediaUrlToSend ? { mediaUrl: mediaUrlToSend, mediaType: mediaTypeToSend } : {}
+        await supabaseClient.functions.invoke('send-message-v3', { 
+            body: { channel_id: lead.channel_id, phone: cleanPhone, message: aiText } 
         });
 
-        // Esperar seguro
-        await supabaseClient.functions.invoke('analyze-leads', { body: { lead_id: lead.id } });
+        await supabaseClient.from('conversaciones').insert({ 
+            lead_id: lead.id, emisor: 'IA', mensaje: aiText, platform: 'WHATSAPP'
+        });
     }
 
     return new Response('ok', { headers: corsHeaders });
 
   } catch (err) {
-    console.error("[process-response] Error crítico:", err.message);
-    return new Response(err.message, { status: 500, headers: corsHeaders });
+    return new Response(err.message, { status: 200, headers: corsHeaders });
   }
 });
