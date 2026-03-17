@@ -62,7 +62,7 @@ serve(async (req) => {
 
     let phone, text = '', pushName = 'Cliente WA', mediaUrl = null, mediaType = null, base64String = null;
 
-    // --- 2. PARSEAR MENSAJE GOWA / EVOLUTION ---
+    // --- 2. PARSEAR MENSAJE ---
     if (payload.device_id && payload.event) { 
        if (payload.event !== 'message') return new Response('ignored_event', { status: 200 });
        if (!payload.payload || payload.payload.is_from_me) return new Response('ignored_self', { status: 200 });
@@ -87,14 +87,10 @@ serve(async (req) => {
        } else if (p.document) {
          text = p.body || "[Documento]"; mediaType = 'document';
          if (p.document.startsWith('data:')) base64String = p.document; else mediaUrl = `${GOWA_BASE_URL}/${p.document}`;
-       } else if (p.sticker) {
-         text = "[Sticker]"; mediaType = 'image';
-         if (p.sticker.startsWith('data:')) base64String = p.sticker; else mediaUrl = `${GOWA_BASE_URL}/${p.sticker}`;
        } else if (p.body) {
          text = p.body; mediaType = 'text';
        }
     } else { 
-       // Evolution API o similar
        if (payload.event && payload.event !== 'messages.upsert') return new Response('ignored_event', { status: 200 });
        const msg = payload.data?.[0] || payload.data || payload;
        if (msg?.key?.fromMe || payload.fromMe) return new Response('ignored_self', { status: 200 });
@@ -104,14 +100,9 @@ serve(async (req) => {
        
        if (msg?.message?.imageMessage) { 
            text = msg?.message?.imageMessage?.caption || "[Imagen]"; mediaType = 'image'; 
-           if (payload.data?.message?.base64) base64String = `data:image/jpeg;base64,${payload.data.message.base64}`;
        } 
-       else if (msg?.message?.videoMessage) { 
-           text = msg?.message?.videoMessage?.caption || "[Video]"; mediaType = 'video'; 
-       }
        else if (msg?.message?.audioMessage) { 
            text = "[Audio]"; mediaType = 'audio'; 
-           if (payload.data?.message?.base64) base64String = `data:audio/ogg;base64,${payload.data.message.base64}`;
        } 
        else { 
            text = msg?.message?.conversation || msg?.message?.extendedTextMessage?.text || msg?.text || payload.message || ''; 
@@ -120,99 +111,63 @@ serve(async (req) => {
 
     if (!phone) return new Response('invalid_phone', { status: 200 });
 
-    if (!text.trim() && !mediaUrl && !mediaType && !base64String) {
-        await logTrace(`IGNORADO: Evento de sistema sin contenido para ${phone}`);
-        return new Response('empty_message_ignored', { status: 200 });
-    }
-
     let cleanPhone = phone.split('@')[0].replace(/\D/g, '');
     if (cleanPhone.startsWith('52') && cleanPhone.length === 12 && cleanPhone[2] !== '1') cleanPhone = '521' + cleanPhone.substring(2);
 
-    // --- 3. DESCARGA MULTIMEDIA Y WHISPER ---
+    // --- 3. DESCARGA Y WHISPER ---
     let finalMediaUrl = null;
     let downloadedBlob = null; 
 
-    // Procesar Base64 si existe
     if (base64String) {
+        const arr = base64String.split(',');
+        const bstr = atob(arr[1]);
+        let n = bstr.length;
+        const u8arr = new Uint8Array(n);
+        while(n--){ u8arr[n] = bstr.charCodeAt(n); }
+        downloadedBlob = new Blob([u8arr], {type: mediaType === 'audio' ? 'audio/ogg' : 'application/octet-stream'});
+    } else if (mediaUrl) {
         try {
-            await logTrace(`Procesando archivo Base64...`);
-            const arr = base64String.split(',');
-            const mimeMatch = arr[0].match(/:(.*?);/);
-            const mime = mimeMatch ? mimeMatch[1] : (mediaType === 'audio' ? 'audio/ogg' : 'application/octet-stream');
-            const bstr = atob(arr[1]);
-            let n = bstr.length;
-            const u8arr = new Uint8Array(n);
-            while(n--){ u8arr[n] = bstr.charCodeAt(n); }
-            downloadedBlob = new Blob([u8arr], {type: mime});
-        } catch(e) { await logTrace(`Error procesando Base64: ${e.message}`, true); }
-    } 
-    // Procesar URL si no hay Base64
-    else if (mediaUrl) {
-        try {
-            await logTrace(`Descargando archivo desde URL: ${mediaUrl}`);
             const authHeader = channel.api_key.startsWith('Basic ') ? channel.api_key : `Basic ${channel.api_key}`;
             const mediaRes = await fetch(mediaUrl, { headers: { 'Authorization': authHeader } });
-            if (mediaRes.ok) {
-                downloadedBlob = await mediaRes.blob();
-            } else {
-                await logTrace(`Error HTTP al descargar adjunto: ${mediaRes.status}`, true);
-            }
-        } catch (e) { await logTrace(`Error bajando adjunto URL: ${e.message}`, true); }
+            if (mediaRes.ok) downloadedBlob = await mediaRes.blob();
+        } catch (e) { await logTrace(`Error descargando adjunto: ${e.message}`, true); }
     }
 
-    // Subir a Storage
     if (downloadedBlob) {
         try {
-            let ext = 'bin';
-            if (mediaType === 'audio') ext = 'ogg';
-            if (mediaType === 'image') ext = 'jpg';
-            if (mediaType === 'video') ext = 'mp4';
-            if (mediaType === 'document') ext = 'pdf';
-
-            const fileName = `inbound/${Date.now()}_${Math.random().toString(36).substring(7)}.${ext}`;
-            const { data: uploadData, error: uploadError } = await supabaseClient.storage.from('media').upload(fileName, downloadedBlob, { contentType: downloadedBlob.type });
-            if (uploadError) throw uploadError;
+            const ext = mediaType === 'audio' ? 'ogg' : 'bin';
+            const fileName = `inbound/${Date.now()}.${ext}`;
+            const { data: uploadData } = await supabaseClient.storage.from('media').upload(fileName, downloadedBlob, { contentType: downloadedBlob.type });
             if (uploadData) finalMediaUrl = supabaseClient.storage.from('media').getPublicUrl(fileName).data.publicUrl;
-        } catch(e) {
-            await logTrace(`Error subiendo Blob a Storage: ${e.message}`, true);
-        }
+        } catch(e) { await logTrace(`Error subiendo a Storage: ${e.message}`, true); }
     }
 
-    // TRANSCRIPCIÓN WHISPER (Con File API seguro)
+    // WHISPER
     if (mediaType === 'audio' && downloadedBlob) {
-        try {
-            await logTrace("Audio descargado. Iniciando Whisper...");
-            const { data: conf } = await supabaseClient.from('app_config').select('value').eq('key', 'openai_api_key').maybeSingle();
-            
-            if (conf?.value) {
-                const formData = new FormData();
-                // OpenAI API prefiere File objects nativos sobre Blobs crudos para la extensión
-                const file = new File([downloadedBlob], 'voice_note.ogg', { type: 'audio/ogg' });
-                formData.append('file', file); 
-                formData.append('model', 'whisper-1');
-                formData.append('language', 'es');
+        await logTrace("Audio listo. Llamando a motor Whisper...");
+        const { data: conf } = await supabaseClient.from('app_config').select('value').eq('key', 'openai_api_key').maybeSingle();
+        if (conf?.value) {
+            const formData = new FormData();
+            formData.append('file', downloadedBlob, 'voice_note.ogg'); 
+            formData.append('model', 'whisper-1');
+            formData.append('language', 'es');
 
-                const whisperRes = await fetch("https://api.openai.com/v1/audio/transcriptions", {
-                    method: 'POST',
-                    headers: { 'Authorization': `Bearer ${conf.value}` },
-                    body: formData
-                });
+            const whisperRes = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${conf.value}` },
+                body: formData
+            });
 
-                if (whisperRes.ok) {
-                    const whisperData = await whisperRes.json();
-                    if (whisperData.text) {
-                        text = `[TRANSCRIPCIÓN DE NOTA DE VOZ]: "${whisperData.text}"`;
-                        await logTrace(`Audio transcrito con éxito.`);
-                    }
-                } else {
-                    const err = await whisperRes.text();
-                    await logTrace(`Fallo Whisper API: ${err}`, true);
+            if (whisperRes.ok) {
+                const whisperData = await whisperRes.json();
+                if (whisperData.text) {
+                    text = `[TRANSCRIPCIÓN DE NOTA DE VOZ]: "${whisperData.text}"`;
+                    await logTrace("Transcripción exitosa.");
                 }
             } else {
-                await logTrace(`Error Whisper: API Key no configurada`, true);
+                const errorData = await whisperRes.json();
+                await logTrace(`Fallo Whisper: ${JSON.stringify(errorData)}`, true);
             }
-        } catch (err) {
-            await logTrace(`Excepción en Whisper: ${err.message}`, true);
         }
     }
 
@@ -227,59 +182,25 @@ serve(async (req) => {
     }
 
     await supabaseClient.from('conversaciones').insert({ 
-        lead_id: lead.id, emisor: 'CLIENTE', mensaje: text || " ", platform: 'WHATSAPP',
+        lead_id: lead.id, emisor: 'CLIENTE', mensaje: text || "[Nota de voz sin texto]", platform: 'WHATSAPP',
         metadata: finalMediaUrl ? { mediaUrl: finalMediaUrl, mediaType } : {}
     });
 
-    await logTrace(`Mensaje de ${lead.nombre} guardado.`);
-
     // --- 5. LÓGICA IA ---
     if (!lead.ai_paused) {
-       await logTrace(`Iniciando Cerebro Samurai para ${lead.nombre}...`);
-
        const { data: configs } = await supabaseClient.from('app_config').select('key, value');
        const configMap = configs?.reduce((acc, item) => ({...acc, [item.key]: item.value}), {});
        const openaiKey = configMap['openai_api_key'];
 
-       if (!openaiKey) {
-          await logTrace("ERROR: OpenAI Key no configurada", true);
-       } else {
-          const { data: webPages } = await supabaseClient.from('main_website_content').select('title, content').eq('scrape_status', 'success');
-          let masterTruth = "\n=== VERDAD MAESTRA (SITIO WEB) ===\n";
-          webPages?.forEach(p => { if(p.content) masterTruth += `\n[PÁGINA: ${p.title}]\n${p.content.substring(0, 1500)}\n`; });
-
-          const { data: mediaAssets } = await supabaseClient.from('media_assets').select('title, url, ai_instructions').eq('category', 'POSTER');
-          let mediaContext = "\n=== BÓVEDA VISUAL (POSTERS) ===\nINSTRUCCIÓN DE ALTA PRIORIDAD: Si el cliente menciona una CIUDAD o LUGAR, debes buscar el poster que coincida y enviarlo usando <<MEDIA:url>> al inicio de tu respuesta.\n";
-          mediaAssets?.forEach(m => { mediaContext += `- ${m.title}: ${m.ai_instructions} -> <<MEDIA:${m.url}>>\n`; });
-
-          const bankInfo = `Banco: ${configMap['bank_name']}\nCuenta: ${configMap['bank_account']}\nCLABE: ${configMap['bank_clabe']}\nTitular: ${configMap['bank_holder']}`;
-
-          const systemPrompt = `
-            ${configMap['prompt_alma_samurai']}
-            ${configMap['prompt_adn_core']}
-            ${configMap['prompt_behavior_rules']}
-            ${masterTruth}
-            ${mediaContext}
-            === DATOS DE PAGO ===
-            ${bankInfo}
-          `;
-
-          const { data: historyData } = await supabaseClient.from('conversaciones')
-             .select('emisor, mensaje')
-             .eq('lead_id', lead.id)
-             .order('created_at', { ascending: false })
-             .limit(12);
-
+       if (openaiKey) {
+          const { data: context } = await supabaseClient.functions.invoke('get-samurai-context', { body: { lead, platform: 'WHATSAPP' } });
+          const { data: historyData } = await supabaseClient.from('conversaciones').select('emisor, mensaje').eq('lead_id', lead.id).order('created_at', { ascending: false }).limit(12);
           const history = (historyData || []).reverse();
-          const messages = [ { role: 'system', content: systemPrompt } ];
-
-          history.forEach(h => {
-             if (h.emisor === 'CLIENTE') {
-                 messages.push({ role: 'user', content: h.mensaje || '[Adjunto]' });
-             } else if (['IA', 'SAMURAI', 'HUMANO'].includes(h.emisor)) {
-                 messages.push({ role: 'assistant', content: h.mensaje || '[Archivo Enviado]' });
-             }
-          });
+          
+          const messages = [ 
+              { role: 'system', content: context.system_prompt },
+              ...history.map(h => ({ role: (['IA', 'SAMURAI', 'BOT'].includes(h.emisor)) ? 'assistant' : 'user', content: h.mensaje }))
+          ];
 
           const aiRes = await fetch("https://api.openai.com/v1/chat/completions", {
             method: 'POST',
@@ -293,20 +214,12 @@ serve(async (req) => {
           if (aiText) {
              let mediaUrlToSend = null;
              const match = aiText.match(/<<MEDIA:\s*(.+?)\s*>>/i);
-             if (match) {
-                mediaUrlToSend = match[1].trim();
-                aiText = aiText.replace(match[0], '').trim();
-             }
+             if (match) { mediaUrlToSend = match[1].trim(); aiText = aiText.replace(match[0], '').trim(); }
 
              await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/send-message-v3`, {
                 method: 'POST',
                 headers: { 'Authorization': `Bearer ${Deno.env.get('SUPABASE_ANON_KEY')}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    channel_id: lead.channel_id || channel.id, 
-                    phone: cleanPhone, 
-                    message: aiText,
-                    mediaData: mediaUrlToSend ? { url: mediaUrlToSend, type: 'image', name: 'poster.jpg' } : undefined
-                })
+                body: JSON.stringify({ channel_id: lead.channel_id || channel.id, phone: cleanPhone, message: aiText, mediaData: mediaUrlToSend ? { url: mediaUrlToSend, type: 'image' } : undefined })
              });
 
              await supabaseClient.from('conversaciones').insert({ 
@@ -319,7 +232,7 @@ serve(async (req) => {
 
     return new Response('ok', { headers: corsHeaders });
   } catch (err) {
-    await logTrace(`ERROR CRÍTICO WEBHOOK: ${err.message}`, true);
+    await logTrace(`ERROR CRÍTICO: ${err.message}`, true);
     return new Response(err.message, { status: 200, headers: corsHeaders });
   }
 });

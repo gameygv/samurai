@@ -30,33 +30,25 @@ serve(async (req) => {
     let mediaContext = "\n=== BÓVEDA VISUAL (POSTERS) ===\nINSTRUCCIÓN CRÍTICA: Para enviar un poster usa EXACTAMENTE este formato en tu respuesta: <<MEDIA:url_del_poster>>\n";
     mediaAssets?.forEach(m => { mediaContext += `- ${m.title}: ${m.ai_instructions} -> <<MEDIA:${m.url}>>\n`; });
 
-    // --- REGLAS PSICOGRÁFICAS ---
-    const psychStrategy = `
-### ESTRATEGIA DE PERFILAMIENTO PSICOGRÁFICO:
-1. Si el cliente pregunta por el sonido, menciona la "Psicoacústica" y pregunta: "¿Te interesa para uso personal o para integrarlo en alguna terapia que ya realices?"
-2. Usa datos del Cerebro Core para demostrar autoridad.
-3. REGLA WHATSAPP: Estás en ${platform}. Ya tienes su teléfono (${lead.telefono || 'Desconocido'}). NO lo pidas.
-`;
+    const bankInfo = `Banco: ${getConfig('bank_name')}\nCuenta: ${getConfig('bank_account')}\nCLABE: ${getConfig('bank_clabe')}\nTitular: ${getConfig('bank_holder')}`;
 
-    // --- CARGA DE DATOS BANCARIOS ---
-    const bankData = `
-### [DATOS DE PAGO - VERDAD ABSOLUTA]
-Banco: ${getConfig('bank_name')}
-Cuenta: ${getConfig('bank_account')}
-CLABE: ${getConfig('bank_clabe')}
-Titular: ${getConfig('bank_holder')}
+    // --- REGLA DE ORO: AUDICIÓN IA ---
+    const voiceInstruction = `
+### REGLA DE OJO DE HALCÓN (AUDICIÓN):
+1. Cuentas con un módulo de transcripción avanzada (OpenAI Whisper). 
+2. Si ves un mensaje que empieza con "[TRANSCRIPCIÓN DE NOTA DE VOZ]:", significa que el cliente te envió un audio y ya fue procesado para ti. 
+3. RESPONDE como si hubieras escuchado el audio perfectamente. NUNCA digas "no puedo escuchar audios" o "soy una IA de texto". Tu respuesta debe ser fluida y natural.
 `;
 
     const systemPrompt = `
-${psychStrategy}
+${voiceInstruction}
 ${getConfig('prompt_alma_samurai')}
 ${getConfig('prompt_adn_core')}
 ${getConfig('prompt_behavior_rules')}
-
 ${masterTruth}
 ${kbContext}
 ${mediaContext}
-${bankData}
+${bankInfo}
 `;
 
     return new Response(JSON.stringify({ system_prompt: systemPrompt }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
