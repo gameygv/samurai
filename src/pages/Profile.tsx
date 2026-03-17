@@ -69,7 +69,6 @@ const Profile = () => {
       const emailChanged = form.email !== user?.email;
 
       if (emailChanged) {
-        // FIXED: El parámetro correcto es 'email', no 'newEmail'
         const { error: functionError } = await supabase.functions.invoke('update-user-email', { body: { email: form.email } });
         if (functionError) throw functionError;
       }

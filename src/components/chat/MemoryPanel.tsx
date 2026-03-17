@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { 
-  Edit2, Save, Loader2, Fingerprint, MapPin, User, ShieldAlert, Smartphone, Trash2, Tag, Plus, X, DollarSign
+  Edit2, Save, Loader2, Fingerprint, MapPin, User, ShieldAlert, Smartphone, Trash2, Tag, Plus, X 
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -17,7 +17,6 @@ import { cn } from '@/lib/utils';
 // Import Componentes Modulares
 import { FinancialAudit } from './memory/FinancialAudit';
 import { CapiStatus } from './memory/CapiStatus';
-import { FinancialStatusBadge } from '../contacts/FinancialStatusBadge';
 
 interface MemoryPanelProps {
   currentAnalysis: any;
@@ -46,10 +45,6 @@ export const MemoryPanel = ({
   const [channels, setChannels] = useState<any[]>([]);
   const [localTags, setLocalTags] = useState<{id: string, text: string, color: string}[]>([]);
 
-  // Financial Status integration
-  const [contactId, setContactId] = useState<string | null>(null);
-  const [financialStatus, setFinancialStatus] = useState('Sin transacción');
-
   const capiFields = [
      true, 
      !!(currentAnalysis.email && currentAnalysis.email.includes('@')),
@@ -65,22 +60,6 @@ export const MemoryPanel = ({
     fetchChannels();
     if (user) fetchLocalTags();
   }, [user]);
-
-  useEffect(() => {
-     if (currentAnalysis.id) {
-         fetchContactFinancialStatus();
-     }
-  }, [currentAnalysis.id]);
-
-  const fetchContactFinancialStatus = async () => {
-     const { data } = await supabase.from('contacts').select('id, financial_status').eq('lead_id', currentAnalysis.id).maybeSingle();
-     if (data) {
-         setContactId(data.id);
-         setFinancialStatus(data.financial_status || 'Sin transacción');
-     } else {
-         setContactId(null);
-     }
-  };
 
   const fetchAgents = async () => {
       const { data } = await supabase.from('profiles').select('id, full_name, role');
@@ -300,16 +279,6 @@ export const MemoryPanel = ({
                              </Select>
                           </div>
                        </div>
-                       
-                       {/* ESTADO FINANCIERO (Solo Gerencia/Admin) */}
-                       {isManager && contactId && (
-                           <div className="pt-4 border-t border-slate-800/50">
-                              <span className="text-[9px] text-slate-500 uppercase font-bold tracking-widest flex items-center gap-1.5 mb-2">
-                                 <DollarSign className="w-3 h-3" /> Estado Financiero
-                              </span>
-                              <FinancialStatusBadge contactId={contactId} currentStatus={financialStatus} isManager={isManager} onUpdate={fetchContactFinancialStatus} />
-                           </div>
-                       )}
 
                     </AccordionContent>
                  </AccordionItem>
