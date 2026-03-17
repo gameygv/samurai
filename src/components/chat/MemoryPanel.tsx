@@ -45,7 +45,6 @@ export const MemoryPanel = ({
   const [localTags, setLocalTags] = useState<{id: string, text: string, color: string}[]>([]);
   const [globalTags, setGlobalTags] = useState<{id: string, text: string, color: string}[]>([]);
   
-  // Datos Completos del Contacto y Modales
   const [contactData, setContactData] = useState<any>(null);
   const [groups, setGroups] = useState<string[]>([]);
   const [isCreditOpen, setIsCreditOpen] = useState(false);
@@ -85,7 +84,6 @@ export const MemoryPanel = ({
   };
 
   const fetchContactData = async () => {
-     // Traemos toda la info del contacto para poder mandarla a los modales
      const { data } = await supabase.from('contacts').select('*').eq('lead_id', currentAnalysis.id).maybeSingle();
      if (data) setContactData(data);
   };
@@ -199,8 +197,6 @@ export const MemoryPanel = ({
 
   return (
     <div className="w-full flex-shrink-0 bg-[#0a0a0c] flex flex-col h-full text-slate-300">
-      
-      {/* 1. EVENT MATCH QUALITY */}
       <div className="p-5 border-b border-[#1a1a1a]">
         <div className="flex justify-between items-center mb-3">
            <span className="text-[9px] font-bold text-[#7A8A9E] uppercase tracking-widest">Event Match Quality</span>
@@ -217,8 +213,6 @@ export const MemoryPanel = ({
       </div>
 
       <div className="flex-1 overflow-y-auto custom-scrollbar">
-        
-        {/* BOTONES DE ACCIÓN RÁPIDA (VENTA Y EDICIÓN) */}
         {contactData && (
            <div className="px-5 pt-5 flex gap-2">
               <Button onClick={() => setIsFullEditOpen(true)} variant="outline" className="flex-1 h-9 bg-[#121214] border-[#222225] hover:bg-[#161618] text-slate-300 text-[10px] font-bold uppercase tracking-widest">
@@ -232,7 +226,6 @@ export const MemoryPanel = ({
            </div>
         )}
 
-        {/* 2. AUDITORÍA DE PAGO */}
         <div className="p-5 border-b border-[#1a1a1a] space-y-4">
            <h4 className="text-[10px] font-bold text-[#7A8A9E] uppercase tracking-widest flex items-center gap-2">
               <span className="w-3 h-3 border border-indigo-400 rounded-sm flex items-center justify-center text-[6px] text-indigo-400">💳</span> Auditoría de Pago
@@ -251,7 +244,6 @@ export const MemoryPanel = ({
            </div>
         </div>
 
-        {/* 3. IDENTIDAD & CRM */}
         <div className="p-5 border-b border-[#1a1a1a] space-y-4">
            <div className="flex justify-between items-center mb-2">
               <h4 className="text-[10px] font-bold text-[#7A8A9E] uppercase tracking-widest flex items-center gap-2">
@@ -308,7 +300,6 @@ export const MemoryPanel = ({
               </div>
            ) : (
               <div className="space-y-4">
-                 {/* RESUMEN TÁCTICO */}
                  <div>
                     <button onClick={() => setTacticalOpen(!tacticalOpen)} className="w-full flex justify-between items-center py-2 text-[10px] font-bold text-white uppercase tracking-widest hover:text-indigo-400 transition-colors">
                        Resumen Táctico
@@ -336,16 +327,10 @@ export const MemoryPanel = ({
                              <span className="text-[9px] text-[#7A8A9E] uppercase font-bold tracking-widest">Canal</span>
                              <p className="text-[11px] text-indigo-400 mt-1 flex items-center gap-1.5 font-bold"><Smartphone className="w-3 h-3 text-indigo-400"/> {currentChannelName}</p>
                           </div>
-                          <div>
-                             <span className="text-[9px] text-[#7A8A9E] uppercase font-bold tracking-widest">Email</span>
-                             <p className={cn("text-[11px] font-bold mt-1 truncate", currentAnalysis.email && currentAnalysis.email.includes('@') ? "text-emerald-400" : "text-emerald-400/60 italic")}>
-                                {currentAnalysis.email || 'Pendiente'}
-                             </p>
-                          </div>
-                          <div>
-                             <span className="text-[9px] text-[#7A8A9E] uppercase font-bold tracking-widest">Ubicación</span>
-                             <p className={cn("text-[11px] font-bold mt-1 truncate", currentAnalysis.ciudad ? "text-indigo-300" : "text-[#7A8A9E] italic")}>
-                                {currentAnalysis.ciudad || 'Pendiente'}
+                          <div className="col-span-2">
+                             <span className="text-[9px] text-[#7A8A9E] uppercase font-bold tracking-widest">Resumen IA</span>
+                             <p className="text-[11px] text-emerald-400/80 italic mt-1 leading-relaxed">
+                                {currentAnalysis.summary || 'Generando resumen...'}
                              </p>
                           </div>
                           <div className="col-span-2">
@@ -358,7 +343,6 @@ export const MemoryPanel = ({
                     )}
                  </div>
 
-                 {/* ETIQUETAS */}
                  <div className="pt-2 border-t border-[#1a1a1a]">
                     <button onClick={() => setTagsOpen(!tagsOpen)} className="w-full flex justify-between items-center py-2 text-[10px] font-bold text-white uppercase tracking-widest hover:text-indigo-400 transition-colors">
                        <span className="flex items-center gap-2"><Tag className="w-3.5 h-3.5 text-[#7A8A9E]" /> Etiquetas Asignadas</span>
@@ -402,7 +386,6 @@ export const MemoryPanel = ({
                     )}
                  </div>
 
-                 {/* ESTADO FINANCIERO CONECTADO A BASE DE CONTACTOS */}
                  <div className="pt-2 border-t border-[#1a1a1a]">
                     <div className="flex flex-col py-2 space-y-2">
                        <span className="text-[10px] font-bold text-[#7A8A9E] uppercase tracking-widest flex items-center justify-between">
@@ -426,7 +409,6 @@ export const MemoryPanel = ({
            )}
         </div>
 
-        {/* 4. REPORTE A BITÁCORA */}
         <div className="p-5 space-y-3">
            <h4 className="text-[10px] font-bold text-amber-500 uppercase tracking-widest flex items-center gap-2">
               <ShieldAlert className="w-3.5 h-3.5" /> Reportar a Bitácora #CIA
@@ -448,7 +430,6 @@ export const MemoryPanel = ({
         </div>
       </div>
 
-      {/* 5. ACCIÓN PRINCIPAL (STICKY BOTTOM) */}
       <div className="p-5 bg-[#0a0a0c] border-t border-[#1a1a1a] mt-auto">
          <Button 
             onClick={onToggleFollowup} 
@@ -463,31 +444,12 @@ export const MemoryPanel = ({
          </Button>
       </div>
 
-      {/* MODALES ADICIONALES */}
       {isCreditOpen && contactData && (
-         <CreateCreditSaleDialog 
-            open={isCreditOpen} 
-            onOpenChange={setIsCreditOpen} 
-            contact={contactData} 
-            onSuccess={() => {
-               fetchContactData();
-               toast.success("Venta a crédito programada.");
-            }} 
-         />
+         <CreateCreditSaleDialog open={isCreditOpen} onOpenChange={setIsCreditOpen} contact={contactData} onSuccess={() => { fetchContactData(); toast.success("Venta a crédito programada."); }} />
       )}
 
       {isFullEditOpen && contactData && (
-         <EditContactDialog 
-            open={isFullEditOpen} 
-            onOpenChange={setIsFullEditOpen} 
-            contact={contactData} 
-            existingGroups={groups} 
-            allTags={allAvailableTags} 
-            onSuccess={() => {
-               fetchContactData();
-               if (onAnalysisComplete) onAnalysisComplete();
-            }} 
-         />
+         <EditContactDialog open={isFullEditOpen} onOpenChange={setIsFullEditOpen} contact={contactData} existingGroups={groups} allTags={allAvailableTags} onSuccess={() => { fetchContactData(); if (onAnalysisComplete) onAnalysisComplete(); }} />
       )}
     </div>
   );

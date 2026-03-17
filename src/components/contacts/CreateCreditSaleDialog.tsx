@@ -28,7 +28,6 @@ export const CreateCreditSaleDialog = ({ open, onOpenChange, contact, onSuccess 
   const [step, setStep] = useState(1);
   const [agents, setAgents] = useState<any[]>([]);
 
-  // STEP 1: Configuración de la Venta
   const [concept, setConcept] = useState('');
   const [totalAmount, setTotalAmount] = useState('');
   const [downPayment, setDownPayment] = useState('');
@@ -38,10 +37,8 @@ export const CreateCreditSaleDialog = ({ open, onOpenChange, contact, onSuccess 
   const [startDate, setStartDate] = useState('');
   const [dayOfMonth, setDayOfMonth] = useState('1'); 
   
-  // STEP 2: Parcialidades Generadas
   const [installments, setInstallments] = useState<{ id: string; amount: string; date: string; }[]>([]);
 
-  // STEP 3: Timeline de Notificaciones (A, B, C, D)
   const [seqPreDays, setSeqPreDays] = useState('1');
   const [seqPost1Days, setSeqPost1Days] = useState('1');
   const [seqPost2Days, setSeqPost2Days] = useState('8');
@@ -56,11 +53,33 @@ export const CreateCreditSaleDialog = ({ open, onOpenChange, contact, onSuccess 
     if (open) {
       setStep(1);
       setConcept(''); setTotalAmount(''); setDownPayment(''); setInstallments([]); setNumberOfPayments('1');
-      const today = new Date().toISOString().split('T')[0];
-      setStartDate(today);
+      updateDefaultDates('MENSUAL');
       fetchAgents();
     }
   }, [open]);
+
+  const updateDefaultDates = (freq: string) => {
+      const now = new Date();
+      if (freq === 'MENSUAL') {
+          now.setMonth(now.getMonth() + 1);
+          now.setDate(1);
+          setDayOfMonth('1');
+      } else if (freq === 'QUINCENAL') {
+          if (now.getDate() < 15) now.setDate(15);
+          else { now.setMonth(now.getMonth() + 1); now.setDate(1); }
+      } else if (freq === 'SEMANAL') {
+          const day = now.getDay();
+          const diff = (5 - day + 7) % 7 || 7; 
+          now.setDate(now.getDate() + diff);
+      }
+      const localStr = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().split('T')[0];
+      setStartDate(localStr);
+  };
+
+  const handleFrequencyChange = (newFreq: string) => {
+      setFrequency(newFreq);
+      updateDefaultDates(newFreq);
+  };
 
   const fetchAgents = async () => {
      const { data } = await supabase.from('profiles').select('id, full_name, role').in('role', ['admin', 'dev', 'gerente']);
@@ -83,25 +102,37 @@ export const CreateCreditSaleDialog = ({ open, onOpenChange, contact, onSuccess 
 
       const amountPerPayment = (financed / payments).toFixed(2);
       const generated = [];
-      let currentDate = new Date(startDate);
+
+      let parts = startDate.split('-');
+      let currentYear = parseInt(parts[0]);
+      let currentMonth = parseInt(parts[1]) - 1;
+      let currentDay = parseInt(parts[2]);
 
       for (let i = 0; i < payments; i++) {
+          let paymentDate = new Date(currentYear, currentMonth, currentDay, 12, 0, 0);
+
           if (i > 0) {
-             if (frequency === 'MENSUAL') {
-                 currentDate.setMonth(currentDate.getMonth() + 1);
-                 const targetDay = parseInt(dayOfMonth);
-                 const lastDayOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).getDate();
-                 currentDate.setDate(Math.min(targetDay, lastDayOfMonth));
-             } else if (frequency === 'QUINCENAL') {
-                 const currentDay = currentDate.getDate();
-                 if (currentDay <= 15) currentDate.setDate(currentDate.getDate() + 15);
-                 else { currentDate.setMonth(currentDate.getMonth() + 1); currentDate.setDate(1); }
-             } else if (frequency === 'SEMANAL') {
-                 currentDate.setDate(currentDate.getDate() + 7);
-             }
+              if (frequency === 'MENSUAL') {
+                  currentMonth += 1;
+                  paymentDate = new Date(currentYear, currentMonth, parseInt(dayOfMonth), 12, 0, 0);
+                  currentYear = paymentDate.getFullYear();
+                  currentMonth = paymentDate.getMonth();
+              } else if (frequency === 'QUINCENAL') {
+                  if (currentDay <= 14) { currentDay = 15; } 
+                  else { currentMonth += 1; currentDay = 1; }
+                  paymentDate = new Date(currentYear, currentMonth, currentDay, 12, 0, 0);
+                  currentYear = paymentDate.getFullYear();
+                  currentMonth = paymentDate.getMonth();
+                  currentDay = paymentDate.getDate();
+              } else if (frequency === 'SEMANAL') {
+                  paymentDate.setDate(paymentDate.getDate() + 7);
+                  currentYear = paymentDate.getFullYear();
+                  currentMonth = paymentDate.getMonth();
+                  currentDay = paymentDate.getDate();
+              }
           }
 
-          generated.push({ id: `temp-${i}`, amount: amountPerPayment, date: currentDate.toISOString().split('T')[0] });
+          generated.push({ id: `temp-${i}`, amount: amountPerPayment, date: paymentDate.toISOString().split('T')[0] });
       }
 
       setInstallments(generated);
@@ -126,19 +157,16 @@ export const CreateCreditSaleDialog = ({ open, onOpenChange, contact, onSuccess 
 
       setLoading(true);
       try {
-          // 1. Crear Venta Maestra
           const { data: sale, error: saleError } = await supabase.from('credit_sales').insert({
               contact_id: contact.id,
               responsible_id: responsibleId,
               concept: concept,
               total_amount: parseFloat(totalAmount),
               down_payment: parseFloat(downPayment) || 0,
-              
               seq_pre_days: parseInt(seqPreDays) || 1,
               seq_post1_days: parseInt(seqPost1Days) || 1,
               seq_post2_days: parseInt(seqPost2Days) || 8,
               seq_abandon_days: parseInt(seqAbandonDays) || 15,
-              
               msg_pre: msgPre,
               msg_post1: msgPost1,
               msg_post2: msgPost2,
@@ -147,7 +175,6 @@ export const CreateCreditSaleDialog = ({ open, onOpenChange, contact, onSuccess 
 
           if (saleError) throw saleError;
 
-          // 2. Insertar Parcialidades
           const installmentsData = installments.map((inst, idx) => ({
               sale_id: sale.id,
               installment_number: idx + 1,
@@ -191,7 +218,6 @@ export const CreateCreditSaleDialog = ({ open, onOpenChange, contact, onSuccess 
         </DialogHeader>
 
         <ScrollArea className="flex-1 bg-[#0a0a0c] p-6">
-            {/* --- PASO 1: DATOS GENERALES --- */}
             {step === 1 && (
                <div className="space-y-6 animate-in fade-in slide-in-from-left-4">
                   <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -240,7 +266,7 @@ export const CreateCreditSaleDialog = ({ open, onOpenChange, contact, onSuccess 
                         </div>
                         <div className="space-y-2">
                            <Label className="text-[9px] uppercase font-bold text-slate-500 ml-1">Frecuencia</Label>
-                           <Select value={frequency} onValueChange={setFrequency}>
+                           <Select value={frequency} onValueChange={handleFrequencyChange}>
                               <SelectTrigger className="bg-[#0a0a0c] border-[#222225] h-10 rounded-xl text-xs"><SelectValue/></SelectTrigger>
                               <SelectContent className="bg-[#0a0a0c] border-[#222225] text-white text-xs">
                                  <SelectItem value="MENSUAL">Mensual</SelectItem>
@@ -263,7 +289,6 @@ export const CreateCreditSaleDialog = ({ open, onOpenChange, contact, onSuccess 
                </div>
             )}
 
-            {/* --- PASO 2: PARCIALIDADES --- */}
             {step === 2 && (
                <div className="space-y-4 animate-in fade-in slide-in-from-right-4">
                   <div className="flex justify-between items-center bg-[#121214] p-4 rounded-xl border border-[#222225]">
@@ -277,17 +302,17 @@ export const CreateCreditSaleDialog = ({ open, onOpenChange, contact, onSuccess 
                      </div>
                   </div>
 
-                  <div className="border border-[#222225] rounded-2xl overflow-hidden bg-[#161618]">
-                     <div className="bg-[#222225]/50 p-3 border-b border-[#222225] flex justify-between items-center">
+                  <div className="border border-[#222225] rounded-2xl overflow-hidden bg-[#161618] flex flex-col max-h-[400px]">
+                     <div className="bg-[#222225]/50 p-3 border-b border-[#222225] flex justify-between items-center shrink-0">
                         <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2"><ListChecks className="w-4 h-4"/> Tabla de Amortización (Editable)</span>
                      </div>
-                     <div className="h-64 overflow-y-auto custom-scrollbar">
+                     <ScrollArea className="flex-1 custom-scrollbar">
                         <Table>
                            <TableHeader>
                               <TableRow className="border-[#222225] hover:bg-transparent">
-                                 <TableHead className="text-[9px] uppercase text-slate-500 font-bold">Pago #</TableHead>
-                                 <TableHead className="text-[9px] uppercase text-slate-500 font-bold">Fecha de Vencimiento</TableHead>
-                                 <TableHead className="text-[9px] uppercase text-slate-500 font-bold text-right">Monto ($)</TableHead>
+                                 <TableHead className="text-[9px] uppercase text-slate-500 font-bold sticky top-0 bg-[#161618]">Pago #</TableHead>
+                                 <TableHead className="text-[9px] uppercase text-slate-500 font-bold sticky top-0 bg-[#161618]">Fecha de Vencimiento</TableHead>
+                                 <TableHead className="text-[9px] uppercase text-slate-500 font-bold text-right sticky top-0 bg-[#161618]">Monto ($)</TableHead>
                               </TableRow>
                            </TableHeader>
                            <TableBody>
@@ -306,14 +331,13 @@ export const CreateCreditSaleDialog = ({ open, onOpenChange, contact, onSuccess 
                               ))}
                            </TableBody>
                         </Table>
-                     </div>
+                     </ScrollArea>
                   </div>
                </div>
             )}
 
-            {/* --- PASO 3: LÍNEA DE TIEMPO A/B/C/D (NUEVO) --- */}
             {step === 3 && (
-               <div className="space-y-6 animate-in fade-in slide-in-from-right-4 max-w-3xl mx-auto">
+               <div className="space-y-6 animate-in fade-in slide-in-from-right-4 max-w-3xl mx-auto pb-8">
                   <div className="text-center space-y-2">
                      <h3 className="text-lg font-bold text-white">Cronograma de Cobranza (A/B/C/D)</h3>
                      <p className="text-xs text-slate-400">Define los intervalos y mensajes automáticos. Si el cliente no paga tras el último ciclo, será etiquetado como <strong className="text-red-400">Abandonado</strong> automáticamente.</p>
@@ -321,7 +345,6 @@ export const CreateCreditSaleDialog = ({ open, onOpenChange, contact, onSuccess 
 
                   <div className="relative space-y-6 pl-4 before:absolute before:inset-0 before:ml-[23px] before:-translate-x-px md:before:mx-auto md:before:translate-x-0 before:h-full before:w-0.5 before:bg-gradient-to-b before:from-emerald-500/50 before:via-amber-500/50 before:to-red-500/50">
                      
-                     {/* FASE A: PRE-AVISO */}
                      <div className="relative flex items-center justify-between md:justify-normal md:odd:flex-row-reverse group">
                         <div className="flex items-center justify-center w-8 h-8 rounded-full bg-[#121214] border-2 border-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.3)] text-emerald-500 shrink-0 md:order-1 md:group-odd:-translate-x-1/2 md:group-even:translate-x-1/2 z-10 font-bold text-xs">A</div>
                         <div className="w-[calc(100%-3rem)] md:w-[calc(50%-2rem)] p-4 rounded-2xl bg-[#121214] border border-[#222225] group-hover:border-emerald-500/50 transition-colors shadow-lg">
@@ -336,7 +359,6 @@ export const CreateCreditSaleDialog = ({ open, onOpenChange, contact, onSuccess 
                         </div>
                      </div>
 
-                     {/* FASE B: PRIMER ATRASO */}
                      <div className="relative flex items-center justify-between md:justify-normal md:odd:flex-row-reverse group">
                         <div className="flex items-center justify-center w-8 h-8 rounded-full bg-[#121214] border-2 border-amber-400 shadow-[0_0_10px_rgba(251,191,36,0.3)] text-amber-400 shrink-0 md:order-1 md:group-odd:-translate-x-1/2 md:group-even:translate-x-1/2 z-10 font-bold text-xs">B</div>
                         <div className="w-[calc(100%-3rem)] md:w-[calc(50%-2rem)] p-4 rounded-2xl bg-[#121214] border border-[#222225] group-hover:border-amber-500/50 transition-colors shadow-lg">
@@ -351,7 +373,6 @@ export const CreateCreditSaleDialog = ({ open, onOpenChange, contact, onSuccess 
                         </div>
                      </div>
 
-                     {/* FASE C: SEGUNDO ATRASO */}
                      <div className="relative flex items-center justify-between md:justify-normal md:odd:flex-row-reverse group">
                         <div className="flex items-center justify-center w-8 h-8 rounded-full bg-[#121214] border-2 border-orange-500 shadow-[0_0_10px_rgba(249,115,22,0.3)] text-orange-500 shrink-0 md:order-1 md:group-odd:-translate-x-1/2 md:group-even:translate-x-1/2 z-10 font-bold text-xs">C</div>
                         <div className="w-[calc(100%-3rem)] md:w-[calc(50%-2rem)] p-4 rounded-2xl bg-[#121214] border border-[#222225] group-hover:border-orange-500/50 transition-colors shadow-lg">
@@ -366,7 +387,6 @@ export const CreateCreditSaleDialog = ({ open, onOpenChange, contact, onSuccess 
                         </div>
                      </div>
 
-                     {/* FASE D: ABANDONADO */}
                      <div className="relative flex items-center justify-between md:justify-normal md:odd:flex-row-reverse group">
                         <div className="flex items-center justify-center w-8 h-8 rounded-full bg-[#121214] border-2 border-red-500 shadow-[0_0_10px_rgba(239,68,68,0.5)] text-red-500 shrink-0 md:order-1 md:group-odd:-translate-x-1/2 md:group-even:translate-x-1/2 z-10 font-bold text-xs">D</div>
                         <div className="w-[calc(100%-3rem)] md:w-[calc(50%-2rem)] p-4 rounded-2xl bg-red-950/20 border border-red-900/50 group-hover:border-red-500/50 transition-colors shadow-lg">

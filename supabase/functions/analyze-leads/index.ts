@@ -37,8 +37,6 @@ serve(async (req) => {
     const agentsContext = agents?.map(a => `- ID: ${a.id}, Nombre: ${a.full_name}, Zonas: ${a.territories?.join(', ') || 'GLOBAL'}`).join('\n');
 
     const results = [];
-
-    // REGEX para validar que el agente sugerido por la IA sea un UUID real
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
     for (const lead of leadsToProcess) {
@@ -54,13 +52,15 @@ serve(async (req) => {
         const systemPrompt = `
 Eres el Auditor de Identidad del CRM. Tu misión es extraer datos reales de la conversación.
 REGLA DE ORO: Si el usuario dice "Soy X" o "Mi nombre es X", ese es su NOMBRE REAL. Sustituye cualquier nombre provisional.
-DATOS:
+DATOS A EXTRAER:
 1. NOMBRE: Nombre real.
 2. CIUDAD: Ciudad/Estado en México.
 3. EMAIL: Correos.
+4. PERFIL: Perfil psicológico o dolores principales.
+5. SUMMARY: Un resumen MUY CORTO de la situación actual (Máximo 15 palabras).
 ROUTING: Elige EXACTAMENTE el ID del agente según la ciudad:
 ${agentsContext}
-RESPONDE SOLO JSON: {"nombre": "...", "email": "...", "ciudad": "...", "intent": "BAJO|MEDIO|ALTO", "perfil": "...", "suggested_agent_id": "UUID"}`;
+RESPONDE SOLO JSON: {"nombre": "...", "email": "...", "ciudad": "...", "intent": "BAJO|MEDIO|ALTO", "perfil": "...", "summary": "...", "suggested_agent_id": "UUID"}`;
 
         const aiRes = await fetch(OPENAI_URL, {
             method: 'POST',
@@ -82,19 +82,15 @@ RESPONDE SOLO JSON: {"nombre": "...", "email": "...", "ciudad": "...", "intent":
         if (result.ciudad && result.ciudad !== 'null') updates.ciudad = result.ciudad;
         if (result.intent) updates.buying_intent = result.intent;
         if (result.perfil) updates.perfil_psicologico = result.perfil;
+        if (result.summary) updates.summary = result.summary;
         
-        // Routing Geográfico Automático con Validación Estricta
         if (!lead.assigned_to) {
             let finalAgentId = result.suggested_agent_id;
-            
-            // Si la IA no devuelve un UUID válido, buscamos manualmente por la ciudad
             if (!uuidRegex.test(finalAgentId) && updates.ciudad) {
                 const cityNorm = updates.ciudad.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
                 const match = agents.find(a => a.territories?.some(t => cityNorm.includes(t.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, ""))));
                 if (match) finalAgentId = match.id;
             }
-
-            // Solo asignamos si estamos 100% seguros de que es un UUID válido de Postgres
             if (uuidRegex.test(finalAgentId)) {
                 updates.assigned_to = finalAgentId;
             }
@@ -102,7 +98,6 @@ RESPONDE SOLO JSON: {"nombre": "...", "email": "...", "ciudad": "...", "intent":
 
         await supabaseClient.from('leads').update(updates).eq('id', lead.id);
         
-        // Disparo Meta CAPI aislado (Si falla, no rompe el proceso de los demás leads)
         if ((updates.email || updates.ciudad) && !lead.capi_lead_event_sent_at) {
              try {
                  await supabaseClient.functions.invoke('meta-capi-sender', {
@@ -113,7 +108,7 @@ RESPONDE SOLO JSON: {"nombre": "...", "email": "...", "ciudad": "...", "intent":
                  });
                  await supabaseClient.from('leads').update({ capi_lead_event_sent_at: new Date().toISOString() }).eq('id', lead.id);
              } catch (capiError) {
-                 console.error("Fallo silencioso al enviar a CAPI:", capiError);
+                 console.error("Fallo silencioso CAPI:", capiError);
              }
         }
         results.push({ id: lead.id, updates });
