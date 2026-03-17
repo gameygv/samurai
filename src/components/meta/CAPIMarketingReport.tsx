@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { 
   TrendingUp, Target, Users, Zap, CheckCircle2, AlertTriangle, 
-  ArrowRight, Brain, ShieldCheck, BarChart3, Globe, Mail, Phone, MapPin
+  ArrowRight, Brain, BarChart3, Mail, Phone, MapPin
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -101,7 +101,6 @@ export const CAPIMarketingReport = ({ event }: CAPIMarketingReportProps) => {
           </CardTitle>
         </CardHeader>
         <CardContent className="p-6 space-y-5">
-          {/* Score principal */}
           <div className="flex items-center gap-6">
             <div className="relative w-20 h-20 shrink-0">
               <svg className="w-20 h-20 -rotate-90" viewBox="0 0 36 36">
@@ -132,7 +131,6 @@ export const CAPIMarketingReport = ({ event }: CAPIMarketingReportProps) => {
             </div>
           </div>
 
-          {/* Campos enviados vs faltantes */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <p className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest flex items-center gap-1">
@@ -191,7 +189,6 @@ export const CAPIMarketingReport = ({ event }: CAPIMarketingReportProps) => {
             </div>
           </div>
 
-          {/* Datos de contexto enviados */}
           {Object.keys(customData).length > 0 && (
             <div className="space-y-2 pt-2 border-t border-slate-800">
               <p className="text-[10px] font-bold text-amber-500 uppercase tracking-widest">Datos de Contexto (Custom Data):</p>
@@ -208,7 +205,6 @@ export const CAPIMarketingReport = ({ event }: CAPIMarketingReportProps) => {
         </CardContent>
       </Card>
 
-      {/* Recomendaciones */}
       {missingFields.length > 0 && (
         <Card className="bg-slate-900 border-amber-500/20 rounded-2xl overflow-hidden border-l-4 border-l-amber-500">
           <CardContent className="p-5 space-y-3">
@@ -219,7 +215,7 @@ export const CAPIMarketingReport = ({ event }: CAPIMarketingReportProps) => {
               {missingFields.slice(0, 3).map(f => (
                 <div key={f.key} className="flex items-start gap-3 text-[11px] text-slate-300">
                   <ArrowRight className="w-3.5 h-3.5 text-amber-500 shrink-0 mt-0.5" />
-                  <span>Captura el <strong className="text-amber-400">{f.label}</strong> del prospecto en la conversación para aumentar la precisión del matching en un ~{f.weight === 'Alta' ? '25%' : f.weight === 'Media' ? '15%' : '8%'}.</span>
+                  <span>Captura el <strong className="text-amber-400">{f.label}</strong> del prospecto para aumentar la precisión en un ~{f.weight === 'Alta' ? '25%' : f.weight === 'Media' ? '15%' : '8%'}.</span>
                 </div>
               ))}
             </div>

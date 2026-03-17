@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { 
-  Edit2, Save, Loader2, Fingerprint, MapPin, User, ShieldAlert, Smartphone, Trash2, Tag, Plus, X 
+  Edit2, Save, Loader2, Fingerprint, MapPin, User, ShieldAlert, Smartphone, Trash2, Tag, Plus, X, Zap 
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -38,8 +38,9 @@ export const MemoryPanel = ({
   onToggleFollowup, onAnalysisComplete, onDeleteLead
 }: MemoryPanelProps) => {
 
-  const { user, isManager } = useAuth();
+  const { user, isManager, profile } = useAuth();
   const [correctionText, setCorrectionText] = useState('');
+  const [reporting, setReporting] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [agents, setAgents] = useState<any[]>([]);
   const [channels, setChannels] = useState<any[]>([]);
@@ -77,6 +78,45 @@ export const MemoryPanel = ({
      if (data?.value) {
         try { setLocalTags(JSON.parse(data.value)); } catch(e) {}
      }
+  };
+
+  const handleReportCia = async () => {
+      if (!correctionText.trim()) return;
+      setReporting(true);
+      const tid = toast.loading("Vinculando reporte al contexto del chat...");
+      
+      try {
+          // Obtener el último mensaje del cliente para dar contexto a la regla #CIA
+          const { data: lastMsgs } = await supabase
+            .from('conversaciones')
+            .select('mensaje, emisor')
+            .eq('lead_id', currentAnalysis.id)
+            .order('created_at', { ascending: false })
+            .limit(2);
+
+          const clientMsg = lastMsgs?.find(m => m.emisor === 'CLIENTE')?.mensaje || 'Contexto de chat activo';
+          const aiMsg = lastMsgs?.find(m => m.emisor !== 'CLIENTE')?.mensaje || 'N/A';
+
+          const { error } = await supabase.from('errores_ia').insert({
+              usuario_id: user?.id,
+              cliente_id: currentAnalysis.id,
+              mensaje_cliente: clientMsg,
+              respuesta_ia: aiMsg,
+              correccion_sugerida: correctionText,
+              estado_correccion: 'REPORTADA',
+              categoria: 'CONDUCTA',
+              created_by: profile?.full_name || 'Agente'
+          });
+
+          if (error) throw error;
+          
+          toast.success("Regla enviada a la Bitácora #CIA. Un administrador debe validarla.", { id: tid });
+          setCorrectionText('');
+      } catch (err: any) {
+          toast.error("Fallo al reportar: " + err.message, { id: tid });
+      } finally {
+          setReporting(false);
+      }
   };
 
   const handleRunAnalysis = async () => {
@@ -189,7 +229,7 @@ export const MemoryPanel = ({
                     </div>
                  </div>
 
-                 <Button onClick={onSave} disabled={saving} className="w-full bg-indigo-600 hover:bg-indigo-500 text-white h-9 text-xs font-bold rounded-lg">
+                 <Button onClick={onSave} disabled={saving} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white h-9 text-xs font-bold rounded-lg">
                     {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Save className="w-3.5 h-3.5 mr-2" /> ACTUALIZAR CRM</>}
                  </Button>
               </div>
@@ -243,7 +283,7 @@ export const MemoryPanel = ({
 
                        {/* ETIQUETAS VISUALES */}
                        <div className="pt-2 border-t border-slate-800/50">
-                          <span className="text-[9px] text-slate-500 uppercase font-bold tracking-widest flex items-center gap-1.5 mb-2"><Tag className="w-3 h-3" /> Etiquetas Personales</span>
+                          <span className="text-[9px] text-slate-500 uppercase font-bold tracking-widest flex items-center gap-1.5 mb-2"><Tag className="w-3 h-3" /> Etiquetas</span>
                           <div className="flex flex-wrap gap-1.5 items-center">
                              {(memoryForm.tags || []).map((t: string) => {
                                 const localTagConfig = localTags.find(lt => lt.text === t);
@@ -288,8 +328,18 @@ export const MemoryPanel = ({
 
         <div className="space-y-3">
            <h4 className="text-[10px] font-bold text-amber-500 uppercase tracking-widest flex items-center gap-2"><ShieldAlert className="w-3.5 h-3.5" /> Reportar a Bitácora #CIA</h4>
-           <Textarea value={correctionText} onChange={e => setCorrectionText(e.target.value)} placeholder="¿Qué debe corregir Sam?" className="bg-slate-950 border-slate-800 text-xs min-h-[80px] rounded-xl" />
-           <Button onClick={() => { toast.success("Enviado a Auditoría"); setCorrectionText(''); }} disabled={!correctionText.trim()} className="w-full h-10 text-[10px] bg-[#1a120b] text-amber-500 border border-[#3b2513] hover:bg-[#291b0f] font-bold uppercase tracking-widest rounded-xl transition-colors">
+           <Textarea 
+             value={correctionText} 
+             onChange={e => setCorrectionText(e.target.value)} 
+             placeholder="Ej: Sam no saludó / Sam dio un precio mal..." 
+             className="bg-slate-950 border-slate-800 text-xs min-h-[80px] rounded-xl focus:border-amber-500" 
+           />
+           <Button 
+             onClick={handleReportCia} 
+             disabled={!correctionText.trim() || reporting} 
+             className="w-full h-10 text-[10px] bg-[#1a120b] text-amber-500 border border-[#3b2513] hover:bg-[#291b0f] font-bold uppercase tracking-widest rounded-xl transition-colors"
+           >
+             {reporting ? <Loader2 className="w-3 h-3 animate-spin mr-2" /> : <Zap className="w-3 h-3 mr-2" />}
              NOTIFICAR MEJORA
            </Button>
         </div>
