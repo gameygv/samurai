@@ -14,7 +14,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { 
   Search, Loader2, MapPin, Phone, Trash2, 
   RefreshCw, Users, FileSpreadsheet, Megaphone, X, Mail, Edit3, FolderInput,
-  UserPlus, ExternalLink, Filter, Wallet, DollarSign
+  UserPlus, ExternalLink, Filter, Wallet, DollarSign, CheckSquare
 } from 'lucide-react';
 import { toast } from 'sonner';
 import ChatViewer from '@/components/ChatViewer';
@@ -35,6 +35,7 @@ const Contacts = () => {
   const { user, isManager } = useAuth();
   const [contacts, setContacts] = useState<any[]>([]);
   const [groups, setGroups] = useState<string[]>([]);
+  const [cities, setCities] = useState<string[]>([]); // Nuevo estado para ciudades
   
   // Tag System
   const [globalTags, setGlobalTags] = useState<{id: string, text: string, color: string}[]>([]);
@@ -44,8 +45,9 @@ const Contacts = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedGroup, setSelectedGroup] = useState<string>('ALL');
   const [selectedTagFilter, setSelectedTagFilter] = useState<string>('ALL');
+  const [selectedCity, setSelectedCity] = useState<string>('ALL'); // Nuevo filtro de ciudad
   const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>('ALL');
-  const [debtFilter, setDebtFilter] = useState<string>('ALL'); // ALL, CON_DEUDA, SIN_DEUDA
+  const [debtFilter, setDebtFilter] = useState<string>('ALL'); 
   
   // Selection State
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -89,7 +91,6 @@ const Contacts = () => {
 
   const fetchContacts = async () => {
     setLoading(true);
-    // Fetch contacts with leads and their active credit sales to calculate debt
     const { data, error } = await supabase
       .from('contacts')
       .select('*, leads(id, buying_intent, payment_status, lead_score, ai_paused, summary), credit_sales(total_amount, status)')
@@ -102,8 +103,12 @@ const Contacts = () => {
          return { ...c, total_debt: totalDebt };
       });
       setContacts(mappedData);
+      
       const uniqueGroups = Array.from(new Set(mappedData.map(d => d.grupo).filter(Boolean))) as string[];
       setGroups(uniqueGroups.sort());
+      
+      const uniqueCities = Array.from(new Set(mappedData.map(d => d.ciudad).filter(Boolean))) as string[];
+      setCities(uniqueCities.sort());
     }
     setLoading(false);
     setSelectedIds([]);
@@ -182,18 +187,21 @@ const Contacts = () => {
     const term = searchTerm.toLowerCase();
     const contactTags = Array.isArray(c.tags) ? c.tags : [];
     
-    const matchesSearch = c.nombre?.toLowerCase().includes(term) || c.apellido?.toLowerCase().includes(term) || c.telefono?.includes(term) || c.email?.toLowerCase().includes(term) || c.ciudad?.toLowerCase().includes(term);
+    const matchesSearch = c.nombre?.toLowerCase().includes(term) || c.apellido?.toLowerCase().includes(term) || c.telefono?.includes(term) || c.email?.toLowerCase().includes(term);
     const matchesGroup = selectedGroup === 'ALL' || c.grupo === selectedGroup;
+    const matchesCity = selectedCity === 'ALL' || c.ciudad === selectedCity;
     const matchesStatus = selectedStatusFilter === 'ALL' || (c.financial_status || 'Sin transacción') === selectedStatusFilter;
     const matchesTag = selectedTagFilter === 'ALL' || contactTags.includes(selectedTagFilter);
     const matchesDebt = debtFilter === 'ALL' || (debtFilter === 'CON_DEUDA' ? c.total_debt > 0 : c.total_debt === 0);
     
-    return matchesSearch && matchesGroup && matchesStatus && matchesTag && matchesDebt;
+    return matchesSearch && matchesGroup && matchesCity && matchesStatus && matchesTag && matchesDebt;
   });
+
+  const hasActiveFilters = searchTerm !== '' || selectedGroup !== 'ALL' || selectedCity !== 'ALL' || selectedTagFilter !== 'ALL' || selectedStatusFilter !== 'ALL' || debtFilter !== 'ALL';
 
   return (
     <Layout>
-      <div className="max-w-7xl mx-auto space-y-6 pb-24 animate-in fade-in duration-500">
+      <div className="max-w-[1800px] mx-auto space-y-6 pb-24 animate-in fade-in duration-500">
         
         <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
           <div>
@@ -203,17 +211,17 @@ const Contacts = () => {
               </div>
               Directorio de Contactos
             </h1>
-            <p className="text-slate-400 text-sm mt-1">Gestión avanzada, segmentaciones y cobranza.</p>
+            <p className="text-slate-400 text-sm mt-1">Gestión avanzada, segmentaciones y creación de audiencias para campañas.</p>
           </div>
           
           <div className="flex gap-2 items-center flex-wrap">
-            <Button onClick={() => setIsMassMessageOpen(true)} variant="outline" className="bg-amber-900/20 border-amber-500/30 text-amber-500 hover:bg-amber-900/40 h-10 rounded-xl font-bold uppercase tracking-widest text-[10px]">
+            <Button onClick={() => setIsMassMessageOpen(true)} variant="outline" className="bg-amber-900/20 border-amber-500/30 text-amber-500 hover:bg-amber-900/40 h-11 rounded-xl font-bold uppercase tracking-widest text-[10px]">
                <Megaphone className="w-4 h-4 mr-2" /> Campañas ({filteredContacts.length})
             </Button>
-            <Button onClick={() => setIsImportOpen(true)} variant="outline" className="h-10 border-[#333336] bg-[#0a0a0c] hover:bg-[#161618] text-slate-300 rounded-xl font-bold uppercase tracking-widest text-[10px]">
+            <Button onClick={() => setIsImportOpen(true)} variant="outline" className="h-11 border-[#333336] bg-[#0a0a0c] hover:bg-[#161618] text-slate-300 rounded-xl font-bold uppercase tracking-widest text-[10px]">
                <FileSpreadsheet className="w-4 h-4 mr-2" /> Importar
             </Button>
-            <Button onClick={() => setIsCreateOpen(true)} className="bg-indigo-600 hover:bg-indigo-500 text-white h-10 px-6 font-bold rounded-xl shadow-lg uppercase tracking-widest text-[10px]">
+            <Button onClick={() => setIsCreateOpen(true)} className="bg-indigo-600 hover:bg-indigo-500 text-white h-11 px-6 font-bold rounded-xl shadow-lg uppercase tracking-widest text-[10px]">
                <UserPlus className="w-4 h-4 mr-2" /> NUEVO
             </Button>
           </div>
@@ -223,26 +231,36 @@ const Contacts = () => {
         <div className="flex flex-wrap items-center gap-3 bg-[#0f0f11] p-3 rounded-2xl border border-slate-800/50 shadow-md">
             <div className="flex items-center gap-2 pl-2 border-r border-slate-800/50 pr-4">
                 <Filter className="w-4 h-4 text-slate-500" />
-                <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Filtros</span>
+                <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Segmentación</span>
             </div>
             
             <div className="relative flex-1 min-w-[200px]">
               <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-500" />
-              <Input placeholder="Buscar por nombre, tel o ciudad..." className="pl-10 h-9 bg-[#161618] border-[#222225] rounded-xl text-xs focus-visible:ring-indigo-500/50 text-white" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+              <Input placeholder="Buscar por nombre, email o tel..." className="pl-10 h-10 bg-[#161618] border-[#222225] rounded-xl text-xs focus-visible:ring-indigo-500/50 text-white" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
             </div>
 
             <Select value={selectedGroup} onValueChange={setSelectedGroup}>
-               <SelectTrigger className="w-[140px] h-9 bg-[#161618] border-[#222225] rounded-xl text-xs text-slate-300">
+               <SelectTrigger className="w-[150px] h-10 bg-[#161618] border-[#222225] rounded-xl text-xs text-slate-300">
                   <SelectValue placeholder="Grupo" />
                </SelectTrigger>
-               <SelectContent className="bg-slate-900 border-slate-800 text-white rounded-xl">
-                  <SelectItem value="ALL">Todos los Grupos</SelectItem>
+               <SelectContent className="bg-slate-900 border-slate-800 text-white rounded-xl max-h-[300px]">
+                  <SelectItem value="ALL">Cualquier Grupo</SelectItem>
                   {groups.map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}
                </SelectContent>
             </Select>
 
+            <Select value={selectedCity} onValueChange={setSelectedCity}>
+               <SelectTrigger className="w-[150px] h-10 bg-[#161618] border-[#222225] rounded-xl text-xs text-slate-300">
+                  <SelectValue placeholder="Ciudad" />
+               </SelectTrigger>
+               <SelectContent className="bg-slate-900 border-slate-800 text-white rounded-xl max-h-[300px]">
+                  <SelectItem value="ALL">Cualquier Ciudad</SelectItem>
+                  {cities.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+               </SelectContent>
+            </Select>
+
             <Select value={selectedTagFilter} onValueChange={setSelectedTagFilter}>
-               <SelectTrigger className="w-[140px] h-9 bg-[#161618] border-[#222225] rounded-xl text-xs text-slate-300">
+               <SelectTrigger className="w-[150px] h-10 bg-[#161618] border-[#222225] rounded-xl text-xs text-slate-300">
                   <SelectValue placeholder="Etiqueta" />
                </SelectTrigger>
                <SelectContent className="bg-[#121214] border-[#222225] text-white rounded-xl max-h-[300px]">
@@ -261,7 +279,7 @@ const Contacts = () => {
             {isManager && (
                 <>
                 <Select value={selectedStatusFilter} onValueChange={setSelectedStatusFilter}>
-                   <SelectTrigger className="w-[140px] h-9 bg-[#161618] border-[#222225] rounded-xl text-xs text-slate-300">
+                   <SelectTrigger className="w-[150px] h-10 bg-[#161618] border-[#222225] rounded-xl text-xs text-slate-300">
                       <SelectValue placeholder="Finanzas" />
                    </SelectTrigger>
                    <SelectContent className="bg-[#121214] border-[#222225] text-white rounded-xl">
@@ -270,7 +288,7 @@ const Contacts = () => {
                    </SelectContent>
                 </Select>
                 <Select value={debtFilter} onValueChange={setDebtFilter}>
-                   <SelectTrigger className="w-[130px] h-9 bg-[#161618] border-[#222225] rounded-xl text-xs text-slate-300">
+                   <SelectTrigger className="w-[140px] h-10 bg-[#161618] border-[#222225] rounded-xl text-xs text-slate-300">
                       <SelectValue placeholder="Deuda" />
                    </SelectTrigger>
                    <SelectContent className="bg-[#121214] border-[#222225] text-white rounded-xl">
@@ -280,6 +298,23 @@ const Contacts = () => {
                    </SelectContent>
                 </Select>
                 </>
+            )}
+
+            {/* Botón rápido para seleccionar todo el segmento visible */}
+            {hasActiveFilters && filteredContacts.length > 0 && (
+               <Button 
+                  onClick={handleToggleSelectAll} 
+                  variant="secondary" 
+                  className={cn(
+                     "h-10 px-4 ml-auto rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all",
+                     selectedIds.length === filteredContacts.length 
+                        ? "bg-indigo-600/20 text-indigo-400 border border-indigo-500/30" 
+                        : "bg-[#161618] text-slate-300 hover:bg-[#222225] border border-[#333336]"
+                  )}
+               >
+                  <CheckSquare className="w-3.5 h-3.5 mr-2" />
+                  {selectedIds.length === filteredContacts.length ? "Deseleccionar" : `Seleccionar Segmento (${filteredContacts.length})`}
+               </Button>
             )}
         </div>
 
@@ -400,7 +435,7 @@ const Contacts = () => {
                  
                  <div className="flex items-center gap-3">
                     <Button variant="outline" onClick={() => setIsMassMessageOpen(true)} className="bg-amber-900/20 border-amber-500/30 text-amber-500 hover:bg-amber-600 hover:text-slate-900 h-10 px-4 rounded-xl font-bold uppercase tracking-widest text-[10px]">
-                       <Megaphone className="w-4 h-4 mr-2" /> Campaña WA
+                       <Megaphone className="w-4 h-4 mr-2" /> Lanzar Campaña
                     </Button>
                     
                     <Button variant="outline" onClick={() => setIsMassGroupOpen(true)} className="bg-[#161618] border-[#222225] text-slate-300 hover:bg-indigo-600 hover:text-white h-10 px-4 rounded-xl font-bold uppercase tracking-widest text-[10px]">
