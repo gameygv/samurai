@@ -28,7 +28,7 @@ import {
 } from "@/components/ui/dialog";
 
 const Inbox = () => {
-  const { user, isManager } = useAuth();
+  const { user, isManager, isDev } = useAuth();
   const [leads, setLeads] = useState<any[]>([]);
   const [filteredLeads, setFilteredLeads] = useState<any[]>([]);
   const [activeLead, setActiveLead] = useState<any>(null);
@@ -54,6 +54,7 @@ const Inbox = () => {
   const [memoryForm, setMemoryForm] = useState<any>({});
   
   const [localTags, setLocalTags] = useState<{id: string, text: string, color: string}[]>([]);
+  const [globalTags, setGlobalTags] = useState<{id: string, text: string, color: string}[]>([]);
 
   const { messages, loading: loadingMessages, refetch: refetchMessages } = useRealtimeMessages(
     activeLead?.id || null,
@@ -63,7 +64,7 @@ const Inbox = () => {
   useEffect(() => {
     fetchLeads();
     fetchQuickActions();
-    if (user) fetchLocalTags();
+    if (user) fetchTags();
     
     const channel = supabase.channel('inbox-leads-watch').on('postgres_changes', { event: '*', schema: 'public', table: 'leads' }, () => fetchLeads(false)).subscribe();
     return () => { supabase.removeChannel(channel); };
@@ -102,11 +103,14 @@ const Inbox = () => {
     if (showLoader) setLoadingLeads(false);
   };
 
-  const fetchLocalTags = async () => {
+  const fetchTags = async () => {
      if(!user) return;
-     const { data } = await supabase.from('app_config').select('value').eq('key', `agent_tags_${user.id}`).maybeSingle();
-     if (data?.value) {
-        try { setLocalTags(JSON.parse(data.value)); } catch(e) {}
+     const { data } = await supabase.from('app_config').select('key, value').in('key', [`agent_tags_${user.id}`, 'global_tags']);
+     if (data) {
+        const local = data.find(d => d.key === `agent_tags_${user.id}`)?.value;
+        const global = data.find(d => d.key === 'global_tags')?.value;
+        if (local) try { setLocalTags(JSON.parse(local)); } catch(e) {}
+        if (global) try { setGlobalTags(JSON.parse(global)); } catch(e) {}
      }
   };
 
@@ -258,29 +262,31 @@ const Inbox = () => {
     } catch (err: any) { toast.error("Error al eliminar: " + err.message, { id: tid }); }
   };
 
+  const allTags = [...globalTags, ...localTags];
+
   return (
     <Layout>
-      <div className="h-[calc(100vh-64px)] -m-4 md:-m-8 flex overflow-hidden bg-slate-950 border-t border-slate-800">
+      <div className="h-[calc(100vh-64px)] -m-4 md:-m-8 flex overflow-hidden bg-[#050505] border-t border-[#1a1a1a]">
         
         {/* COLUMNA 1: LISTA */}
-        <div className={cn("w-full md:w-[340px] flex-shrink-0 border-r border-slate-800 bg-[#0d0a08] flex flex-col", activeLead ? "hidden md:flex" : "flex")}>
-           <div className="p-4 border-b border-slate-800 bg-slate-900/50 shrink-0">
+        <div className={cn("w-full md:w-[340px] flex-shrink-0 border-r border-[#1a1a1a] bg-[#0a0a0c] flex flex-col", activeLead ? "hidden md:flex" : "flex")}>
+           <div className="p-4 border-b border-[#1a1a1a] shrink-0">
                <div className="flex items-center justify-between mb-3">
                   <h2 className="text-sm font-bold text-white uppercase tracking-widest flex items-center gap-2"><MessageCircle className="w-4 h-4 text-indigo-400"/> Bandeja</h2>
                </div>
                <div className="relative">
                   <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-500" />
-                  <Input placeholder="Buscar nombre, ciudad, tag..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="pl-9 h-9 bg-slate-950 border-slate-800 text-xs rounded-xl"/>
+                  <Input placeholder="Buscar nombre, ciudad, tag..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="pl-9 h-9 bg-[#121214] border-[#222225] text-xs rounded-xl focus-visible:ring-indigo-500/50"/>
                </div>
            </div>
            <ScrollArea className="flex-1">
               {loadingLeads ? <div className="flex justify-center p-8"><Loader2 className="w-6 h-6 animate-spin text-slate-600"/></div>
-              : <div className="divide-y divide-slate-800/50">
+              : <div className="divide-y divide-[#1a1a1a]">
                     {filteredLeads.map(lead => (
                        <button key={lead.id} onClick={() => setActiveLead(lead)}
-                         className={cn("w-full text-left p-3 hover:bg-slate-800/30 transition-colors flex items-start gap-3 relative", activeLead?.id === lead.id ? "bg-indigo-900/20" : "")}>
-                          <Avatar className="h-10 w-10 border border-slate-700">
-                               <AvatarFallback className="bg-slate-800 text-slate-300 font-bold">{lead.nombre?.substring(0,2).toUpperCase() || 'CL'}</AvatarFallback>
+                         className={cn("w-full text-left p-4 hover:bg-[#161618] transition-colors flex items-start gap-3 relative", activeLead?.id === lead.id ? "bg-[#161618] border-l-2 border-l-indigo-500" : "")}>
+                          <Avatar className="h-10 w-10 border border-[#222225] bg-[#121214]">
+                               <AvatarFallback className="bg-transparent text-indigo-400 font-bold">{lead.nombre?.substring(0,2).toUpperCase() || 'CL'}</AvatarFallback>
                           </Avatar>
                           <div className="flex-1 min-w-0">
                              <div className="flex justify-between items-baseline mb-0.5">
@@ -293,8 +299,11 @@ const Inbox = () => {
                              {lead.tags && lead.tags.length > 0 && (
                                 <div className="flex gap-1 mt-1.5 flex-wrap">
                                    {lead.tags.map((t: string) => {
-                                      const tagConf = localTags.find(lt => lt.text === t);
-                                      return <Badge key={t} variant="outline" className="text-[8px] h-3.5 px-1 font-medium" style={tagConf ? { backgroundColor: tagConf.color+'20', color: tagConf.color, borderColor: tagConf.color+'50' } : {}}>{t}</Badge>
+                                      const tagConf = allTags.find(lt => lt.text === t);
+                                      const bgColor = tagConf ? tagConf.color + '20' : '#1e293b';
+                                      const textColor = tagConf ? tagConf.color : '#94a3b8';
+                                      const borderColor = tagConf ? tagConf.color + '50' : '#334155';
+                                      return <Badge key={t} variant="outline" className="text-[8px] h-3.5 px-1 font-medium" style={{ backgroundColor: bgColor, color: textColor, borderColor }}>{t}</Badge>
                                    })}
                                 </div>
                              )}
@@ -306,10 +315,10 @@ const Inbox = () => {
         </div>
 
         {/* COLUMNA 2: CHAT */}
-        <div className={cn("flex-1 min-w-0 flex flex-col bg-slate-950 relative", !activeLead ? "hidden md:flex items-center justify-center" : "flex")}>
+        <div className={cn("flex-1 min-w-0 flex flex-col bg-[#050505] relative", !activeLead ? "hidden md:flex items-center justify-center" : "flex")}>
            {activeLead ? (
               <>
-                 <div className="h-16 px-4 bg-slate-900/80 border-b border-slate-800 flex items-center justify-between shrink-0">
+                 <div className="h-16 px-4 bg-[#0a0a0c]/80 backdrop-blur-md border-b border-[#1a1a1a] flex items-center justify-between shrink-0">
                     <div className="flex items-center gap-3">
                        <div className="flex flex-col">
                           <span className="font-bold text-white">{activeLead.nombre || activeLead.telefono}</span>
@@ -317,16 +326,18 @@ const Inbox = () => {
                        </div>
                     </div>
                     <div className="flex items-center gap-2">
-                       <Button variant="outline" size="sm" className="h-8 text-[10px] bg-red-900/10 border-red-500/30 text-red-400 font-bold uppercase tracking-widest" onClick={() => setIsEmergencyOpen(true)}>
-                          <AlertTriangle className="w-3 h-3 mr-1.5"/> Fallo Webhook: Entrada Manual
-                       </Button>
+                       {isDev && (
+                         <Button variant="outline" size="sm" className="h-8 text-[10px] bg-red-900/10 border-red-500/30 text-red-400 font-bold uppercase tracking-widest hover:bg-red-900/20" onClick={() => setIsEmergencyOpen(true)}>
+                            <AlertTriangle className="w-3 h-3 mr-1.5"/> Fallo Webhook: Entrada Manual
+                         </Button>
+                       )}
                        <Button variant="ghost" size="icon" className="xl:hidden text-slate-400" onClick={() => setShowMemoryMobile(!showMemoryMobile)}><Menu className="w-5 h-5" /></Button>
                     </div>
                  </div>
 
                  <MessageList messages={messages} loading={loadingMessages} />
 
-                 <div className="p-3 bg-slate-900/80 border-t border-slate-800 shrink-0">
+                 <div className="p-3 bg-[#0a0a0c] border-t border-[#1a1a1a] shrink-0">
                     <AiSuggestions suggestions={suggestions} loading={loadingSuggestions} onSelect={setDraftMessage} onRefresh={() => fetchAiSuggestions(activeLead.id, messages)} />
                     <MessageInput 
                         onSendMessage={handleSendMessage} 
@@ -337,35 +348,35 @@ const Inbox = () => {
                         toolbarAction={
                            <DropdownMenu>
                               <DropdownMenuTrigger asChild>
-                                 <Button size="sm" variant="outline" className="h-8 text-[10px] bg-slate-950 border-slate-700 text-amber-500 uppercase font-bold tracking-widest rounded-lg">
+                                 <Button size="sm" variant="outline" className="h-8 text-[10px] bg-[#121214] border-[#222225] text-amber-500 uppercase font-bold tracking-widest rounded-lg hover:bg-[#161618]">
                                     <Zap className="w-3 h-3 mr-1.5" /> Plantillas
                                  </Button>
                               </DropdownMenuTrigger>
-                              <DropdownMenuContent align="start" className="bg-slate-900 border-slate-800 text-white w-64 max-h-[300px] overflow-y-auto">
+                              <DropdownMenuContent align="start" className="bg-[#0a0a0c] border-[#222225] text-white w-64 max-h-[300px] overflow-y-auto">
                                  <DropdownMenuLabel className="text-[10px] uppercase text-slate-500 font-bold">Catálogo</DropdownMenuLabel>
                                  {products.map(p => (
-                                     <DropdownMenuItem key={p.id} onClick={() => setDraftMessage(`${quickActions.wcBaseUrl}/checkout/?add-to-cart=${p.wc_id}`)} className="cursor-pointer text-xs">
+                                     <DropdownMenuItem key={p.id} onClick={() => setDraftMessage(`${quickActions.wcBaseUrl}/checkout/?add-to-cart=${p.wc_id}`)} className="cursor-pointer text-xs focus:bg-[#161618] focus:text-white">
                                         <ShoppingCart className="w-3 h-3 mr-2 text-indigo-400 shrink-0" /><span className="truncate">{p.title}</span>
                                      </DropdownMenuItem>
                                  ))}
-                                 <DropdownMenuSeparator className="bg-slate-800 my-2"/>
-                                 <DropdownMenuItem onClick={() => setDraftMessage(quickActions.bankInfo)} className="cursor-pointer text-xs"><CreditCard className="w-3 h-3 mr-2 text-indigo-400" /> Datos Bancarios</DropdownMenuItem>
+                                 <DropdownMenuSeparator className="bg-[#222225] my-2"/>
+                                 <DropdownMenuItem onClick={() => setDraftMessage(quickActions.bankInfo)} className="cursor-pointer text-xs focus:bg-[#161618] focus:text-white"><CreditCard className="w-3 h-3 mr-2 text-indigo-400" /> Datos Bancarios</DropdownMenuItem>
                                  
                                  {globalReplies.length > 0 && <>
-                                    <DropdownMenuSeparator className="bg-slate-800 my-2"/>
+                                    <DropdownMenuSeparator className="bg-[#222225] my-2"/>
                                     <DropdownMenuLabel className="text-[10px] uppercase text-slate-500 font-bold">Plantillas Globales</DropdownMenuLabel>
                                     {globalReplies.map((qr) => (
-                                       <DropdownMenuItem key={qr.id} onClick={() => setDraftMessage(qr.text)} className="cursor-pointer text-xs">
+                                       <DropdownMenuItem key={qr.id} onClick={() => setDraftMessage(qr.text)} className="cursor-pointer text-xs focus:bg-[#161618] focus:text-white">
                                           <MessageSquarePlus className="w-3 h-3 mr-2 text-indigo-400 shrink-0" /><span className="truncate">{qr.title}</span>
                                        </DropdownMenuItem>
                                     ))}
                                  </>}
 
                                  {localReplies.length > 0 && <>
-                                    <DropdownMenuSeparator className="bg-slate-800 my-2"/>
+                                    <DropdownMenuSeparator className="bg-[#222225] my-2"/>
                                     <DropdownMenuLabel className="text-[10px] uppercase text-slate-500 font-bold">Mis Plantillas Privadas</DropdownMenuLabel>
                                     {localReplies.map((qr) => (
-                                       <DropdownMenuItem key={qr.id} onClick={() => setDraftMessage(qr.text)} className="cursor-pointer text-xs">
+                                       <DropdownMenuItem key={qr.id} onClick={() => setDraftMessage(qr.text)} className="cursor-pointer text-xs focus:bg-[#161618] focus:text-white">
                                           <MessageSquarePlus className="w-3 h-3 mr-2 text-amber-500 shrink-0" /><span className="truncate">{qr.title}</span>
                                        </DropdownMenuItem>
                                     ))}
@@ -386,8 +397,8 @@ const Inbox = () => {
 
         {/* COLUMNA 3: FICHA TÁCTICA */}
         {activeLead && (
-           <div className={cn("w-full xl:w-[350px] flex-shrink-0 bg-slate-900 border-l border-slate-800 flex flex-col absolute xl:relative z-20 h-full transition-transform duration-300", showMemoryMobile ? "translate-x-0" : "translate-x-full xl:translate-x-0")}>
-              <div className="xl:hidden p-4 border-b border-slate-800 flex justify-between items-center bg-slate-900">
+           <div className={cn("w-full xl:w-[360px] flex-shrink-0 bg-[#0a0a0c] border-l border-[#1a1a1a] flex flex-col absolute xl:relative z-20 h-full transition-transform duration-300", showMemoryMobile ? "translate-x-0" : "translate-x-full xl:translate-x-0")}>
+              <div className="xl:hidden p-4 border-b border-[#1a1a1a] flex justify-between items-center bg-[#0a0a0c]">
                  <span className="font-bold text-sm">Ficha Táctica</span>
                  <Button variant="ghost" size="sm" onClick={() => setShowMemoryMobile(false)}><X className="w-4 h-4" /></Button>
               </div>
