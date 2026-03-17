@@ -88,7 +88,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
         { icon: Trello, label: 'Pipeline Ventas', path: '/pipeline', roles: ['any'] },
         { icon: MessageSquare, label: 'Radar Leads', path: '/leads', roles: ['any'] },
         { icon: Contact, label: 'Contactos', path: '/contacts', roles: ['any'] },
-        { icon: CreditCard, label: 'Pagos & Ventas', path: '/payments', roles: ['admin', 'dev'] },
+        { icon: CreditCard, label: 'Pagos & Ventas', path: '/payments', roles: ['any'] },
         { icon: Archive, label: 'Archivo de Chats', path: '/archive', roles: ['any'] },
       ]
     },
@@ -126,7 +126,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
                (isDev && item.roles.includes('dev'))
             );
 
-            // Si el grupo no tiene items visibles (ej. Agente viendo "SISTEMA"), ocultamos el título completo
+            // Oculta el título de la sección si no hay items visibles
             if (visibleItems.length === 0) return null;
 
             return (
@@ -163,7 +163,6 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
       </ScrollArea>
       
       <div className="p-4 border-t border-[#1a1a1a]">
-         {/* BOTÓN DE PERFIL MEJORADO */}
          <div className="bg-[#121214] rounded-xl p-3 border border-[#222225] hover:border-indigo-500/50 hover:bg-[#161618] transition-colors cursor-pointer group" onClick={() => navigate('/profile')}>
             <div className="flex items-center gap-3">
                <div className="w-8 h-8 rounded-full bg-[#1a1a1a] flex items-center justify-center text-[10px] font-bold text-indigo-400 border border-[#222225] shadow-inner shrink-0">

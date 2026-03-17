@@ -73,9 +73,9 @@ const App = () => (
             <Route path="/contacts" element={<PrivateRoute><Contacts /></PrivateRoute>} />
             <Route path="/pipeline" element={<PrivateRoute><Pipeline /></PrivateRoute>} />
             <Route path="/archive" element={<PrivateRoute><Archive /></PrivateRoute>} />
+            <Route path="/payments" element={<PrivateRoute><Payments /></PrivateRoute>} />
             
             <Route path="/activity" element={<PrivateRoute><AdminRoute><Activity /></AdminRoute></PrivateRoute>} />
-            <Route path="/payments" element={<PrivateRoute><AdminRoute><Payments /></AdminRoute></PrivateRoute>} />
             <Route path="/brain" element={<PrivateRoute><AdminRoute><AgentBrain /></AdminRoute></PrivateRoute>} />
             <Route path="/learning" element={<PrivateRoute><AdminRoute><LearningLog /></AdminRoute></PrivateRoute>} />
             <Route path="/knowledge" element={<PrivateRoute><AdminRoute><KnowledgeBase /></AdminRoute></PrivateRoute>} />
