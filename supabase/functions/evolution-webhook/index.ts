@@ -81,7 +81,6 @@ serve(async (req) => {
     if (mediaType && mediaType !== 'text') {
         try {
             const headers = { "Authorization": GOWA_AUTH_HEADER, "X-Device-Id": GOWA_DEVICE_ID };
-            
             if (mediaType === 'audio') await sleep(1500);
 
             const triggerUrl = `${GOWA_BASE_URL}/message/${messageId}/download?phone=${senderPhone}`;
@@ -131,6 +130,15 @@ serve(async (req) => {
       lead = nl;
     } else {
       await supabaseClient.from('leads').update({ last_message_at: new Date().toISOString() }).eq('id', lead.id);
+      
+      // NUEVO: ALERTA DE COBRANZA (Si responde alguien con deuda)
+      const { data: contactCheck } = await supabaseClient.from('contacts').select('financial_status').eq('lead_id', lead.id).maybeSingle();
+      if (contactCheck && (contactCheck.financial_status === 'Atrasado' || contactCheck.financial_status === 'Muy atrasado' || contactCheck.financial_status === 'Abandonado')) {
+          await supabaseClient.from('activity_logs').insert({
+              action: 'ERROR', resource: 'SYSTEM',
+              description: `🚨 COBRANZA: El cliente moroso '${lead.nombre}' acaba de enviar un mensaje en WhatsApp.`, status: 'ERROR'
+          });
+      }
     }
 
     await supabaseClient.from('conversaciones').insert({ 
@@ -139,9 +147,7 @@ serve(async (req) => {
     });
 
     // --- 6. PROCESOS PARALELOS SEGUROS ---
-    // En lugar de fetch sueltos, usamos invoke y Promise.allSettled para asegurar que la función no muera a la mitad
     const analyzeTask = supabaseClient.functions.invoke('analyze-leads', { body: { lead_id: lead.id, force: false } });
-
     let aiTask = Promise.resolve();
 
     if (!lead.ai_paused) {
@@ -183,7 +189,6 @@ serve(async (req) => {
        })();
     }
 
-    // Esperamos a que tanto el análisis como la IA terminen
     await Promise.allSettled([analyzeTask, aiTask]);
 
     return new Response('ok', { headers: corsHeaders });

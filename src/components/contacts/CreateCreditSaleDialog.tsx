@@ -10,7 +10,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { 
   Loader2, DollarSign, CalendarDays, Wallet, User, Save, 
-  ListChecks, Calculator, ChevronRight, BellRing, MessageSquare, AlertTriangle, ShieldAlert
+  ListChecks, Calculator, ChevronRight, BellRing, MessageSquare, AlertTriangle, ShieldAlert,
+  ArrowRight, Clock
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -30,6 +31,7 @@ export const CreateCreditSaleDialog = ({ open, onOpenChange, contact, onSuccess 
   // STEP 1: Configuración de la Venta
   const [concept, setConcept] = useState('');
   const [totalAmount, setTotalAmount] = useState('');
+  const [downPayment, setDownPayment] = useState('');
   const [responsibleId, setResponsibleId] = useState('');
   const [frequency, setFrequency] = useState('MENSUAL');
   const [numberOfPayments, setNumberOfPayments] = useState('1');
@@ -39,16 +41,21 @@ export const CreateCreditSaleDialog = ({ open, onOpenChange, contact, onSuccess 
   // STEP 2: Parcialidades Generadas
   const [installments, setInstallments] = useState<{ id: string; amount: string; date: string; }[]>([]);
 
-  // STEP 3: Notificaciones & Cobranza
-  const [reminderDays, setReminderDays] = useState('1'); // Días previos (ej: "1" o "1, 3")
-  const [overdueInterval, setOverdueInterval] = useState('3'); // Ciclo de emergencia (días)
-  const [msgClient, setMsgClient] = useState('👋 Hola {nombre}, te recordamos amablemente que tu próximo pago por *${monto}* vence el *{fecha}*. Cualquier duda, estamos a tu disposición.');
-  const [msgAgent, setMsgAgent] = useState('⚠️ RECORDATORIO COBRANZA: El pago de *${monto}* del cliente *{nombre}* vence el *{fecha}*. Por favor, da seguimiento.');
+  // STEP 3: Timeline de Notificaciones (A, B, C, D)
+  const [seqPreDays, setSeqPreDays] = useState('1');
+  const [seqPost1Days, setSeqPost1Days] = useState('1');
+  const [seqPost2Days, setSeqPost2Days] = useState('8');
+  const [seqAbandonDays, setSeqAbandonDays] = useState('15');
+
+  const [msgPre, setMsgPre] = useState('👋 Hola {nombre}, te recordamos amablemente que mañana vence tu pago de *${monto}*. Cualquier duda, estamos a tu disposición.');
+  const [msgPost1, setMsgPost1] = useState('⚠️ Hola {nombre}, notamos que tu pago de *${monto}* venció ayer. ¿Tuviste algún contratiempo?');
+  const [msgPost2, setMsgPost2] = useState('🚨 Hola {nombre}, tu pago de *${monto}* tiene una semana de atraso. Por favor contáctanos urgente para evitar penalizaciones.');
+  const [msgAbandonAgent, setMsgAbandonAgent] = useState('🚨 ALERTA CRÍTICA: El cliente *{nombre}* no ha respondido ni pagado y superó el límite. El sistema lo ha marcado como ABANDONADO automáticamente. Se requiere acción humana/legal inmediata.');
 
   useEffect(() => {
     if (open) {
       setStep(1);
-      setConcept(''); setTotalAmount(''); setInstallments([]); setNumberOfPayments('1');
+      setConcept(''); setTotalAmount(''); setDownPayment(''); setInstallments([]); setNumberOfPayments('1');
       const today = new Date().toISOString().split('T')[0];
       setStartDate(today);
       fetchAgents();
@@ -60,15 +67,21 @@ export const CreateCreditSaleDialog = ({ open, onOpenChange, contact, onSuccess 
      if (data) setAgents(data);
   };
 
+  const getFinancedAmount = () => {
+     const total = parseFloat(totalAmount) || 0;
+     const abono = parseFloat(downPayment) || 0;
+     return Math.max(0, total - abono);
+  };
+
   const handleGeneratePlan = () => {
-      const amount = parseFloat(totalAmount);
+      const financed = getFinancedAmount();
       const payments = parseInt(numberOfPayments);
       
-      if (isNaN(amount) || amount <= 0) return toast.error("Ingresa un monto total válido.");
+      if (financed <= 0) return toast.error("El monto a financiar debe ser mayor a 0.");
       if (isNaN(payments) || payments <= 0) return toast.error("El número de pagos debe ser mayor a 0.");
       if (!startDate) return toast.error("Selecciona una fecha de inicio.");
 
-      const amountPerPayment = (amount / payments).toFixed(2);
+      const amountPerPayment = (financed / payments).toFixed(2);
       const generated = [];
       let currentDate = new Date(startDate);
 
@@ -105,26 +118,31 @@ export const CreateCreditSaleDialog = ({ open, onOpenChange, contact, onSuccess 
       if (!concept) return toast.error("El concepto es obligatorio.");
       if (!responsibleId) return toast.error("Debes asignar un responsable de cobranza.");
 
+      const financed = getFinancedAmount();
       const sum = installments.reduce((acc, curr) => acc + parseFloat(curr.amount || '0'), 0);
-      if (Math.abs(sum - parseFloat(totalAmount)) > 1) {
-          return toast.error(`La suma de las parcialidades ($${sum}) no coincide con el total ($${totalAmount}).`);
+      if (Math.abs(sum - financed) > 1) {
+          return toast.error(`La suma de las parcialidades ($${sum}) no coincide con el saldo a financiar ($${financed}).`);
       }
 
       setLoading(true);
       try {
-          const rDaysArray = reminderDays.split(',').map(d => parseInt(d.trim())).filter(d => !isNaN(d));
-          if (rDaysArray.length === 0) rDaysArray.push(1);
-
           // 1. Crear Venta Maestra
           const { data: sale, error: saleError } = await supabase.from('credit_sales').insert({
               contact_id: contact.id,
               responsible_id: responsibleId,
               concept: concept,
               total_amount: parseFloat(totalAmount),
-              reminder_days_before: rDaysArray,
-              overdue_reminder_interval: parseInt(overdueInterval) || 3,
-              msg_template_client: msgClient,
-              msg_template_agent: msgAgent
+              down_payment: parseFloat(downPayment) || 0,
+              
+              seq_pre_days: parseInt(seqPreDays) || 1,
+              seq_post1_days: parseInt(seqPost1Days) || 1,
+              seq_post2_days: parseInt(seqPost2Days) || 8,
+              seq_abandon_days: parseInt(seqAbandonDays) || 15,
+              
+              msg_pre: msgPre,
+              msg_post1: msgPost1,
+              msg_post2: msgPost2,
+              msg_abandon_agent: msgAbandonAgent
           }).select().single();
 
           if (saleError) throw saleError;
@@ -140,7 +158,7 @@ export const CreateCreditSaleDialog = ({ open, onOpenChange, contact, onSuccess 
           const { error: instError } = await supabase.from('credit_installments').insert(installmentsData);
           if (instError) throw instError;
 
-          toast.success("Crédito registrado y notificaciones automatizadas programadas.");
+          toast.success("Crédito registrado y Motor A/B/C/D programado exitosamente.");
           onSuccess();
           onOpenChange(false);
       } catch (err: any) {
@@ -152,46 +170,59 @@ export const CreateCreditSaleDialog = ({ open, onOpenChange, contact, onSuccess 
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="bg-[#0f0f11] border-[#222225] text-white max-w-3xl rounded-3xl p-0 overflow-hidden shadow-2xl">
-        <DialogHeader className="p-6 bg-[#161618] border-b border-[#222225]">
+      <DialogContent className="bg-[#0f0f11] border-[#222225] text-white max-w-4xl rounded-3xl p-0 overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
+        <DialogHeader className="p-6 bg-[#161618] border-b border-[#222225] shrink-0">
           <div className="flex justify-between items-center">
              <div>
                 <DialogTitle className="flex items-center gap-3 text-amber-500 text-lg">
                   <div className="p-2 bg-amber-500/10 rounded-xl border border-amber-500/20"><Wallet className="w-5 h-5" /></div>
-                  Aperturar Línea de Crédito
+                  Aperturar Venta a Crédito
                 </DialogTitle>
                 <DialogDescription className="text-slate-400 text-xs mt-1">
                    Cliente: <strong className="text-white">{contact?.nombre} {contact?.apellido}</strong>
                 </DialogDescription>
              </div>
              <div className="flex gap-1.5">
-                <div className={`w-2.5 h-2.5 rounded-full ${step >= 1 ? 'bg-amber-500' : 'bg-slate-700'}`} />
-                <div className={`w-2.5 h-2.5 rounded-full ${step >= 2 ? 'bg-amber-500' : 'bg-slate-700'}`} />
-                <div className={`w-2.5 h-2.5 rounded-full ${step >= 3 ? 'bg-amber-500' : 'bg-slate-700'}`} />
+                <div className={`w-2.5 h-2.5 rounded-full ${step >= 1 ? 'bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.5)]' : 'bg-slate-700'}`} />
+                <div className={`w-2.5 h-2.5 rounded-full ${step >= 2 ? 'bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.5)]' : 'bg-slate-700'}`} />
+                <div className={`w-2.5 h-2.5 rounded-full ${step >= 3 ? 'bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.5)]' : 'bg-slate-700'}`} />
              </div>
           </div>
         </DialogHeader>
 
-        <div className="p-6 bg-[#0a0a0c]">
+        <ScrollArea className="flex-1 bg-[#0a0a0c] p-6">
             {/* --- PASO 1: DATOS GENERALES --- */}
             {step === 1 && (
                <div className="space-y-6 animate-in fade-in slide-in-from-left-4">
-                  <div className="grid grid-cols-2 gap-6">
-                     <div className="space-y-2">
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                     <div className="space-y-2 lg:col-span-3">
                         <Label className="text-[10px] uppercase font-bold text-slate-500 ml-1">Concepto de Venta</Label>
-                        <Input value={concept} onChange={e => setConcept(e.target.value)} placeholder="Ej: Cuenco Tibetano 40cm" className="bg-[#161618] border-[#222225] h-11 rounded-xl text-slate-200 focus-visible:ring-amber-500" />
+                        <Input value={concept} onChange={e => setConcept(e.target.value)} placeholder="Ej: Tratamiento 6 Meses, Terreno, Equipo..." className="bg-[#161618] border-[#222225] h-11 rounded-xl text-slate-200 focus-visible:ring-amber-500" />
                      </div>
                      <div className="space-y-2">
-                        <Label className="text-[10px] uppercase font-bold text-emerald-500 ml-1">Monto Total de Deuda ($)</Label>
+                        <Label className="text-[10px] uppercase font-bold text-slate-400 ml-1">Valor Total ($)</Label>
+                        <div className="relative">
+                           <DollarSign className="absolute left-3 top-3.5 h-4 w-4 text-slate-500" />
+                           <Input type="number" value={totalAmount} onChange={e => setTotalAmount(e.target.value)} placeholder="65000" className="bg-[#161618] border-[#222225] pl-10 h-11 rounded-xl text-white font-bold focus-visible:ring-amber-500" />
+                        </div>
+                     </div>
+                     <div className="space-y-2">
+                        <Label className="text-[10px] uppercase font-bold text-emerald-500 ml-1">Abono Inicial / Enganche</Label>
                         <div className="relative">
                            <DollarSign className="absolute left-3 top-3.5 h-4 w-4 text-emerald-500" />
-                           <Input type="number" value={totalAmount} onChange={e => setTotalAmount(e.target.value)} placeholder="70000" className="bg-[#161618] border-emerald-900/50 pl-10 h-11 rounded-xl text-emerald-400 font-bold focus-visible:ring-emerald-500" />
+                           <Input type="number" value={downPayment} onChange={e => setDownPayment(e.target.value)} placeholder="15000" className="bg-[#161618] border-emerald-900/50 pl-10 h-11 rounded-xl text-emerald-400 font-bold focus-visible:ring-emerald-500" />
+                        </div>
+                     </div>
+                     <div className="space-y-2">
+                        <Label className="text-[10px] uppercase font-bold text-indigo-400 ml-1">Saldo a Financiar</Label>
+                        <div className="h-11 rounded-xl bg-indigo-950/20 border border-indigo-500/30 flex items-center px-4">
+                           <span className="text-indigo-400 font-bold font-mono text-lg">${getFinancedAmount().toLocaleString()}</span>
                         </div>
                      </div>
                   </div>
 
                   <div className="space-y-2">
-                     <Label className="text-[10px] uppercase font-bold text-indigo-400 flex items-center gap-1.5 ml-1"><User className="w-3.5 h-3.5"/> Responsable de Cobranza (Gestor)</Label>
+                     <Label className="text-[10px] uppercase font-bold text-amber-500 flex items-center gap-1.5 ml-1"><User className="w-3.5 h-3.5"/> Responsable de Cobranza (Gestor)</Label>
                      <Select value={responsibleId} onValueChange={setResponsibleId}>
                         <SelectTrigger className="bg-[#161618] border-[#222225] h-11 rounded-xl text-slate-200"><SelectValue placeholder="Seleccionar un gerente o admin..."/></SelectTrigger>
                         <SelectContent className="bg-[#121214] border-[#222225] text-white">
@@ -201,7 +232,7 @@ export const CreateCreditSaleDialog = ({ open, onOpenChange, contact, onSuccess 
                   </div>
 
                   <div className="p-5 bg-[#121214] border border-[#222225] rounded-2xl space-y-4">
-                     <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2 mb-4"><Calculator className="w-4 h-4 text-amber-500"/> Generador Bulk de Parcialidades</h4>
+                     <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2 mb-4"><Calculator className="w-4 h-4 text-amber-500"/> Dividir Saldo en Parcialidades</h4>
                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                         <div className="space-y-2">
                            <Label className="text-[9px] uppercase font-bold text-slate-500 ml-1">Número de Pagos</Label>
@@ -225,7 +256,7 @@ export const CreateCreditSaleDialog = ({ open, onOpenChange, contact, onSuccess 
                         </div>
                         <div className="space-y-2">
                            <Label className="text-[9px] uppercase font-bold text-slate-500 ml-1">Fecha Primer Pago</Label>
-                           <Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="bg-[#0a0a0c] border-[#222225] h-10 rounded-xl text-xs text-indigo-300" />
+                           <Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="bg-[#0a0a0c] border-[#222225] h-10 rounded-xl text-xs text-amber-500" />
                         </div>
                      </div>
                   </div>
@@ -241,8 +272,8 @@ export const CreateCreditSaleDialog = ({ open, onOpenChange, contact, onSuccess 
                         <p className="text-sm font-bold text-white">{concept}</p>
                      </div>
                      <div className="text-right space-y-1">
-                        <p className="text-[10px] text-slate-500 uppercase font-bold tracking-widest">Total a Cubrir</p>
-                        <p className="text-lg font-mono font-bold text-emerald-400">${parseFloat(totalAmount).toLocaleString()}</p>
+                        <p className="text-[10px] text-slate-500 uppercase font-bold tracking-widest">Saldo a Financiar</p>
+                        <p className="text-lg font-mono font-bold text-emerald-400">${getFinancedAmount().toLocaleString()}</p>
                      </div>
                   </div>
 
@@ -250,7 +281,7 @@ export const CreateCreditSaleDialog = ({ open, onOpenChange, contact, onSuccess 
                      <div className="bg-[#222225]/50 p-3 border-b border-[#222225] flex justify-between items-center">
                         <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2"><ListChecks className="w-4 h-4"/> Tabla de Amortización (Editable)</span>
                      </div>
-                     <ScrollArea className="h-64">
+                     <div className="h-64 overflow-y-auto custom-scrollbar">
                         <Table>
                            <TableHeader>
                               <TableRow className="border-[#222225] hover:bg-transparent">
@@ -275,76 +306,107 @@ export const CreateCreditSaleDialog = ({ open, onOpenChange, contact, onSuccess 
                               ))}
                            </TableBody>
                         </Table>
-                     </ScrollArea>
+                     </div>
                   </div>
                </div>
             )}
 
-            {/* --- PASO 3: NOTIFICACIONES (NUEVO) --- */}
+            {/* --- PASO 3: LÍNEA DE TIEMPO A/B/C/D (NUEVO) --- */}
             {step === 3 && (
-               <div className="space-y-6 animate-in fade-in slide-in-from-right-4">
-                  <div className="p-4 bg-[#121214] border border-[#222225] rounded-xl flex items-start gap-4">
-                     <div className="p-2 bg-amber-500/10 rounded-lg border border-amber-500/20 shrink-0"><BellRing className="w-5 h-5 text-amber-500"/></div>
-                     <div>
-                        <h4 className="text-xs font-bold text-white uppercase tracking-widest">Motor de Cobranza Automatizado</h4>
-                        <p className="text-[11px] text-slate-400 mt-1">El sistema enviará WhatsApps al cliente y al gestor asignado automáticamente basándose en las fechas estipuladas.</p>
-                     </div>
+               <div className="space-y-6 animate-in fade-in slide-in-from-right-4 max-w-3xl mx-auto">
+                  <div className="text-center space-y-2">
+                     <h3 className="text-lg font-bold text-white">Cronograma de Cobranza (A/B/C/D)</h3>
+                     <p className="text-xs text-slate-400">Define los intervalos y mensajes automáticos. Si el cliente no paga tras el último ciclo, será etiquetado como <strong className="text-red-400">Abandonado</strong> automáticamente.</p>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-6">
-                     <div className="space-y-2">
-                        <Label className="text-[10px] uppercase font-bold text-slate-500 ml-1 flex items-center gap-1.5"><CalendarDays className="w-3.5 h-3.5 text-indigo-400"/> Avisos Previos (Días)</Label>
-                        <Input value={reminderDays} onChange={e => setReminderDays(e.target.value)} className="bg-[#161618] border-[#222225] h-10 rounded-xl" placeholder="Ej: 1, 3 (Separa por comas)" />
-                        <p className="text-[9px] text-slate-600">¿Cuántos días ANTES del vencimiento avisamos? Ej: "1" = Un día antes.</p>
-                     </div>
-                     <div className="space-y-2">
-                        <Label className="text-[10px] uppercase font-bold text-red-500 ml-1 flex items-center gap-1.5"><ShieldAlert className="w-3.5 h-3.5"/> Alerta de Vencido (Ciclo)</Label>
-                        <Input type="number" value={overdueInterval} onChange={e => setOverdueInterval(e.target.value)} className="bg-[#161618] border-red-900/30 h-10 rounded-xl text-red-400" />
-                        <p className="text-[9px] text-slate-600">Si no pagan, ¿cada cuántos días insistimos? (Ej: "3" = Cada 3 días).</p>
-                     </div>
-                  </div>
-
-                  <div className="space-y-4 pt-2 border-t border-[#222225]">
-                     <div className="space-y-2">
-                        <Label className="text-[10px] uppercase font-bold text-slate-400 ml-1 flex items-center gap-1.5"><MessageSquare className="w-3.5 h-3.5 text-emerald-500"/> Mensaje para el Cliente</Label>
-                        <Textarea value={msgClient} onChange={e => setMsgClient(e.target.value)} className="bg-[#161618] border-[#222225] h-20 text-xs rounded-xl" />
-                        <div className="flex gap-2">
-                           <Badge variant="outline" className="text-[9px] border-[#333336] bg-[#0a0a0c]">{"{nombre}"}</Badge>
-                           <Badge variant="outline" className="text-[9px] border-[#333336] bg-[#0a0a0c]">{"{monto}"}</Badge>
-                           <Badge variant="outline" className="text-[9px] border-[#333336] bg-[#0a0a0c]">{"{fecha}"}</Badge>
+                  <div className="relative space-y-6 pl-4 before:absolute before:inset-0 before:ml-[23px] before:-translate-x-px md:before:mx-auto md:before:translate-x-0 before:h-full before:w-0.5 before:bg-gradient-to-b before:from-emerald-500/50 before:via-amber-500/50 before:to-red-500/50">
+                     
+                     {/* FASE A: PRE-AVISO */}
+                     <div className="relative flex items-center justify-between md:justify-normal md:odd:flex-row-reverse group">
+                        <div className="flex items-center justify-center w-8 h-8 rounded-full bg-[#121214] border-2 border-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.3)] text-emerald-500 shrink-0 md:order-1 md:group-odd:-translate-x-1/2 md:group-even:translate-x-1/2 z-10 font-bold text-xs">A</div>
+                        <div className="w-[calc(100%-3rem)] md:w-[calc(50%-2rem)] p-4 rounded-2xl bg-[#121214] border border-[#222225] group-hover:border-emerald-500/50 transition-colors shadow-lg">
+                           <div className="flex items-center justify-between mb-3">
+                              <span className="text-[10px] uppercase font-bold text-emerald-500 tracking-widest flex items-center gap-1.5"><Clock className="w-3.5 h-3.5"/> Pre-Aviso</span>
+                              <div className="flex items-center gap-1.5 bg-[#0a0a0c] px-2 py-1 rounded-md border border-[#222225]">
+                                 <Input type="number" min="1" value={seqPreDays} onChange={e => setSeqPreDays(e.target.value)} className="w-10 h-6 p-0 text-center bg-transparent border-0 text-[10px] font-bold text-white focus-visible:ring-0" />
+                                 <span className="text-[9px] text-slate-500">días antes</span>
+                              </div>
+                           </div>
+                           <Textarea value={msgPre} onChange={e => setMsgPre(e.target.value)} className="bg-[#0a0a0c] border-[#222225] h-20 text-[11px] rounded-xl text-slate-300 resize-none" />
                         </div>
                      </div>
 
-                     <div className="space-y-2">
-                        <Label className="text-[10px] uppercase font-bold text-slate-400 ml-1 flex items-center gap-1.5"><User className="w-3.5 h-3.5 text-indigo-400"/> Mensaje para el Gestor (Tú)</Label>
-                        <Textarea value={msgAgent} onChange={e => setMsgAgent(e.target.value)} className="bg-[#161618] border-[#222225] h-20 text-xs rounded-xl text-indigo-300" />
+                     {/* FASE B: PRIMER ATRASO */}
+                     <div className="relative flex items-center justify-between md:justify-normal md:odd:flex-row-reverse group">
+                        <div className="flex items-center justify-center w-8 h-8 rounded-full bg-[#121214] border-2 border-amber-400 shadow-[0_0_10px_rgba(251,191,36,0.3)] text-amber-400 shrink-0 md:order-1 md:group-odd:-translate-x-1/2 md:group-even:translate-x-1/2 z-10 font-bold text-xs">B</div>
+                        <div className="w-[calc(100%-3rem)] md:w-[calc(50%-2rem)] p-4 rounded-2xl bg-[#121214] border border-[#222225] group-hover:border-amber-500/50 transition-colors shadow-lg">
+                           <div className="flex items-center justify-between mb-3">
+                              <span className="text-[10px] uppercase font-bold text-amber-400 tracking-widest flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5"/> 1er Atraso</span>
+                              <div className="flex items-center gap-1.5 bg-[#0a0a0c] px-2 py-1 rounded-md border border-[#222225]">
+                                 <Input type="number" min="1" value={seqPost1Days} onChange={e => setSeqPost1Days(e.target.value)} className="w-10 h-6 p-0 text-center bg-transparent border-0 text-[10px] font-bold text-white focus-visible:ring-0" />
+                                 <span className="text-[9px] text-slate-500">días desp.</span>
+                              </div>
+                           </div>
+                           <Textarea value={msgPost1} onChange={e => setMsgPost1(e.target.value)} className="bg-[#0a0a0c] border-[#222225] h-20 text-[11px] rounded-xl text-slate-300 resize-none" />
+                        </div>
+                     </div>
+
+                     {/* FASE C: SEGUNDO ATRASO */}
+                     <div className="relative flex items-center justify-between md:justify-normal md:odd:flex-row-reverse group">
+                        <div className="flex items-center justify-center w-8 h-8 rounded-full bg-[#121214] border-2 border-orange-500 shadow-[0_0_10px_rgba(249,115,22,0.3)] text-orange-500 shrink-0 md:order-1 md:group-odd:-translate-x-1/2 md:group-even:translate-x-1/2 z-10 font-bold text-xs">C</div>
+                        <div className="w-[calc(100%-3rem)] md:w-[calc(50%-2rem)] p-4 rounded-2xl bg-[#121214] border border-[#222225] group-hover:border-orange-500/50 transition-colors shadow-lg">
+                           <div className="flex items-center justify-between mb-3">
+                              <span className="text-[10px] uppercase font-bold text-orange-500 tracking-widest flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5"/> 2do Atraso</span>
+                              <div className="flex items-center gap-1.5 bg-[#0a0a0c] px-2 py-1 rounded-md border border-[#222225]">
+                                 <Input type="number" min="2" value={seqPost2Days} onChange={e => setSeqPost2Days(e.target.value)} className="w-10 h-6 p-0 text-center bg-transparent border-0 text-[10px] font-bold text-white focus-visible:ring-0" />
+                                 <span className="text-[9px] text-slate-500">días desp.</span>
+                              </div>
+                           </div>
+                           <Textarea value={msgPost2} onChange={e => setMsgPost2(e.target.value)} className="bg-[#0a0a0c] border-[#222225] h-20 text-[11px] rounded-xl text-slate-300 resize-none" />
+                        </div>
+                     </div>
+
+                     {/* FASE D: ABANDONADO */}
+                     <div className="relative flex items-center justify-between md:justify-normal md:odd:flex-row-reverse group">
+                        <div className="flex items-center justify-center w-8 h-8 rounded-full bg-[#121214] border-2 border-red-500 shadow-[0_0_10px_rgba(239,68,68,0.5)] text-red-500 shrink-0 md:order-1 md:group-odd:-translate-x-1/2 md:group-even:translate-x-1/2 z-10 font-bold text-xs">D</div>
+                        <div className="w-[calc(100%-3rem)] md:w-[calc(50%-2rem)] p-4 rounded-2xl bg-red-950/20 border border-red-900/50 group-hover:border-red-500/50 transition-colors shadow-lg">
+                           <div className="flex items-center justify-between mb-3">
+                              <span className="text-[10px] uppercase font-bold text-red-500 tracking-widest flex items-center gap-1.5"><ShieldAlert className="w-3.5 h-3.5"/> Quiebre</span>
+                              <div className="flex items-center gap-1.5 bg-[#0a0a0c] px-2 py-1 rounded-md border border-red-900/50">
+                                 <Input type="number" min="3" value={seqAbandonDays} onChange={e => setSeqAbandonDays(e.target.value)} className="w-10 h-6 p-0 text-center bg-transparent border-0 text-[10px] font-bold text-red-400 focus-visible:ring-0" />
+                                 <span className="text-[9px] text-slate-500">días desp.</span>
+                              </div>
+                           </div>
+                           <p className="text-[10px] text-slate-400 mb-2">Mensaje al Gestor (El sistema etiquetará al cliente automáticamente como Abandonado):</p>
+                           <Textarea value={msgAbandonAgent} onChange={e => setMsgAbandonAgent(e.target.value)} className="bg-[#0a0a0c] border-red-900/30 h-16 text-[11px] rounded-xl text-red-300 resize-none" />
+                        </div>
                      </div>
                   </div>
                </div>
             )}
-        </div>
+        </ScrollArea>
 
-        <DialogFooter className="p-6 bg-[#161618] border-t border-[#222225] flex justify-between">
-          <Button type="button" variant="ghost" onClick={() => onOpenChange(false)} className="h-11 rounded-xl">Cancelar</Button>
+        <DialogFooter className="p-6 bg-[#161618] border-t border-[#222225] flex justify-between shrink-0">
+          <Button type="button" variant="ghost" onClick={() => onOpenChange(false)} className="h-11 rounded-xl text-xs uppercase tracking-widest font-bold text-slate-400 hover:text-white">Cancelar</Button>
           
           <div className="flex gap-2">
-             {step > 1 && <Button type="button" variant="outline" onClick={() => setStep(step - 1)} className="h-11 rounded-xl border-[#333336] bg-[#0a0a0c]">Atrás</Button>}
+             {step > 1 && <Button type="button" variant="outline" onClick={() => setStep(step - 1)} className="h-11 rounded-xl border-[#333336] bg-[#0a0a0c] font-bold text-xs uppercase tracking-widest">Atrás</Button>}
              
              {step === 1 && (
                <Button onClick={handleGeneratePlan} className="bg-amber-600 hover:bg-amber-500 text-slate-950 font-bold h-11 px-8 rounded-xl shadow-lg uppercase tracking-widest text-[10px]">
-                 Calcular Plan <ChevronRight className="w-4 h-4 ml-2" />
+                 Calcular Plan <ArrowRight className="w-4 h-4 ml-2" />
                </Button>
              )}
              
              {step === 2 && (
                <Button onClick={() => setStep(3)} className="bg-amber-600 hover:bg-amber-500 text-slate-950 font-bold h-11 px-8 rounded-xl shadow-lg uppercase tracking-widest text-[10px]">
-                 Configurar Alertas <ChevronRight className="w-4 h-4 ml-2" />
+                 Motor Cobranza <ArrowRight className="w-4 h-4 ml-2" />
                </Button>
              )}
 
              {step === 3 && (
                <Button onClick={handleSaveSale} disabled={loading} className="bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold h-11 px-8 rounded-xl shadow-lg uppercase tracking-widest text-[10px]">
-                 {loading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />} FINALIZAR Y APROBAR CRÉDITO
+                 {loading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />} ACTIVAR CRÉDITO Y AVISOS
                </Button>
              )}
           </div>
