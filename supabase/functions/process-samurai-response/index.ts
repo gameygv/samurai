@@ -60,35 +60,27 @@ serve(async (req) => {
     const aiText = aiData.choices?.[0]?.message?.content || '';
 
     if (aiText) {
-        // --- 3. ENVIAR POR EL CANAL CORRESPONDIENTE ---
-        const { data: channel } = await supabaseClient.from('whatsapp_channels').select('*').eq('id', lead.channel_id).single();
+        // --- 3. ENVIAR POR EL CANAL CORRESPONDIENTE USANDO EL TÚNEL PRINCIPAL ---
+        const { data: channel } = await supabaseClient.from('whatsapp_channels').select('id').eq('id', lead.channel_id).single();
         
         if (!channel) {
             console.error("[process-response] No se encontró el canal para el lead", lead.id);
             return new Response('no_channel');
         }
 
-        const provider = channel.provider || 'evolution';
-        let endpoint = channel.api_url;
-        let body = {};
-        let headers = { 'Content-Type': 'application/json' };
-
-        if (provider === 'gowa') {
-            endpoint = `${channel.api_url.endsWith('/') ? channel.api_url.slice(0, -1) : channel.api_url}/send-message`;
-            headers['Authorization'] = `Bearer ${channel.api_key}`;
-            body = { phone: cleanPhone, message: aiText, instance_id: channel.instance_id };
-        } else if (provider === 'meta') {
-            endpoint = `https://graph.facebook.com/v19.0/${channel.instance_id}/messages`;
-            headers['Authorization'] = `Bearer ${channel.api_key}`;
-            body = { messaging_product: "whatsapp", to: cleanPhone, type: "text", text: { body: aiText } };
-        } else {
-            // Evolution
-            endpoint = `${channel.api_url}/message/sendText/${channel.instance_id}`;
-            headers['apikey'] = channel.api_key;
-            body = { number: cleanPhone, text: aiText };
-        }
-
-        const sendRes = await fetch(endpoint, { method: 'POST', headers, body: JSON.stringify(body) });
+        // Delegar el envío a send-message-v3 para no duplicar código
+        const sendRes = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/send-message-v3`, {
+            method: 'POST',
+            headers: { 
+                'Authorization': `Bearer ${Deno.env.get('SUPABASE_ANON_KEY')}`,
+                'Content-Type': 'application/json' 
+            },
+            body: JSON.stringify({
+                channel_id: channel.id,
+                phone: cleanPhone,
+                message: aiText
+            })
+        });
 
         if (sendRes.ok) {
             await supabaseClient.from('conversaciones').insert({ 
@@ -106,7 +98,7 @@ serve(async (req) => {
             }).catch(() => {});
         } else {
             const errorText = await sendRes.text();
-            console.error(`[process-response] Error enviando via ${provider}:`, errorText);
+            console.error(`[process-response] Error enviando via túnel:`, errorText);
         }
     }
 

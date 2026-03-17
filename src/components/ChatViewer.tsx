@@ -199,7 +199,9 @@ const ChatViewer = ({ lead: initialLead, open, onOpenChange }: ChatViewerProps) 
         mediaData = { url: publicUrl, type, mimetype: file.type, name: file.name };
       }
 
-      const apiResponse = await sendEvolutionMessage(lead.telefono, text, mediaData);
+      // CORRECCIÓN AQUÍ: lead.id posicionado correctamente antes de mediaData
+      const apiResponse = await sendEvolutionMessage(lead.telefono, text, lead.id, mediaData);
+      
       const textToSave = text || (file ? `[ARCHIVO ENVIADO: ${file.name}]` : '');
       const finalMessage = apiResponse ? textToSave : `[PRUEBA / WA DESCONECTADO] ${textToSave}`;
 

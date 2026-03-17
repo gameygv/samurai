@@ -167,7 +167,10 @@ const Inbox = () => {
         const { data: { publicUrl } } = supabase.storage.from('media').getPublicUrl(path);
         mediaData = { url: publicUrl, type: file.type.startsWith('image/') ? 'image' : 'document', mimetype: file.type, name: file.name };
       }
-      const apiResponse = await sendEvolutionMessage(activeLead.telefono, text, mediaData);
+      
+      // CORRECCIÓN AQUÍ: activeLead.id posicionado correctamente antes de mediaData
+      const apiResponse = await sendEvolutionMessage(activeLead.telefono, text, activeLead.id, mediaData);
+      
       await supabase.from('conversaciones').insert({ 
         lead_id: activeLead.id, mensaje: apiResponse ? text : `[PRUEBA / WA DESCONECTADO] ${text}`, emisor: 'HUMANO', platform: 'PANEL',
         metadata: mediaData ? { mediaUrl: mediaData.url, mediaType: mediaData.type, fileName: mediaData.name } : {}
@@ -183,6 +186,23 @@ const Inbox = () => {
        ciudad: data.ciudad || '', perfil_psicologico: data.perfil_psicologico || '', assigned_to: data.assigned_to || '',
        tags: data.tags || [], reminders: data.reminders || []
     });
+  };
+
+  const handleAutoGenerate = async () => {
+      try {
+         const history = messages.slice(-15).map(m => ({ 
+             role: (m.emisor === 'IA' || m.emisor === 'SAMURAI' ? 'bot' : 'user'), 
+             text: m.mensaje 
+         }));
+         const { data, error } = await supabase.functions.invoke('simulate-samurai', {
+            body: { question: "Por favor genera la mejor respuesta corta y persuasiva para continuar esta conversación como un experto humano.", history, customPrompts: null }
+         });
+         if (error) throw error;
+         return data.answer as string;
+      } catch (e) {
+         console.error(e);
+         return null;
+      }
   };
 
   const saveMemory = async () => {
@@ -254,7 +274,7 @@ const Inbox = () => {
 
                  <div className="p-3 bg-slate-900/80 border-t border-slate-800 shrink-0">
                     <AiSuggestions suggestions={suggestions} loading={loadingSuggestions} onSelect={setDraftMessage} onRefresh={() => fetchAiSuggestions(activeLead.id, messages)} />
-                    <MessageInput onSendMessage={handleSendMessage} sending={sending} isAiPaused={activeLead.ai_paused} initialValue={draftMessage} />
+                    <MessageInput onSendMessage={handleSendMessage} sending={sending} isAiPaused={activeLead.ai_paused} initialValue={draftMessage} onAutoGenerate={handleAutoGenerate} />
                  </div>
               </>
            )}
