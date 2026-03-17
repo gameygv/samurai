@@ -103,7 +103,7 @@ serve(async (req) => {
     let cleanPhone = phone.split('@')[0].replace(/\D/g, '');
     if (cleanPhone.startsWith('52') && cleanPhone.length === 12 && cleanPhone[2] !== '1') cleanPhone = '521' + cleanPhone.substring(2);
 
-    // --- 4. DESCARGA MULTIMEDIA ---
+    // --- 3. DESCARGA MULTIMEDIA ---
     let finalMediaUrl = null;
     if (mediaUrl) {
         try {
@@ -119,7 +119,7 @@ serve(async (req) => {
         } catch (e) { await logTrace(`Error bajando adjunto: ${e.message}`, true); }
     }
 
-    // --- 5. ACTUALIZAR CRM ---
+    // --- 4. ACTUALIZAR CRM ---
     let { data: lead } = await supabaseClient.from('leads').select('*').or(`telefono.ilike.%${cleanPhone.slice(-10)}%`).limit(1).maybeSingle();
     
     if (!lead) {
@@ -134,17 +134,97 @@ serve(async (req) => {
         metadata: finalMediaUrl ? { mediaUrl: finalMediaUrl, mediaType } : {}
     });
 
-    // --- 6. LANZAR IA (AHORA CON AWAIT PARA EVITAR CONGELAMIENTO) ---
+    await logTrace(`Mensaje de ${lead.nombre} guardado.`);
+
+    // --- 5. LOGICA IA (INTEGRADA PARA EVITAR FALLOS) ---
     if (!lead.ai_paused) {
-       let samuraiUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/process-samurai-response?phone=${cleanPhone}&client_message=${encodeURIComponent(text)}`;
-       if (finalMediaUrl) samuraiUrl += `&media_url=${encodeURIComponent(finalMediaUrl)}&media_type=${mediaType}`;
-       
-       // AWAIT ES LA CLAVE: Evita que el servidor cierre el proceso antes de que la IA conteste
-       await fetch(samuraiUrl, { method: 'POST', headers: { 'Authorization': `Bearer ${Deno.env.get('SUPABASE_ANON_KEY')}` } }).catch(() => {});
+       await logTrace(`Iniciando Cerebro Samurai para ${lead.nombre}...`);
+
+       // A. CARGAR CONFIGURACIÓN COMPLETA
+       const { data: configs } = await supabaseClient.from('app_config').select('key, value');
+       const configMap = configs?.reduce((acc, item) => ({...acc, [item.key]: item.value}), {});
+       const openaiKey = configMap['openai_api_key'];
+
+       if (!openaiKey) {
+          await logTrace("ERROR: OpenAI Key no configurada", true);
+       } else {
+          // B. CONSTRUIR CONTEXTO (VERDAD MAESTRA + POSTERS)
+          const { data: webPages } = await supabaseClient.from('main_website_content').select('title, content').eq('scrape_status', 'success');
+          let masterTruth = "\n=== VERDAD MAESTRA (SITIO WEB) ===\n";
+          webPages?.forEach(p => { if(p.content) masterTruth += `\n[PÁGINA: ${p.title}]\n${p.content.substring(0, 1500)}\n`; });
+
+          const { data: mediaAssets } = await supabaseClient.from('media_assets').select('title, url, ai_instructions').eq('category', 'POSTER');
+          let mediaContext = "\n=== BÓVEDA VISUAL (POSTERS) ===\nINSTRUCCIÓN CRÍTICA: Para enviar un poster usa EXACTAMENTE este formato en tu respuesta: <<MEDIA:url_del_poster>>\n";
+          mediaAssets?.forEach(m => { mediaContext += `- ${m.title}: ${m.ai_instructions} -> <<MEDIA:${m.url}>>\n`; });
+
+          const bankInfo = `Banco: ${configMap['bank_name']}\nCuenta: ${configMap['bank_account']}\nCLABE: ${configMap['bank_clabe']}\nTitular: ${configMap['bank_holder']}`;
+
+          const systemPrompt = `
+            ${configMap['prompt_alma_samurai']}
+            ${configMap['prompt_adn_core']}
+            ${configMap['prompt_behavior_rules']}
+            ${masterTruth}
+            ${mediaContext}
+            === DATOS DE PAGO ===
+            ${bankInfo}
+          `;
+
+          // C. CARGAR HISTORIAL
+          const { data: history } = await supabaseClient.from('conversaciones').select('emisor, mensaje').eq('lead_id', lead.id).order('created_at', { ascending: true }).limit(10);
+          
+          const messages = [
+            { role: 'system', content: systemPrompt },
+            ...history.map(h => ({ role: (h.emisor === 'IA' || h.emisor === 'SAMURAI' || h.emisor === 'BOT') ? 'assistant' : 'user', content: h.mensaje }))
+          ];
+
+          // D. PREGUNTAR A LA IA
+          const aiRes = await fetch("https://api.openai.com/v1/chat/completions", {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${openaiKey}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ model: "gpt-4o", messages, temperature: 0.4 })
+          });
+
+          const aiData = await aiRes.json();
+          let aiText = aiData.choices?.[0]?.message?.content || '';
+
+          if (aiText) {
+             await logTrace(`IA Generó respuesta. Procesando envío...`);
+             
+             // Extraer Poster
+             let mediaUrlToSend = null;
+             const mediaRegex = /<<MEDIA:\s*(.+?)\s*>>/i;
+             const match = aiText.match(mediaRegex);
+             if (match) {
+                mediaUrlToSend = match[1].trim();
+                aiText = aiText.replace(mediaRegex, '').trim();
+             }
+
+             // ENVIAR POR EL TÚNEL
+             await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/send-message-v3`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${Deno.env.get('SUPABASE_ANON_KEY')}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    channel_id: lead.channel_id || channel.id, 
+                    phone: cleanPhone, 
+                    message: aiText,
+                    mediaData: mediaUrlToSend ? { url: mediaUrlToSend, type: 'image', name: 'poster.jpg' } : undefined
+                })
+             });
+
+             // GUARDAR EN BD (Imprescindible para visibilidad)
+             await supabaseClient.from('conversaciones').insert({ 
+                lead_id: lead.id, emisor: 'IA', mensaje: aiText || "[Poster Enviado]", platform: 'WHATSAPP',
+                metadata: mediaUrlToSend ? { mediaUrl: mediaUrlToSend, mediaType: 'image' } : {}
+             });
+
+             await logTrace(`Samurai respondió con éxito.`);
+          }
+       }
     }
 
     return new Response('ok', { headers: corsHeaders });
   } catch (err) {
+    await logTrace(`ERROR CRÍTICO WEBHOOK: ${err.message}`, true);
     return new Response(err.message, { status: 200, headers: corsHeaders });
   }
 });
