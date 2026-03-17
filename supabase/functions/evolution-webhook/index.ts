@@ -22,6 +22,7 @@ serve(async (req) => {
 
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
+  // Función para registrar CADA paso y saber exactamente dónde falla
   const logTrace = async (msg: string, isError = false) => {
     await supabaseClient.from('activity_logs').insert({
         action: isError ? 'ERROR' : 'UPDATE',
@@ -41,19 +42,17 @@ serve(async (req) => {
       return new Response("Invalid JSON", { status: 400 });
     }
     
-    await logTrace(`Iniciando parseo. Evento detectado: ${payload.event || 'N/A'}`);
+    await logTrace(`Iniciando parseo. Evento: ${payload.event || 'N/A'}`);
 
-    // --- 1. RESOLVER CANAL (CON FALLBACK INTELIGENTE) ---
+    // --- 1. RESOLVER CANAL (CON FALLBACK) ---
     const deviceJid = payload.device_id;
     let channel = null;
 
-    // Intento 1: Por URL (Si Gowa no lo cortó)
     if (channelIdParam) {
        const { data } = await supabaseClient.from('whatsapp_channels').select('*').eq('id', channelIdParam).maybeSingle();
        if (data) channel = data;
     }
 
-    // Intento 2: Por Device ID (JID)
     if (!channel && deviceJid) {
        const deviceNum = deviceJid.split('@')[0];
        const { data } = await supabaseClient.from('whatsapp_channels')
@@ -63,9 +62,7 @@ serve(async (req) => {
        if (data) channel = data;
     }
 
-    // Intento 3: Fallback al Canal por Defecto
     if (!channel) {
-       await logTrace(`ID no coincide exacto (${deviceJid}). Aplicando Fallback al Canal Principal...`);
        const { data: defConfig } = await supabaseClient.from('app_config').select('value').eq('key', 'default_notification_channel').maybeSingle();
        if (defConfig?.value) {
            const { data } = await supabaseClient.from('whatsapp_channels').select('*').eq('id', defConfig.value).maybeSingle();
@@ -73,14 +70,13 @@ serve(async (req) => {
        }
     }
 
-    // Intento 4: Último recurso, agarrar el primero activo
     if (!channel) {
        const { data } = await supabaseClient.from('whatsapp_channels').select('*').eq('is_active', true).limit(1).maybeSingle();
        if (data) channel = data;
     }
 
     if (!channel) {
-       await logTrace(`Canal definitivo no encontrado. Abortando.`, true);
+       await logTrace(`Canal definitivo no encontrado.`, true);
        return new Response('invalid_channel', { status: 200 });
     }
 
@@ -89,15 +85,15 @@ serve(async (req) => {
     // --- 2. LÓGICA EXACTA GOWA v8.3.0 ---
     if (payload.device_id && payload.event) {
        if (payload.event !== 'message') {
-          await logTrace(`Ignorado: Evento '${payload.event}' no es 'message'`);
+          await logTrace(`Ignorado: Evento no es message (${payload.event})`);
           return new Response('ignored_event', { status: 200 });
        }
        if (!payload.payload) {
-          await logTrace(`Abortado: No se detectó objeto 'payload'`, true);
+          await logTrace(`Abortado: No hay payload`);
           return new Response('no_payload', { status: 200 });
        }
        if (payload.payload.is_from_me) {
-          await logTrace(`Ignorado: Mensaje de salida (is_from_me = true)`);
+          await logTrace(`Ignorado: Mensaje enviado por ti mismo`);
           return new Response('ignored_self', { status: 200 });
        }
 
@@ -131,7 +127,7 @@ serve(async (req) => {
          mediaUrl = `${GOWA_BASE_URL}/${p.sticker}`;
          mediaType = 'image';
        } else {
-         await logTrace(`Ignorado: Tipo de mensaje multimedia desconocido`);
+         await logTrace(`Ignorado: Mensaje multimedia no soportado`);
          return new Response('unknown_msg_type', { status: 200 });
        }
     } 
@@ -145,7 +141,7 @@ serve(async (req) => {
     }
 
     if (!phone) {
-       await logTrace(`Abortado: Sin teléfono detectado`, true);
+       await logTrace(`Abortado: Sin teléfono`);
        return new Response('invalid_phone', { status: 200 });
     }
 
@@ -155,10 +151,11 @@ serve(async (req) => {
         cleanPhone = '521' + cleanPhone.substring(2);
     }
 
+    await logTrace(`Procesando para el número: ${cleanPhone}`);
+
     // --- 4. DESCARGA DE MULTIMEDIA ---
     let finalMediaUrl = null;
     if (mediaUrl) {
-        await logTrace(`Descargando multimedia: ${mediaUrl}`);
         try {
             const authHeader = channel.api_key.startsWith('Basic ') ? channel.api_key : `Basic ${channel.api_key}`;
             const mediaRes = await fetch(mediaUrl, { headers: { 'Authorization': authHeader } });
@@ -174,25 +171,33 @@ serve(async (req) => {
                     finalMediaUrl = publicUrl;
                 }
             } else {
-                await logTrace(`HTTP Error descargando archivo: ${mediaRes.status}`, true);
+                await logTrace(`Error bajando adjunto HTTP ${mediaRes.status}`, true);
             }
         } catch (e) {
-            await logTrace(`Excepción en descarga de archivo: ${e.message}`, true);
+            await logTrace(`Excepción bajando adjunto: ${e.message}`, true);
         }
     }
 
     // --- 5. ACTUALIZAR CRM ---
-    let { data: lead } = await supabaseClient.from('leads').select('*').or(`telefono.ilike.%${cleanPhone.slice(-10)}%`).limit(1).maybeSingle();
+    let { data: lead, error: searchErr } = await supabaseClient.from('leads').select('*').or(`telefono.ilike.%${cleanPhone.slice(-10)}%`).limit(1).maybeSingle();
     
+    if (searchErr) {
+        await logTrace(`Error BD al buscar lead: ${searchErr.message}`, true);
+        throw searchErr;
+    }
+
     if (!lead) {
+      // AQUÍ ESTABA EL ERROR: quitamos platform: 'WHATSAPP' que rompía todo
       const { data: nl, error: insErr } = await supabaseClient.from('leads').insert({ 
         nombre: pushName, 
         telefono: cleanPhone, 
-        channel_id: channel.id,
-        platform: 'WHATSAPP'
+        channel_id: channel.id
       }).select().single();
       
-      if (insErr) throw insErr;
+      if (insErr) {
+         await logTrace(`Fallo BD insertando Lead: ${insErr.message}`, true);
+         throw insErr;
+      }
       lead = nl;
     } else {
       await supabaseClient.from('leads').update({ 
@@ -201,6 +206,7 @@ serve(async (req) => {
       }).eq('id', lead.id);
     }
 
+    // A la tabla de conversaciones sí le pasamos el platform
     const { error: convErr } = await supabaseClient.from('conversaciones').insert({ 
         lead_id: lead.id, 
         emisor: 'CLIENTE', 
@@ -209,9 +215,12 @@ serve(async (req) => {
         metadata: finalMediaUrl ? { mediaUrl: finalMediaUrl, mediaType } : {}
     });
 
-    if (convErr) throw convErr;
+    if (convErr) {
+       await logTrace(`Fallo BD guardando chat: ${convErr.message}`, true);
+       throw convErr;
+    }
 
-    await logTrace(`Éxito. Mensaje en CRM para: ${lead.nombre}`);
+    await logTrace(`¡Éxito! Mensaje guardado en CRM para: ${lead.nombre}`);
 
     // --- 6. LANZAR IA ---
     if (!lead.ai_paused) {
@@ -222,6 +231,8 @@ serve(async (req) => {
 
     return new Response('ok', { headers: corsHeaders });
   } catch (err) {
+    // AHORA CAPTURAMOS CUALQUIER OTRA FALLA EN EL UI
+    await logTrace(`CRASH FATAL: ${err.message}`, true);
     console.error("[evolution-webhook] Error Fatal:", err.message);
     return new Response(err.message, { status: 200, headers: corsHeaders });
   }
