@@ -25,7 +25,7 @@ export const CreateResourceDialog = ({ open, onOpenChange, userId, onSuccess }: 
   const [formData, setFormData] = useState({
     title: '',
     type: 'PDF',
-    category: 'Talleres',
+    category: 'Talleres Online',
     external_link: '',
     description: '',
     content: '',
@@ -38,7 +38,7 @@ export const CreateResourceDialog = ({ open, onOpenChange, userId, onSuccess }: 
       setFormData({
         title: '',
         type: 'PDF',
-        category: 'Talleres',
+        category: 'Talleres Online',
         external_link: '',
         description: '',
         content: '',
@@ -247,7 +247,9 @@ export const CreateResourceDialog = ({ open, onOpenChange, userId, onSuccess }: 
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent className="bg-slate-900 border-slate-800 text-white">
-                  <SelectItem value="Talleres">Talleres & Eventos</SelectItem>
+                  <SelectItem value="Talleres Online">Talleres Online</SelectItem>
+                  <SelectItem value="Cursos">Cursos</SelectItem>
+                  <SelectItem value="Clases Gratuitas">Clases Gratuitas</SelectItem>
                   <SelectItem value="Maestros">Maestros</SelectItem>
                   <SelectItem value="Instrumentos">Instrumentos (Cuencos/Gongs)</SelectItem>
                   <SelectItem value="Legal">Políticas</SelectItem>

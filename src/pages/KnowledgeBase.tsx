@@ -143,7 +143,7 @@ const KnowledgeBase = () => {
                  <Label className="text-[10px] uppercase font-bold text-slate-500">Filtrar por categoría</Label>
               </div>
               <div className="p-2 space-y-1">
-                 {['all', 'Talleres', 'Maestros', 'Instrumentos', 'Legal'].map(cat => (
+                 {['all', 'Talleres Online', 'Cursos', 'Clases Gratuitas', 'Maestros', 'Instrumentos', 'Legal'].map(cat => (
                     <button
                        key={cat}
                        onClick={() => setActiveCategory(cat)}
