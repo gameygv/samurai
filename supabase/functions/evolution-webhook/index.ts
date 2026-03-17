@@ -63,7 +63,7 @@ serve(async (req) => {
     let phone, text = '', pushName = 'Cliente WA', mediaUrl = null, mediaType = null;
 
     // --- 2. PARSEAR MENSAJE GOWA / EVOLUTION ---
-    if (payload.device_id && payload.event) { // Flujo GOWA
+    if (payload.device_id && payload.event) { 
        if (payload.event !== 'message') return new Response('ignored_event', { status: 200 });
        if (!payload.payload || payload.payload.is_from_me) return new Response('ignored_self', { status: 200 });
 
@@ -85,9 +85,8 @@ serve(async (req) => {
        } else if (p.sticker) {
          text = "[Sticker]"; mediaUrl = `${GOWA_BASE_URL}/${p.sticker}`; mediaType = 'image';
        }
-    } else { // Flujo Evolution API Genérico
+    } else { 
        if (payload.event && payload.event !== 'messages.upsert') return new Response('ignored_event', { status: 200 });
-       
        const msg = payload.data?.[0] || payload.data || payload;
        if (msg?.key?.fromMe || payload.fromMe) return new Response('ignored_self', { status: 200 });
        
@@ -101,7 +100,6 @@ serve(async (req) => {
 
     if (!phone) return new Response('invalid_phone', { status: 200 });
 
-    // 🛑 ROMPE-BUCLES CRÍTICO: Si no hay texto real ni adjunto, lo ignoramos. (Evita que los "Visto" rompan la IA)
     if (!text.trim() && !mediaUrl && !mediaType) {
         await logTrace(`IGNORADO: Evento de sistema sin contenido para ${phone}`);
         return new Response('empty_message_ignored', { status: 200 });
@@ -110,20 +108,60 @@ serve(async (req) => {
     let cleanPhone = phone.split('@')[0].replace(/\D/g, '');
     if (cleanPhone.startsWith('52') && cleanPhone.length === 12 && cleanPhone[2] !== '1') cleanPhone = '521' + cleanPhone.substring(2);
 
-    // --- 3. DESCARGA MULTIMEDIA ---
+    // --- 3. DESCARGA MULTIMEDIA Y MÓDULO AUDITIVO (WHISPER) ---
     let finalMediaUrl = null;
+    let downloadedBlob = null; // Guardamos el blob crudo por si es un audio
+
     if (mediaUrl) {
         try {
             const authHeader = channel.api_key.startsWith('Basic ') ? channel.api_key : `Basic ${channel.api_key}`;
             const mediaRes = await fetch(mediaUrl, { headers: { 'Authorization': authHeader } });
             if (mediaRes.ok) {
-                const blob = await mediaRes.blob();
+                downloadedBlob = await mediaRes.blob();
                 const ext = mediaUrl.split('.').pop()?.split('?')[0] || 'bin';
                 const fileName = `inbound/${Date.now()}_${Math.random().toString(36).substring(7)}.${ext}`;
-                const { data: uploadData } = await supabaseClient.storage.from('media').upload(fileName, blob, { contentType: blob.type });
+                const { data: uploadData } = await supabaseClient.storage.from('media').upload(fileName, downloadedBlob, { contentType: downloadedBlob.type });
                 if (uploadData) finalMediaUrl = supabaseClient.storage.from('media').getPublicUrl(fileName).data.publicUrl;
             }
         } catch (e) { await logTrace(`Error bajando adjunto: ${e.message}`, true); }
+    }
+
+    // TRANSCRIPCIÓN WHISPER (Solo si es audio y se descargó correctamente)
+    if (mediaType === 'audio' && downloadedBlob) {
+        try {
+            await logTrace("Audio detectado. Iniciando motor de transcripción Whisper...");
+            const { data: conf } = await supabaseClient.from('app_config').select('value').eq('key', 'openai_api_key').maybeSingle();
+            
+            if (conf?.value) {
+                const formData = new FormData();
+                // Whisper requiere una extensión válida para procesar el archivo. OGG es el estándar de WhatsApp.
+                formData.append('file', downloadedBlob, 'voice_note.ogg'); 
+                formData.append('model', 'whisper-1');
+                formData.append('language', 'es');
+
+                const whisperRes = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${conf.value}` },
+                    body: formData
+                });
+
+                if (whisperRes.ok) {
+                    const whisperData = await whisperRes.json();
+                    if (whisperData.text) {
+                        // Reemplazamos la etiqueta "[Audio]" por la transcripción real para que la IA la lea
+                        text = `[TRANSCRIPCIÓN DE NOTA DE VOZ]: "${whisperData.text}"`;
+                        await logTrace(`Audio transcrito con éxito: ${whisperData.text.substring(0, 30)}...`);
+                    }
+                } else {
+                    const err = await whisperRes.text();
+                    await logTrace(`Fallo Whisper API: ${err}`, true);
+                }
+            } else {
+                await logTrace(`Error Whisper: API Key no configurada`, true);
+            }
+        } catch (err) {
+            await logTrace(`Excepción en Whisper: ${err.message}`, true);
+        }
     }
 
     // --- 4. ACTUALIZAR CRM ---
@@ -136,27 +174,31 @@ serve(async (req) => {
       await supabaseClient.from('leads').update({ last_message_at: new Date().toISOString(), channel_id: channel.id }).eq('id', lead.id);
     }
 
+    // Guardamos el mensaje en la BD (Si fue audio, aquí se guardará el texto transcrito)
     await supabaseClient.from('conversaciones').insert({ 
-        lead_id: lead.id, emisor: 'CLIENTE', mensaje: text, platform: 'WHATSAPP',
+        lead_id: lead.id, emisor: 'CLIENTE', mensaje: text || " ", platform: 'WHATSAPP',
         metadata: finalMediaUrl ? { mediaUrl: finalMediaUrl, mediaType } : {}
     });
 
-    await logTrace(`Mensaje de ${lead.nombre} procesado correctamente.`);
+    await logTrace(`Mensaje de ${lead.nombre} guardado.`);
 
     // --- 5. LÓGICA IA ---
     if (!lead.ai_paused) {
+       await logTrace(`Iniciando Cerebro Samurai para ${lead.nombre}...`);
+
        const { data: configs } = await supabaseClient.from('app_config').select('key, value');
        const configMap = configs?.reduce((acc, item) => ({...acc, [item.key]: item.value}), {});
        const openaiKey = configMap['openai_api_key'];
 
-       if (openaiKey) {
-          // A. Construir el contexto del sistema
+       if (!openaiKey) {
+          await logTrace("ERROR: OpenAI Key no configurada", true);
+       } else {
           const { data: webPages } = await supabaseClient.from('main_website_content').select('title, content').eq('scrape_status', 'success');
           let masterTruth = "\n=== VERDAD MAESTRA (SITIO WEB) ===\n";
           webPages?.forEach(p => { if(p.content) masterTruth += `\n[PÁGINA: ${p.title}]\n${p.content.substring(0, 1500)}\n`; });
 
           const { data: mediaAssets } = await supabaseClient.from('media_assets').select('title, url, ai_instructions').eq('category', 'POSTER');
-          let mediaContext = "\n=== BÓVEDA VISUAL (POSTERS) ===\nINSTRUCCIÓN CRÍTICA: Para enviar un poster usa EXACTAMENTE este formato en tu respuesta: <<MEDIA:url_del_poster>>\n";
+          let mediaContext = "\n=== BÓVEDA VISUAL (POSTERS) ===\nINSTRUCCIÓN DE ALTA PRIORIDAD: Si el cliente menciona una CIUDAD o LUGAR, debes buscar el poster que coincida y enviarlo usando <<MEDIA:url>> al inicio de tu respuesta.\n";
           mediaAssets?.forEach(m => { mediaContext += `- ${m.title}: ${m.ai_instructions} -> <<MEDIA:${m.url}>>\n`; });
 
           const bankInfo = `Banco: ${configMap['bank_name']}\nCuenta: ${configMap['bank_account']}\nCLABE: ${configMap['bank_clabe']}\nTitular: ${configMap['bank_holder']}`;
@@ -171,8 +213,6 @@ serve(async (req) => {
             ${bankInfo}
           `;
 
-          // B. RECUPERAR MEMORIA (HISTORIAL)
-          // Esto evita la "Amnesia" y que la IA se presente una y otra vez.
           const { data: historyData } = await supabaseClient.from('conversaciones')
              .select('emisor, mensaje')
              .eq('lead_id', lead.id)
@@ -183,7 +223,6 @@ serve(async (req) => {
           const messages = [ { role: 'system', content: systemPrompt } ];
 
           history.forEach(h => {
-             // Formateamos el historial para que OpenAI entienda la conversación
              if (h.emisor === 'CLIENTE') {
                  messages.push({ role: 'user', content: h.mensaje || '[Adjunto]' });
              } else if (['IA', 'SAMURAI', 'HUMANO'].includes(h.emisor)) {
@@ -191,7 +230,6 @@ serve(async (req) => {
              }
           });
 
-          // C. Llamar a OpenAI con todo el historial
           const aiRes = await fetch("https://api.openai.com/v1/chat/completions", {
             method: 'POST',
             headers: { 'Authorization': `Bearer ${openaiKey}`, 'Content-Type': 'application/json' },
@@ -202,14 +240,16 @@ serve(async (req) => {
           let aiText = aiData.choices?.[0]?.message?.content || '';
 
           if (aiText) {
+             await logTrace(`IA Generó respuesta. Procesando envío...`);
+             
              let mediaUrlToSend = null;
-             const match = aiText.match(/<<MEDIA:\s*(.+?)\s*>>/i);
+             const mediaRegex = /<<MEDIA:\s*(.+?)\s*>>/i;
+             const match = aiText.match(mediaRegex);
              if (match) {
                 mediaUrlToSend = match[1].trim();
-                aiText = aiText.replace(match[0], '').trim();
+                aiText = aiText.replace(mediaRegex, '').trim();
              }
 
-             // Enviar a WhatsApp a través del túnel
              await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/send-message-v3`, {
                 method: 'POST',
                 headers: { 'Authorization': `Bearer ${Deno.env.get('SUPABASE_ANON_KEY')}`, 'Content-Type': 'application/json' },
@@ -221,18 +261,19 @@ serve(async (req) => {
                 })
              });
 
-             // Guardar respuesta de la IA en la base de datos
              await supabaseClient.from('conversaciones').insert({ 
                 lead_id: lead.id, emisor: 'SAMURAI', mensaje: aiText || "[Poster Enviado]", platform: 'WHATSAPP',
                 metadata: mediaUrlToSend ? { mediaUrl: mediaUrlToSend, mediaType: 'image' } : {}
              });
+
+             await logTrace(`Samurai respondió con éxito.`);
           }
        }
     }
 
     return new Response('ok', { headers: corsHeaders });
   } catch (err) {
-    await logTrace(`ERROR CRÍTICO: ${err.message}`, true);
+    await logTrace(`ERROR CRÍTICO WEBHOOK: ${err.message}`, true);
     return new Response(err.message, { status: 200, headers: corsHeaders });
   }
 });
