@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Loader2, Send, ShieldAlert, Paperclip, X, Image as ImageIcon, FileText, MessageCircle, Lock, Sparkles } from 'lucide-react';
+import { Loader2, Send, ShieldAlert, Paperclip, X, Image as ImageIcon, FileText, MessageCircle, Lock, Sparkles, UploadCloud } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
@@ -20,6 +20,7 @@ export const MessageInput = ({ onSendMessage, sending, isAiPaused, initialValue 
   const [file, setFile] = useState<File | null>(null);
   const [mode, setMode] = useState<'message' | 'note'>('message');
   const [generating, setGenerating] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -56,8 +57,26 @@ export const MessageInput = ({ onSendMessage, sending, isAiPaused, initialValue 
   };
 
   return (
-    <div className="flex flex-col gap-2 w-full mt-2">
-      
+    <div 
+      className="relative flex flex-col gap-2 w-full mt-2"
+      onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+      onDragLeave={(e) => { e.preventDefault(); setIsDragging(false); }}
+      onDrop={(e) => {
+         e.preventDefault();
+         setIsDragging(false);
+         if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+            setFile(e.dataTransfer.files[0]);
+            setMode('message');
+         }
+      }}
+    >
+      {isDragging && (
+         <div className="absolute -inset-4 z-50 bg-indigo-900/80 border-2 border-dashed border-indigo-400 rounded-xl flex flex-col items-center justify-center backdrop-blur-sm shadow-2xl animate-in fade-in">
+            <UploadCloud className="w-12 h-12 text-indigo-300 mb-2 animate-bounce" />
+            <p className="text-white font-bold text-sm tracking-widest uppercase pointer-events-none">Suelta para Adjuntar al Chat</p>
+         </div>
+      )}
+
       <div className="flex items-center justify-between">
          <Tabs value={mode} onValueChange={(v: any) => setMode(v)} className="w-auto">
             <TabsList className="bg-slate-950 border border-slate-800 h-8 rounded-lg">
@@ -81,19 +100,19 @@ export const MessageInput = ({ onSendMessage, sending, isAiPaused, initialValue 
       </div>
 
       {file && mode === 'message' && (
-        <div className="flex items-center justify-between bg-slate-950 border border-slate-800 p-2 rounded-lg animate-in fade-in">
-          <div className="flex items-center gap-2 overflow-hidden">
-            {file.type.startsWith('image/') ? <ImageIcon className="w-4 h-4 text-indigo-400 shrink-0" /> : <FileText className="w-4 h-4 text-amber-500 shrink-0" />}
-            <span className="text-xs text-slate-300 truncate">{file.name}</span>
-            <span className="text-[10px] text-slate-500 shrink-0">({(file.size / 1024 / 1024).toFixed(2)} MB)</span>
+        <div className="flex items-center justify-between bg-indigo-950/40 border border-indigo-500/30 p-2.5 rounded-xl animate-in fade-in slide-in-from-bottom-2">
+          <div className="flex items-center gap-3 overflow-hidden">
+            {file.type.startsWith('image/') ? <ImageIcon className="w-5 h-5 text-indigo-400 shrink-0" /> : <FileText className="w-5 h-5 text-amber-500 shrink-0" />}
+            <span className="text-xs font-bold text-indigo-100 truncate">{file.name}</span>
+            <span className="text-[10px] font-mono text-indigo-300/60 shrink-0 bg-black/20 px-2 py-0.5 rounded">{(file.size / 1024 / 1024).toFixed(2)} MB</span>
           </div>
-          <Button type="button" variant="ghost" size="icon" className="h-6 w-6 text-slate-500 hover:text-red-400" onClick={() => setFile(null)}>
+          <Button type="button" variant="ghost" size="icon" className="h-7 w-7 text-indigo-300 hover:text-red-400 hover:bg-red-500/10 rounded-lg" onClick={() => setFile(null)}>
             <X className="w-4 h-4" />
           </Button>
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="flex gap-2 items-center">
+      <form onSubmit={handleSubmit} className="flex gap-2 items-center relative z-10">
         <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileChange} accept="image/*,video/*,application/pdf,.doc,.docx" />
         
         {mode === 'message' && (
@@ -107,19 +126,19 @@ export const MessageInput = ({ onSendMessage, sending, isAiPaused, initialValue 
               value={message}
               onChange={(e) => setMessage(e.target.value)}
               className={cn(
-                 "h-11 rounded-xl focus-visible:ring-1 text-sm transition-colors pr-10",
+                 "h-12 rounded-xl focus-visible:ring-1 text-sm transition-colors pr-10 shadow-inner",
                  mode === 'note' 
                    ? "bg-amber-950/20 border-amber-900/50 text-amber-100 placeholder:text-amber-700/50 focus-visible:ring-amber-500" 
-                   : "bg-slate-950 border-slate-700 text-slate-100 focus-visible:ring-indigo-500"
+                   : "bg-slate-950 border-slate-800 text-slate-100 focus-visible:ring-indigo-500"
               )}
-              placeholder={mode === 'note' ? "Escribe un apunte interno..." : (file ? "Añade un comentario..." : "Escribe un mensaje de WhatsApp...")}
+              placeholder={mode === 'note' ? "Escribe un apunte interno..." : (file ? "Añade un comentario a tu archivo..." : "Escribe o arrastra una imagen aquí...")}
               disabled={sending || generating}
             />
             {onAutoGenerate && mode === 'message' && (
                 <Button 
                     type="button" variant="ghost" size="icon" 
                     onClick={handleGenerateAI} disabled={generating || sending}
-                    className="absolute right-1 top-1.5 h-8 w-8 text-amber-500 hover:bg-amber-500/20 rounded-lg"
+                    className="absolute right-1.5 top-1.5 h-9 w-9 text-amber-500 hover:bg-amber-500/20 rounded-lg"
                     title="Autocompletar con IA"
                 >
                     {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
@@ -127,8 +146,8 @@ export const MessageInput = ({ onSendMessage, sending, isAiPaused, initialValue 
             )}
         </div>
         
-        <Button type="submit" size="icon" className={cn("shrink-0 h-11 w-11 rounded-xl shadow-lg transition-colors", mode === 'note' ? "bg-amber-600 hover:bg-amber-700 text-slate-900" : "bg-indigo-600 hover:bg-indigo-700 text-white")} disabled={sending || (!message.trim() && !file) || generating}>
-          {sending ? <Loader2 className="w-5 h-5 animate-spin" /> : (mode === 'note' ? <Lock className="w-5 h-5" /> : <Send className="w-5 h-5" />)}
+        <Button type="submit" size="icon" className={cn("shrink-0 h-12 w-12 rounded-xl shadow-lg transition-all active:scale-95", mode === 'note' ? "bg-amber-600 hover:bg-amber-700 text-slate-900" : "bg-indigo-600 hover:bg-indigo-700 text-white")} disabled={sending || (!message.trim() && !file) || generating}>
+          {sending ? <Loader2 className="w-5 h-5 animate-spin" /> : (mode === 'note' ? <Lock className="w-5 h-5" /> : <Send className="w-5 h-5 ml-0.5" />)}
         </Button>
       </form>
     </div>

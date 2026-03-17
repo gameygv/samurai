@@ -5,7 +5,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { 
-  Database, Loader2, Fingerprint, Trash2, Edit2, ChevronDown, User, Smartphone, Tag, Plus, ShieldAlert, Zap, X, Wallet, FileEdit
+  Database, Loader2, Fingerprint, Trash2, Edit2, ChevronDown, User, Smartphone, Tag, Plus, ShieldAlert, Zap, X, Wallet, FileEdit, Globe
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -42,6 +42,8 @@ export const MemoryPanel = ({
   const [analyzing, setAnalyzing] = useState(false);
   const [agents, setAgents] = useState<any[]>([]);
   const [channels, setChannels] = useState<any[]>([]);
+  
+  // Tag System
   const [localTags, setLocalTags] = useState<{id: string, text: string, color: string}[]>([]);
   const [globalTags, setGlobalTags] = useState<{id: string, text: string, color: string}[]>([]);
   
@@ -349,36 +351,60 @@ export const MemoryPanel = ({
                        <ChevronDown className={cn("w-3.5 h-3.5 transition-transform", tagsOpen ? "rotate-180" : "")} />
                     </button>
                     {tagsOpen && (
-                       <div className="flex flex-wrap gap-2 items-center pt-2 pb-2">
+                       <div className="flex flex-wrap gap-2 items-center pt-3 pb-2">
                           {(memoryForm.tags || []).map((t: string) => {
                              const tagConf = allAvailableTags.find(lt => lt.text === t);
+                             const isGlobal = globalTags.some(gt => gt.text === t);
+                             
                              const bgColor = tagConf ? tagConf.color + '15' : '#161618';
                              const textColor = tagConf ? tagConf.color : '#94a3b8';
                              const borderColor = tagConf ? tagConf.color + '40' : '#222225';
                              return (
-                                <Badge key={t} style={{ backgroundColor: bgColor, color: textColor, borderColor }} className="text-[9px] h-5 border pr-1 font-bold">
+                                <Badge key={t} style={{ backgroundColor: bgColor, color: textColor, borderColor }} className="text-[9px] h-6 border pr-1 pl-2 font-bold flex items-center gap-1.5 shadow-sm">
+                                   <span title={isGlobal ? "Etiqueta Global" : "Etiqueta Privada"} className="flex">
+                                     {isGlobal ? <Globe className="w-2.5 h-2.5 opacity-70" /> : <User className="w-2.5 h-2.5 opacity-70" />}
+                                   </span>
                                    {t}
-                                   <button onClick={() => handleRemoveTag(t)} className="ml-1 hover:text-white rounded-full p-0.5 transition-colors"><X className="w-2.5 h-2.5"/></button>
+                                   <button onClick={() => handleRemoveTag(t)} className="ml-0.5 hover:bg-black/20 rounded-full p-0.5 transition-colors"><X className="w-3 h-3"/></button>
                                 </Badge>
                              );
                           })}
                           
                           <Select onValueChange={(v) => { if(v) handleAddTag(v); }}>
-                             <SelectTrigger className="h-5 text-[9px] bg-transparent border border-[#222225] hover:bg-[#161618] text-[#7A8A9E] w-auto px-2 shadow-none focus:ring-0 rounded-full transition-colors">
+                             <SelectTrigger className="h-6 text-[10px] bg-transparent border border-[#222225] hover:bg-[#161618] text-[#7A8A9E] w-auto px-2 shadow-none focus:ring-0 rounded-full transition-colors font-bold uppercase tracking-widest">
                                 <Plus className="w-3 h-3 mr-1" /> Añadir
                              </SelectTrigger>
-                             <SelectContent className="bg-[#121214] border-[#222225]">
-                                {allAvailableTags.length === 0 ? (
-                                   <div className="p-2 text-xs text-[#7A8A9E]">No hay etiquetas creadas</div>
-                                ) : (
-                                   allAvailableTags.map(tag => (
-                                      <SelectItem key={tag.id} value={tag.text} className="text-xs text-white focus:bg-[#161618] focus:text-white cursor-pointer">
-                                         <div className="flex items-center gap-2">
-                                            <div className="w-2 h-2 rounded-full" style={{backgroundColor: tag.color}}></div>
-                                            {tag.text}
-                                         </div>
-                                      </SelectItem>
-                                   ))
+                             <SelectContent className="bg-[#121214] border-[#222225] max-h-64">
+                                {globalTags.length > 0 && (
+                                   <div className="py-1.5 px-2">
+                                      <div className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1 px-1">Globales (Equipo)</div>
+                                      {globalTags.map(tag => (
+                                         <SelectItem key={tag.id} value={tag.text} className="text-xs text-white focus:bg-[#161618] cursor-pointer rounded-lg">
+                                            <div className="flex items-center gap-2">
+                                               <div className="w-2 h-2 rounded-full" style={{backgroundColor: tag.color}}></div>
+                                               {tag.text}
+                                            </div>
+                                         </SelectItem>
+                                      ))}
+                                   </div>
+                                )}
+                                
+                                {localTags.length > 0 && (
+                                   <div className="py-1.5 px-2 border-t border-[#222225]">
+                                      <div className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1 px-1">Privadas (Solo tú)</div>
+                                      {localTags.map(tag => (
+                                         <SelectItem key={tag.id} value={tag.text} className="text-xs text-white focus:bg-[#161618] cursor-pointer rounded-lg">
+                                            <div className="flex items-center gap-2">
+                                               <div className="w-2 h-2 rounded-full" style={{backgroundColor: tag.color}}></div>
+                                               {tag.text}
+                                            </div>
+                                         </SelectItem>
+                                      ))}
+                                   </div>
+                                )}
+
+                                {allAvailableTags.length === 0 && (
+                                   <div className="p-4 text-xs text-center text-[#7A8A9E]">No hay etiquetas creadas</div>
                                 )}
                              </SelectContent>
                           </Select>

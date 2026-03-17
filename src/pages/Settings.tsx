@@ -61,29 +61,28 @@ const Settings = () => {
   const handleSaveAll = async () => {
     setSaving(true);
     try {
-      // PREVENCIÓN DE ERROR: Filtramos los valores gestionados por Tabs separados para no duplicar llaves en el upsert
+      // 1. Guardado ATÓMICO y SEPARADO de Etiquetas y Plantillas para asegurar persistencia
+      await supabase.from('app_config').upsert({ 
+          key: 'global_tags', value: JSON.stringify(globalTags), category: 'SYSTEM', updated_at: new Date().toISOString() 
+      }, { onConflict: 'key' });
+      
+      await supabase.from('app_config').upsert({ 
+          key: 'quick_replies', value: JSON.stringify(globalReplies), category: 'SYSTEM', updated_at: new Date().toISOString() 
+      }, { onConflict: 'key' });
+
+      // 2. Guardado del resto de configuraciones
       const filteredConfigs = configs.filter(c => c.key !== 'global_tags' && c.key !== 'quick_replies');
-
-      const updates = filteredConfigs.map(c => ({ 
-        key: c.key, 
-        value: c.value, 
-        category: c.category || 'SYSTEM',
-        updated_at: new Date().toISOString()
-      }));
-
-      // Insertamos los valores limpios
-      updates.push({ key: 'global_tags', value: JSON.stringify(globalTags), category: 'SYSTEM', updated_at: new Date().toISOString() });
-      updates.push({ key: 'quick_replies', value: JSON.stringify(globalReplies), category: 'SYSTEM', updated_at: new Date().toISOString() });
-
-      const { error } = await supabase.from('app_config').upsert(updates, { onConflict: 'key' });
-      if (error) throw error;
-
-      if (followupConfig.id) {
-         await supabase.from('followup_config').update({ ...followupConfig, updated_at: new Date().toISOString() }).eq('id', followupConfig.id);
+      if (filteredConfigs.length > 0) {
+         const updates = filteredConfigs.map(c => ({ 
+            key: c.key, value: c.value, category: c.category || 'SYSTEM', updated_at: new Date().toISOString()
+         }));
+         const { error } = await supabase.from('app_config').upsert(updates, { onConflict: 'key' });
+         if (error) throw error;
       }
-      if (salesConfig.id) {
-         await supabase.from('followup_config').update({ ...salesConfig, updated_at: new Date().toISOString() }).eq('id', salesConfig.id);
-      }
+
+      // 3. Guardado de Followups
+      if (followupConfig.id) await supabase.from('followup_config').update({ ...followupConfig, updated_at: new Date().toISOString() }).eq('id', followupConfig.id);
+      if (salesConfig.id) await supabase.from('followup_config').update({ ...salesConfig, updated_at: new Date().toISOString() }).eq('id', salesConfig.id);
       
       toast.success('Configuración maestra guardada correctamente.');
       fetchAllData();
