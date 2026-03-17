@@ -17,20 +17,26 @@ export const financialStatuses = [
 ];
 
 interface FinancialStatusBadgeProps {
-  contactId: string;
+  contactId?: string;
+  leadId?: string;
   currentStatus: string;
   isManager: boolean;
   onUpdate?: () => void;
 }
 
-export const FinancialStatusBadge = ({ contactId, currentStatus, isManager, onUpdate }: FinancialStatusBadgeProps) => {
+export const FinancialStatusBadge = ({ contactId, leadId, currentStatus, isManager, onUpdate }: FinancialStatusBadgeProps) => {
   const [updating, setUpdating] = useState(false);
 
   const handleUpdate = async (newStatus: string) => {
     setUpdating(true);
     try {
-       const { error } = await supabase.from('contacts').update({ financial_status: newStatus }).eq('id', contactId);
-       if (error) throw error;
+       if (contactId) {
+          const { error } = await supabase.from('contacts').update({ financial_status: newStatus }).eq('id', contactId);
+          if (error) throw error;
+       } else if (leadId) {
+          const { error } = await supabase.from('contacts').update({ financial_status: newStatus }).eq('lead_id', leadId);
+          if (error) throw error;
+       }
        toast.success("Estado financiero actualizado");
        if (onUpdate) onUpdate();
     } catch (err: any) {

@@ -2,22 +2,17 @@ import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { 
-  Database, Loader2, Fingerprint, Trash2, Edit2, ChevronDown, CheckCircle2, User, Smartphone, Tag, Plus, AlertTriangle, X, ShieldAlert, Zap
+  Database, Loader2, Fingerprint, Trash2, Edit2, ChevronDown, User, Smartphone, Tag, Plus, ShieldAlert, Zap, X
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useAuth } from '@/context/AuthContext';
 import { cn } from '@/lib/utils';
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { FinancialStatusBadge } from '@/components/contacts/FinancialStatusBadge';
-
-// Import Componentes Modulares
-import { FinancialAudit } from './memory/FinancialAudit';
-import { CapiStatus } from './memory/CapiStatus';
+import { Textarea } from '@/components/ui/textarea';
 
 interface MemoryPanelProps {
   currentAnalysis: any;
@@ -47,8 +42,8 @@ export const MemoryPanel = ({
   const [channels, setChannels] = useState<any[]>([]);
   const [localTags, setLocalTags] = useState<{id: string, text: string, color: string}[]>([]);
   const [globalTags, setGlobalTags] = useState<{id: string, text: string, color: string}[]>([]);
+  const [contactData, setContactData] = useState<any>(null);
 
-  // Expandable sections state
   const [tacticalOpen, setTacticalOpen] = useState(true);
   const [tagsOpen, setTagsOpen] = useState(true);
 
@@ -66,6 +61,17 @@ export const MemoryPanel = ({
     fetchChannels();
     if (user) fetchTags();
   }, [user]);
+
+  useEffect(() => {
+    if (currentAnalysis?.id) {
+       fetchContactFinancialData();
+    }
+  }, [currentAnalysis?.id]);
+
+  const fetchContactFinancialData = async () => {
+     const { data } = await supabase.from('contacts').select('id, financial_status').eq('lead_id', currentAnalysis.id).maybeSingle();
+     if (data) setContactData(data);
+  };
 
   const fetchAgents = async () => {
       const { data } = await supabase.from('profiles').select('id, full_name, role');
@@ -365,12 +371,22 @@ export const MemoryPanel = ({
                     )}
                  </div>
 
-                 {/* ESTADO FINANCIERO */}
+                 {/* ESTADO FINANCIERO CONECTADO A BASE DE CONTACTOS */}
                  <div className="pt-2 border-t border-[#1a1a1a]">
                     <div className="flex flex-col py-2 space-y-2">
-                       <span className="text-[10px] font-bold text-[#7A8A9E] uppercase tracking-widest">$ Estado Financiero</span>
+                       <span className="text-[10px] font-bold text-[#7A8A9E] uppercase tracking-widest flex items-center justify-between">
+                          <span>$ Estado Financiero</span>
+                       </span>
                        <div>
-                          <FinancialStatusBadge contactId={currentAnalysis.id} currentStatus={currentAnalysis.financial_status || 'Sin transacción'} isManager={isManager} onUpdate={onAnalysisComplete} />
+                          <FinancialStatusBadge 
+                             leadId={currentAnalysis.id} 
+                             currentStatus={contactData?.financial_status || 'Sin transacción'} 
+                             isManager={isManager} 
+                             onUpdate={() => {
+                                fetchContactFinancialData();
+                                if (onAnalysisComplete) onAnalysisComplete();
+                             }} 
+                          />
                        </div>
                     </div>
                  </div>

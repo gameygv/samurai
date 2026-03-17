@@ -29,11 +29,16 @@ const Index = () => {
     const { data: leads } = await supabase.from('leads').select('*');
     const { data: logs } = await supabase.from('activity_logs').select('*').order('created_at', { ascending: false }).limit(20);
     
+    // Buscar cobros vencidos o para hoy para el Radar
+    const { data: inst } = await supabase.from('credit_installments')
+      .select('id, amount, due_date, status, sale:credit_sales(concept, contact:contacts(nombre, telefono))')
+      .in('status', ['LATE', 'PENDING'])
+      .lte('due_date', new Date().toISOString().split('T')[0]);
+
     if (leads) {
       const allTasks: any[] = [];
       const dailyCounts: Record<string, number> = {};
       
-      // Construir últimos 7 días
       for(let i=6; i>=0; i--) {
          const d = new Date();
          d.setDate(d.getDate() - i);
@@ -41,13 +46,11 @@ const Index = () => {
       }
 
       leads.forEach(l => {
-         // Procesar Chart Data
          const leadDate = l.created_at ? l.created_at.split('T')[0] : null;
          if (leadDate && dailyCounts[leadDate] !== undefined) {
              dailyCounts[leadDate]++;
          }
 
-         // Procesar Tasks
          if (l.reminders && Array.isArray(l.reminders)) {
             l.reminders.forEach((r: any) => {
                if (r.datetime) {
@@ -62,6 +65,22 @@ const Index = () => {
             });
          }
       });
+
+      // Inyectar cobros en el radar de tareas
+      if (inst) {
+        inst.forEach((i: any) => {
+           const remDate = new Date(i.due_date);
+           allTasks.push({
+              id: `cobro-${i.id}`,
+              target: `Cobro: ${i.sale?.contact?.nombre?.split(' ')[0] || 'Cliente'} - $${i.amount}`,
+              time: remDate.toLocaleDateString(),
+              type: i.status === 'LATE' ? 'ATRASADO' : 'COBRO HOY',
+              status: 'pending',
+              rawDate: remDate,
+              rawLead: null
+           });
+        });
+      }
 
       const formattedChartData = Object.keys(dailyCounts).map(date => ({
          name: new Date(date).toLocaleDateString('es-ES', { weekday: 'short' }),
@@ -148,10 +167,10 @@ const Index = () => {
                  </div>
                  <ScrollArea className="flex-1 p-4 font-mono text-[10px] bg-[#050505]">
                    {stats.recentLogs.map((log: any, i: number) => (
-                     <div key={i} className="flex gap-4 py-2 border-l-2 border-[#1a1a1a] hover:border-indigo-500 pl-3 mb-2 hover:bg-[#0f0f11] rounded-r-lg transition-all group cursor-default">
+                     <div key={i} className={cn("flex gap-4 py-2 border-l-2 border-[#1a1a1a] pl-3 mb-2 rounded-r-lg transition-all group cursor-default", log.action === 'ERROR' ? "hover:border-red-500 hover:bg-red-950/20" : "hover:border-indigo-500 hover:bg-[#0f0f11]")}>
                        <span className="text-slate-600 shrink-0">[{new Date(log.created_at).toLocaleTimeString()}]</span>
-                       <span className="text-indigo-400 uppercase font-bold shrink-0">{log.action}</span>
-                       <span className="text-slate-400 truncate">{log.description}</span>
+                       <span className={cn("uppercase font-bold shrink-0", log.action === 'ERROR' ? "text-red-500" : "text-indigo-400")}>{log.action}</span>
+                       <span className={cn("truncate", log.action === 'ERROR' ? "text-red-400" : "text-slate-400")}>{log.description}</span>
                      </div>
                    ))}
                  </ScrollArea>
