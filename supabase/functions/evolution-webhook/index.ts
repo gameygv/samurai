@@ -7,7 +7,6 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-// Función auxiliar para esperar
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 serve(async (req) => {
@@ -75,33 +74,17 @@ serve(async (req) => {
        pushName = p.from_name || 'Lead Gowa';
        const GOWA_BASE_URL = channel.api_url.endsWith('/') ? channel.api_url.slice(0, -1) : channel.api_url;
 
-       if (p.image) {
-         text = p.body || "[Imagen]"; mediaType = 'image';
-         if (p.image.startsWith('data:')) base64String = p.image; else mediaUrl = `${GOWA_BASE_URL}/${p.image}`;
-       } else if (p.video) {
-         text = p.body || "[Video]"; mediaType = 'video';
-         if (p.video.startsWith('data:')) base64String = p.video; else mediaUrl = `${GOWA_BASE_URL}/${p.video}`;
-       } else if (p.audio) {
-         text = "[Audio]"; mediaType = 'audio';
-         if (p.audio.startsWith('data:')) base64String = p.audio; else {
-            const audioPath = p.audio.split(";")[0].trim();
-            mediaUrl = `${GOWA_BASE_URL}/${audioPath}`;
-         }
-       } else if (p.document) {
-         text = p.body || "[Documento]"; mediaType = 'document';
-         if (p.document.startsWith('data:')) base64String = p.document; else mediaUrl = `${GOWA_BASE_URL}/${p.document}`;
-       } else if (p.body) {
-         text = p.body; mediaType = 'text';
-       }
+       if (p.image) { text = p.body || "[Imagen]"; mediaType = 'image'; if (p.image.startsWith('data:')) base64String = p.image; else mediaUrl = `${GOWA_BASE_URL}/${p.image}`; } 
+       else if (p.video) { text = p.body || "[Video]"; mediaType = 'video'; if (p.video.startsWith('data:')) base64String = p.video; else mediaUrl = `${GOWA_BASE_URL}/${p.video}`; } 
+       else if (p.audio) { text = "[Audio]"; mediaType = 'audio'; if (p.audio.startsWith('data:')) base64String = p.audio; else { const audioPath = p.audio.split(";")[0].trim(); mediaUrl = `${GOWA_BASE_URL}/${audioPath}`; } } 
+       else if (p.document) { text = p.body || "[Documento]"; mediaType = 'document'; if (p.document.startsWith('data:')) base64String = p.document; else mediaUrl = `${GOWA_BASE_URL}/${p.document}`; } 
+       else if (p.body) { text = p.body; mediaType = 'text'; }
     } else { 
-       // Fallback para otros proveedores
        if (payload.event && payload.event !== 'messages.upsert') return new Response('ignored_event', { status: 200 });
        const msg = payload.data?.[0] || payload.data || payload;
        if (msg?.key?.fromMe || payload.fromMe) return new Response('ignored_self', { status: 200 });
-       
        phone = msg?.key?.remoteJid?.split('@')[0] || payload.phone || payload.sender;
        pushName = payload.pushName || msg?.pushName || 'Lead WA';
-       
        if (msg?.message?.audioMessage) { text = "[Audio]"; mediaType = 'audio'; } 
        else { text = msg?.message?.conversation || msg?.message?.extendedTextMessage?.text || msg?.text || payload.message || ''; }
     }
@@ -111,38 +94,43 @@ serve(async (req) => {
     let cleanPhone = phone.split('@')[0].replace(/\D/g, '');
     if (cleanPhone.startsWith('52') && cleanPhone.length === 12 && cleanPhone[2] !== '1') cleanPhone = '521' + cleanPhone.substring(2);
 
-    // --- 3. DESCARGA Y WHISPER (CON RETRY PARA 404) ---
+    // --- 3. BÚSQUEDA PROFUNDA DE AUDIO (RETRY LOOP) ---
     let finalMediaUrl = null;
     let downloadedBlob = null; 
 
     if (base64String) {
         const arr = base64String.split(',');
         const bstr = atob(arr[1]);
-        let n = bstr.length;
-        const u8arr = new Uint8Array(n);
+        let n = bstr.length; const u8arr = new Uint8Array(n);
         while(n--){ u8arr[n] = bstr.charCodeAt(n); }
         downloadedBlob = new Blob([u8arr], {type: mediaType === 'audio' ? 'audio/ogg' : 'application/octet-stream'});
     } else if (mediaUrl) {
-        try {
-            // REGLA DE ORO: Si es audio de Gowa, esperar 1.5s para evitar el 404 del servidor de origen
-            if (mediaType === 'audio' && channel.provider === 'gowa') {
-               await logTrace("Esperando 1.5s para que Gowa escriba el archivo...");
-               await sleep(1500);
-            }
+        let attempts = 0;
+        const maxAttempts = 4;
+        const authHeader = channel.api_key.startsWith('Basic ') ? channel.api_key : `Basic ${channel.api_key}`;
 
-            const authHeader = channel.api_key.startsWith('Basic ') ? channel.api_key : `Basic ${channel.api_key}`;
-            const mediaRes = await fetch(mediaUrl, { headers: { 'Authorization': authHeader } });
-            
-            if (mediaRes.ok) {
-                downloadedBlob = await mediaRes.blob();
-            } else {
-                await logTrace(`Fallo descarga (${mediaRes.status}). Intentando segundo intento en 2s...`, true);
-                await sleep(2000);
-                const secondTry = await fetch(mediaUrl, { headers: { 'Authorization': authHeader } });
-                if (secondTry.ok) downloadedBlob = await secondTry.blob();
-                else await logTrace(`Error definitivo descarga: ${secondTry.status}`, true);
-            }
-        } catch (e) { await logTrace(`Excepción descarga: ${e.message}`, true); }
+        while (attempts < maxAttempts && !downloadedBlob) {
+            try {
+                attempts++;
+                const waitTime = attempts === 1 ? 1500 : 2500; // Espera más en cada intento
+                await logTrace(`Intento ${attempts}/${maxAttempts} de descarga de audio. Esperando ${waitTime}ms...`);
+                await sleep(waitTime);
+
+                const mediaRes = await fetch(mediaUrl, { headers: { 'Authorization': authHeader } });
+                if (mediaRes.ok) {
+                    downloadedBlob = await mediaRes.blob();
+                    await logTrace(`¡Audio recuperado con éxito en el intento ${attempts}!`);
+                } else {
+                    await logTrace(`Fallo intento ${attempts}: HTTP ${mediaRes.status}`, true);
+                }
+            } catch (e) { await logTrace(`Error en intento ${attempts}: ${e.message}`, true); }
+        }
+    }
+
+    // SI DESPUÉS DE TODO NO HAY AUDIO, CAMBIAMOS EL TEXTO PARA LA IA
+    if (mediaType === 'audio' && !downloadedBlob) {
+       text = "[ERROR TÉCNICO: Tu audio llegó con problemas de conexión y no pude escucharlo. ¿Podrías repetirlo o escribirme tu duda?]";
+       await logTrace("Audio irrecuperable tras 4 intentos. Notificando a Sam.", true);
     }
 
     if (downloadedBlob) {
@@ -156,7 +144,6 @@ serve(async (req) => {
 
     // WHISPER
     if (mediaType === 'audio' && downloadedBlob) {
-        await logTrace("Iniciando motor Whisper...");
         const { data: conf } = await supabaseClient.from('app_config').select('value').eq('key', 'openai_api_key').maybeSingle();
         if (conf?.value) {
             const formData = new FormData();
@@ -174,17 +161,13 @@ serve(async (req) => {
                 const whisperData = await whisperRes.json();
                 if (whisperData.text) {
                     text = `[TRANSCRIPCIÓN DE NOTA DE VOZ]: "${whisperData.text}"`;
-                    await logTrace("Transcripción exitosa.");
                 }
-            } else {
-                await logTrace(`Error Whisper API: ${await whisperRes.text()}`, true);
             }
         }
     }
 
     // --- 4. ACTUALIZAR CRM ---
     let { data: lead } = await supabaseClient.from('leads').select('*').or(`telefono.ilike.%${cleanPhone.slice(-10)}%`).limit(1).maybeSingle();
-    
     if (!lead) {
       const { data: nl } = await supabaseClient.from('leads').insert({ nombre: pushName, telefono: cleanPhone, channel_id: channel.id }).select().single();
       lead = nl;
@@ -193,7 +176,7 @@ serve(async (req) => {
     }
 
     await supabaseClient.from('conversaciones').insert({ 
-        lead_id: lead.id, emisor: 'CLIENTE', mensaje: text || "[Audio sin procesar]", platform: 'WHATSAPP',
+        lead_id: lead.id, emisor: 'CLIENTE', mensaje: text || " ", platform: 'WHATSAPP',
         metadata: finalMediaUrl ? { mediaUrl: finalMediaUrl, mediaType } : {}
     });
 
@@ -207,11 +190,7 @@ serve(async (req) => {
           const { data: context } = await supabaseClient.functions.invoke('get-samurai-context', { body: { lead, platform: 'WHATSAPP' } });
           const { data: historyData } = await supabaseClient.from('conversaciones').select('emisor, mensaje').eq('lead_id', lead.id).order('created_at', { ascending: false }).limit(12);
           const history = (historyData || []).reverse();
-          
-          const messages = [ 
-              { role: 'system', content: context.system_prompt },
-              ...history.map(h => ({ role: (['IA', 'SAMURAI', 'BOT'].includes(h.emisor)) ? 'assistant' : 'user', content: h.mensaje }))
-          ];
+          const messages = [ { role: 'system', content: context.system_prompt }, ...history.map(h => ({ role: (['IA', 'SAMURAI', 'BOT'].includes(h.emisor)) ? 'assistant' : 'user', content: h.mensaje })) ];
 
           const aiRes = await fetch("https://api.openai.com/v1/chat/completions", {
             method: 'POST',
