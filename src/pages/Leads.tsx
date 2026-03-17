@@ -1,17 +1,20 @@
 import React, { useEffect, useState } from 'react';
 import Layout from '@/components/Layout';
 import { supabase } from '@/integrations/supabase/client';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHeader, TableRow, TableHead } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Search, Loader2, Target, UserPlus, Sparkles } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Search, Loader2, Target, UserPlus, Sparkles, Filter } from 'lucide-react';
 import { LeadRow } from '@/components/leads/LeadRow';
 import { CreateLeadDialog } from '@/components/leads/CreateLeadDialog';
 import ChatViewer from '@/components/ChatViewer';
 import { toast } from 'sonner';
+import { useAuth } from '@/context/AuthContext';
 
 const Leads = () => {
+  const { user, isManager } = useAuth();
   const [leads, setLeads] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [analyzing, setAnalyzing] = useState(false);
@@ -20,11 +23,33 @@ const Leads = () => {
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
 
-  useEffect(() => { fetchLeads(); }, []);
+  // Filters
+  const [selectedTagFilter, setSelectedTagFilter] = useState<string>('ALL');
+  const [selectedIntent, setSelectedIntent] = useState<string>('ALL');
+  const [globalTags, setGlobalTags] = useState<{id: string, text: string, color: string}[]>([]);
+  const [localTags, setLocalTags] = useState<{id: string, text: string, color: string}[]>([]);
+
+  useEffect(() => { 
+      fetchLeads(); 
+      if (user) fetchTags();
+  }, [user]);
+
+  const fetchTags = async () => {
+     if(!user) return;
+     const { data } = await supabase.from('app_config').select('key, value').in('key', [`agent_tags_${user.id}`, 'global_tags']);
+     if (data) {
+        const local = data.find(d => d.key === `agent_tags_${user.id}`)?.value;
+        const global = data.find(d => d.key === 'global_tags')?.value;
+        if (local) try { setLocalTags(JSON.parse(local)); } catch(e) {}
+        if (global) try { setGlobalTags(JSON.parse(global)); } catch(e) {}
+     }
+  };
 
   const fetchLeads = async () => {
     setLoading(true);
-    const { data } = await supabase.from('leads').select('*').order('last_message_at', { ascending: false });
+    let query = supabase.from('leads').select('*').order('last_message_at', { ascending: false });
+    if (!isManager) query = query.eq('assigned_to', user?.id);
+    const { data } = await query;
     if (data) setLeads(data);
     setLoading(false);
   };
@@ -44,59 +69,109 @@ const Leads = () => {
      }
   };
 
-  const filtered = leads.filter(l => 
-    l.nombre?.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    l.telefono?.includes(searchTerm)
-  );
+  const allTags = [...globalTags, ...localTags];
+
+  const filtered = leads.filter(l => {
+    const term = searchTerm.toLowerCase();
+    const contactTags = Array.isArray(l.tags) ? l.tags : [];
+    
+    const matchesSearch = l.nombre?.toLowerCase().includes(term) || l.telefono?.includes(term) || l.ciudad?.toLowerCase().includes(term);
+    const matchesTag = selectedTagFilter === 'ALL' || contactTags.includes(selectedTagFilter);
+    const matchesIntent = selectedIntent === 'ALL' || (l.buying_intent || 'BAJO').toUpperCase() === selectedIntent;
+
+    return matchesSearch && matchesTag && matchesIntent;
+  });
 
   return (
     <Layout>
       <div className="max-w-7xl mx-auto space-y-6 animate-in fade-in duration-500">
-        <div className="flex justify-between items-center">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
             <h1 className="text-3xl font-bold text-white flex items-center gap-3">
-              Radar Leads <Target className="w-6 h-6 text-amber-500 animate-pulse" />
+              <div className="p-2 bg-amber-500/10 rounded-xl border border-amber-500/20">
+                <Target className="w-6 h-6 text-amber-500" />
+              </div>
+              Radar Leads
             </h1>
-            <p className="text-slate-500 text-sm">Monitoreo de inteligencia en tiempo real.</p>
+            <p className="text-slate-500 text-sm mt-1">Monitoreo de inteligencia y embudo en tiempo real.</p>
           </div>
           <div className="flex gap-3">
             <Button 
                variant="outline" 
-               className="border-amber-500/30 text-amber-500 hover:bg-amber-900/10 h-10 px-4 font-bold rounded-xl"
+               className="border-[#333336] bg-[#0a0a0c] hover:bg-[#161618] text-amber-500 h-10 px-4 font-bold rounded-xl text-[10px] uppercase tracking-widest"
                onClick={handleRunMassAnalysis}
                disabled={analyzing}
             >
                {analyzing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Sparkles className="w-4 h-4 mr-2" />}
-               FORZAR ANÁLISIS IA
+               Forzar Análisis IA
             </Button>
-            <div className="relative w-64 hidden sm:block">
-              <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-600" />
-              <Input placeholder="Buscar por nombre..." className="pl-10 glass-panel h-10 rounded-xl text-white" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
-            </div>
-            <button onClick={() => setIsCreateOpen(true)} className="bg-indigo-900 hover:bg-indigo-800 text-amber-500 p-2.5 rounded-xl shadow-glow transition-all">
-              <UserPlus className="w-5 h-5" />
-            </button>
+            <Button onClick={() => setIsCreateOpen(true)} className="bg-indigo-600 hover:bg-indigo-500 text-white p-2.5 px-6 rounded-xl shadow-lg transition-all font-bold text-[10px] uppercase tracking-widest">
+              <UserPlus className="w-4 h-4 mr-2" /> Nuevo Lead
+            </Button>
           </div>
         </div>
 
-        <Card className="glass-panel overflow-hidden rounded-2xl">
+        {/* BARRA DE FILTROS */}
+        <div className="flex flex-wrap items-center gap-3 bg-[#0f0f11] p-3 rounded-2xl border border-[#222225] shadow-md">
+            <div className="flex items-center gap-2 pl-2 border-r border-[#222225] pr-4">
+                <Filter className="w-4 h-4 text-slate-500" />
+                <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Filtros</span>
+            </div>
+            
+            <div className="relative flex-1 min-w-[200px]">
+              <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-500" />
+              <Input placeholder="Buscar por nombre o teléfono..." className="pl-10 h-9 bg-[#161618] border-[#222225] rounded-xl text-xs focus-visible:ring-indigo-500/50 text-white" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+            </div>
+
+            <Select value={selectedIntent} onValueChange={setSelectedIntent}>
+               <SelectTrigger className="w-[150px] h-9 bg-[#161618] border-[#222225] rounded-xl text-xs text-slate-300">
+                  <SelectValue placeholder="Intención" />
+               </SelectTrigger>
+               <SelectContent className="bg-[#121214] border-[#222225] text-white rounded-xl">
+                  <SelectItem value="ALL" className="focus:bg-[#161618]">Cualquier Etapa</SelectItem>
+                  <SelectItem value="BAJO" className="focus:bg-[#161618]">Data Hunting (Bajo)</SelectItem>
+                  <SelectItem value="MEDIO" className="focus:bg-[#161618]">Seducción (Medio)</SelectItem>
+                  <SelectItem value="ALTO" className="focus:bg-[#161618]">Cierre (Alto)</SelectItem>
+                  <SelectItem value="COMPRADO" className="focus:bg-[#161618]">Ganado (Comprado)</SelectItem>
+               </SelectContent>
+            </Select>
+
+            <Select value={selectedTagFilter} onValueChange={setSelectedTagFilter}>
+               <SelectTrigger className="w-[160px] h-9 bg-[#161618] border-[#222225] rounded-xl text-xs text-slate-300">
+                  <SelectValue placeholder="Etiqueta" />
+               </SelectTrigger>
+               <SelectContent className="bg-[#121214] border-[#222225] text-white rounded-xl max-h-[300px]">
+                  <SelectItem value="ALL">Todas las Etiquetas</SelectItem>
+                  {allTags.map(t => (
+                      <SelectItem key={t.id} value={t.text} className="focus:bg-[#161618]">
+                          <div className="flex items-center gap-2">
+                             <div className="w-2 h-2 rounded-full" style={{backgroundColor: t.color}}></div>
+                             {t.text}
+                          </div>
+                      </SelectItem>
+                  ))}
+               </SelectContent>
+            </Select>
+        </div>
+
+        <Card className="bg-[#0f0f11] border-[#222225] shadow-2xl rounded-2xl overflow-hidden min-h-[400px]">
           <Table>
-            <TableHeader className="bg-slate-950/60">
-              <TableRow className="border-slate-800">
-                <TableHead className="text-[10px] uppercase font-bold text-slate-500 pl-6">Prospecto</TableHead>
-                <TableHead className="text-[10px] uppercase font-bold text-slate-500">Datos CAPI</TableHead>
-                <TableHead className="text-[10px] uppercase font-bold text-slate-500 text-center">IA Score</TableHead>
-                <TableHead className="text-[10px] uppercase font-bold text-slate-500">Intención</TableHead>
-                <TableHead className="text-[10px] uppercase font-bold text-slate-500 text-right pr-6">Acción</TableHead>
+            <TableHeader className="bg-[#161618]">
+              <TableRow className="border-[#222225] hover:bg-[#161618]">
+                <TableHead className="text-[10px] uppercase font-bold text-slate-500 pl-6 py-4 tracking-widest">Prospecto</TableHead>
+                <TableHead className="text-[10px] uppercase font-bold text-slate-500 tracking-widest">Datos CAPI & Etiquetas</TableHead>
+                <TableHead className="text-[10px] uppercase font-bold text-slate-500 text-center tracking-widest">IA Score</TableHead>
+                <TableHead className="text-[10px] uppercase font-bold text-slate-500 tracking-widest">Intención</TableHead>
+                <TableHead className="text-[10px] uppercase font-bold text-slate-500 text-right pr-6 tracking-widest">Acción</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
-                <TableRow><TableCell colSpan={5} className="h-40 text-center"><Loader2 className="animate-spin inline-block text-indigo-500" /></TableCell></TableRow>
+                <TableRow><TableCell colSpan={5} className="h-60 text-center"><Loader2 className="animate-spin inline-block text-indigo-500" /></TableCell></TableRow>
               ) : filtered.length === 0 ? (
-                <TableRow><TableCell colSpan={5} className="h-40 text-center text-slate-600 italic">No hay leads registrados.</TableCell></TableRow>
+                <TableRow><TableCell colSpan={5} className="h-60 text-center text-slate-600 italic text-[10px] uppercase font-bold tracking-widest">No hay leads que coincidan.</TableCell></TableRow>
               ) : filtered.map(lead => (
-                <LeadRow key={lead.id} lead={lead} onClick={() => { setSelectedLead(lead); setIsChatOpen(true); }} />
+                <LeadRow key={lead.id} lead={lead} allTags={allTags} onClick={() => { setSelectedLead(lead); setIsChatOpen(true); }} />
               ))}
             </TableBody>
           </Table>
