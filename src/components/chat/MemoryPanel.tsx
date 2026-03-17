@@ -5,7 +5,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { 
-  Database, Loader2, Fingerprint, Trash2, Edit2, ChevronDown, User, Smartphone, Tag, Plus, ShieldAlert, Zap, X, Wallet, FileEdit, Globe
+  Database, Loader2, Fingerprint, Trash2, Edit2, ChevronDown, User, Smartphone, Tag, Plus, ShieldAlert, Zap, X, Wallet, FileEdit, Globe, Bell
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -15,6 +15,7 @@ import { FinancialStatusBadge } from '@/components/contacts/FinancialStatusBadge
 import { Textarea } from '@/components/ui/textarea';
 import { CreateCreditSaleDialog } from '@/components/contacts/CreateCreditSaleDialog';
 import { EditContactDialog } from '@/components/contacts/EditContactDialog';
+import { ReminderItem } from '@/components/chat/memory/ReminderItem';
 
 interface MemoryPanelProps {
   currentAnalysis: any;
@@ -193,6 +194,20 @@ export const MemoryPanel = ({
       await supabase.from('leads').update({ tags: newTags }).eq('id', currentAnalysis.id);
   };
 
+  // Funciones de Recordatorios
+  const handleAddReminder = () => {
+      const newReminders = [...(memoryForm.reminders || []), { id: Date.now().toString(), title: '', datetime: '', notify_minutes: 15 }];
+      setMemoryForm({...memoryForm, reminders: newReminders});
+  };
+  const handleUpdateReminder = (id: string, field: string, val: any) => {
+      const newReminders = memoryForm.reminders.map((r: any) => r.id === id ? { ...r, [field]: val } : r);
+      setMemoryForm({...memoryForm, reminders: newReminders});
+  };
+  const handleRemoveReminder = (id: string) => {
+      const newReminders = memoryForm.reminders.filter((r: any) => r.id !== id);
+      setMemoryForm({...memoryForm, reminders: newReminders});
+  };
+
   const currentAgentName = agents.find(a => a.id === currentAnalysis.assigned_to)?.full_name || 'Bot Global';
   const currentChannelName = channels.find(c => c.id === currentAnalysis.channel_id)?.name || 'Canal Desconocido';
   const allAvailableTags = [...globalTags, ...localTags];
@@ -296,8 +311,27 @@ export const MemoryPanel = ({
                     </div>
                  </div>
 
-                 <Button onClick={onSave} disabled={saving} className="w-full bg-indigo-600 hover:bg-indigo-500 text-white h-9 text-xs font-bold rounded-lg uppercase tracking-widest">
-                    {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : "Guardar Cambios"}
+                 {/* SECCIÓN RECORDATORIOS (MODO EDICIÓN) */}
+                 <div className="pt-3 border-t border-[#222225] space-y-3">
+                    <Label className="text-[10px] text-amber-500 uppercase tracking-widest flex items-center justify-between font-bold">
+                       <span className="flex items-center gap-1.5"><Bell className="w-3.5 h-3.5"/> Agendar Seguimiento</span>
+                       <Button type="button" variant="outline" size="sm" className="h-6 px-2 text-[9px] bg-[#0a0a0c] border-[#333336] text-slate-300 uppercase font-bold" onClick={handleAddReminder}>
+                          <Plus className="w-3 h-3 mr-1"/> Tarea
+                       </Button>
+                    </Label>
+                    <div className="space-y-2">
+                       {memoryForm.reminders?.length === 0 ? (
+                          <p className="text-[9px] text-slate-500 italic text-center py-2">No hay tareas programadas.</p>
+                       ) : (
+                          memoryForm.reminders?.map((r: any) => (
+                             <ReminderItem key={r.id} reminder={r} onUpdate={handleUpdateReminder} onRemove={handleRemoveReminder} />
+                          ))
+                       )}
+                    </div>
+                 </div>
+
+                 <Button onClick={onSave} disabled={saving} className="w-full bg-indigo-600 hover:bg-indigo-500 text-white h-9 text-xs font-bold rounded-lg uppercase tracking-widest mt-2 shadow-lg">
+                    {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : "Guardar Ficha"}
                  </Button>
               </div>
            ) : (
@@ -344,6 +378,25 @@ export const MemoryPanel = ({
                        </div>
                     )}
                  </div>
+
+                 {/* SECCIÓN RECORDATORIOS (MODO LECTURA) */}
+                 {currentAnalysis.reminders && currentAnalysis.reminders.length > 0 && (
+                    <div className="pt-2 border-t border-[#1a1a1a]">
+                       <span className="text-[10px] font-bold text-amber-500 uppercase tracking-widest flex items-center gap-2 mb-3">
+                          <Bell className="w-3.5 h-3.5"/> Tareas / Follow-Ups
+                       </span>
+                       <div className="space-y-2">
+                          {currentAnalysis.reminders.map((r: any) => (
+                             <div key={r.id} className="bg-[#121214] border border-[#222225] p-3 rounded-xl flex justify-between items-center">
+                                <span className="text-xs text-slate-200 font-bold truncate pr-4">{r.title || 'Seguimiento'}</span>
+                                <span className="text-[10px] text-amber-500 font-mono bg-amber-500/10 px-2 py-1 rounded-md shrink-0">
+                                   {r.datetime ? new Date(r.datetime).toLocaleString([], {day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit'}) : 'Sin fecha'}
+                                </span>
+                             </div>
+                          ))}
+                       </div>
+                    </div>
+                 )}
 
                  <div className="pt-2 border-t border-[#1a1a1a]">
                     <button onClick={() => setTagsOpen(!tagsOpen)} className="w-full flex justify-between items-center py-2 text-[10px] font-bold text-white uppercase tracking-widest hover:text-indigo-400 transition-colors">

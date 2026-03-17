@@ -5,7 +5,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Key, Save, Loader2, Clock, MessageSquarePlus, TerminalSquare, Smartphone, DollarSign } from 'lucide-react';
+import { Key, Save, Loader2, Clock, MessageSquarePlus, TerminalSquare, Smartphone, DollarSign, ShoppingCart } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/context/AuthContext';
 
@@ -14,9 +14,10 @@ import { TemplatesTab } from '@/components/settings/TemplatesTab';
 import { FollowupTab } from '@/components/settings/FollowupTab';
 import { KernelTab } from '@/components/settings/KernelTab';
 import { ChannelsTab } from '@/components/settings/ChannelsTab';
+import { WooCommerceTab } from '@/components/settings/WooCommerceTab';
 
 const Settings = () => {
-  const { isDev } = useAuth();
+  const { isDev, isManager } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const activeTab = searchParams.get('tab') || 'plantillas';
   
@@ -26,6 +27,7 @@ const Settings = () => {
   
   const [globalTags, setGlobalTags] = useState<{id: string, text: string, color: string}[]>([]);
   const [globalReplies, setGlobalReplies] = useState<{id: string, title: string, text: string}[]>([]);
+  const [wcProducts, setWcProducts] = useState<any[]>([]);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -42,6 +44,8 @@ const Settings = () => {
          if (tagsStr) { try { setGlobalTags(JSON.parse(tagsStr)); } catch(e){} }
          const repliesStr = appData.find(c => c.key === 'quick_replies')?.value;
          if (repliesStr) { try { setGlobalReplies(JSON.parse(repliesStr)); } catch(e){} }
+         const wcProdStr = appData.find(c => c.key === 'wc_products')?.value;
+         if (wcProdStr) { try { setWcProducts(JSON.parse(wcProdStr)); } catch(e){} }
       }
 
       const { data: flpData } = await supabase.from('followup_config').select('*');
@@ -61,17 +65,15 @@ const Settings = () => {
   const handleSaveAll = async () => {
     setSaving(true);
     try {
-      // 1. Guardado ATÓMICO y SEPARADO de Etiquetas y Plantillas para asegurar persistencia
-      await supabase.from('app_config').upsert({ 
-          key: 'global_tags', value: JSON.stringify(globalTags), category: 'SYSTEM', updated_at: new Date().toISOString() 
-      }, { onConflict: 'key' });
-      
-      await supabase.from('app_config').upsert({ 
-          key: 'quick_replies', value: JSON.stringify(globalReplies), category: 'SYSTEM', updated_at: new Date().toISOString() 
-      }, { onConflict: 'key' });
+      // 1. Guardado ATÓMICO de JSONs complejos
+      await supabase.from('app_config').upsert([
+          { key: 'global_tags', value: JSON.stringify(globalTags), category: 'SYSTEM', updated_at: new Date().toISOString() },
+          { key: 'quick_replies', value: JSON.stringify(globalReplies), category: 'SYSTEM', updated_at: new Date().toISOString() },
+          { key: 'wc_products', value: JSON.stringify(wcProducts), category: 'WOOCOMMERCE', updated_at: new Date().toISOString() }
+      ], { onConflict: 'key' });
 
-      // 2. Guardado del resto de configuraciones
-      const filteredConfigs = configs.filter(c => c.key !== 'global_tags' && c.key !== 'quick_replies');
+      // 2. Guardado del resto de configuraciones simples
+      const filteredConfigs = configs.filter(c => !['global_tags', 'quick_replies', 'wc_products'].includes(c.key));
       if (filteredConfigs.length > 0) {
          const updates = filteredConfigs.map(c => ({ 
             key: c.key, value: c.value, category: c.category || 'SYSTEM', updated_at: new Date().toISOString()
@@ -103,6 +105,11 @@ const Settings = () => {
       }
   };
 
+  // WooCommerce Handlers
+  const handleAddProduct = () => setWcProducts([...wcProducts, { id: Date.now().toString(), wc_id: '', title: '', price: '', prompt: '' }]);
+  const handleUpdateProduct = (id: string, field: string, value: string) => setWcProducts(wcProducts.map(p => p.id === id ? { ...p, [field]: value } : p));
+  const handleRemoveProduct = (id: string) => setWcProducts(wcProducts.filter(p => p.id !== id));
+
   if (loading) return <Layout><div className="flex h-[80vh] items-center justify-center"><Loader2 className="animate-spin text-indigo-500" /></div></Layout>;
 
   return (
@@ -119,8 +126,9 @@ const Settings = () => {
           <TabsList className="bg-[#121214] border border-[#222225] p-1 flex-wrap h-auto rounded-xl">
             <TabsTrigger value="plantillas" className="gap-2 px-4 py-2 text-xs data-[state=active]:bg-amber-600 data-[state=active]:text-slate-900"><MessageSquarePlus className="w-4 h-4"/> Plantillas y Etiquetas</TabsTrigger>
             <TabsTrigger value="canales" className="gap-2 px-4 py-2 text-xs data-[state=active]:bg-indigo-600 data-[state=active]:text-white"><Smartphone className="w-4 h-4"/> Canales WA</TabsTrigger>
+            <TabsTrigger value="ecommerce" className="gap-2 px-4 py-2 text-xs data-[state=active]:bg-pink-600 data-[state=active]:text-white"><ShoppingCart className="w-4 h-4"/> Tienda / Catálogo</TabsTrigger>
             <TabsTrigger value="followup" className="gap-2 px-4 py-2 text-xs data-[state=active]:bg-indigo-600 data-[state=active]:text-white"><Clock className="w-4 h-4"/> Retargeting (IA)</TabsTrigger>
-            <TabsTrigger value="finanzas" className="gap-2 px-4 py-2 text-xs data-[state=active]:bg-indigo-600 data-[state=active]:text-white"><DollarSign className="w-4 h-4"/> Finanzas</TabsTrigger>
+            <TabsTrigger value="finanzas" className="gap-2 px-4 py-2 text-xs data-[state=active]:bg-indigo-600 data-[state=active]:text-white"><DollarSign className="w-4 h-4"/> Banco</TabsTrigger>
             <TabsTrigger value="secrets" className="gap-2 px-4 py-2 text-xs data-[state=active]:bg-indigo-600 data-[state=active]:text-white"><Key className="w-4 h-4"/> API Keys</TabsTrigger>
             {isDev && <TabsTrigger value="kernel" className="gap-2 bg-indigo-900/20 text-indigo-400 ml-auto text-xs data-[state=active]:bg-indigo-600 data-[state=active]:text-white"><TerminalSquare className="w-4 h-4"/> Kernel Dev</TabsTrigger>}
           </TabsList>
@@ -138,6 +146,18 @@ const Settings = () => {
             />
           </TabsContent>
           <TabsContent value="canales" className="mt-6"><ChannelsTab /></TabsContent>
+          
+          <TabsContent value="ecommerce" className="mt-6">
+             <WooCommerceTab 
+                getValue={getValue} 
+                onChange={updateConfigValue}
+                wcProducts={wcProducts}
+                onAddProduct={handleAddProduct}
+                onUpdateProduct={handleUpdateProduct}
+                onRemoveProduct={handleRemoveProduct}
+             />
+          </TabsContent>
+
           <TabsContent value="followup" className="mt-6"><FollowupTab followupConfig={followupConfig} setFollowupConfig={setFollowupConfig} salesConfig={salesConfig} setSalesConfig={setSalesConfig} onSave={handleSaveAll} saving={saving}/></TabsContent>
           <TabsContent value="finanzas" className="mt-6 space-y-6">
              <BankTab getValue={getValue} onChange={updateConfigValue} />
