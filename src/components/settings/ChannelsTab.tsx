@@ -7,17 +7,22 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { 
   Plus, Trash2, Smartphone, Globe, Key, 
-  CheckCircle2, AlertCircle, Loader2, RefreshCw, Layers, ShieldCheck, BellRing, Info
+  CheckCircle2, AlertCircle, Loader2, RefreshCw, Layers, ShieldCheck, BellRing, Info, Send
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { sendMessage } from '@/utils/messagingService';
 
 export const ChannelsTab = () => {
   const [channels, setChannels] = useState<any[]>([]);
   const [defaultNotifyId, setDefaultNotifyId] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  
+  // States para pruebas
+  const [testPhones, setTestPhones] = useState<Record<string, string>>({});
+  const [testingId, setTestingId] = useState<string | null>(null);
 
   useEffect(() => { fetchAll(); }, []);
 
@@ -64,6 +69,25 @@ export const ChannelsTab = () => {
       toast.success("¡Canal guardado! Webhook generado.");
       fetchAll();
     } catch (err: any) { toast.error(err.message); } finally { setSaving(false); }
+  };
+
+  const handleTestChannel = async (channelId: string) => {
+     const phone = testPhones[channelId];
+     if (!phone || phone.length < 10) {
+        toast.error("Ingresa un número de teléfono válido (10+ dígitos)");
+        return;
+     }
+
+     setTestingId(channelId);
+     const tid = toast.loading("Enviando mensaje de prueba...");
+     try {
+        await sendMessage(phone, "🛡️ Samurai Kernel: Prueba de conexión exitosa.", undefined, undefined, channelId);
+        toast.success("¡Mensaje enviado! Revisa tu WhatsApp.", { id: tid });
+     } catch (err: any) {
+        toast.error("Fallo de envío: " + err.message, { id: tid });
+     } finally {
+        setTestingId(null);
+     }
   };
 
   if (loading) return <div className="flex justify-center py-20"><Loader2 className="animate-spin text-indigo-500" /></div>;
@@ -138,23 +162,51 @@ export const ChannelsTab = () => {
                   </Button>
                </div>
             </CardContent>
-            {!ch.is_new ? (
-               <CardFooter className="bg-slate-950/40 border-t border-slate-800/50 py-4 flex flex-col items-start gap-3">
-                  <div className="flex items-center gap-2 text-indigo-400 font-bold text-[10px] uppercase tracking-widest">
-                     <Globe className="w-3.5 h-3.5" /> URL de Webhook para Gowa:
+            
+            {!ch.is_new && (
+               <div className="bg-slate-950/60 border-t border-slate-800/50 p-4 space-y-4">
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                     <div className="flex-1 space-y-2">
+                        <Label className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest flex items-center gap-2">
+                           <Send className="w-3.5 h-3.5" /> Enviar Mensaje de Prueba:
+                        </Label>
+                        <div className="flex gap-2">
+                           <Input 
+                              placeholder="Teléfono (ej: 521...)" 
+                              value={testPhones[ch.id] || ''} 
+                              onChange={e => setTestPhones({...testPhones, [ch.id]: e.target.value})}
+                              className="bg-black border-slate-800 h-10 text-xs font-mono max-w-[200px]"
+                           />
+                           <Button 
+                              size="sm" 
+                              variant="outline" 
+                              className="border-indigo-500/30 text-indigo-400 hover:bg-indigo-500/10 h-10 px-4 font-bold text-[10px] uppercase"
+                              onClick={() => handleTestChannel(ch.id)}
+                              disabled={testingId === ch.id}
+                           >
+                              {testingId === ch.id ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-2"/> : <Send className="w-3.5 h-3.5 mr-2"/>}
+                              EJECUTAR TEST
+                           </Button>
+                        </div>
+                     </div>
+                     
+                     <div className="flex-1 space-y-2">
+                        <div className="flex items-center gap-2 text-indigo-400 font-bold text-[10px] uppercase tracking-widest">
+                           <Globe className="w-3.5 h-3.5" /> URL de Webhook:
+                        </div>
+                        <code className="text-[10px] text-indigo-300 bg-black p-2.5 rounded-lg border border-slate-800 block truncate select-all font-mono">
+                           {`https://giwoovmvwlddaizorizk.supabase.co/functions/v1/evolution-webhook?channel_id=${ch.id}`}
+                        </code>
+                     </div>
                   </div>
-                  <div className="flex gap-2 w-full">
-                      <code className="text-[10px] text-indigo-300 bg-black p-3 rounded-xl border border-slate-800 w-full truncate select-all font-mono">
-                         {`https://giwoovmvwlddaizorizk.supabase.co/functions/v1/evolution-webhook?channel_id=${ch.id}`}
-                      </code>
-                  </div>
-                  <p className="text-[9px] text-slate-600">Pega esta URL en la configuración de Webhooks de tu instancia en el panel de Gowa.</p>
-               </CardFooter>
-            ) : (
+               </div>
+            )}
+
+            {ch.is_new && (
                 <div className="bg-amber-900/10 p-4 border-t border-slate-800/50 flex items-center gap-3">
                     <Info className="w-5 h-5 text-amber-500 shrink-0" />
                     <p className="text-[10px] text-amber-500/80 leading-relaxed uppercase font-bold tracking-tight">
-                        Primero haz clic en "CREAR Y GENERAR WEBHOOK" para obtener el enlace de vinculación.
+                        Primero haz clic en "CREAR Y GENERAR WEBHOOK" para habilitar las pruebas de salida.
                     </p>
                 </div>
             )}

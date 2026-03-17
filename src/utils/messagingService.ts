@@ -1,19 +1,27 @@
 import { supabase } from '@/integrations/supabase/client';
-import { toast } from 'sonner';
 
 export const sendMessage = async (
   phone: string, 
   message: string, 
-  leadId: string,
-  mediaFile?: { url: string; type: string; mimetype: string; name: string }
+  leadId?: string,
+  mediaFile?: { url: string; type: string; mimetype: string; name: string },
+  explicitChannelId?: string
 ) => {
   try {
-    const { data: lead } = await supabase.from('leads').select('channel_id').eq('id', leadId).single();
-    const { data: config } = await supabase.from('app_config').select('value').eq('key', 'default_notification_channel').maybeSingle();
+    let channelId = explicitChannelId;
     
-    let channelId = lead?.channel_id || config?.value;
-    let channel;
+    // Si no hay canal explícito, lo buscamos por el lead o el default
+    if (!channelId && leadId) {
+       const { data: lead } = await supabase.from('leads').select('channel_id').eq('id', leadId).single();
+       channelId = lead?.channel_id;
+    }
 
+    if (!channelId) {
+       const { data: config } = await supabase.from('app_config').select('value').eq('key', 'default_notification_channel').maybeSingle();
+       channelId = config?.value;
+    }
+
+    let channel;
     if (!channelId) {
        const { data: first } = await supabase.from('whatsapp_channels').select('*').eq('is_active', true).limit(1).single();
        channel = first;
@@ -32,7 +40,6 @@ export const sendMessage = async (
     // --- LÓGICA GOWA ---
     if (channel.provider === 'gowa') {
       headers['Authorization'] = `Bearer ${channel.api_key}`;
-      // Gowa suele requerir el instance_id en la URL o como parámetro
       const baseUrl = channel.api_url.endsWith('/') ? channel.api_url.slice(0, -1) : channel.api_url;
       
       if (mediaFile) {
@@ -70,21 +77,26 @@ export const sendMessage = async (
     // --- LÓGICA EVOLUTION ---
     else if (channel.provider === 'evolution') {
       headers['apikey'] = channel.api_key;
+      const baseUrl = channel.api_url.endsWith('/') ? channel.api_url.slice(0, -1) : channel.api_url;
       if (mediaFile) {
-        endpoint = `${channel.api_url}/message/sendMedia/${channel.instance_id}`;
+        endpoint = `${baseUrl}/message/sendMedia/${channel.instance_id}`;
         payload = { number: cleanPhone, mediatype: mediaFile.type, mimetype: mediaFile.mimetype, caption: message || "", media: mediaFile.url, fileName: mediaFile.name };
       } else {
-        endpoint = `${channel.api_url}/message/sendText/${channel.instance_id}`;
+        endpoint = `${baseUrl}/message/sendText/${channel.instance_id}`;
         payload = { number: cleanPhone, text: message };
       }
     }
 
     const response = await fetch(endpoint, { method: 'POST', headers, body: JSON.stringify(payload) });
-    return response.ok ? await response.json() : null;
+    if (!response.ok) {
+       const errorText = await response.text();
+       throw new Error(`Error ${response.status}: ${errorText}`);
+    }
+    return await response.json();
 
   } catch (error: any) {
     console.error('Messaging Error:', error);
-    return null;
+    throw error;
   }
 };
 
