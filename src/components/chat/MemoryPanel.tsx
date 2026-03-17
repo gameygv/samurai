@@ -5,7 +5,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { 
-  Database, Loader2, Fingerprint, Trash2, Edit2, ChevronDown, User, Smartphone, Tag, Plus, ShieldAlert, Zap, X
+  Database, Loader2, Fingerprint, Trash2, Edit2, ChevronDown, User, Smartphone, Tag, Plus, ShieldAlert, Zap, X, Wallet, FileEdit
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -13,6 +13,8 @@ import { useAuth } from '@/context/AuthContext';
 import { cn } from '@/lib/utils';
 import { FinancialStatusBadge } from '@/components/contacts/FinancialStatusBadge';
 import { Textarea } from '@/components/ui/textarea';
+import { CreateCreditSaleDialog } from '@/components/contacts/CreateCreditSaleDialog';
+import { EditContactDialog } from '@/components/contacts/EditContactDialog';
 
 interface MemoryPanelProps {
   currentAnalysis: any;
@@ -42,7 +44,12 @@ export const MemoryPanel = ({
   const [channels, setChannels] = useState<any[]>([]);
   const [localTags, setLocalTags] = useState<{id: string, text: string, color: string}[]>([]);
   const [globalTags, setGlobalTags] = useState<{id: string, text: string, color: string}[]>([]);
+  
+  // Datos Completos del Contacto y Modales
   const [contactData, setContactData] = useState<any>(null);
+  const [groups, setGroups] = useState<string[]>([]);
+  const [isCreditOpen, setIsCreditOpen] = useState(false);
+  const [isFullEditOpen, setIsFullEditOpen] = useState(false);
 
   const [tacticalOpen, setTacticalOpen] = useState(true);
   const [tagsOpen, setTagsOpen] = useState(true);
@@ -59,17 +66,27 @@ export const MemoryPanel = ({
   useEffect(() => { 
     fetchAgents(); 
     fetchChannels();
+    fetchGroups();
     if (user) fetchTags();
   }, [user]);
 
   useEffect(() => {
     if (currentAnalysis?.id) {
-       fetchContactFinancialData();
+       fetchContactData();
     }
   }, [currentAnalysis?.id]);
 
-  const fetchContactFinancialData = async () => {
-     const { data } = await supabase.from('contacts').select('id, financial_status').eq('lead_id', currentAnalysis.id).maybeSingle();
+  const fetchGroups = async () => {
+     const { data } = await supabase.from('contacts').select('grupo').not('grupo', 'is', null);
+     if (data) {
+        const uniqueGroups = Array.from(new Set(data.map(d => d.grupo).filter(Boolean))) as string[];
+        setGroups(uniqueGroups);
+     }
+  };
+
+  const fetchContactData = async () => {
+     // Traemos toda la info del contacto para poder mandarla a los modales
+     const { data } = await supabase.from('contacts').select('*').eq('lead_id', currentAnalysis.id).maybeSingle();
      if (data) setContactData(data);
   };
 
@@ -201,6 +218,20 @@ export const MemoryPanel = ({
 
       <div className="flex-1 overflow-y-auto custom-scrollbar">
         
+        {/* BOTONES DE ACCIÓN RÁPIDA (VENTA Y EDICIÓN) */}
+        {contactData && (
+           <div className="px-5 pt-5 flex gap-2">
+              <Button onClick={() => setIsFullEditOpen(true)} variant="outline" className="flex-1 h-9 bg-[#121214] border-[#222225] hover:bg-[#161618] text-slate-300 text-[10px] font-bold uppercase tracking-widest">
+                 <FileEdit className="w-3.5 h-3.5 mr-1.5" /> Editar
+              </Button>
+              {isManager && (
+                 <Button onClick={() => setIsCreditOpen(true)} className="flex-1 h-9 bg-amber-600 hover:bg-amber-500 text-slate-950 text-[10px] font-bold uppercase tracking-widest shadow-lg">
+                    <Wallet className="w-3.5 h-3.5 mr-1.5" /> Venta / Pagos
+                 </Button>
+              )}
+           </div>
+        )}
+
         {/* 2. AUDITORÍA DE PAGO */}
         <div className="p-5 border-b border-[#1a1a1a] space-y-4">
            <h4 className="text-[10px] font-bold text-[#7A8A9E] uppercase tracking-widest flex items-center gap-2">
@@ -233,7 +264,7 @@ export const MemoryPanel = ({
                    </button>
                 )}
                 {!isEditing && (
-                   <button onClick={() => setIsEditing(true)} className="text-[#7A8A9E] hover:text-white transition-colors">
+                   <button onClick={() => setIsEditing(true)} className="text-[#7A8A9E] hover:text-white transition-colors" title="Edición Rápida">
                       <Edit2 className="w-3.5 h-3.5" />
                    </button>
                 )}
@@ -383,7 +414,7 @@ export const MemoryPanel = ({
                              currentStatus={contactData?.financial_status || 'Sin transacción'} 
                              isManager={isManager} 
                              onUpdate={() => {
-                                fetchContactFinancialData();
+                                fetchContactData();
                                 if (onAnalysisComplete) onAnalysisComplete();
                              }} 
                           />
@@ -431,6 +462,33 @@ export const MemoryPanel = ({
             {currentAnalysis.ai_paused ? "▶ ACTIVAR IA (ESTE CHAT)" : "⏸ PAUSAR IA (ESTE CHAT)"}
          </Button>
       </div>
+
+      {/* MODALES ADICIONALES */}
+      {isCreditOpen && contactData && (
+         <CreateCreditSaleDialog 
+            open={isCreditOpen} 
+            onOpenChange={setIsCreditOpen} 
+            contact={contactData} 
+            onSuccess={() => {
+               fetchContactData();
+               toast.success("Venta a crédito programada.");
+            }} 
+         />
+      )}
+
+      {isFullEditOpen && contactData && (
+         <EditContactDialog 
+            open={isFullEditOpen} 
+            onOpenChange={setIsFullEditOpen} 
+            contact={contactData} 
+            existingGroups={groups} 
+            allTags={allAvailableTags} 
+            onSuccess={() => {
+               fetchContactData();
+               if (onAnalysisComplete) onAnalysisComplete();
+            }} 
+         />
+      )}
     </div>
   );
 };
