@@ -8,11 +8,14 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { 
   Contact, Search, Loader2, MapPin, Mail, Phone, ExternalLink, 
-  UserPlus, Tag, Trash2, RefreshCw, Users
+  UserPlus, Tag, Trash2, RefreshCw, Users, FileSpreadsheet, Megaphone
 } from 'lucide-react';
 import { toast } from 'sonner';
 import ChatViewer from '@/components/ChatViewer';
 import { CreateLeadDialog } from '@/components/leads/CreateLeadDialog';
+import { ImportContactsDialog } from '@/components/contacts/ImportContactsDialog';
+import { MassMessageDialog } from '@/components/contacts/MassMessageDialog';
+import { FinancialStatusBadge } from '@/components/contacts/FinancialStatusBadge';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/context/AuthContext';
 import {
@@ -21,13 +24,17 @@ import {
 } from "@/components/ui/alert-dialog";
 
 const Contacts = () => {
-  const { user, isAdmin } = useAuth();
+  const { user, isManager } = useAuth();
   const [contacts, setContacts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  
   const [selectedLead, setSelectedLead] = useState<any>(null);
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [isImportOpen, setIsImportOpen] = useState(false);
+  const [isMassMessageOpen, setIsMassMessageOpen] = useState(false);
+  
   const [contactToDelete, setContactToDelete] = useState<any>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [localTags, setLocalTags] = useState<{id: string, text: string, color: string}[]>([]);
@@ -49,13 +56,7 @@ const Contacts = () => {
       .select('*, leads(id, buying_intent, payment_status, lead_score, ai_paused, summary, telefono, nombre, apellido, email, ciudad, estado, cp, pais, tags)')
       .order('updated_at', { ascending: false });
 
-    if (error) {
-      const { data: leadsData } = await supabase
-        .from('leads')
-        .select('*')
-        .order('created_at', { ascending: false });
-      setContacts((leadsData || []).map(l => ({ ...l, lead_id: l.id, leads: l })));
-    } else {
+    if (!error) {
       setContacts(data || []);
     }
     setLoading(false);
@@ -114,6 +115,8 @@ const Contacts = () => {
       c.telefono?.includes(term) ||
       c.email?.toLowerCase().includes(term) ||
       c.ciudad?.toLowerCase().includes(term) ||
+      c.financial_status?.toLowerCase().includes(term) ||
+      (c.tags && c.tags.some((t: string) => t.toLowerCase().includes(term))) ||
       (l.tags && l.tags.some((t: string) => t.toLowerCase().includes(term)))
     );
   });
@@ -123,7 +126,7 @@ const Contacts = () => {
   return (
     <Layout>
       <div className="max-w-7xl mx-auto space-y-6 pb-12">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
           <div>
             <h1 className="text-3xl font-bold text-white flex items-center gap-3">
               <div className="p-2 bg-indigo-900/30 rounded-xl border border-indigo-500/20">
@@ -131,20 +134,23 @@ const Contacts = () => {
               </div>
               Directorio de Contactos
             </h1>
-            <p className="text-slate-400 text-sm mt-1">Gestión permanente de la base de datos de clientes.</p>
+            <p className="text-slate-400 text-sm mt-1">Gestión de base de datos, segmentaciones y envíos masivos.</p>
           </div>
-          <div className="flex gap-3 items-center flex-wrap">
-            <Button onClick={fetchContacts} variant="outline" className="border-slate-800 text-slate-400">
-              <RefreshCw className={cn("w-4 h-4 mr-2", loading && "animate-spin")} /> Actualizar
+          <div className="flex gap-2 items-center flex-wrap">
+            <Button onClick={() => setIsMassMessageOpen(true)} variant="secondary" className="bg-amber-600/20 text-amber-500 hover:bg-amber-600/30 border border-amber-500/30 h-10">
+              <Megaphone className="w-4 h-4 mr-2" /> Difusión ({filteredContacts.length})
+            </Button>
+            <Button onClick={() => setIsImportOpen(true)} variant="outline" className="border-slate-700 text-slate-300 bg-slate-900 hover:bg-slate-800 h-10">
+              <FileSpreadsheet className="w-4 h-4 mr-2" /> Importar CSV
             </Button>
             <Button onClick={() => setIsCreateOpen(true)} className="bg-indigo-600 hover:bg-indigo-700 h-10 px-6 font-bold text-xs uppercase tracking-widest rounded-xl">
-              <UserPlus className="w-4 h-4 mr-2" /> Nuevo Contacto
+              <UserPlus className="w-4 h-4 mr-2" /> Nuevo
             </Button>
-            <div className="relative w-full md:w-72">
+            <div className="relative w-full md:w-64 mt-2 xl:mt-0">
               <Search className="absolute left-3 top-3 h-4 w-4 text-slate-500" />
               <Input
-                placeholder="Buscar en el directorio..."
-                className="pl-10 bg-slate-900/50 border-slate-800 text-slate-200 rounded-xl h-10"
+                placeholder="Buscar por tag, ciudad o nombre..."
+                className="pl-10 bg-slate-900/50 border-slate-800 text-slate-200 rounded-xl h-10 focus-visible:ring-indigo-500"
                 value={searchTerm}
                 onChange={e => setSearchTerm(e.target.value)}
               />
@@ -158,19 +164,19 @@ const Contacts = () => {
               <TableHeader>
                 <TableRow className="border-slate-800 bg-slate-900/20">
                   <TableHead className="text-slate-500 text-[10px] uppercase font-bold pl-6">Nombre y Contacto</TableHead>
-                  <TableHead className="text-slate-500 text-[10px] uppercase font-bold">Ubicación & Data</TableHead>
-                  <TableHead className="text-slate-500 text-[10px] uppercase font-bold">Estado en Pipeline</TableHead>
+                  <TableHead className="text-slate-500 text-[10px] uppercase font-bold">Ubicación & Segmentación</TableHead>
+                  {isManager && <TableHead className="text-slate-500 text-[10px] uppercase font-bold">Finanzas</TableHead>}
                   <TableHead className="text-slate-500 text-[10px] uppercase font-bold text-right pr-6">Acciones</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {loading ? (
-                  <TableRow><TableCell colSpan={4} className="h-40 text-center"><Loader2 className="animate-spin mx-auto text-indigo-500" /></TableCell></TableRow>
+                  <TableRow><TableCell colSpan={isManager ? 4 : 3} className="h-40 text-center"><Loader2 className="animate-spin mx-auto text-indigo-500" /></TableCell></TableRow>
                 ) : filteredContacts.length === 0 ? (
-                  <TableRow><TableCell colSpan={4} className="h-40 text-center text-slate-500 italic">No hay registros que coincidan.</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={isManager ? 4 : 3} className="h-40 text-center text-slate-500 italic">No hay registros que coincidan.</TableCell></TableRow>
                 ) : filteredContacts.map((contact) => {
                   const l = leadData(contact);
-                  const intent = (l?.buying_intent || 'BAJO').toUpperCase();
+                  const combinedTags = Array.from(new Set([...(contact.tags || []), ...(l?.tags || [])]));
                   return (
                     <TableRow key={contact.id} className="border-slate-800 hover:bg-slate-800/40 transition-colors">
                       <TableCell className="pl-6 py-4">
@@ -194,13 +200,13 @@ const Contacts = () => {
                           <span className={cn("text-[10px] flex items-center gap-1.5", contact.ciudad ? "text-slate-300" : "text-slate-600 italic")}>
                             <MapPin className="w-3 h-3 text-slate-500" /> {contact.ciudad || 'Sin ciudad'}
                           </span>
-                          {l?.tags && l.tags.length > 0 && (
+                          {combinedTags.length > 0 && (
                              <div className="flex flex-wrap gap-1 mt-1">
-                                {l.tags.map((t: string) => {
+                                {combinedTags.map((t: string) => {
                                    const tagConf = localTags.find(lt => lt.text === t);
                                    const style = tagConf ? { backgroundColor: tagConf.color+'20', color: tagConf.color, borderColor: tagConf.color+'50' } : {};
                                    return (
-                                      <Badge key={t} variant="outline" className="text-[8px] h-3.5 px-1 font-medium" style={style}>
+                                      <Badge key={t} variant="outline" className="text-[8px] h-3.5 px-1 font-medium max-w-[120px] truncate" style={style}>
                                          {t}
                                       </Badge>
                                    );
@@ -209,27 +215,23 @@ const Contacts = () => {
                           )}
                         </div>
                       </TableCell>
-                      <TableCell>
-                        {l ? (
-                          <Badge variant="outline" className={cn("text-[9px] uppercase font-bold",
-                            intent === 'COMPRADO' ? "border-emerald-500/50 text-emerald-400 bg-emerald-500/10" :
-                            intent === 'ALTO' ? "border-amber-500/50 text-amber-400 bg-amber-500/10" :
-                            "border-slate-700 text-slate-500"
-                          )}>{intent}</Badge>
-                        ) : (
-                          <Badge variant="outline" className="text-[9px] border-slate-800 text-slate-600">INACTIVO</Badge>
-                        )}
-                      </TableCell>
+                      {isManager && (
+                         <TableCell>
+                            <FinancialStatusBadge contactId={contact.id} currentStatus={contact.financial_status || 'Sin transacción'} isManager={isManager} onUpdate={fetchContacts} />
+                         </TableCell>
+                      )}
                       <TableCell className="text-right pr-6">
                         <div className="flex justify-end gap-2">
                           <Button size="sm" variant="ghost" className="h-8 text-[10px] text-indigo-400 hover:bg-indigo-900/20"
                             onClick={() => handleOpenChat(contact)}>
                             <ExternalLink className="w-3 h-3 mr-1.5" /> CHAT
                           </Button>
-                          <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-slate-600 hover:text-red-500"
-                            onClick={() => setContactToDelete(contact)}>
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
+                          {isManager && (
+                             <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-slate-600 hover:text-red-500"
+                               onClick={() => setContactToDelete(contact)}>
+                               <Trash2 className="w-4 h-4" />
+                             </Button>
+                          )}
                         </div>
                       </TableCell>
                     </TableRow>
@@ -261,6 +263,8 @@ const Contacts = () => {
         </AlertDialogContent>
       </AlertDialog>
 
+      <ImportContactsDialog open={isImportOpen} onOpenChange={setIsImportOpen} onSuccess={fetchContacts} />
+      <MassMessageDialog open={isMassMessageOpen} onOpenChange={setIsMassMessageOpen} targetContacts={filteredContacts} />
       {isCreateOpen && <CreateLeadDialog open={isCreateOpen} onOpenChange={setIsCreateOpen} onSuccess={fetchContacts} />}
       {selectedLead && <ChatViewer lead={selectedLead} open={isChatOpen} onOpenChange={setIsChatOpen} />}
     </Layout>

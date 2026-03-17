@@ -10,6 +10,8 @@ interface AuthContextType {
   loading: boolean;
   isAdmin: boolean;
   isDev: boolean;
+  isManager: boolean;
+  isGerente: boolean;
   isSales: boolean;
   isAgent: boolean;
   role: string | null;
@@ -24,6 +26,8 @@ const AuthContext = createContext<AuthContextType>({
   loading: true,
   isAdmin: false,
   isDev: false,
+  isManager: false,
+  isGerente: false,
   isSales: false,
   isAgent: false,
   role: null,
@@ -46,7 +50,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         .single();
       
       if (!error && data) {
-        // REGLA DE ORO: gameygv@gmail.com siempre es dev
         if (email === 'gameygv@gmail.com') {
             data.role = 'dev';
         }
@@ -90,7 +93,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     await supabase.auth.signOut();
   };
 
-  // Lógica de roles con fallback de seguridad
   const userRole = (user?.email === 'gameygv@gmail.com') ? 'dev' : (profile?.role?.toLowerCase() || 'agent');
 
   const value = {
@@ -101,6 +103,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     role: userRole,
     isAdmin: userRole === 'admin' || userRole === 'dev',
     isDev: userRole === 'dev',
+    isManager: userRole === 'admin' || userRole === 'dev' || userRole === 'gerente',
+    isGerente: userRole === 'gerente',
     isSales: userRole === 'sales',
     isAgent: userRole === 'agent',
     signOut,

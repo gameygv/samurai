@@ -16,7 +16,7 @@ import { logActivity } from '@/utils/logger';
 import { useAuth } from '@/context/AuthContext';
 
 const Archive = () => {
-  const { user, isAdmin } = useAuth();
+  const { user, isManager } = useAuth();
   const [conversations, setConversations] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -33,7 +33,7 @@ const Archive = () => {
     if (!refreshing) setLoading(true);
     try {
       let query = supabase.from('leads').select('*, conversaciones(id)').order('last_message_at', { ascending: false });
-      if (!isAdmin) {
+      if (!isManager) {
           query = query.eq('assigned_to', user?.id);
       }
       const { data, error } = await query;
@@ -125,7 +125,7 @@ const Archive = () => {
             <p className="text-slate-400">Historial completo de interacciones archivadas.</p>
           </div>
           <div className="flex gap-3 items-center">
-            {isAdmin && (
+            {isManager && (
               <Button 
                 variant="outline" 
                 className="border-indigo-500/30 text-indigo-400 hover:bg-indigo-500/10"
@@ -183,7 +183,7 @@ const Archive = () => {
                     </TableCell>
                     <TableCell className="text-right">
                        <div className="flex justify-end gap-2">
-                          {isAdmin && (
+                          {isManager && (
                             <Button variant="ghost" size="icon" className="text-red-500/50 hover:text-red-500" onClick={() => handleDeleteLead(lead.id, lead.nombre)}>
                                <Trash2 className="w-4 h-4" />
                             </Button>

@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { 
-  Edit2, Save, Loader2, Fingerprint, MapPin, User, ShieldAlert, Brain, Smartphone, Trash2, Tag, Plus, X
+  Edit2, Save, Loader2, Fingerprint, MapPin, User, ShieldAlert, Smartphone, Trash2, Tag, Plus, X, DollarSign
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -17,6 +17,7 @@ import { cn } from '@/lib/utils';
 // Import Componentes Modulares
 import { FinancialAudit } from './memory/FinancialAudit';
 import { CapiStatus } from './memory/CapiStatus';
+import { FinancialStatusBadge } from '../contacts/FinancialStatusBadge';
 
 interface MemoryPanelProps {
   currentAnalysis: any;
@@ -38,12 +39,16 @@ export const MemoryPanel = ({
   onToggleFollowup, onAnalysisComplete, onDeleteLead
 }: MemoryPanelProps) => {
 
-  const { user, isAdmin, isDev } = useAuth();
+  const { user, isManager } = useAuth();
   const [correctionText, setCorrectionText] = useState('');
   const [analyzing, setAnalyzing] = useState(false);
   const [agents, setAgents] = useState<any[]>([]);
   const [channels, setChannels] = useState<any[]>([]);
   const [localTags, setLocalTags] = useState<{id: string, text: string, color: string}[]>([]);
+
+  // Financial Status integration
+  const [contactId, setContactId] = useState<string | null>(null);
+  const [financialStatus, setFinancialStatus] = useState('Sin transacción');
 
   const capiFields = [
      true, 
@@ -60,6 +65,22 @@ export const MemoryPanel = ({
     fetchChannels();
     if (user) fetchLocalTags();
   }, [user]);
+
+  useEffect(() => {
+     if (currentAnalysis.id) {
+         fetchContactFinancialStatus();
+     }
+  }, [currentAnalysis.id]);
+
+  const fetchContactFinancialStatus = async () => {
+     const { data } = await supabase.from('contacts').select('id, financial_status').eq('lead_id', currentAnalysis.id).maybeSingle();
+     if (data) {
+         setContactId(data.id);
+         setFinancialStatus(data.financial_status || 'Sin transacción');
+     } else {
+         setContactId(null);
+     }
+  };
 
   const fetchAgents = async () => {
       const { data } = await supabase.from('profiles').select('id, full_name, role');
@@ -118,7 +139,6 @@ export const MemoryPanel = ({
   };
 
   const handleAddTag = async (tagText: string) => {
-      // BLINDAJE: Evitar tags duplicados
       const currentTags = memoryForm.tags || [];
       if (currentTags.includes(tagText)) return;
 
@@ -150,8 +170,8 @@ export const MemoryPanel = ({
                  <Fingerprint className="w-4 h-4" /> Identidad & CRM
               </h4>
               <div className="flex gap-1">
-                {isAdmin && onDeleteLead && (
-                   <Button variant="ghost" size="icon" className="h-6 w-6 text-red-900/50 hover:text-red-500" onClick={() => { if(confirm("¿Borrar lead?")) onDeleteLead(); }} title="Eliminar de raíz">
+                {isManager && onDeleteLead && (
+                   <Button variant="ghost" size="icon" className="h-6 w-6 text-red-900/50 hover:text-red-500" onClick={() => { if(confirm("¿Borrar lead permanentemente?")) onDeleteLead(); }} title="Eliminar de raíz">
                       <Trash2 className="w-3.5 h-3.5" />
                    </Button>
                 )}
@@ -170,7 +190,7 @@ export const MemoryPanel = ({
                  <div className="grid grid-cols-2 gap-2">
                     <div className="space-y-1">
                         <Label className="text-[9px] text-slate-500 uppercase tracking-widest">Asesor:</Label>
-                        <Select value={memoryForm.assigned_to || "unassigned"} onValueChange={v => setMemoryForm({...memoryForm, assigned_to: v === "unassigned" ? null : v})}>
+                        <Select value={memoryForm.assigned_to || "unassigned"} onValueChange={v => setMemoryForm({...memoryForm, assigned_to: v === "unassigned" ? null : v})} disabled={!isManager}>
                         <SelectTrigger className="h-8 text-xs bg-slate-950 border-slate-800"><SelectValue /></SelectTrigger>
                         <SelectContent className="bg-slate-900 border-slate-800 text-white">
                             <SelectItem value="unassigned">Bot Global</SelectItem>
@@ -202,7 +222,7 @@ export const MemoryPanel = ({
                        <div className="grid grid-cols-2 gap-4">
                             <div>
                                 <span className="text-[9px] text-slate-500 uppercase font-bold tracking-widest">Agente</span>
-                                {(isAdmin || isDev) ? (
+                                {isManager ? (
                                    <Select value={memoryForm.assigned_to || "unassigned"} onValueChange={handleDirectAgentChange}>
                                       <SelectTrigger className="h-7 text-xs bg-transparent border-0 p-0 text-slate-300 hover:text-indigo-400 focus:ring-0 w-full justify-start gap-2 shadow-none">
                                          <User className="w-3.5 h-3.5 text-slate-500"/> <SelectValue />
@@ -280,6 +300,16 @@ export const MemoryPanel = ({
                              </Select>
                           </div>
                        </div>
+                       
+                       {/* ESTADO FINANCIERO (Solo Gerencia/Admin) */}
+                       {isManager && contactId && (
+                           <div className="pt-4 border-t border-slate-800/50">
+                              <span className="text-[9px] text-slate-500 uppercase font-bold tracking-widest flex items-center gap-1.5 mb-2">
+                                 <DollarSign className="w-3 h-3" /> Estado Financiero
+                              </span>
+                              <FinancialStatusBadge contactId={contactId} currentStatus={financialStatus} isManager={isManager} onUpdate={fetchContactFinancialStatus} />
+                           </div>
+                       )}
 
                     </AccordionContent>
                  </AccordionItem>

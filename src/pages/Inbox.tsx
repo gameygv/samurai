@@ -28,7 +28,7 @@ import {
 } from "@/components/ui/dialog";
 
 const Inbox = () => {
-  const { user, isAdmin, isDev } = useAuth();
+  const { user, isManager } = useAuth();
   const [leads, setLeads] = useState<any[]>([]);
   const [filteredLeads, setFilteredLeads] = useState<any[]>([]);
   const [activeLead, setActiveLead] = useState<any>(null);
@@ -89,7 +89,7 @@ const Inbox = () => {
   const fetchLeads = async (showLoader = true) => {
     if (showLoader) setLoadingLeads(true);
     let query = supabase.from('leads').select('*').order('last_message_at', { ascending: false });
-    if (!isAdmin && !isDev) query = query.eq('assigned_to', user?.id);
+    if (!isManager) query = query.eq('assigned_to', user?.id);
     
     const { data } = await query;
     if (data) {
@@ -169,27 +169,45 @@ const Inbox = () => {
          const isPaused = text.trim() === '#STOP';
          await supabase.from('leads').update({ ai_paused: isPaused }).eq('id', activeLead.id);
          await supabase.from('conversaciones').insert({ lead_id: activeLead.id, mensaje: `IA ${isPaused ? 'Pausada' : 'Activada'} manualmente.`, emisor: 'NOTA', platform: 'PANEL_INTERNO' });
-         setDraftMessage(''); return;
+         toast.success(`Samurai ${isPaused ? 'Pausado' : 'Activado'}`);
+         setDraftMessage('');
+         return;
       }
+
       if (isInternalNote) {
          await supabase.from('conversaciones').insert({ lead_id: activeLead.id, mensaje: text, emisor: 'NOTA', platform: 'PANEL_INTERNO' });
-         setDraftMessage(''); return; 
+         toast.success("Nota guardada.");
+         setDraftMessage('');
+         return; 
       }
+
       let mediaData = undefined;
       if (file) {
         const ext = file.name.split('.').pop();
         const path = `chat_uploads/${Date.now()}.${ext}`;
-        await supabase.storage.from('media').upload(path, file);
+        const { error: uploadErr } = await supabase.storage.from('media').upload(path, file);
+        if (uploadErr) throw uploadErr;
         const { data: { publicUrl } } = supabase.storage.from('media').getPublicUrl(path);
-        mediaData = { url: publicUrl, type: file.type.startsWith('image/') ? 'image' : 'document', mimetype: file.type, name: file.name };
+        let type = 'document';
+        if (file.type.startsWith('image/')) type = 'image';
+        else if (file.type.startsWith('video/')) type = 'video';
+        mediaData = { url: publicUrl, type, mimetype: file.type, name: file.name };
       }
-      
+
       const apiResponse = await sendEvolutionMessage(activeLead.telefono, text, activeLead.id, mediaData);
       
+      const textToSave = text || (file ? `[ARCHIVO ENVIADO: ${file.name}]` : '');
+      const finalMessage = apiResponse ? textToSave : `[PRUEBA / WA DESCONECTADO] ${textToSave}`;
+
       await supabase.from('conversaciones').insert({ 
-        lead_id: activeLead.id, mensaje: apiResponse ? text : `[PRUEBA / WA DESCONECTADO] ${text}`, emisor: 'HUMANO', platform: 'PANEL',
+        lead_id: activeLead.id, mensaje: finalMessage, emisor: 'HUMANO', platform: 'PANEL',
         metadata: mediaData ? { mediaUrl: mediaData.url, mediaType: mediaData.type, fileName: mediaData.name } : {}
       });
+
+      if (user && text) {
+          supabase.functions.invoke('evaluate-agent', { body: { agent_id: user.id, lead_id: activeLead.id, message_text: text } }).catch(() => {});
+      }
+
       setDraftMessage('');
     } catch (err: any) { toast.error('Error: ' + err.message); } finally { setSending(false); }
   };
@@ -228,6 +246,16 @@ const Inbox = () => {
        toast.success('Memoria actualizada');
        setIsEditingMemory(false);
     } catch (err: any) { toast.error("Error: " + err.message); } finally { setSending(false); }
+  };
+
+  const handleDeleteLead = async () => {
+    const tid = toast.loading("Eliminando prospecto...");
+    try {
+       await supabase.from('conversaciones').delete().eq('lead_id', activeLead.id);
+       await supabase.from('leads').delete().eq('id', activeLead.id);
+       toast.success("Prospecto eliminado correctamente.", { id: tid });
+       setActiveLead(null);
+    } catch (err: any) { toast.error("Error al eliminar: " + err.message, { id: tid }); }
   };
 
   return (
@@ -279,7 +307,7 @@ const Inbox = () => {
 
         {/* COLUMNA 2: CHAT */}
         <div className={cn("flex-1 min-w-0 flex flex-col bg-slate-950 relative", !activeLead ? "hidden md:flex items-center justify-center" : "flex")}>
-           {activeLead && (
+           {activeLead ? (
               <>
                  <div className="h-16 px-4 bg-slate-900/80 border-b border-slate-800 flex items-center justify-between shrink-0">
                     <div className="flex items-center gap-3">
@@ -335,7 +363,7 @@ const Inbox = () => {
 
                                  {localReplies.length > 0 && <>
                                     <DropdownMenuSeparator className="bg-slate-800 my-2"/>
-                                    <DropdownMenuLabel className="text-[10px] uppercase text-slate-500 font-bold">Mis Plantillas</DropdownMenuLabel>
+                                    <DropdownMenuLabel className="text-[10px] uppercase text-slate-500 font-bold">Mis Plantillas Privadas</DropdownMenuLabel>
                                     {localReplies.map((qr) => (
                                        <DropdownMenuItem key={qr.id} onClick={() => setDraftMessage(qr.text)} className="cursor-pointer text-xs">
                                           <MessageSquarePlus className="w-3 h-3 mr-2 text-amber-500 shrink-0" /><span className="truncate">{qr.title}</span>
@@ -348,12 +376,21 @@ const Inbox = () => {
                     />
                  </div>
               </>
+           ) : (
+              <div className="flex flex-col items-center justify-center text-slate-500">
+                 <MessageCircle className="w-12 h-12 mb-4 opacity-20" />
+                 <p className="text-xs uppercase font-bold tracking-widest">Selecciona un chat</p>
+              </div>
            )}
         </div>
 
         {/* COLUMNA 3: FICHA TÁCTICA */}
         {activeLead && (
            <div className={cn("w-full xl:w-[350px] flex-shrink-0 bg-slate-900 border-l border-slate-800 flex flex-col absolute xl:relative z-20 h-full transition-transform duration-300", showMemoryMobile ? "translate-x-0" : "translate-x-full xl:translate-x-0")}>
+              <div className="xl:hidden p-4 border-b border-slate-800 flex justify-between items-center bg-slate-900">
+                 <span className="font-bold text-sm">Ficha Táctica</span>
+                 <Button variant="ghost" size="sm" onClick={() => setShowMemoryMobile(false)}><X className="w-4 h-4" /></Button>
+              </div>
               <MemoryPanel 
                 currentAnalysis={activeLead} 
                 isEditing={isEditingMemory} 
@@ -364,6 +401,8 @@ const Inbox = () => {
                 saving={sending} 
                 onReset={() => {}} 
                 onToggleFollowup={() => handleSendMessage(activeLead.ai_paused ? '#START' : '#STOP')} 
+                onAnalysisComplete={() => refetchMessages()} 
+                onDeleteLead={handleDeleteLead}
               />
            </div>
         )}

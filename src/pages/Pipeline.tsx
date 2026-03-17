@@ -20,7 +20,7 @@ import { toast } from 'sonner';
 import { useAuth } from '@/context/AuthContext';
 
 const Pipeline = () => {
-  const { user, isAdmin } = useAuth();
+  const { user, isManager } = useAuth();
   const [leads, setLeads] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedLead, setSelectedLead] = useState<any>(null);
@@ -46,7 +46,7 @@ const Pipeline = () => {
     fetchLeads();
     if (user) fetchLocalTags();
 
-    supabase.from('profiles').select('id, full_name, role').in('role', ['admin', 'dev', 'sales']).then(({data}) => {
+    supabase.from('profiles').select('id, full_name, role').in('role', ['admin', 'dev', 'gerente', 'sales']).then(({data}) => {
        if (data) {
           const map: any = {};
           data.forEach(d => map[d.id] = d.full_name);
@@ -61,7 +61,7 @@ const Pipeline = () => {
   const fetchLeads = async () => {
     setLoading(true);
     let query = supabase.from('leads').select('*').order('last_message_at', { ascending: false });
-    if (!isAdmin) {
+    if (!isManager) {
        query = query.eq('assigned_to', user?.id);
     }
     const { data } = await query;
@@ -149,7 +149,7 @@ const Pipeline = () => {
               <div><h3 className="text-xs font-bold text-emerald-600/80 uppercase tracking-widest">Ganados</h3><p className="text-xl font-bold text-slate-50">${totalWon.toLocaleString()}</p></div>
            </Card>
            <Card className="bg-transparent border-0 p-0 flex flex-col justify-center gap-2 shadow-none">
-              {isAdmin && (
+              {isManager && (
                  <Select value={filterAgent} onValueChange={setFilterAgent}>
                     <SelectTrigger className="w-full bg-slate-900 border-slate-800 h-10 rounded-xl">
                        <SelectValue placeholder="Filtro de Vendedores" />
@@ -211,7 +211,7 @@ const Pipeline = () => {
                             <div className="flex justify-between items-start">
                                <div>
                                   <p className="text-xs font-bold text-slate-100 group-hover:text-amber-400 transition-colors truncate max-w-[180px]">{lead.nombre || lead.telefono}</p>
-                                  {lead.assigned_to && agentsMap[lead.assigned_to] && isAdmin && filterAgent === 'ALL' && (
+                                  {lead.assigned_to && agentsMap[lead.assigned_to] && isManager && filterAgent === 'ALL' && (
                                      <Badge variant="outline" className="mt-1 text-[8px] h-4 px-1.5 border-purple-900/50 text-purple-300 font-medium">
                                         <User className="w-2 h-2 mr-1"/> {agentsMap[lead.assigned_to].split(' ')[0]}
                                      </Badge>
