@@ -72,18 +72,31 @@ serve(async (req) => {
        pushName = p.from_name || 'Lead Gowa';
        const GOWA_BASE_URL = channel.api_url.endsWith('/') ? channel.api_url.slice(0, -1) : channel.api_url;
 
-       if (p.body) {
-         text = p.body;
-       } else if (p.image) {
-         text = "[Imagen]"; mediaUrl = `${GOWA_BASE_URL}/${p.image}`; mediaType = 'image';
-       } else if (p.audio) {
-         text = "[Audio]"; const audioPath = p.audio.split(";")[0].trim(); mediaUrl = `${GOWA_BASE_URL}/${audioPath}`; mediaType = 'audio';
+       // LÓGICA MEJORADA: Priorizar Media, y usar el body como Caption
+       if (p.image) {
+         text = p.body || "[Imagen]"; 
+         mediaUrl = `${GOWA_BASE_URL}/${p.image}`; 
+         mediaType = 'image';
        } else if (p.video) {
-         text = "[Video]"; mediaUrl = `${GOWA_BASE_URL}/${p.video}`; mediaType = 'video';
+         text = p.body || "[Video]"; 
+         mediaUrl = `${GOWA_BASE_URL}/${p.video}`; 
+         mediaType = 'video';
+       } else if (p.audio) {
+         text = "[Audio]"; 
+         const audioPath = p.audio.split(";")[0].trim(); 
+         mediaUrl = `${GOWA_BASE_URL}/${audioPath}`; 
+         mediaType = 'audio';
        } else if (p.document) {
-         text = "[Documento]"; mediaUrl = `${GOWA_BASE_URL}/${p.document}`; mediaType = 'document';
+         text = p.body || "[Documento]"; 
+         mediaUrl = `${GOWA_BASE_URL}/${p.document}`; 
+         mediaType = 'document';
        } else if (p.sticker) {
-         text = "[Sticker]"; mediaUrl = `${GOWA_BASE_URL}/${p.sticker}`; mediaType = 'image';
+         text = "[Sticker]"; 
+         mediaUrl = `${GOWA_BASE_URL}/${p.sticker}`; 
+         mediaType = 'image';
+       } else if (p.body) {
+         text = p.body;
+         mediaType = 'text';
        }
     } else { 
        if (payload.event && payload.event !== 'messages.upsert') return new Response('ignored_event', { status: 200 });
@@ -93,9 +106,21 @@ serve(async (req) => {
        phone = msg?.key?.remoteJid?.split('@')[0] || payload.phone || payload.sender;
        pushName = payload.pushName || msg?.pushName || 'Lead WA';
        
-       if (msg?.message?.imageMessage) { text = "[Imagen]"; mediaType = 'image'; } 
-       else if (msg?.message?.audioMessage) { text = "[Audio]"; mediaType = 'audio'; } 
-       else { text = msg?.message?.conversation || msg?.message?.extendedTextMessage?.text || msg?.text || payload.message || ''; }
+       if (msg?.message?.imageMessage) { 
+           text = msg?.message?.imageMessage?.caption || "[Imagen]"; 
+           mediaType = 'image'; 
+       } 
+       else if (msg?.message?.videoMessage) { 
+           text = msg?.message?.videoMessage?.caption || "[Video]"; 
+           mediaType = 'video'; 
+       }
+       else if (msg?.message?.audioMessage) { 
+           text = "[Audio]"; 
+           mediaType = 'audio'; 
+       } 
+       else { 
+           text = msg?.message?.conversation || msg?.message?.extendedTextMessage?.text || msg?.text || payload.message || ''; 
+       }
     }
 
     if (!phone) return new Response('invalid_phone', { status: 200 });
@@ -110,7 +135,7 @@ serve(async (req) => {
 
     // --- 3. DESCARGA MULTIMEDIA Y MÓDULO AUDITIVO (WHISPER) ---
     let finalMediaUrl = null;
-    let downloadedBlob = null; // Guardamos el blob crudo por si es un audio
+    let downloadedBlob = null; 
 
     if (mediaUrl) {
         try {
@@ -126,7 +151,7 @@ serve(async (req) => {
         } catch (e) { await logTrace(`Error bajando adjunto: ${e.message}`, true); }
     }
 
-    // TRANSCRIPCIÓN WHISPER (Solo si es audio y se descargó correctamente)
+    // TRANSCRIPCIÓN WHISPER
     if (mediaType === 'audio' && downloadedBlob) {
         try {
             await logTrace("Audio detectado. Iniciando motor de transcripción Whisper...");
@@ -134,7 +159,6 @@ serve(async (req) => {
             
             if (conf?.value) {
                 const formData = new FormData();
-                // Whisper requiere una extensión válida para procesar el archivo. OGG es el estándar de WhatsApp.
                 formData.append('file', downloadedBlob, 'voice_note.ogg'); 
                 formData.append('model', 'whisper-1');
                 formData.append('language', 'es');
@@ -148,7 +172,6 @@ serve(async (req) => {
                 if (whisperRes.ok) {
                     const whisperData = await whisperRes.json();
                     if (whisperData.text) {
-                        // Reemplazamos la etiqueta "[Audio]" por la transcripción real para que la IA la lea
                         text = `[TRANSCRIPCIÓN DE NOTA DE VOZ]: "${whisperData.text}"`;
                         await logTrace(`Audio transcrito con éxito: ${whisperData.text.substring(0, 30)}...`);
                     }
@@ -174,7 +197,6 @@ serve(async (req) => {
       await supabaseClient.from('leads').update({ last_message_at: new Date().toISOString(), channel_id: channel.id }).eq('id', lead.id);
     }
 
-    // Guardamos el mensaje en la BD (Si fue audio, aquí se guardará el texto transcrito)
     await supabaseClient.from('conversaciones').insert({ 
         lead_id: lead.id, emisor: 'CLIENTE', mensaje: text || " ", platform: 'WHATSAPP',
         metadata: finalMediaUrl ? { mediaUrl: finalMediaUrl, mediaType } : {}

@@ -29,7 +29,8 @@ export const useRealtimeMessages = (leadId: string | null, open: boolean = true)
     setLoading(true);
     fetchMessages(leadId);
 
-    // Polling ultra-rápido (1.5s) para que se sienta en tiempo real
+    // Polling optimizado (10s) como fallback de seguridad para los WebSockets
+    // Reducir esto previene que Supabase corte la conexión por exceso de requests
     intervalRef.current = setInterval(() => {
       if (leadIdRef.current) {
         supabase.from('conversaciones').select('*')
@@ -40,7 +41,7 @@ export const useRealtimeMessages = (leadId: string | null, open: boolean = true)
             }
           });
       }
-    }, 1500);
+    }, 10000);
 
     const channel = supabase.channel(`live-${leadId}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'conversaciones', filter: `lead_id=eq.${leadId}` }, (payload) => {
@@ -54,7 +55,6 @@ export const useRealtimeMessages = (leadId: string | null, open: boolean = true)
     };
   }, [leadId, open]);
 
-  // Añadimos la función refetch que faltaba
   const refetch = () => {
     if (leadIdRef.current) fetchMessages(leadIdRef.current);
   };

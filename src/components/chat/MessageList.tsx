@@ -1,6 +1,6 @@
 import React, { useRef, useEffect } from 'react';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Loader2, StickyNote, FileText } from 'lucide-react';
+import { Loader2, StickyNote, FileText, Mic } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface MessageListProps {
@@ -19,6 +19,7 @@ export const MessageList = ({ messages, loading }: MessageListProps) => {
     let text = msg.mensaje || '';
     let imageUrl = null;
     let docUrl = null;
+    let audioUrl = null;
     let docName = null;
 
     // Limpieza de etiquetas multimedia para que no se vean duplicadas
@@ -27,26 +28,63 @@ export const MessageList = ({ messages, loading }: MessageListProps) => {
     if (msg.metadata?.mediaUrl) {
       if (msg.metadata.mediaType === 'image' || msg.metadata.mediaType === 'sticker') {
         imageUrl = msg.metadata.mediaUrl;
+      } else if (msg.metadata.mediaType === 'audio') {
+        audioUrl = msg.metadata.mediaUrl;
       } else {
         docUrl = msg.metadata.mediaUrl;
         docName = msg.metadata.fileName || 'Archivo adjunto';
       }
     }
 
+    // Detectar si es una transcripción de Whisper
+    let isTranscription = false;
+    let cleanText = text;
+    if (text.includes('[TRANSCRIPCIÓN DE NOTA DE VOZ]:')) {
+       isTranscription = true;
+       cleanText = text.replace('[TRANSCRIPCIÓN DE NOTA DE VOZ]:', '').trim();
+       if (cleanText.startsWith('"') && cleanText.endsWith('"')) {
+          cleanText = cleanText.substring(1, cleanText.length - 1);
+       }
+    }
+
     return (
       <div className="flex flex-col gap-2">
+        {/* Renderizado de Imágenes */}
         {imageUrl && (
           <a href={imageUrl} target="_blank" rel="noopener noreferrer" className="block overflow-hidden rounded-lg">
             <img src={imageUrl} alt="Adjunto" className="w-full max-w-[280px] h-auto max-h-80 object-contain rounded-lg border border-white/10" loading="lazy" />
           </a>
         )}
-        {docUrl && (
+        
+        {/* Renderizado de Audios */}
+        {audioUrl && (
+          <audio controls className="h-10 w-full max-w-[250px] rounded-md outline-none">
+            <source src={audioUrl} type="audio/ogg" />
+            <source src={audioUrl} type="audio/mpeg" />
+            Tu navegador no soporta el elemento de audio.
+          </audio>
+        )}
+
+        {/* Renderizado de Documentos */}
+        {docUrl && !audioUrl && (
           <a href={docUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 p-3 bg-slate-950/40 rounded-xl border border-white/10">
             <FileText className="w-5 h-5 text-amber-500 shrink-0" />
             <span className="text-xs truncate underline">{docName}</span>
           </a>
         )}
-        {text && <p className="whitespace-pre-wrap text-sm leading-relaxed">{text}</p>}
+
+        {/* Renderizado de Transcripción Whisper */}
+        {isTranscription && cleanText && (
+           <div className="mt-1 p-2.5 bg-indigo-950/30 border border-indigo-500/30 rounded-lg text-indigo-200">
+              <p className="text-[9px] font-bold uppercase tracking-widest text-indigo-400 flex items-center gap-1 mb-1">
+                 <Mic className="w-3 h-3" /> Transcripción IA
+              </p>
+              <p className="text-xs italic leading-relaxed">"{cleanText}"</p>
+           </div>
+        )}
+
+        {/* Texto Normal */}
+        {!isTranscription && text && <p className="whitespace-pre-wrap text-sm leading-relaxed">{text}</p>}
       </div>
     );
   };
@@ -95,6 +133,7 @@ export const MessageList = ({ messages, loading }: MessageListProps) => {
                 </div>
               </div>
           )})}
+          <div ref={scrollRef} />
         </div>
       )}
     </ScrollArea>
