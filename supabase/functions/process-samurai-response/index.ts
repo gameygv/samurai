@@ -53,53 +53,60 @@ serve(async (req) => {
     const aiRes = await fetch("https://api.openai.com/v1/chat/completions", {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${openaiKey}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: "gpt-4o", messages, temperature: 0.7 })
+        body: JSON.stringify({ model: "gpt-4o", messages, temperature: 0.5 })
     });
 
     const aiData = await aiRes.json();
-    const aiText = aiData.choices?.[0]?.message?.content || '';
+    let aiText = aiData.choices?.[0]?.message?.content || '';
 
     if (aiText) {
-        // --- 3. ENVIAR POR EL CANAL CORRESPONDIENTE USANDO EL TÚNEL PRINCIPAL ---
-        const { data: channel } = await supabaseClient.from('whatsapp_channels').select('id').eq('id', lead.channel_id).single();
+        // Extraer si la IA decidió mandar un poster (<<MEDIA:url>>)
+        let mediaUrlToSend = null;
+        let mediaTypeToSend = 'image';
+        const mediaRegex = /<<MEDIA:\s*(.+?)\s*>>/i;
+        const match = aiText.match(mediaRegex);
         
-        if (!channel) {
-            console.error("[process-response] No se encontró el canal para el lead", lead.id);
-            return new Response('no_channel');
+        if (match) {
+            mediaUrlToSend = match[1].trim();
+            aiText = aiText.replace(mediaRegex, '').trim();
         }
 
-        // Delegar el envío a send-message-v3 para no duplicar código
+        const { data: channel } = await supabaseClient.from('whatsapp_channels').select('id').eq('id', lead.channel_id).single();
+        if (!channel) return new Response('no_channel');
+
+        // Construir payload de envío
+        const payload: any = {
+            channel_id: channel.id,
+            phone: cleanPhone,
+            message: aiText
+        };
+
+        if (mediaUrlToSend) {
+            payload.mediaData = { url: mediaUrlToSend, type: mediaTypeToSend, name: 'poster.jpg' };
+        }
+
+        // --- 3. ENVIAR POR EL TÚNEL ---
         const sendRes = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/send-message-v3`, {
             method: 'POST',
-            headers: { 
-                'Authorization': `Bearer ${Deno.env.get('SUPABASE_ANON_KEY')}`,
-                'Content-Type': 'application/json' 
-            },
-            body: JSON.stringify({
-                channel_id: channel.id,
-                phone: cleanPhone,
-                message: aiText
-            })
+            headers: { 'Authorization': `Bearer ${Deno.env.get('SUPABASE_ANON_KEY')}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
         });
 
-        if (sendRes.ok) {
-            await supabaseClient.from('conversaciones').insert({ 
-                lead_id: lead.id, 
-                emisor: 'IA', 
-                mensaje: aiText, 
-                platform: 'WHATSAPP' 
-            });
-            
-            // Re-analizar lead tras la respuesta
-            fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/analyze-leads`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${Deno.env.get('SUPABASE_ANON_KEY')}` },
-                body: JSON.stringify({ lead_id: lead.id })
-            }).catch(() => {});
-        } else {
-            const errorText = await sendRes.text();
-            console.error(`[process-response] Error enviando via túnel:`, errorText);
-        }
+        // Registrar SIEMPRE en la base de datos, aunque falle la entrega a WhatsApp
+        await supabaseClient.from('conversaciones').insert({ 
+            lead_id: lead.id, 
+            emisor: 'IA', 
+            mensaje: aiText || '[Poster Enviado]', 
+            platform: 'WHATSAPP',
+            metadata: mediaUrlToSend ? { mediaUrl: mediaUrlToSend, mediaType: mediaTypeToSend } : {}
+        });
+
+        // Forzar análisis del lead en background
+        fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/analyze-leads`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${Deno.env.get('SUPABASE_ANON_KEY')}` },
+            body: JSON.stringify({ lead_id: lead.id })
+        }).catch(() => {});
     }
 
     return new Response('ok', { headers: corsHeaders });

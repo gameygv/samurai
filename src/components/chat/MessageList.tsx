@@ -21,6 +21,9 @@ export const MessageList = ({ messages, loading }: MessageListProps) => {
     let docUrl = null;
     let docName = null;
 
+    // Quitar tags inyectados por el túnel
+    text = text.replace(/\[(Imagen|Video|Audio|Documento|Sticker)\]/gi, '').trim();
+
     const imgMatch = text.match(/\[IMG:\s*(.+?)\]/i);
     if (imgMatch) {
       imageUrl = imgMatch[1];
@@ -33,7 +36,6 @@ export const MessageList = ({ messages, loading }: MessageListProps) => {
         docUrl = msg.metadata.mediaUrl;
         docName = msg.metadata.fileName || 'Documento adjunto';
       }
-      text = text.replace(/\[ARCHIVO:\s*.*?\]/i, '').trim();
     }
 
     return (
@@ -80,8 +82,6 @@ export const MessageList = ({ messages, loading }: MessageListProps) => {
              const isError = msg.platform === 'ERROR';
              const isHuman = emisor === 'HUMANO';
              
-             // Si no es cliente, ni nota, ni error, ni humano -> Asumimos que es el BOT (IA)
-             // Esto previene el error si WhatsApp envía el nombre de la empresa como emisor.
              const isAI = !isClient && !isNote && !isError && !isHuman;
 
              if (isNote) {

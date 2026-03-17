@@ -15,31 +15,47 @@ serve(async (req) => {
     const { data: configs } = await supabaseClient.from('app_config').select('key, value');
     const getConfig = (key: string, def = "") => configs?.find((c: any) => c.key === key)?.value || def;
 
-    // --- REGLAS PSICOGRÁFICAS BASADAS EN CEREBRO CORE ---
+    // --- CARGAR VERDAD MAESTRA ---
+    const { data: webPages } = await supabaseClient.from('main_website_content').select('title, content').eq('scrape_status', 'success');
+    let masterTruth = "\n=== VERDAD MAESTRA (SITIO WEB) ===\n";
+    webPages?.forEach(p => { if(p.content) masterTruth += `\n[PÁGINA: ${p.title}]\n${p.content.substring(0, 1500)}\n`; });
+
+    // --- CARGAR BASE DE CONOCIMIENTO ---
+    const { data: kbDocs } = await supabaseClient.from('knowledge_documents').select('title, category, content');
+    let kbContext = "\n=== CONOCIMIENTO TÉCNICO (PDFs/NOTAS) ===\n";
+    kbDocs?.forEach(d => { if(d.content) kbContext += `\n[RECURSO: ${d.title}]\n${d.content.substring(0, 1000)}\n`; });
+
+    // --- CARGAR BÓVEDA VISUAL (POSTERS) ---
+    const { data: mediaAssets } = await supabaseClient.from('media_assets').select('title, url, ai_instructions').eq('category', 'POSTER');
+    let mediaContext = "\n=== BÓVEDA VISUAL (POSTERS) ===\nINSTRUCCIÓN CRÍTICA: Para enviar un poster usa EXACTAMENTE este formato en tu respuesta: <<MEDIA:url_del_poster>>\n";
+    mediaAssets?.forEach(m => { mediaContext += `- ${m.title}: ${m.ai_instructions} -> <<MEDIA:${m.url}>>\n`; });
+
+    // --- REGLAS PSICOGRÁFICAS ---
     const psychStrategy = `
 ### ESTRATEGIA DE PERFILAMIENTO PSICOGRÁFICO:
-Usa la información técnica que tienes para educar y preguntar:
 1. Si el cliente pregunta por el sonido, menciona la "Psicoacústica" y pregunta: "¿Te interesa para uso personal o para integrarlo en alguna terapia que ya realices?"
-2. Usa datos del Cerebro Core para demostrar autoridad antes de pedir datos.
-3. REGLA WHATSAPP: Estás en ${platform}. Ya tienes su teléfono (${lead.telefono}). NO lo pidas.
+2. Usa datos del Cerebro Core para demostrar autoridad.
+3. REGLA WHATSAPP: Estás en ${platform}. Ya tienes su teléfono (${lead.telefono || 'Desconocido'}). NO lo pidas.
 `;
 
-    // --- CARGA DE DATOS BANCARIOS (CERO ALUCINACIÓN) ---
+    // --- CARGA DE DATOS BANCARIOS ---
     const bankData = `
 ### [DATOS DE PAGO - VERDAD ABSOLUTA]
-PROHIBIDO INVENTAR CUENTAS. USA SOLO ESTO:
 Banco: ${getConfig('bank_name')}
 Cuenta: ${getConfig('bank_account')}
 CLABE: ${getConfig('bank_clabe')}
 Titular: ${getConfig('bank_holder')}
 `;
 
-    // (Concatenación de prompts de usuario y sistema...)
     const systemPrompt = `
 ${psychStrategy}
 ${getConfig('prompt_alma_samurai')}
 ${getConfig('prompt_adn_core')}
 ${getConfig('prompt_behavior_rules')}
+
+${masterTruth}
+${kbContext}
+${mediaContext}
 ${bankData}
 `;
 
