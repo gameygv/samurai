@@ -6,6 +6,7 @@ import { StatCard } from '@/components/dashboard/StatCard';
 import { SystemStatus } from '@/components/SystemStatus';
 import { BrainHealthCard } from '@/components/dashboard/BrainHealthCard';
 import { TaskRadar } from '@/components/dashboard/TaskRadar';
+import { FinancialOverviewCard } from '@/components/dashboard/FinancialOverviewCard';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { CheckCircle2, DollarSign, Users2, Fingerprint, Terminal, Loader2, Zap, Activity, TrendingUp } from 'lucide-react';
@@ -14,16 +15,19 @@ import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsToolti
 import { cn } from '@/lib/utils';
 
 const Index = () => {
-  const { user, profile } = useAuth();
+  const { user, profile, isManager } = useAuth();
   const [loading, setLoading] = useState(true);
-  const [stats, setStats] = useState<any>({ totalLeads: 0, wonSales: 0, capiReady: 0, recentLogs: [], tasks: [] });
+  const [stats, setStats] = useState<any>({ 
+     totalLeads: 0, wonSales: 0, capiReady: 0, recentLogs: [], tasks: [],
+     financial: { totalCreditSales: 0, totalCollected: 0, totalPending: 0, lateInstallments: 0, activeCredits: 0 }
+  });
   const [chartData, setChartData] = useState<any[]>([]);
 
   useEffect(() => {
     fetchData();
     const interval = setInterval(fetchData, 30000);
     return () => clearInterval(interval);
-  }, [user]);
+  }, [user, isManager]);
 
   const fetchData = async () => {
     const { data: leads } = await supabase.from('leads').select('*');
@@ -34,6 +38,30 @@ const Index = () => {
       .select('id, amount, due_date, status, sale:credit_sales(concept, contact:contacts(nombre, telefono))')
       .in('status', ['LATE', 'PENDING'])
       .lte('due_date', new Date().toISOString().split('T')[0]);
+
+    // Data Financiera (Solo si es manager)
+    let financialData = { totalCreditSales: 0, totalCollected: 0, totalPending: 0, lateInstallments: 0, activeCredits: 0 };
+    if (isManager) {
+       const { data: salesData } = await supabase.from('credit_sales').select('total_amount, down_payment, status, installments:credit_installments(amount, status, due_date)');
+       if (salesData) {
+          salesData.forEach(sale => {
+             financialData.totalCreditSales += parseFloat(sale.total_amount) || 0;
+             financialData.totalCollected += parseFloat(sale.down_payment) || 0;
+             if (sale.status === 'ACTIVE') financialData.activeCredits++;
+             
+             sale.installments?.forEach((i: any) => {
+                const amt = parseFloat(i.amount) || 0;
+                if (i.status === 'PAID') {
+                   financialData.totalCollected += amt;
+                } else {
+                   financialData.totalPending += amt;
+                   const isLate = i.status === 'LATE' || (i.status === 'PENDING' && new Date(i.due_date) < new Date(new Date().toISOString().split('T')[0]));
+                   if (isLate) financialData.lateInstallments++;
+                }
+             });
+          });
+       }
+    }
 
     if (leads) {
       const allTasks: any[] = [];
@@ -95,7 +123,8 @@ const Index = () => {
         wonSales: leads.filter(l => l.buying_intent === 'COMPRADO').length,
         capiReady: leads.filter(l => l.email && l.email.includes('@')).length,
         recentLogs: logs || [],
-        tasks: allTasks.slice(0, 10)
+        tasks: allTasks.slice(0, 10),
+        financial: financialData
       });
     }
     setLoading(false);
@@ -137,7 +166,6 @@ const Index = () => {
                </CardHeader>
                <CardContent className="p-0">
                   <ScrollArea className="w-full">
-                     {/* Se fuerza un ancho mínimo para que la gráfica no se apriete y muestre el scroll horizontal si es necesario */}
                      <div className="min-w-[600px] h-[300px] p-6 pr-8">
                         <ResponsiveContainer width="100%" height="100%">
                           <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
@@ -185,6 +213,7 @@ const Index = () => {
           </div>
 
           <div className="lg:col-span-4 space-y-6">
+            {isManager && <FinancialOverviewCard stats={stats.financial} />}
             <SystemStatus />
             <BrainHealthCard health={{ adnCoreStatus: 'ok', ciaRules: 5, webHealth: 95, overallStatus: 'Operational' }} />
           </div>
