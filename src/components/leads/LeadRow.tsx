@@ -15,7 +15,7 @@ interface LeadRowProps {
 export const LeadRow = ({ lead, allTags, onClick }: LeadRowProps) => {
   if (!lead) return null;
   
-  // Forzamos conversión a string para evitar crashes de React
+  // ✅ CONVERSIÓN FORZADA A STRING PARA EVITAR CRASHES POR OBJETOS
   const nombre = String(lead.nombre || lead.telefono || 'Sin nombre');
   const telefono = String(lead.telefono || '');
   const email = String(lead.email || '');
@@ -53,9 +53,21 @@ export const LeadRow = ({ lead, allTags, onClick }: LeadRowProps) => {
                  {tags.map((rawTag: any, idx: number) => {
                      const tagText = extractTagText(rawTag);
                      if (!tagText) return null;
-                     const tagConf = tagsConfig.find(lt => lt.text === tagText);
+                     const tagConf = tagsConfig.find(lt => String(lt.text) === tagText);
+                     
+                     // Protección de colores para inline-styles
+                     const tagColor = String(tagConf?.color || '#475569');
+
                      return (
-                         <Badge key={`${tagText}-${idx}`} style={{ backgroundColor: (tagConf?.color || '#475569') + '15', color: tagConf?.color || '#94a3b8', borderColor: (tagConf?.color || '#475569') + '40' }} className="text-[8px] h-5 px-2 font-bold uppercase tracking-widest border">
+                         <Badge 
+                            key={`${tagText}-${idx}`} 
+                            style={{ 
+                                backgroundColor: tagColor + '15', 
+                                color: tagColor, 
+                                borderColor: tagColor + '40' 
+                            }} 
+                            className="text-[8px] h-5 px-2 font-bold uppercase tracking-widest border"
+                         >
                              {tagText}
                          </Badge>
                      );
@@ -66,7 +78,7 @@ export const LeadRow = ({ lead, allTags, onClick }: LeadRowProps) => {
       </TableCell>
       <TableCell className="text-center">
         <div className="inline-flex flex-col items-center bg-[#121214] px-4 py-1.5 rounded-xl border border-[#222225]">
-           <span className="text-xs font-bold text-indigo-400 font-mono">{lead.lead_score || 0}</span>
+           <span className="text-xs font-bold text-indigo-400 font-mono">{Number(lead.lead_score || 0)}</span>
         </div>
       </TableCell>
       <TableCell>

@@ -13,7 +13,7 @@ import { CreateLeadDialog } from '@/components/leads/CreateLeadDialog';
 import ChatViewer from '@/components/ChatViewer';
 import { toast } from 'sonner';
 import { useAuth } from '@/context/AuthContext';
-import { extractTagText } from '@/lib/tag-parser';
+import { extractTagText, parseTagsSafe } from '@/lib/tag-parser';
 
 const Leads = () => {
   const { user, isManager } = useAuth();
@@ -70,8 +70,8 @@ const Leads = () => {
     if (data) {
       const local = data.find(d => d.key === `agent_tags_${user.id}`)?.value;
       const global = data.find(d => d.key === 'global_tags')?.value;
-      if (local) try { const parsed = JSON.parse(local); if (Array.isArray(parsed)) setLocalTags(parsed); } catch {}
-      if (global) try { const parsed = JSON.parse(global); if (Array.isArray(parsed)) setGlobalTags(parsed); } catch {}
+      if (local) setLocalTags(parseTagsSafe(local));
+      if (global) setGlobalTags(parseTagsSafe(global));
     }
   };
 
@@ -93,16 +93,17 @@ const Leads = () => {
   const allTags = [...globalTags, ...localTags];
 
   const filtered = leads.filter(l => {
-    const term = searchTerm.toLowerCase().trim();
+    // PROTECCIÓN CRÍTICA: Convertir todo a String antes de usar toLowerCase()
+    const term = String(searchTerm || '').toLowerCase().trim();
     const contactTags = Array.isArray(l.tags) ? l.tags.map(extractTagText) : [];
     
-    const nombre = (l.nombre || '').toLowerCase();
-    const telefono = (l.telefono || '').toLowerCase();
-    const ciudad = (l.ciudad || '').toLowerCase();
+    const nombre = String(l.nombre || '').toLowerCase();
+    const telefono = String(l.telefono || '').toLowerCase();
+    const ciudad = String(l.ciudad || '').toLowerCase();
     
     const matchesSearch = term === '' || nombre.includes(term) || telefono.includes(term) || ciudad.includes(term);
     const matchesTag = selectedTagFilter === 'ALL' || contactTags.includes(selectedTagFilter);
-    const matchesIntent = selectedIntent === 'ALL' || (l.buying_intent || 'BAJO').toUpperCase() === selectedIntent;
+    const matchesIntent = selectedIntent === 'ALL' || String(l.buying_intent || 'BAJO').toUpperCase() === selectedIntent;
 
     return matchesSearch && matchesTag && matchesIntent;
   });
@@ -172,10 +173,10 @@ const Leads = () => {
             <SelectContent className="bg-[#121214] border-[#222225] text-white rounded-xl max-h-[300px]">
               <SelectItem value="ALL">Todas las Etiquetas</SelectItem>
               {allTags.map(t => (
-                <SelectItem key={t.id || t.text} value={t.text} className="focus:bg-[#161618]">
+                <SelectItem key={String(t.id || t.text)} value={String(t.text)} className="focus:bg-[#161618]">
                   <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: t.color }}></div>
-                    {t.text}
+                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: String(t.color || '#475569') }}></div>
+                    {String(t.text)}
                   </div>
                 </SelectItem>
               ))}
@@ -202,7 +203,7 @@ const Leads = () => {
               ) : (
                 filtered.map(lead => (
                   <LeadRow 
-                    key={lead.id} 
+                    key={String(lead.id)} 
                     lead={lead} 
                     allTags={allTags} 
                     onClick={() => handleOpenChat(lead)} 
