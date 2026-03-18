@@ -6,13 +6,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { 
-  Database, Loader2, Fingerprint, Trash2, Edit2, ChevronDown, User, Smartphone, Tag, Plus, ShieldAlert, Zap, X, Wallet, FileEdit, Globe, Bell, Mail, MapPin, Target, Send, StickyNote, CalendarClock
+  Database, Loader2, Fingerprint, Trash2, Edit2, ChevronDown, User, Smartphone, Tag, Plus, ShieldAlert, Zap, X, Wallet, FileEdit, Globe, Bell, Mail, MapPin, Target, Send, StickyNote, CalendarClock, Clock, ArrowRight, CheckCircle2, XCircle
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useAuth } from '@/context/AuthContext';
 import { cn } from '@/lib/utils';
-import { FinancialStatusBadge } from '@/components/contacts/FinancialStatusBadge';
 import { Textarea } from '@/components/ui/textarea';
 import { CreateCreditSaleDialog } from '@/components/contacts/CreateCreditSaleDialog';
 import { EditContactDialog } from '@/components/contacts/EditContactDialog';
@@ -182,7 +181,19 @@ export const MemoryPanel = ({
       await supabase.from('leads').update({ tags: newTags }).eq('id', currentAnalysis.id);
   };
 
-  // --- LÓGICA DE RECORDATORIOS ---
+  const handleIntentChange = async (newIntent: string) => {
+      if (currentAnalysis?.buying_intent === newIntent) return;
+      try {
+          await supabase.from('leads').update({ buying_intent: newIntent }).eq('id', currentAnalysis.id);
+          setMemoryForm({ ...memoryForm, buying_intent: newIntent });
+          if (currentAnalysis) currentAnalysis.buying_intent = newIntent;
+          toast.success(`Movido a: ${newIntent}`);
+          if (onAnalysisComplete) onAnalysisComplete();
+      } catch (err: any) {
+          toast.error("Error al actualizar etapa");
+      }
+  };
+
   const handleAddReminder = () => {
       const newReminder = {
           id: Date.now().toString(),
@@ -191,7 +202,7 @@ export const MemoryPanel = ({
           notify_minutes: 15
       };
       setMemoryForm({ ...memoryForm, reminders: [...(memoryForm.reminders || []), newReminder] });
-      setIsEditing(true); // Fuerza a que aparezca "Guardar Ficha"
+      setIsEditing(true);
   };
 
   const handleUpdateReminder = (id: string, field: string, val: any) => {
@@ -206,8 +217,14 @@ export const MemoryPanel = ({
       setIsEditing(true);
   };
 
+  // Cálculo de tiempo para retargeting
+  const minutesSinceLastMsg = currentAnalysis?.last_message_at 
+      ? Math.floor((new Date().getTime() - new Date(currentAnalysis.last_message_at).getTime()) / 60000) 
+      : 0;
+
   return (
     <div className="w-full flex-shrink-0 bg-[#0a0a0c] flex flex-col h-full text-slate-300">
+      {/* HEADER EMQ */}
       <div className="p-5 border-b border-[#1a1a1a]">
         <div className="flex justify-between items-center mb-3">
            <span className="text-[9px] font-bold text-[#7A8A9E] uppercase tracking-widest">Event Match Quality</span>
@@ -224,6 +241,7 @@ export const MemoryPanel = ({
       </div>
 
       <div className="flex-1 overflow-y-auto custom-scrollbar">
+        {/* BOTONES RÁPIDOS */}
         {contactData && (
            <div className="px-5 pt-5 flex gap-2">
               <Button onClick={() => setIsFullEditOpen(true)} variant="outline" className="flex-1 h-9 bg-[#121214] border-[#222225] hover:bg-[#161618] text-slate-300 text-[10px] font-bold uppercase tracking-widest"><FileEdit className="w-3.5 h-3.5 mr-1.5" /> Editar</Button>
@@ -231,12 +249,89 @@ export const MemoryPanel = ({
            </div>
         )}
 
+        {/* EMBUDO RÁPIDO (QUICK PIPELINE) */}
         <div className="p-5 border-b border-[#1a1a1a] space-y-4">
-           <h4 className="text-[10px] font-bold text-[#7A8A9E] uppercase tracking-widest flex items-center gap-2"><span className="w-3 h-3 border border-indigo-400 rounded-sm flex items-center justify-center text-[6px] text-indigo-400">💳</span> Auditoría de Pago</h4>
+           <h4 className="text-[10px] font-bold text-[#7A8A9E] uppercase tracking-widest flex items-center gap-2"><Target className="w-3.5 h-3.5" /> Etapa del Embudo</h4>
+           <div className="grid grid-cols-4 gap-1 bg-[#121214] p-1 rounded-xl border border-[#222225]">
+              {['BAJO', 'MEDIO', 'ALTO', 'COMPRADO'].map((intent, i) => {
+                 const isActive = currentAnalysis?.buying_intent === intent;
+                 const isLost = currentAnalysis?.buying_intent === 'PERDIDO';
+                 const labels = ['Hunting', 'Seducción', 'Cierre', 'Ganado'];
+                 const colors = ['bg-slate-700', 'bg-indigo-600', 'bg-amber-500', 'bg-emerald-500'];
+                 
+                 return (
+                    <button 
+                       key={intent} 
+                       onClick={() => handleIntentChange(intent)}
+                       className={cn(
+                          "relative h-8 rounded-lg text-[9px] font-bold uppercase tracking-widest transition-all",
+                          isActive ? cn(colors[i], "text-white shadow-lg") : "hover:bg-[#1a1a1d] text-slate-500",
+                          isLost && "opacity-30"
+                       )}
+                    >
+                       {labels[i]}
+                    </button>
+                 )
+              })}
+           </div>
+           {currentAnalysis?.buying_intent === 'PERDIDO' && (
+              <div className="text-center text-[10px] text-red-500 font-bold uppercase tracking-widest bg-red-950/20 py-1.5 rounded-lg border border-red-900/30">
+                 LEAD DESCARTADO / PERDIDO
+              </div>
+           )}
+        </div>
+
+        {/* RADAR DE RETARGETING IA */}
+        <div className="p-5 border-b border-[#1a1a1a] space-y-4">
+           <h4 className="text-[10px] font-bold text-[#7A8A9E] uppercase tracking-widest flex items-center gap-2"><Clock className="w-3.5 h-3.5" /> Motor de Retargeting IA</h4>
+           <div className="bg-[#121214] border border-[#222225] rounded-xl p-4 flex flex-col gap-3">
+              <div className="flex items-center justify-between">
+                 <span className="text-[10px] text-slate-400">Estatus del Piloto:</span>
+                 {currentAnalysis?.ai_paused ? (
+                    <Badge className="bg-red-950/40 text-red-400 border border-red-900/50 text-[9px] uppercase"><XCircle className="w-3 h-3 mr-1"/> Pausado Manual</Badge>
+                 ) : currentAnalysis?.buying_intent === 'COMPRADO' || currentAnalysis?.buying_intent === 'PERDIDO' ? (
+                    <Badge className="bg-slate-800 text-slate-400 border border-slate-700 text-[9px] uppercase"><CheckCircle2 className="w-3 h-3 mr-1"/> Desactivado (Fin)</Badge>
+                 ) : (
+                    <Badge className="bg-indigo-900/30 text-indigo-400 border border-indigo-500/30 text-[9px] uppercase"><Zap className="w-3 h-3 mr-1"/> Buscando Interacción</Badge>
+                 )}
+              </div>
+
+              {!currentAnalysis?.ai_paused && currentAnalysis?.buying_intent !== 'COMPRADO' && currentAnalysis?.buying_intent !== 'PERDIDO' && (
+                 <>
+                    <div className="flex justify-between text-[10px] font-mono">
+                       <span className="text-slate-500">Último mensaje:</span>
+                       <span className={cn("font-bold", minutesSinceLastMsg > 60 ? "text-amber-500" : "text-slate-300")}>
+                          {minutesSinceLastMsg} mins ago
+                       </span>
+                    </div>
+                    <div className="flex justify-between items-center pt-2 border-t border-[#222225]">
+                       <span className="text-[10px] text-slate-500">Fase Actual:</span>
+                       <div className="flex gap-1">
+                          {[0, 1, 2, 3].map(stage => (
+                             <div key={stage} className={cn(
+                                "w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-bold border",
+                                currentAnalysis?.followup_stage === stage ? "bg-amber-500 text-slate-950 border-amber-400 shadow-[0_0_8px_rgba(245,158,11,0.5)]" : 
+                                currentAnalysis?.followup_stage > stage ? "bg-emerald-900/30 text-emerald-500 border-emerald-500/30" : "bg-[#161618] text-slate-600 border-[#333336]"
+                             )}>
+                                {stage}
+                             </div>
+                          ))}
+                       </div>
+                    </div>
+                 </>
+              )}
+           </div>
+        </div>
+
+        {/* AUDITORÍA DE PAGO */}
+        <div className="p-5 border-b border-[#1a1a1a] space-y-4">
+           <h4 className="text-[10px] font-bold text-[#7A8A9E] uppercase tracking-widest flex items-center gap-2"><Wallet className="w-3.5 h-3.5 text-[#7A8A9E]" /> Auditoría de Pago</h4>
            <div className="bg-[#121214] border border-[#222225] rounded-xl p-4 space-y-4">
               <div className="flex justify-between items-center">
                  <span className="text-[10px] text-[#7A8A9E]">Dictamen IA:</span>
-                 <Badge variant="outline" className="text-[9px] border-[#222225] bg-[#0a0a0c] text-[#7A8A9E] h-5 px-2">{currentAnalysis?.payment_status === 'VALID' ? 'APROBADO' : 'SIN COMPROBANTE'}</Badge>
+                 <Badge variant="outline" className={cn("text-[9px] border-[#222225] h-5 px-2", currentAnalysis?.payment_status === 'VALID' ? 'bg-emerald-900/20 text-emerald-500 border-emerald-500/30' : 'bg-[#0a0a0c] text-[#7A8A9E]')}>
+                    {currentAnalysis?.payment_status === 'VALID' ? 'APROBADO' : 'SIN COMPROBANTE'}
+                 </Badge>
               </div>
               <div className="flex gap-3">
                  <Button onClick={() => handleUpdatePaymentStatus('VALID')} variant="outline" size="sm" className="flex-1 h-8 bg-transparent border-emerald-900/50 text-emerald-500 hover:bg-emerald-950/30 text-[10px] uppercase font-bold tracking-widest">Validar</Button>
@@ -259,24 +354,6 @@ export const MemoryPanel = ({
                  </div>
                  <Input value={String(memoryForm.email)} onChange={e => setMemoryForm({...memoryForm, email: e.target.value})} placeholder="Email" className="h-8 text-xs bg-[#0a0a0c] border-[#222225]" />
                  
-                 <div className="space-y-1.5 mt-2 pt-2 border-t border-[#222225]">
-                    <Label className="text-[9px] uppercase font-bold text-[#7A8A9E] tracking-widest flex items-center gap-1">
-                       <Target className="w-3 h-3"/> Etapa del Embudo
-                    </Label>
-                    <Select value={String(memoryForm.buying_intent || 'BAJO')} onValueChange={v => setMemoryForm({...memoryForm, buying_intent: v})}>
-                       <SelectTrigger className="h-8 text-xs bg-[#0a0a0c] border-[#222225]">
-                          <SelectValue />
-                       </SelectTrigger>
-                       <SelectContent className="bg-[#121214] border-[#222225] text-white">
-                          <SelectItem value="BAJO">Data Hunting (Bajo)</SelectItem>
-                          <SelectItem value="MEDIO">Seducción (Medio)</SelectItem>
-                          <SelectItem value="ALTO">Cierre (Alto)</SelectItem>
-                          <SelectItem value="COMPRADO">Ganado (Comprado)</SelectItem>
-                          <SelectItem value="PERDIDO">Perdido / Descartado</SelectItem>
-                       </SelectContent>
-                    </Select>
-                 </div>
-
                  <Button onClick={onSave} disabled={saving} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white h-9 text-xs font-bold rounded-lg uppercase tracking-widest mt-2 shadow-lg">{saving ? <Loader2 className="w-4 h-4 animate-spin" /> : "Guardar Ficha"}</Button>
               </div>
            ) : (
