@@ -1,15 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import Layout from '@/components/Layout';
 import { supabase } from '@/integrations/supabase/client';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { 
-  Trello, Loader2, Fingerprint, Image, Target, DollarSign, UserPlus, 
-  MapPin, CheckCircle2, Bot, Clock, AlertTriangle, MessageCircle, Wallet, CalendarDays, XCircle
+  Trello, Loader2, Fingerprint, Image, Target, UserPlus, 
+  MapPin, CheckCircle2, Bot, AlertTriangle, Wallet, XCircle, Eye, EyeOff
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import ChatViewer from '@/components/ChatViewer';
@@ -33,6 +33,7 @@ const Pipeline = () => {
   
   const [draggedLeadId, setDraggedLeadId] = useState<string | null>(null);
   const [filterAgent, setFilterAgent] = useState<string>('ALL');
+  const [showLost, setShowLost] = useState<boolean>(false);
 
   useEffect(() => {
     fetchLeads();
@@ -75,7 +76,7 @@ const Pipeline = () => {
      const tid = toast.loading("Actualizando etapa...");
      try {
         await supabase.from('leads').update({ buying_intent: targetIntent }).eq('id', draggedLeadId);
-        toast.success("Lead movido.", { id: tid });
+        toast.success("Lead movido exitosamente.", { id: tid });
         fetchLeads();
      } catch (err) { toast.error("Error al mover lead.", { id: tid }); }
   };
@@ -91,20 +92,21 @@ const Pipeline = () => {
     setIsChatOpen(true);
   };
 
-  const columns = [
+  const allColumns = [
     { id: 'BAJO', title: 'Data Hunting', icon: Fingerprint, color: 'border-slate-800', headerBg: 'bg-[#161618]', dot: 'bg-slate-500' },
     { id: 'MEDIO', title: 'Seducción', icon: Image, color: 'border-indigo-900/30', headerBg: 'bg-indigo-950/20', dot: 'bg-indigo-500' },
     { id: 'ALTO', title: 'Cierre ($)', icon: Target, color: 'border-amber-900/30', headerBg: 'bg-amber-950/20', dot: 'bg-amber-500' },
     { id: 'COMPRADO', title: 'Ganado', icon: CheckCircle2, color: 'border-emerald-900/30', headerBg: 'bg-emerald-950/20', dot: 'bg-emerald-500' },
-    { id: 'PERDIDO', title: 'Perdido / Descartado', icon: XCircle, color: 'border-red-900/30', headerBg: 'bg-red-950/20', dot: 'bg-red-500' }
+    { id: 'PERDIDO', title: 'Perdidos / Descartados', icon: XCircle, color: 'border-red-900/30', headerBg: 'bg-red-950/20', dot: 'bg-red-500' }
   ];
 
+  const visibleColumns = showLost ? allColumns : allColumns.filter(c => c.id !== 'PERDIDO');
   const allTags = [...globalTags, ...localTags];
 
   return (
     <Layout>
       <div className="max-w-[1800px] mx-auto space-y-6 h-[calc(100vh-140px)] flex flex-col">
-        <div className="flex justify-between items-center bg-[#0a0a0c] p-5 rounded-3xl border border-[#1a1a1a] shadow-2xl">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center bg-[#0a0a0c] p-5 rounded-3xl border border-[#1a1a1a] shadow-2xl gap-4">
            <div className="flex items-center gap-4">
               <div className="p-2.5 bg-indigo-500/10 rounded-xl border border-indigo-500/20">
                  <Trello className="w-6 h-6 text-indigo-400" />
@@ -114,10 +116,18 @@ const Pipeline = () => {
                  <p className="text-xs text-slate-500 mt-0.5">Arrastra las tarjetas para cambiar su etapa de maduración.</p>
               </div>
            </div>
-           <div className="flex gap-3">
+           <div className="flex flex-wrap gap-3">
+              <Button 
+                variant="outline" 
+                onClick={() => setShowLost(!showLost)}
+                className={cn("h-11 px-4 rounded-xl text-xs uppercase tracking-widest font-bold transition-all", showLost ? "bg-red-900/20 border-red-500/30 text-red-400" : "bg-[#121214] border-[#222225] text-slate-400 hover:text-white")}
+              >
+                 {showLost ? <EyeOff className="w-4 h-4 mr-2"/> : <Eye className="w-4 h-4 mr-2"/>}
+                 {showLost ? 'Ocultar Perdidos' : 'Ver Perdidos'}
+              </Button>
               {isManager && (
                  <Select value={filterAgent} onValueChange={setFilterAgent}>
-                    <SelectTrigger className="w-56 bg-[#121214] border-[#222225] h-11 rounded-xl text-sm font-bold text-slate-300">
+                    <SelectTrigger className="w-48 bg-[#121214] border-[#222225] h-11 rounded-xl text-sm font-bold text-slate-300">
                        <SelectValue placeholder="Asesor" />
                     </SelectTrigger>
                     <SelectContent className="bg-[#0f0f11] border-[#222225] text-white rounded-xl">
@@ -133,8 +143,8 @@ const Pipeline = () => {
         </div>
 
         <div className="flex-1 flex gap-5 min-h-0 overflow-x-auto pb-4 custom-scrollbar">
-          {columns.map((col) => {
-              const colLeads = leads.filter(l => (l.buying_intent || 'BAJO').toUpperCase() === col.id && (filterAgent === 'ALL' || l.assigned_to === filterAgent));
+          {visibleColumns.map((col) => {
+              const colLeads = leads.filter(l => (String(l.buying_intent || 'BAJO').toUpperCase() === col.id) && (filterAgent === 'ALL' || l.assigned_to === filterAgent));
               return (
               <div key={col.id} className={cn("rounded-3xl border flex flex-col min-h-0 min-w-[340px] w-[340px] shrink-0 bg-[#0a0a0c]/80 backdrop-blur-sm shadow-xl", col.color)} onDragOver={(e) => e.preventDefault()} onDrop={(e) => handleDrop(e, col.id)}>
                 <div className={cn("p-4 border-b border-[#1a1a1a] flex justify-between items-center rounded-t-3xl", col.headerBg)}>

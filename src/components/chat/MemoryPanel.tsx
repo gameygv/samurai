@@ -5,7 +5,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { 
-  Database, Loader2, Fingerprint, Trash2, Edit2, ChevronDown, User, Smartphone, Tag, Plus, ShieldAlert, Zap, X, Wallet, FileEdit, Globe, Bell, Mail, MapPin
+  Database, Loader2, Fingerprint, Trash2, Edit2, ChevronDown, User, Smartphone, Tag, Plus, ShieldAlert, Zap, X, Wallet, FileEdit, Globe, Bell, Mail, MapPin, Target
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -221,6 +221,26 @@ export const MemoryPanel = ({
                     <Input value={String(memoryForm.ciudad)} onChange={e => setMemoryForm({...memoryForm, ciudad: e.target.value})} placeholder="Ciudad" className="h-8 text-xs bg-[#0a0a0c] border-[#222225]" />
                  </div>
                  <Input value={String(memoryForm.email)} onChange={e => setMemoryForm({...memoryForm, email: e.target.value})} placeholder="Email" className="h-8 text-xs bg-[#0a0a0c] border-[#222225]" />
+                 
+                 {/* CAMPO DE RECUPERACIÓN / CAMBIO DE ETAPA */}
+                 <div className="space-y-1.5 mt-2 pt-2 border-t border-[#222225]">
+                    <Label className="text-[9px] uppercase font-bold text-[#7A8A9E] tracking-widest flex items-center gap-1">
+                       <Target className="w-3 h-3"/> Etapa del Embudo
+                    </Label>
+                    <Select value={String(memoryForm.buying_intent || 'BAJO')} onValueChange={v => setMemoryForm({...memoryForm, buying_intent: v})}>
+                       <SelectTrigger className="h-8 text-xs bg-[#0a0a0c] border-[#222225]">
+                          <SelectValue />
+                       </SelectTrigger>
+                       <SelectContent className="bg-[#121214] border-[#222225] text-white">
+                          <SelectItem value="BAJO">Data Hunting (Bajo)</SelectItem>
+                          <SelectItem value="MEDIO">Seducción (Medio)</SelectItem>
+                          <SelectItem value="ALTO">Cierre (Alto)</SelectItem>
+                          <SelectItem value="COMPRADO">Ganado (Comprado)</SelectItem>
+                          <SelectItem value="PERDIDO">Perdido / Descartado</SelectItem>
+                       </SelectContent>
+                    </Select>
+                 </div>
+
                  <Button onClick={onSave} disabled={saving} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white h-9 text-xs font-bold rounded-lg uppercase tracking-widest mt-2 shadow-lg">{saving ? <Loader2 className="w-4 h-4 animate-spin" /> : "Guardar Ficha"}</Button>
               </div>
            ) : (
@@ -238,7 +258,6 @@ export const MemoryPanel = ({
                              <p className="text-[11px] text-indigo-400 mt-1 flex items-center gap-1.5 font-bold"><Smartphone className="w-3 h-3 text-indigo-400"/> {currentChannelName}</p>
                           </div>
                           
-                          {/* DATO AÑADIDO: EMAIL Y CIUDAD EN LECTURA */}
                           <div className="col-span-2 grid grid-cols-2 gap-4 mt-1 mb-1 p-3 bg-[#121214] rounded-xl border border-[#222225]">
                              <div className="overflow-hidden">
                                 <span className="text-[9px] text-[#7A8A9E] uppercase font-bold tracking-widest flex items-center gap-1"><Mail className="w-3 h-3"/> Email</span>
