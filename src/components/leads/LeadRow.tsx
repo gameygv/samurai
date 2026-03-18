@@ -2,17 +2,18 @@ import React from 'react';
 import { TableRow, TableCell } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Mail, MapPin, Target, ChevronRight } from 'lucide-react';
+import { Mail, MapPin, Target, ChevronRight, Globe, User as UserIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { extractTagText } from '@/lib/tag-parser';
 
 interface LeadRowProps {
   lead: any;
   allTags: {id: string, text: string, color: string}[];
+  globalTags: {id: string, text: string, color: string}[];
   onClick: () => void;
 }
 
-export const LeadRow = ({ lead, allTags, onClick }: LeadRowProps) => {
+export const LeadRow = ({ lead, allTags, globalTags, onClick }: LeadRowProps) => {
   if (!lead) return null;
   
   // ✅ CONVERSIÓN FORZADA A STRING PARA EVITAR CRASHES POR OBJETOS
@@ -54,6 +55,7 @@ export const LeadRow = ({ lead, allTags, onClick }: LeadRowProps) => {
                      const tagText = extractTagText(rawTag);
                      if (!tagText) return null;
                      const tagConf = tagsConfig.find(lt => String(lt.text) === tagText);
+                     const isGlobal = globalTags.some(gt => String(gt.text) === tagText);
                      
                      // Protección de colores para inline-styles
                      const tagColor = String(tagConf?.color || '#475569');
@@ -66,9 +68,10 @@ export const LeadRow = ({ lead, allTags, onClick }: LeadRowProps) => {
                                 color: tagColor, 
                                 borderColor: tagColor + '40' 
                             }} 
-                            className="text-[8px] h-5 px-2 font-bold uppercase tracking-widest border"
+                            className="text-[8px] h-5 px-1.5 font-bold uppercase tracking-widest border flex items-center gap-1"
                          >
-                             {tagText}
+                             {isGlobal ? <Globe className="w-2.5 h-2.5 opacity-70 shrink-0"/> : <UserIcon className="w-2.5 h-2.5 opacity-70 shrink-0"/>}
+                             <span className="truncate max-w-[100px]">{tagText}</span>
                          </Badge>
                      );
                  })}

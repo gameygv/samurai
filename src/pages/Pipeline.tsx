@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { 
   Trello, Loader2, Fingerprint, Image, Target, UserPlus, 
-  MapPin, CheckCircle2, Bot, AlertTriangle, Wallet, XCircle, Eye, EyeOff
+  MapPin, CheckCircle2, Bot, AlertTriangle, Wallet, XCircle, Eye, EyeOff, Globe, User as UserIcon
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import ChatViewer from '@/components/ChatViewer';
@@ -197,12 +197,18 @@ const Pipeline = () => {
                                        const t = extractTagText(rawTag);
                                        if (!t) return null;
                                        const tagConf = allTags.find(lt => lt.text === t);
+                                       const isGlobal = globalTags.some(gt => gt.text === t);
                                        const bgColor = tagConf ? tagConf.color + '15' : '#1e293b';
                                        const textColor = tagConf ? tagConf.color : '#94a3b8';
                                        const borderColor = tagConf ? tagConf.color + '40' : '#334155';
-                                       return <Badge key={`${t}-${idx}`} style={{ backgroundColor: bgColor, color: textColor, borderColor }} className="text-[8px] h-4 px-1.5 font-bold uppercase border tracking-widest truncate max-w-[80px]">{t}</Badge>
+                                       return (
+                                          <Badge key={`${t}-${idx}`} style={{ backgroundColor: bgColor, color: textColor, borderColor }} className="text-[8px] h-5 px-1.5 font-bold uppercase border tracking-widest truncate max-w-[80px] flex items-center gap-1">
+                                             {isGlobal ? <Globe className="w-2.5 h-2.5 opacity-70 shrink-0"/> : <UserIcon className="w-2.5 h-2.5 opacity-70 shrink-0"/>}
+                                             <span className="truncate">{t}</span>
+                                          </Badge>
+                                       )
                                    })}
-                                   {lead.tags.length > 3 && <Badge variant="outline" className="text-[8px] h-4 px-1 border-[#222225] text-slate-500">+{lead.tags.length - 3}</Badge>}
+                                   {lead.tags.length > 3 && <Badge variant="outline" className="text-[8px] h-5 px-1 border-[#222225] text-slate-500">+{lead.tags.length - 3}</Badge>}
                                </div>
                            )}
 

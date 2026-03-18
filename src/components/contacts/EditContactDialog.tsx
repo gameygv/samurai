@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Textarea } from '@/components/ui/textarea';
-import { Loader2, User, Users, Save, Mail, MapPin, Phone, Tag, X, Plus, GraduationCap, FileText, Calendar, Send, UserCheck, Trash2 } from 'lucide-react';
+import { Loader2, User, Users, Save, Mail, MapPin, Phone, Tag, X, Plus, GraduationCap, FileText, Calendar, Send, UserCheck, Trash2, Globe } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useAuth } from '@/context/AuthContext';
@@ -19,10 +19,11 @@ interface EditContactDialogProps {
   contact: any;
   existingGroups: string[];
   allTags: {id: string, text: string, color: string}[];
+  globalTags: {id: string, text: string, color: string}[];
   onSuccess: () => void;
 }
 
-export const EditContactDialog = ({ open, onOpenChange, contact, existingGroups, allTags, onSuccess }: EditContactDialogProps) => {
+export const EditContactDialog = ({ open, onOpenChange, contact, existingGroups, allTags, globalTags, onSuccess }: EditContactDialogProps) => {
   const { profile } = useAuth();
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
@@ -31,11 +32,7 @@ export const EditContactDialog = ({ open, onOpenChange, contact, existingGroups,
   });
 
   const [catalog, setCatalog] = useState({ courses: [] as any[], locations: [] as any[], teachers: [] as any[] });
-  
-  // Estado para un nuevo curso
   const [newCourse, setNewCourse] = useState({ course: '', location: '', teacher: '', date: '' });
-  
-  // Estado para una nueva nota
   const [newNote, setNewNote] = useState('');
 
   useEffect(() => {
@@ -190,23 +187,33 @@ export const EditContactDialog = ({ open, onOpenChange, contact, existingGroups,
                                 <div className="flex flex-wrap gap-2 items-center bg-[#0a0a0c] p-2 min-h-[44px] rounded-xl border border-[#222225]">
                                     {formData.tags.map((t: string) => {
                                         const tagConf = allTags.find(lt => lt.text === t);
+                                        const isGlobal = globalTags.some(gt => gt.text === t);
                                         const bgColor = tagConf ? tagConf.color + '15' : '#1e293b';
                                         const textColor = tagConf ? tagConf.color : '#94a3b8';
                                         const borderColor = tagConf ? tagConf.color + '40' : '#334155';
                                         return (
-                                            <Badge key={t} style={{ backgroundColor: bgColor, color: textColor, borderColor }} className="text-[9px] h-6 border pr-1 font-bold">
-                                                {t} <button type="button" onClick={() => handleRemoveTag(t)} className="ml-1 hover:text-white rounded-full p-0.5 transition-colors"><X className="w-3 h-3"/></button>
+                                            <Badge key={t} style={{ backgroundColor: bgColor, color: textColor, borderColor }} className="text-[9px] h-6 border pr-1 pl-1.5 font-bold flex items-center gap-1">
+                                                {isGlobal ? <Globe className="w-2.5 h-2.5 opacity-70 shrink-0"/> : <User className="w-2.5 h-2.5 opacity-70 shrink-0"/>}
+                                                <span className="truncate">{t}</span>
+                                                <button type="button" onClick={() => handleRemoveTag(t)} className="ml-0.5 hover:bg-black/20 rounded-full p-0.5 transition-colors"><X className="w-3 h-3"/></button>
                                             </Badge>
                                         );
                                     })}
                                     <Select onValueChange={(v) => { if(v) handleAddTag(v); }}>
                                         <SelectTrigger className="h-6 text-[10px] bg-transparent border border-dashed border-[#333336] hover:bg-[#161618] text-slate-400 w-auto px-3 shadow-none focus:ring-0 rounded-full transition-colors"><Plus className="w-3 h-3 mr-1" /> Añadir</SelectTrigger>
-                                        <SelectContent className="bg-[#121214] border-[#222225]">
-                                            {allTags.map(tag => (
-                                                <SelectItem key={tag.id} value={tag.text} className="text-xs text-white focus:bg-[#161618] cursor-pointer">
-                                                    <div className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-full shadow-inner" style={{backgroundColor: tag.color}}></div>{tag.text}</div>
-                                                </SelectItem>
-                                            ))}
+                                        <SelectContent className="bg-[#121214] border-[#222225] max-h-[300px]">
+                                            {allTags.map(tag => {
+                                                const isGlobal = globalTags.some(gt => gt.text === tag.text);
+                                                return (
+                                                    <SelectItem key={tag.id} value={tag.text} className="text-xs text-white focus:bg-[#161618] cursor-pointer py-2">
+                                                        <div className="flex items-center gap-2">
+                                                            {isGlobal ? <Globe className="w-3 h-3 opacity-50"/> : <User className="w-3 h-3 opacity-50"/>}
+                                                            <div className="w-2.5 h-2.5 rounded-full shadow-inner" style={{backgroundColor: tag.color}}></div>
+                                                            {tag.text}
+                                                        </div>
+                                                    </SelectItem>
+                                                )
+                                            })}
                                         </SelectContent>
                                     </Select>
                                 </div>

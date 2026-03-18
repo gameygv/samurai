@@ -16,7 +16,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { 
   Search, Loader2, MapPin, Phone, Trash2, 
   Users, FileSpreadsheet, Megaphone, X, Mail, Edit3, FolderInput,
-  UserPlus, ExternalLink, Filter, Wallet, DollarSign, CheckSquare, Download, GraduationCap, Tags
+  UserPlus, ExternalLink, Filter, Wallet, DollarSign, CheckSquare, Download, GraduationCap, Tags, Globe, User as UserIcon
 } from 'lucide-react';
 import { toast } from 'sonner';
 import Papa from 'papaparse';
@@ -276,7 +276,6 @@ const Contacts = () => {
     }
   };
 
-  // FILTRO INTELIGENTE (AND LOGIC PARA TAGS)
   const filteredContacts = contacts.filter(c => {
     const term = searchTerm.toLowerCase();
     const contactTags = Array.isArray(c.tags) ? c.tags.map((t:any) => extractTagText(t)) : [];
@@ -287,7 +286,6 @@ const Contacts = () => {
     const matchesStatus = selectedStatusFilter === 'ALL' || (c.financial_status || 'Sin transacción') === selectedStatusFilter;
     const matchesDebt = debtFilter === 'ALL' || (debtFilter === 'CON_DEUDA' ? c.total_debt > 0 : c.total_debt === 0);
     
-    // Logica AND para Etiquetas (debe tener TODAS las etiquetas seleccionadas)
     const matchesTag = selectedTags.length === 0 || selectedTags.every(t => contactTags.includes(t));
 
     return matchesSearch && matchesGroup && matchesCity && matchesStatus && matchesTag && matchesDebt;
@@ -354,17 +352,16 @@ const Contacts = () => {
             </SelectContent>
           </Select>
 
-          {/* MULTI-SELECT ETIQUETAS */}
           <Popover>
             <PopoverTrigger asChild>
               <Button variant="outline" className={cn("w-[160px] h-10 bg-[#161618] border-[#222225] justify-start text-xs rounded-xl", selectedTags.length > 0 ? "text-indigo-400" : "text-slate-300")}>
                 {selectedTags.length > 0 ? `${selectedTags.length} Seleccionadas` : 'Etiquetas...'}
               </Button>
             </PopoverTrigger>
-            <PopoverContent className="w-[200px] p-0 bg-[#121214] border-[#222225] text-white rounded-xl shadow-2xl">
+            <PopoverContent className="w-[240px] p-0 bg-[#121214] border-[#222225] text-white rounded-xl shadow-2xl">
               <Command className="bg-transparent">
                 <CommandInput placeholder="Buscar etiqueta..." className="text-xs h-10" />
-                <CommandList className="max-h-[250px] overflow-y-auto custom-scrollbar">
+                <CommandList className="max-h-[300px] overflow-y-auto custom-scrollbar">
                    <CommandEmpty className="py-6 text-center text-xs text-slate-500">No encontrada.</CommandEmpty>
                    <CommandGroup>
                      {selectedTags.length > 0 && (
@@ -372,15 +369,19 @@ const Contacts = () => {
                            <X className="w-3 h-3 mr-2 text-red-400" /> Borrar selección
                         </CommandItem>
                      )}
-                     {allTags.map(t => (
-                        <CommandItem key={t.id || t.text} onSelect={() => toggleTagSelection(t.text)} className="text-xs focus:bg-[#161618] focus:text-white cursor-pointer py-2">
-                           <div className="flex items-center gap-3">
-                             <Checkbox checked={selectedTags.includes(t.text)} className="border-slate-600 rounded" />
-                             <div className="w-2.5 h-2.5 rounded-full shadow-inner" style={{ backgroundColor: t.color }}></div>
-                             <span className="truncate">{t.text}</span>
-                           </div>
-                        </CommandItem>
-                     ))}
+                     {allTags.map(t => {
+                        const isGlobal = globalTags.some(gt => gt.text === t.text);
+                        return (
+                          <CommandItem key={t.id || t.text} onSelect={() => toggleTagSelection(t.text)} className="text-xs focus:bg-[#161618] focus:text-white cursor-pointer py-2">
+                             <div className="flex items-center gap-3">
+                               <Checkbox checked={selectedTags.includes(t.text)} className="border-slate-600 rounded" />
+                               {isGlobal ? <Globe className="w-3 h-3 opacity-50 shrink-0"/> : <UserIcon className="w-3 h-3 opacity-50 shrink-0"/>}
+                               <div className="w-2.5 h-2.5 rounded-full shadow-inner shrink-0" style={{ backgroundColor: t.color }}></div>
+                               <span className="truncate">{t.text}</span>
+                             </div>
+                          </CommandItem>
+                        )
+                     })}
                    </CommandGroup>
                 </CommandList>
               </Command>
@@ -461,7 +462,13 @@ const Contacts = () => {
                               const t = extractTagText(rawTag);
                               if (!t) return null;
                               const tagConf = allTags.find(lt => lt.text === t);
-                              return <Badge key={`${t}-${idx}`} style={{ backgroundColor: (tagConf?.color || '#475569') + '15', color: tagConf?.color || '#94a3b8', borderColor: (tagConf?.color || '#475569') + '40' }} className="text-[9px] h-5 px-2 font-bold uppercase tracking-widest border">{t}</Badge>;
+                              const isGlobal = globalTags.some(gt => gt.text === t);
+                              return (
+                                <Badge key={`${t}-${idx}`} style={{ backgroundColor: (tagConf?.color || '#475569') + '15', color: tagConf?.color || '#94a3b8', borderColor: (tagConf?.color || '#475569') + '40' }} className="text-[9px] h-5 px-1.5 font-bold uppercase tracking-widest border flex items-center gap-1">
+                                  {isGlobal ? <Globe className="w-2.5 h-2.5 opacity-70 shrink-0"/> : <UserIcon className="w-2.5 h-2.5 opacity-70 shrink-0"/>}
+                                  <span className="truncate max-w-[120px]">{t}</span>
+                                </Badge>
+                              );
                             })}
                           </div>
                         )}
@@ -535,7 +542,7 @@ const Contacts = () => {
         </AlertDialogContent>
       </AlertDialog>
 
-      <EditContactDialog open={isEditOpen} onOpenChange={setIsEditOpen} contact={contactToEdit} existingGroups={groups} allTags={allTags} onSuccess={fetchContacts} />
+      <EditContactDialog open={isEditOpen} onOpenChange={setIsEditOpen} contact={contactToEdit} existingGroups={groups} allTags={allTags} globalTags={globalTags} onSuccess={fetchContacts} />
       <ImportContactsDialog open={isImportOpen} onOpenChange={setIsImportOpen} onSuccess={fetchContacts} />
       <MassMessageDialog open={isMassMessageOpen} onOpenChange={setIsMassMessageOpen} targetContacts={contacts.filter(c => selectedIds.includes(c.id))} />
       {isCreateOpen && <CreateLeadDialog open={isCreateOpen} onOpenChange={setIsCreateOpen} onSuccess={fetchContacts} />}

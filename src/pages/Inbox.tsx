@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { 
   Search, Loader2, MessageCircle, Bot, Zap, 
-  CreditCard, MessageSquarePlus, Play, Pause, X, Menu, ShoppingCart, User, AlertTriangle, MapPin, Mail, Tag
+  CreditCard, MessageSquarePlus, Play, Pause, X, Menu, ShoppingCart, User, AlertTriangle, MapPin, Mail, Tag, Globe
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -267,12 +267,18 @@ const Inbox = () => {
                                 {lead.email && <span className="flex items-center gap-1 text-emerald-400"><Mail className="w-2.5 h-2.5"/>OK</span>}
                              </div>
                              {Array.isArray(lead.tags) && lead.tags.length > 0 && (
-                                <div className="flex gap-1 mt-1.5 flex-wrap">
+                                <div className="flex gap-1.5 mt-1.5 flex-wrap">
                                    {lead.tags.map((rawTag: any, idx: number) => {
                                       const t = extractTagText(rawTag);
                                       if (!t) return null;
                                       const tagConf = allTags.find(lt => lt.text === t);
-                                      return <Badge key={`${t}-${idx}`} variant="outline" className="text-[8px] h-3.5 px-1 font-medium" style={{ backgroundColor: (tagConf?.color || '#1e293b') + '20', color: tagConf?.color || '#94a3b8', borderColor: (tagConf?.color || '#334155') + '50' }}>{t}</Badge>
+                                      const isGlobal = globalTags.some(gt => gt.text === t);
+                                      return (
+                                        <Badge key={`${t}-${idx}`} variant="outline" className="text-[8px] h-4 px-1 font-medium flex items-center gap-1" style={{ backgroundColor: (tagConf?.color || '#1e293b') + '20', color: tagConf?.color || '#94a3b8', borderColor: (tagConf?.color || '#334155') + '50' }}>
+                                           {isGlobal ? <Globe className="w-2 h-2 opacity-70 shrink-0"/> : <User className="w-2 h-2 opacity-70 shrink-0"/>}
+                                           <span className="truncate max-w-[80px]">{t}</span>
+                                        </Badge>
+                                      );
                                    })}
                                 </div>
                              )}
@@ -330,7 +336,7 @@ const Inbox = () => {
                                  
                                  {Array.isArray(globalReplies) && globalReplies.length > 0 && <>
                                     <DropdownMenuSeparator className="bg-[#222225] my-2"/>
-                                    <DropdownMenuLabel className="text-[10px] uppercase text-slate-500 font-bold">Plantillas Globales</DropdownMenuLabel>
+                                    <DropdownMenuLabel className="text-[10px] uppercase text-slate-500 font-bold flex items-center gap-1.5"><Globe className="w-3 h-3"/> Globales (Equipo)</DropdownMenuLabel>
                                     {globalReplies.map((qr) => (
                                        <DropdownMenuItem key={qr.id || qr.title} onClick={() => setDraftMessage(qr.text)} className="cursor-pointer text-xs focus:bg-[#161618] focus:text-white">
                                           <MessageSquarePlus className="w-3 h-3 mr-2 text-indigo-400 shrink-0" /><span className="truncate">{String(qr.title)}</span>
@@ -340,7 +346,7 @@ const Inbox = () => {
 
                                  {Array.isArray(localReplies) && localReplies.length > 0 && <>
                                     <DropdownMenuSeparator className="bg-[#222225] my-2"/>
-                                    <DropdownMenuLabel className="text-[10px] uppercase text-slate-500 font-bold">Mis Plantillas Privadas</DropdownMenuLabel>
+                                    <DropdownMenuLabel className="text-[10px] uppercase text-slate-500 font-bold flex items-center gap-1.5"><User className="w-3 h-3"/> Mis Plantillas (Personal)</DropdownMenuLabel>
                                     {localReplies.map((qr) => (
                                        <DropdownMenuItem key={qr.id || qr.title} onClick={() => setDraftMessage(qr.text)} className="cursor-pointer text-xs focus:bg-[#161618] focus:text-white">
                                           <MessageSquarePlus className="w-3 h-3 mr-2 text-amber-500 shrink-0" /><span className="truncate">{String(qr.title)}</span>

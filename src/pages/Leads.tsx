@@ -7,7 +7,7 @@ import { Table, TableBody, TableHeader, TableRow, TableHead, TableCell } from '@
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Search, Loader2, Target, UserPlus, Sparkles, Filter } from 'lucide-react';
+import { Search, Loader2, Target, UserPlus, Sparkles, Filter, Globe, User as UserIcon } from 'lucide-react';
 import { LeadRow } from '@/components/leads/LeadRow';
 import { CreateLeadDialog } from '@/components/leads/CreateLeadDialog';
 import ChatViewer from '@/components/ChatViewer';
@@ -93,7 +93,6 @@ const Leads = () => {
   const allTags = [...globalTags, ...localTags];
 
   const filtered = leads.filter(l => {
-    // PROTECCIÓN CRÍTICA: Convertir todo a String antes de usar toLowerCase()
     const term = String(searchTerm || '').toLowerCase().trim();
     const contactTags = Array.isArray(l.tags) ? l.tags.map(extractTagText) : [];
     
@@ -173,14 +172,18 @@ const Leads = () => {
             </SelectTrigger>
             <SelectContent className="bg-[#121214] border-[#222225] text-white rounded-xl max-h-[300px]">
               <SelectItem value="ALL">Todas las Etiquetas</SelectItem>
-              {allTags.map(t => (
-                <SelectItem key={String(t.id || t.text)} value={String(t.text)} className="focus:bg-[#161618]">
-                  <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: String(t.color || '#475569') }}></div>
-                    {String(t.text)}
-                  </div>
-                </SelectItem>
-              ))}
+              {allTags.map(t => {
+                const isGlobal = globalTags.some(gt => gt.text === t.text);
+                return (
+                  <SelectItem key={String(t.id || t.text)} value={String(t.text)} className="focus:bg-[#161618]">
+                    <div className="flex items-center gap-2">
+                      {isGlobal ? <Globe className="w-3 h-3 opacity-50 shrink-0"/> : <UserIcon className="w-3 h-3 opacity-50 shrink-0"/>}
+                      <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: String(t.color || '#475569') }}></div>
+                      <span className="truncate">{String(t.text)}</span>
+                    </div>
+                  </SelectItem>
+                )
+              })}
             </SelectContent>
           </Select>
         </div>
@@ -206,7 +209,8 @@ const Leads = () => {
                   <LeadRow 
                     key={String(lead.id)} 
                     lead={lead} 
-                    allTags={allTags} 
+                    allTags={allTags}
+                    globalTags={globalTags}
                     onClick={() => handleOpenChat(lead)} 
                   />
                 ))
