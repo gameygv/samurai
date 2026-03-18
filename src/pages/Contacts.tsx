@@ -14,7 +14,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { 
   Search, Loader2, MapPin, Phone, Trash2, 
   Users, FileSpreadsheet, Megaphone, X, Mail, Edit3, FolderInput,
-  UserPlus, ExternalLink, Filter, Wallet, DollarSign, CheckSquare, Download
+  UserPlus, ExternalLink, Filter, Wallet, DollarSign, CheckSquare, Download, GraduationCap
 } from 'lucide-react';
 import { toast } from 'sonner';
 import Papa from 'papaparse';
@@ -94,7 +94,11 @@ const Contacts = () => {
       const mappedData = data.map(c => {
         const activeSales = c.credit_sales?.filter((s: any) => s.status === 'ACTIVE') || [];
         const totalDebt = activeSales.reduce((acc: number, sale: any) => acc + Number(sale.total_amount), 0);
-        return { ...c, total_debt: totalDebt };
+        
+        let academicArray = [];
+        try { academicArray = Array.isArray(c.academic_record) ? c.academic_record : JSON.parse(c.academic_record || '[]'); } catch(e){}
+
+        return { ...c, total_debt: totalDebt, academic_count: academicArray.length };
       });
       setContacts(mappedData);
       setGroups(Array.from(new Set(mappedData.map(d => d.grupo).filter(Boolean))) as string[]);
@@ -223,6 +227,7 @@ const Contacts = () => {
           CP: c.cp || '',
           Grupo: c.grupo || '',
           Etiquetas: safeTags,
+          Cursos_Tomados: c.academic_count || 0,
           Estatus_Financiero: c.financial_status || 'Sin transacción',
           Deuda_Total: c.total_debt || 0,
           Intencion_Compra: c.leads?.buying_intent || 'N/A'
@@ -382,7 +387,14 @@ const Contacts = () => {
                       <div className="flex items-center gap-4">
                         <Avatar className="h-10 w-10 border border-[#222225] bg-[#121214]"><AvatarFallback className="bg-transparent text-indigo-300 font-bold text-sm">{contact.nombre?.substring(0, 2).toUpperCase() || 'NA'}</AvatarFallback></Avatar>
                         <div className="flex flex-col">
-                          <span className="font-bold text-slate-100 text-sm">{contact.nombre} {contact.apellido}</span>
+                          <span className="font-bold text-slate-100 text-sm flex items-center gap-2">
+                             {contact.nombre} {contact.apellido}
+                             {contact.academic_count > 0 && (
+                                <span className="flex items-center gap-1 bg-indigo-950/40 text-indigo-400 border border-indigo-500/30 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-widest">
+                                   <GraduationCap className="w-3 h-3" /> Alumno
+                                </span>
+                             )}
+                          </span>
                           <span className="text-[11px] text-slate-500 font-mono mt-0.5 flex items-center gap-1.5"><Phone className="w-3 h-3"/> {contact.telefono}</span>
                         </div>
                       </div>
