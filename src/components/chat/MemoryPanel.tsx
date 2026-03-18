@@ -4,8 +4,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { 
-  Database, Loader2, Fingerprint, Trash2, Edit2, ChevronDown, User, Smartphone, Tag, Plus, ShieldAlert, Zap, X, Wallet, FileEdit, Globe, Bell, Mail, MapPin, Target
+  Database, Loader2, Fingerprint, Trash2, Edit2, ChevronDown, User, Smartphone, Tag, Plus, ShieldAlert, Zap, X, Wallet, FileEdit, Globe, Bell, Mail, MapPin, Target, Send, StickyNote
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -15,7 +16,6 @@ import { FinancialStatusBadge } from '@/components/contacts/FinancialStatusBadge
 import { Textarea } from '@/components/ui/textarea';
 import { CreateCreditSaleDialog } from '@/components/contacts/CreateCreditSaleDialog';
 import { EditContactDialog } from '@/components/contacts/EditContactDialog';
-import { ReminderItem } from '@/components/chat/memory/ReminderItem';
 import { extractTagText } from '@/lib/tag-parser';
 
 interface MemoryPanelProps {
@@ -39,8 +39,6 @@ export const MemoryPanel = ({
 }: MemoryPanelProps) => {
 
   const { user, isManager, profile } = useAuth();
-  const [correctionText, setCorrectionText] = useState('');
-  const [reporting, setReporting] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [agents, setAgents] = useState<any[]>([]);
   const [channels, setChannels] = useState<any[]>([]);
@@ -55,27 +53,25 @@ export const MemoryPanel = ({
 
   const [tacticalOpen, setTacticalOpen] = useState(true);
   const [tagsOpen, setTagsOpen] = useState(true);
+  const [notesOpen, setNotesOpen] = useState(true);
 
-  // Lógica defensiva ABSOLUTA para evitar crash
+  const [internalNotes, setInternalNotes] = useState<any[]>([]);
+  const [newNote, setNewNote] = useState('');
+  const [sendingNote, setSendingNote] = useState(false);
+
+  // Lógica defensiva
   const emailVal = String(currentAnalysis?.email || '');
   const nombreVal = String(currentAnalysis?.nombre || '');
   const ciudadVal = String(currentAnalysis?.ciudad || '');
   const summaryVal = String(currentAnalysis?.summary || 'Generando resumen...');
   const perfilVal = String(currentAnalysis?.perfil_psicologico || 'Analizando conversaciones para perfilar...');
 
-  const capiFields = [
-     true, 
-     !!(emailVal && emailVal.includes('@')),
-     !!(nombreVal && !nombreVal.toLowerCase().includes('nuevo')),
-     !!(ciudadVal && ciudadVal.length > 2)
-  ];
+  const capiFields = [ true, !!(emailVal && emailVal.includes('@')), !!(nombreVal && !nombreVal.toLowerCase().includes('nuevo')), !!(ciudadVal && ciudadVal.length > 2) ];
   const healthScore = capiFields.filter(Boolean).length;
   const healthPercent = Math.round((healthScore / 4) * 100);
 
-  const safeReminders = Array.isArray(currentAnalysis?.reminders) ? currentAnalysis.reminders : [];
   const safeAgents = Array.isArray(agents) ? agents : [];
   const safeChannels = Array.isArray(channels) ? channels : [];
-  
   const currentAgentName = String(safeAgents.find(a => a.id === currentAnalysis?.assigned_to)?.full_name || 'Bot Global');
   const currentChannelName = String(safeChannels.find(c => c.id === currentAnalysis?.channel_id)?.name || 'Canal Desconocido');
   const allAvailableTags = [...(Array.isArray(globalTags) ? globalTags : []), ...(Array.isArray(localTags) ? localTags : [])];
@@ -90,15 +86,47 @@ export const MemoryPanel = ({
   useEffect(() => {
     if (currentAnalysis?.id) {
        fetchContactData();
+       fetchInternalNotes();
     }
   }, [currentAnalysis?.id]);
 
+  const fetchInternalNotes = async () => {
+     if (!currentAnalysis?.id) return;
+     const { data } = await supabase.from('conversaciones')
+        .select('*')
+        .eq('lead_id', currentAnalysis.id)
+        .eq('emisor', 'NOTA')
+        .eq('platform', 'PANEL_INTERNO')
+        .order('created_at', { ascending: true });
+     if (data) setInternalNotes(data);
+  };
+
+  const handleAddInternalNote = async (e: React.FormEvent) => {
+     e.preventDefault();
+     if (!newNote.trim()) return;
+     setSendingNote(true);
+     try {
+        const payload = {
+           lead_id: currentAnalysis.id,
+           emisor: 'NOTA',
+           platform: 'PANEL_INTERNO',
+           mensaje: newNote.trim(),
+           metadata: { author: profile?.full_name || 'Miembro del Equipo' }
+        };
+        const { data, error } = await supabase.from('conversaciones').insert(payload).select().single();
+        if (error) throw error;
+        setInternalNotes(prev => [...prev, data]);
+        setNewNote('');
+     } catch (err: any) {
+        toast.error("Error al guardar nota");
+     } finally {
+        setSendingNote(false);
+     }
+  };
+
   const fetchGroups = async () => {
      const { data } = await supabase.from('contacts').select('grupo').not('grupo', 'is', null);
-     if (data) {
-        const uniqueGroups = Array.from(new Set(data.map(d => d.grupo).filter(Boolean))) as string[];
-        setGroups(uniqueGroups);
-     }
+     if (data) setGroups(Array.from(new Set(data.map(d => d.grupo).filter(Boolean))) as string[]);
   };
 
   const fetchContactData = async () => {
@@ -132,34 +160,17 @@ export const MemoryPanel = ({
      try {
         await supabase.functions.invoke('analyze-leads', { body: { lead_id: currentAnalysis.id, force: true } });
         if (onAnalysisComplete) onAnalysisComplete();
-     } catch (err: any) {
-        toast.error("Error: " + err.message);
-     } finally {
-        setAnalyzing(false);
-     }
+     } catch (err: any) { toast.error("Error: " + err.message); } finally { setAnalyzing(false); }
   };
 
   const handleUpdatePaymentStatus = async (status: string) => {
      try {
          const updates: any = { payment_status: status };
-         if (status === 'VALID') {
-             updates.buying_intent = 'COMPRADO';
-             updates.followup_stage = 100;
-         }
+         if (status === 'VALID') { updates.buying_intent = 'COMPRADO'; updates.followup_stage = 100; }
          await supabase.from('leads').update(updates).eq('id', currentAnalysis.id);
          toast.success("Auditoría actualizada.");
          if (onAnalysisComplete) onAnalysisComplete();
-     } catch (err: any) {
-         toast.error("Error al actualizar pago.");
-     }
-  };
-
-  const handleAddTag = async (tagText: string) => {
-      const currentTags = Array.isArray(memoryForm.tags) ? memoryForm.tags : [];
-      if (currentTags.some((ct: any) => extractTagText(ct) === tagText)) return;
-      const newTags = [...currentTags, tagText];
-      setMemoryForm({...memoryForm, tags: newTags});
-      await supabase.from('leads').update({ tags: newTags }).eq('id', currentAnalysis.id);
+     } catch (err: any) { toast.error("Error al actualizar pago."); }
   };
 
   const handleRemoveTag = async (rawTag: any) => {
@@ -222,7 +233,6 @@ export const MemoryPanel = ({
                  </div>
                  <Input value={String(memoryForm.email)} onChange={e => setMemoryForm({...memoryForm, email: e.target.value})} placeholder="Email" className="h-8 text-xs bg-[#0a0a0c] border-[#222225]" />
                  
-                 {/* CAMPO DE RECUPERACIÓN / CAMBIO DE ETAPA */}
                  <div className="space-y-1.5 mt-2 pt-2 border-t border-[#222225]">
                     <Label className="text-[9px] uppercase font-bold text-[#7A8A9E] tracking-widest flex items-center gap-1">
                        <Target className="w-3 h-3"/> Etapa del Embudo
@@ -277,6 +287,34 @@ export const MemoryPanel = ({
                              <span className="text-[9px] text-[#7A8A9E] uppercase font-bold tracking-widest">Perfil Psicográfico</span>
                              <p className="text-[11px] text-amber-500/80 italic mt-1 leading-relaxed">{perfilVal}</p>
                           </div>
+                       </div>
+                    )}
+                 </div>
+
+                 {/* NUEVO BLOQUE: NOTAS COLABORATIVAS */}
+                 <div className="pt-2 border-t border-[#1a1a1a]">
+                    <button onClick={() => setNotesOpen(!notesOpen)} className="w-full flex justify-between items-center py-2 text-[10px] font-bold text-white uppercase tracking-widest hover:text-amber-400 transition-colors"><span className="flex items-center gap-2"><StickyNote className="w-3.5 h-3.5 text-amber-500" /> Notas Internas (Equipo)</span><ChevronDown className={cn("w-3.5 h-3.5 transition-transform", notesOpen ? "rotate-180" : "")} /></button>
+                    {notesOpen && (
+                       <div className="pt-3 pb-2 space-y-3">
+                          {internalNotes.length === 0 ? (
+                             <p className="text-[10px] text-slate-600 italic text-center py-2">No hay notas registradas.</p>
+                          ) : (
+                             <div className="space-y-2 max-h-48 overflow-y-auto custom-scrollbar pr-2">
+                                {internalNotes.map(n => (
+                                   <div key={n.id} className="bg-amber-950/20 border border-amber-900/50 p-2.5 rounded-lg">
+                                      <div className="flex justify-between items-center mb-1">
+                                         <span className="text-[9px] font-bold text-amber-500">{n.metadata?.author || 'Agente'}</span>
+                                         <span className="text-[8px] text-slate-500 font-mono">{new Date(n.created_at).toLocaleDateString()}</span>
+                                      </div>
+                                      <p className="text-[10px] text-amber-100/90 leading-relaxed">{n.mensaje}</p>
+                                   </div>
+                                ))}
+                             </div>
+                          )}
+                          <form onSubmit={handleAddInternalNote} className="flex gap-2">
+                             <Input value={newNote} onChange={e => setNewNote(e.target.value)} placeholder="Añadir nota rápida..." className="h-8 text-[10px] bg-[#121214] border-[#222225] focus-visible:ring-amber-500 text-slate-200" disabled={sendingNote}/>
+                             <Button type="submit" size="icon" className="h-8 w-8 bg-amber-600 hover:bg-amber-500 text-slate-900 shrink-0" disabled={sendingNote || !newNote.trim()}><Send className="w-3 h-3"/></Button>
+                          </form>
                        </div>
                     )}
                  </div>

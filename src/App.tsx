@@ -25,6 +25,7 @@ import MetaCapi from "./pages/MetaCapi";
 import Pipeline from "./pages/Pipeline";
 import Inbox from "./pages/Inbox";
 import WebhookDiag from "./pages/WebhookDiag";
+import AgentTools from "./pages/AgentTools";
 import { Loader2 } from "lucide-react";
 
 const queryClient = new QueryClient();
@@ -71,6 +72,7 @@ const App = () => (
             
             <Route path="/leads" element={<PrivateRoute><Leads /></PrivateRoute>} />
             <Route path="/contacts" element={<PrivateRoute><Contacts /></PrivateRoute>} />
+            <Route path="/tools" element={<PrivateRoute><AgentTools /></PrivateRoute>} />
             <Route path="/pipeline" element={<PrivateRoute><Pipeline /></PrivateRoute>} />
             <Route path="/archive" element={<PrivateRoute><Archive /></PrivateRoute>} />
             <Route path="/payments" element={<PrivateRoute><Payments /></PrivateRoute>} />

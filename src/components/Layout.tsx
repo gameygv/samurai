@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { 
   LayoutDashboard, Brain, Settings as SettingsIcon, Database, LogOut, 
-  Users, FileText, UserCircle, MessageSquare, Contact,
+  Users, FileText, UserCircle, MessageSquare, Contact, Tag,
   GitBranch, Link as LinkIcon, Image, Sparkles, BookOpen, Clock,
   Archive, Globe, CreditCard, BarChart3, Zap, Trello, Menu, Activity, Search, MessageCircle, Shield, AlertCircle, Command
 } from 'lucide-react';
@@ -88,6 +88,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
         { icon: Trello, label: 'Pipeline Ventas', path: '/pipeline', roles: ['any'] },
         { icon: MessageSquare, label: 'Radar Leads', path: '/leads', roles: ['any'] },
         { icon: Contact, label: 'Contactos', path: '/contacts', roles: ['any'] },
+        { icon: Tag, label: 'Mis Plantillas', path: '/tools', roles: ['any'] },
         { icon: CreditCard, label: 'Pagos & Ventas', path: '/payments', roles: ['any'] },
         { icon: Archive, label: 'Archivo de Chats', path: '/archive', roles: ['any'] },
       ]
