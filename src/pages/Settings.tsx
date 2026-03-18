@@ -24,6 +24,7 @@ const Settings = () => {
   const [configs, setConfigs] = useState<any[]>([]);
   const [followupConfig, setFollowupConfig] = useState<any>({ enabled: false });
   const [salesConfig, setSalesConfig] = useState<any>({ enabled: false });
+  const [daysToLost, setDaysToLost] = useState('14');
   
   const [globalTags, setGlobalTags] = useState<{id: string, text: string, color: string}[]>([]);
   const [globalReplies, setGlobalReplies] = useState<{id: string, title: string, text: string}[]>([]);
@@ -47,6 +48,9 @@ const Settings = () => {
          if (repliesStr) { try { setGlobalReplies(JSON.parse(repliesStr)); } catch(e){} }
          const wcProdStr = appData.find(c => c.key === 'wc_products')?.value;
          if (wcProdStr) { try { setWcProducts(JSON.parse(wcProdStr)); } catch(e){} }
+         
+         const daysToLostStr = appData.find(c => c.key === 'days_to_lost_lead')?.value;
+         if (daysToLostStr) setDaysToLost(daysToLostStr);
       }
 
       const { data: flpData } = await supabase.from('followup_config').select('*');
@@ -66,15 +70,16 @@ const Settings = () => {
   const handleSaveAll = async () => {
     setSaving(true);
     try {
-      // 1. Guardado ATÓMICO de JSONs complejos
+      // 1. Guardado ATÓMICO de JSONs complejos y Días a Perdido
       await supabase.from('app_config').upsert([
           { key: 'global_tags', value: JSON.stringify(globalTags), category: 'SYSTEM', updated_at: new Date().toISOString() },
           { key: 'quick_replies', value: JSON.stringify(globalReplies), category: 'SYSTEM', updated_at: new Date().toISOString() },
-          { key: 'wc_products', value: JSON.stringify(wcProducts), category: 'WOOCOMMERCE', updated_at: new Date().toISOString() }
+          { key: 'wc_products', value: JSON.stringify(wcProducts), category: 'WOOCOMMERCE', updated_at: new Date().toISOString() },
+          { key: 'days_to_lost_lead', value: daysToLost.toString(), category: 'SYSTEM', updated_at: new Date().toISOString() }
       ], { onConflict: 'key' });
 
       // 2. Guardado del resto de configuraciones simples
-      const filteredConfigs = configs.filter(c => !['global_tags', 'quick_replies', 'wc_products'].includes(c.key));
+      const filteredConfigs = configs.filter(c => !['global_tags', 'quick_replies', 'wc_products', 'days_to_lost_lead'].includes(c.key));
       if (filteredConfigs.length > 0) {
          const updates = filteredConfigs.map(c => ({ 
             key: c.key, value: c.value, category: c.category || 'SYSTEM', updated_at: new Date().toISOString()
@@ -190,7 +195,7 @@ const Settings = () => {
              />
           </TabsContent>
 
-          <TabsContent value="followup" className="mt-6"><FollowupTab followupConfig={followupConfig} setFollowupConfig={setFollowupConfig} salesConfig={salesConfig} setSalesConfig={setSalesConfig} onSave={handleSaveAll} saving={saving}/></TabsContent>
+          <TabsContent value="followup" className="mt-6"><FollowupTab followupConfig={followupConfig} setFollowupConfig={setFollowupConfig} salesConfig={salesConfig} setSalesConfig={setSalesConfig} daysToLost={daysToLost} setDaysToLost={setDaysToLost} onSave={handleSaveAll} saving={saving}/></TabsContent>
           <TabsContent value="finanzas" className="mt-6 space-y-6">
              <BankTab getValue={getValue} onChange={updateConfigValue} />
           </TabsContent>

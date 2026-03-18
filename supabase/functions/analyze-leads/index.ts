@@ -40,6 +40,11 @@ serve(async (req) => {
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
     for (const lead of leadsToProcess) {
+        // No analizar leads que ya estén ganados o perdidos a menos que se fuerce
+        if (!force && (lead.buying_intent === 'COMPRADO' || lead.buying_intent === 'PERDIDO')) {
+           continue;
+        }
+
         const { data: messagesData } = await supabaseClient
             .from('conversaciones')
             .select('emisor, mensaje')
@@ -51,7 +56,9 @@ serve(async (req) => {
 
         const systemPrompt = `
 Eres el Auditor de Identidad del CRM. Tu misión es extraer datos reales de la conversación.
-REGLA DE ORO: Si el usuario dice "Soy X" o "Mi nombre es X", ese es su NOMBRE REAL. Sustituye cualquier nombre provisional.
+REGLA DE ORO: Si el usuario dice "Soy X" o "Mi nombre es X", ese es su NOMBRE REAL.
+IMPORTANTE SOBRE INTENCIÓN DE COMPRA: NUNCA ASIGNES 'COMPRADO'. Solo elige entre BAJO, MEDIO, ALTO o PERDIDO.
+
 DATOS A EXTRAER:
 1. NOMBRE: Nombre real.
 2. CIUDAD: Ciudad/Estado en México.
@@ -60,7 +67,8 @@ DATOS A EXTRAER:
 5. SUMMARY: Un resumen MUY CORTO de la situación actual (Máximo 15 palabras).
 ROUTING: Elige EXACTAMENTE el ID del agente según la ciudad:
 ${agentsContext}
-RESPONDE SOLO JSON: {"nombre": "...", "email": "...", "ciudad": "...", "intent": "BAJO|MEDIO|ALTO", "perfil": "...", "summary": "...", "suggested_agent_id": "UUID"}`;
+
+RESPONDE SOLO JSON: {"nombre": "...", "email": "...", "ciudad": "...", "intent": "BAJO|MEDIO|ALTO|PERDIDO", "perfil": "...", "summary": "...", "suggested_agent_id": "UUID"}`;
 
         const aiRes = await fetch(OPENAI_URL, {
             method: 'POST',
@@ -80,7 +88,12 @@ RESPONDE SOLO JSON: {"nombre": "...", "email": "...", "ciudad": "...", "intent":
         if (result.nombre && result.nombre !== 'null') updates.nombre = result.nombre;
         if (result.email && result.email !== 'null') updates.email = result.email;
         if (result.ciudad && result.ciudad !== 'null') updates.ciudad = result.ciudad;
-        if (result.intent) updates.buying_intent = result.intent;
+        
+        // Bloqueo de seguridad: Evitar falso COMPRADO
+        if (result.intent && result.intent !== 'COMPRADO') {
+            updates.buying_intent = result.intent;
+        }
+
         if (result.perfil) updates.perfil_psicologico = result.perfil;
         if (result.summary) updates.summary = result.summary;
         

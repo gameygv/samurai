@@ -4,7 +4,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
-import { Clock, DollarSign, Sparkles, Save, CheckCircle2, XCircle } from 'lucide-react';
+import { Clock, DollarSign, Sparkles, Save, CheckCircle2, XCircle, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface FollowupTabProps {
@@ -12,19 +12,21 @@ interface FollowupTabProps {
   setFollowupConfig: (val: any) => void;
   salesConfig: any;
   setSalesConfig: (val: any) => void;
+  daysToLost: string;
+  setDaysToLost: (val: string) => void;
   onSave: () => void;
   saving: boolean;
 }
 
-export const FollowupTab = ({ followupConfig, setFollowupConfig, salesConfig, setSalesConfig, onSave, saving }: FollowupTabProps) => {
+export const FollowupTab = ({ followupConfig, setFollowupConfig, salesConfig, setSalesConfig, daysToLost, setDaysToLost, onSave, saving }: FollowupTabProps) => {
   return (
     <div className="space-y-6 animate-in fade-in duration-500 pb-10">
       <Card className="bg-[#0f0f11] border-[#222225] shadow-2xl rounded-2xl">
         <CardHeader className="bg-[#161618] border-b border-[#222225]">
-          <CardTitle className="text-white flex items-center gap-2 text-sm font-bold"><Clock className="w-4 h-4 text-indigo-400" /> Horario de Operación IA</CardTitle>
+          <CardTitle className="text-white flex items-center gap-2 text-sm font-bold"><Clock className="w-4 h-4 text-indigo-400" /> Reglas de Retargeting y Horarios</CardTitle>
         </CardHeader>
         <CardContent className="pt-6">
-          <div className="grid grid-cols-2 gap-6 max-w-lg">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-3xl">
             <div className="space-y-2">
               <Label className="text-[10px] text-slate-500 uppercase font-bold tracking-widest ml-1">Hora Inicio (0-23)</Label>
               <Input type="number" min="0" max="23" value={followupConfig.start_hour || 9} onChange={e => setFollowupConfig({...followupConfig, start_hour: parseInt(e.target.value)})} className="bg-[#0a0a0c] border-[#222225] h-11 rounded-xl text-center font-bold" />
@@ -33,8 +35,12 @@ export const FollowupTab = ({ followupConfig, setFollowupConfig, salesConfig, se
               <Label className="text-[10px] text-slate-500 uppercase font-bold tracking-widest ml-1">Hora Fin (0-23)</Label>
               <Input type="number" min="0" max="23" value={followupConfig.end_hour || 21} onChange={e => setFollowupConfig({...followupConfig, end_hour: parseInt(e.target.value)})} className="bg-[#0a0a0c] border-[#222225] h-11 rounded-xl text-center font-bold" />
             </div>
+            <div className="space-y-2">
+              <Label className="text-[10px] text-slate-500 uppercase font-bold tracking-widest ml-1 flex items-center gap-1"><Trash2 className="w-3 h-3 text-red-500"/> Días Inactivos a PERDIDO</Label>
+              <Input type="number" min="1" max="90" value={daysToLost} onChange={e => setDaysToLost(e.target.value)} className="bg-[#0a0a0c] border-red-900/30 text-red-400 h-11 rounded-xl text-center font-bold" />
+            </div>
           </div>
-          <p className="text-[10px] text-slate-600 mt-4 italic">Sam solo enviará mensajes de retargeting automático dentro de este rango horario para evitar molestar a deshoras.</p>
+          <p className="text-[10px] text-slate-600 mt-4 italic">Sam enviará mensajes solo en este horario. Los leads inactivos por más de {daysToLost} días se moverán a la etapa "Perdido" automáticamente.</p>
         </CardContent>
       </Card>
 

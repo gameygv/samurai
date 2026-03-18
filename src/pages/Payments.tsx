@@ -78,14 +78,14 @@ const Payments = () => {
   const handleLinkAndApprove = async (lead: any) => {
      if (!selectedAsset) return;
      setLinking(true);
-     const tid = toast.loading(`Vinculando pago a ${lead.nombre}...`);
+     const tid = toast.loading(`Validando comprobante de ${lead.nombre}...`);
 
      try {
         await supabase.from('leads').update({
            buying_intent: 'COMPRADO',
            payment_status: 'VALID',
            followup_stage: 100,
-           summary: `PAGO VALIDADO MANUALMENTE. Ref: ${selectedAsset.title}`
+           summary: `PAGO COMPROBADO MANUALMENTE. Ref: ${selectedAsset.title}`
         }).eq('id', lead.id);
 
         await supabase.from('activity_logs').insert({
@@ -111,7 +111,7 @@ const Payments = () => {
            }
         }
 
-        toast.success("Venta vinculada y cerrada exitosamente.", { id: tid });
+        toast.success("Venta comprobada y marcada como GANADO.", { id: tid });
         setIsLinkDialogOpen(false);
         fetchAll();
      } catch (err: any) {
@@ -123,7 +123,7 @@ const Payments = () => {
 
   const handleMarkInstallmentPaid = async (installmentId: string, amount: string, clientName: string) => {
       if (!confirm(`¿Confirmas que el cliente ${clientName} ha pagado la cantidad de $${amount}?`)) return;
-      const tid = toast.loading("Registrando pago...");
+      const tid = toast.loading("Registrando abono...");
       try {
           const { error } = await supabase.from('credit_installments').update({
               status: 'PAID',
@@ -137,10 +137,10 @@ const Payments = () => {
               description: `Cobranza exitosa: $${amount} abonados por ${clientName}`, status: 'OK'
           });
 
-          toast.success("Pago registrado correctamente.", { id: tid });
+          toast.success("Abono registrado correctamente.", { id: tid });
           fetchAll();
       } catch (err: any) {
-          toast.error("Error al registrar pago: " + err.message, { id: tid });
+          toast.error("Error al registrar abono: " + err.message, { id: tid });
       }
   };
 
@@ -170,7 +170,7 @@ const Payments = () => {
               </div>
               Centro Financiero
             </h1>
-            <p className="text-slate-400 text-sm mt-1">Verificación de depósitos online, procesos de cierre y cobranza.</p>
+            <p className="text-slate-400 text-sm mt-1">Gestión separada de pagos de contado (Web) y cobranza manual (Créditos).</p>
           </div>
           <Button variant="outline" className="border-[#222225] bg-[#121214] text-slate-300 hover:bg-[#161618] h-11 px-6 rounded-xl text-xs uppercase tracking-widest font-bold" onClick={fetchAll}>
              <RefreshCw className={cn("w-4 h-4 mr-2", loading && "animate-spin")} /> Refrescar Datos
@@ -181,14 +181,14 @@ const Payments = () => {
            <TabsList className="bg-[#121214] border border-[#222225] p-1 rounded-xl flex-wrap h-auto">
               {isManager && (
                  <TabsTrigger value="cobranza" className="gap-2 px-4 py-2 data-[state=active]:bg-amber-600 data-[state=active]:text-slate-950 uppercase text-[10px] font-bold tracking-widest">
-                    <Wallet className="w-4 h-4"/> Créditos (Manual)
+                    <Wallet className="w-4 h-4"/> Créditos y Abonos
                  </TabsTrigger>
               )}
-              <TabsTrigger value="ocr" className="gap-2 px-4 py-2 data-[state=active]:bg-indigo-600 data-[state=active]:text-white uppercase text-[10px] font-bold tracking-widest">
-                 <ShieldCheck className="w-4 h-4"/> Depósitos y Transferencias
-              </TabsTrigger>
               <TabsTrigger value="intenciones" className="gap-2 px-4 py-2 data-[state=active]:bg-indigo-600 data-[state=active]:text-white uppercase text-[10px] font-bold tracking-widest">
-                 <Target className="w-4 h-4"/> Ventas Online (En Espera)
+                 <Target className="w-4 h-4"/> Ventas Online (Woocommerce)
+              </TabsTrigger>
+              <TabsTrigger value="ocr" className="gap-2 px-4 py-2 data-[state=active]:bg-emerald-600 data-[state=active]:text-white uppercase text-[10px] font-bold tracking-widest">
+                 <ShieldCheck className="w-4 h-4"/> Validar Depósitos (Venta Contado)
               </TabsTrigger>
            </TabsList>
 
@@ -198,10 +198,10 @@ const Payments = () => {
                 <Card className="bg-[#0f0f11] border-[#222225] border-l-4 border-l-amber-500 shadow-2xl overflow-hidden rounded-2xl">
                    <CardHeader className="border-b border-[#222225] bg-[#161618]">
                       <CardTitle className="text-white text-base flex items-center gap-2 font-bold tracking-wide">
-                         <CalendarDays className="w-5 h-5 text-amber-500" /> Vencimientos y Cobros Pendientes (Ventas a Crédito)
+                         <CalendarDays className="w-5 h-5 text-amber-500" /> Vencimientos y Cobros de Planes a Crédito
                       </CardTitle>
                       <CardDescription className="text-slate-400 text-xs">
-                         Parcialidades programadas. NOTA: Los nuevos créditos solo se pueden generar desde el módulo de "Contactos".
+                         Este módulo es exclusivo para clientes que entraron a un esquema de financiamiento manual (Abonos).
                       </CardDescription>
                    </CardHeader>
                    <CardContent className="p-0">
@@ -210,7 +210,7 @@ const Payments = () => {
                             <TableRow className="border-[#222225] bg-[#161618] hover:bg-[#161618]">
                                <TableHead className="text-slate-400 uppercase text-[10px] tracking-widest font-bold pl-6">Cliente y Concepto</TableHead>
                                <TableHead className="text-slate-400 uppercase text-[10px] tracking-widest font-bold">Vencimiento</TableHead>
-                               <TableHead className="text-slate-400 uppercase text-[10px] tracking-widest font-bold">Monto</TableHead>
+                               <TableHead className="text-slate-400 uppercase text-[10px] tracking-widest font-bold">Monto del Abono</TableHead>
                                <TableHead className="text-slate-400 uppercase text-[10px] tracking-widest font-bold">Estado</TableHead>
                                <TableHead className="text-right uppercase text-[10px] tracking-widest font-bold pr-6">Acción</TableHead>
                             </TableRow>
@@ -219,7 +219,7 @@ const Payments = () => {
                             {loading ? (
                                <TableRow><TableCell colSpan={5} className="text-center h-48"><Loader2 className="animate-spin text-amber-500 mx-auto" /></TableCell></TableRow>
                             ) : installments.length === 0 ? (
-                               <TableRow><TableCell colSpan={5} className="text-center h-48 text-slate-500 text-xs font-bold uppercase tracking-widest italic">No hay cobros pendientes.</TableCell></TableRow>
+                               <TableRow><TableCell colSpan={5} className="text-center h-48 text-slate-500 text-xs font-bold uppercase tracking-widest italic">No hay abonos pendientes en este momento.</TableCell></TableRow>
                             ) : installments.map(inst => {
                                const isLate = inst.status === 'LATE' || new Date(inst.due_date) < new Date(new Date().toISOString().split('T')[0]);
                                const contactName = `${inst.sale?.contact?.nombre || ''} ${inst.sale?.contact?.apellido || ''}`.trim() || 'Cliente';
@@ -260,7 +260,7 @@ const Payments = () => {
                                         onClick={() => handleMarkInstallmentPaid(inst.id, inst.amount, contactName)}
                                         className="bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold text-[10px] uppercase tracking-widest rounded-xl shadow-lg h-9 px-4"
                                      >
-                                        <CheckCircle2 className="w-3.5 h-3.5 mr-1.5" /> Registrar Pago
+                                        <CheckCircle2 className="w-3.5 h-3.5 mr-1.5" /> Registrar Abono
                                      </Button>
                                   </TableCell>
                                </TableRow>
@@ -272,12 +272,62 @@ const Payments = () => {
              </TabsContent>
            )}
 
-           {/* TAB: OCR (DEPOSITOS) */}
+           {/* TAB: INTENCIONES (CIERRE ONLINE WOOCOMMERCE) */}
+           <TabsContent value="intenciones" className="mt-6">
+              <Card className="bg-[#0f0f11] border-[#222225] border-t-4 border-t-indigo-500 shadow-2xl rounded-2xl overflow-hidden">
+                 <CardHeader className="bg-[#161618] border-b border-[#222225]">
+                    <CardTitle className="text-white text-base flex items-center gap-2 font-bold tracking-wide"><Target className="w-5 h-5 text-indigo-400" /> Embudo Final: Esperando Venta Online</CardTitle>
+                    <CardDescription className="text-xs text-slate-400">
+                       Leads en etapa de CIERRE. El sistema (WooCommerce Watcher) buscará transacciones de estos clientes periódicamente basándose en su correo.
+                    </CardDescription>
+                 </CardHeader>
+                 <CardContent className="p-0">
+                    <Table>
+                       <TableHeader>
+                          <TableRow className="border-[#222225] bg-[#121214] hover:bg-[#121214]">
+                             <TableHead className="text-slate-500 uppercase text-[10px] font-bold tracking-widest pl-6">Cliente</TableHead>
+                             <TableHead className="text-slate-500 uppercase text-[10px] font-bold tracking-widest">Estatus de Conversión</TableHead>
+                             <TableHead className="text-right uppercase text-[10px] font-bold tracking-widest pr-6">Acción</TableHead>
+                          </TableRow>
+                       </TableHeader>
+                       <TableBody>
+                          {intents.length === 0 ? (
+                             <TableRow><TableCell colSpan={3} className="h-48 text-center text-slate-500 text-xs italic font-bold uppercase tracking-widest">No hay clientes en fase de cierre web.</TableCell></TableRow>
+                          ) : intents.map(lead => (
+                             <TableRow key={lead.id} className="border-[#222225] hover:bg-[#161618] transition-colors">
+                                <TableCell className="pl-6">
+                                   <div className="flex items-center gap-4">
+                                      <div className="w-10 h-10 rounded-xl bg-[#0a0a0c] flex items-center justify-center text-indigo-400 font-bold border border-[#222225] shadow-inner shrink-0">
+                                         {lead.nombre?.substring(0,2).toUpperCase() || 'NA'}
+                                      </div>
+                                      <div className="flex flex-col">
+                                         <p className="text-sm font-bold text-white">{lead.nombre || lead.telefono}</p>
+                                         <p className="text-[10px] text-slate-500 font-mono mt-0.5">{lead.telefono}</p>
+                                      </div>
+                                   </div>
+                                </TableCell>
+                                <TableCell>
+                                   <Badge variant="outline" className="text-[9px] border-indigo-500/30 text-indigo-400 bg-indigo-500/10 uppercase font-bold tracking-widest h-6 px-2">EVALUANDO EN WOOCOMMERCE</Badge>
+                                </TableCell>
+                                <TableCell className="text-right pr-6">
+                                   <Button variant="ghost" size="sm" className="h-9 rounded-xl border border-[#333336] bg-[#0a0a0c] hover:bg-[#1a1a1d] text-slate-300 text-[10px] font-bold uppercase tracking-widest" onClick={() => window.location.href=`/leads?id=${lead.id}`}>
+                                      Revisar Chat <ArrowRight className="w-3.5 h-3.5 ml-2 text-indigo-400" />
+                                   </Button>
+                                </TableCell>
+                             </TableRow>
+                          ))}
+                       </TableBody>
+                    </Table>
+                 </CardContent>
+              </Card>
+           </TabsContent>
+
+           {/* TAB: OCR (DEPOSITOS MANUALES / TRANSFERENCIAS) */}
            <TabsContent value="ocr" className="mt-6">
               <div className="bg-[#121214] border border-[#222225] p-4 rounded-xl mb-6 flex items-start gap-3">
-                  <ShieldCheck className="w-5 h-5 text-indigo-400 shrink-0 mt-0.5" />
+                  <ShieldCheck className="w-5 h-5 text-emerald-500 shrink-0 mt-0.5" />
                   <p className="text-[11px] text-slate-400 leading-relaxed">
-                     <strong className="text-indigo-400">Ojo de Halcón (Verificación de Depósitos):</strong> Aquí aparecen todas las imágenes y PDFs enviados por clientes que Samurai ha clasificado como posibles pagos o transferencias bancarias. Analízalos y vincúlalos al cliente correcto para disparar la conversión a Meta Ads y marcar la venta como lograda.
+                     <strong className="text-emerald-500">Auditoría de Comprobantes:</strong> Imágenes enviadas por clientes que el sistema clasificó como pagos. Al vincularlos confirmarás que el cliente efectuó un pago de contado (Transferencia/Efectivo) y se registrará en la Meta CAPI como una compra lograda.
                   </p>
               </div>
 
@@ -287,7 +337,7 @@ const Payments = () => {
                  ) : paymentAssets.length === 0 ? (
                     <Card className="col-span-full bg-[#0f0f11] border-[#222225] py-20 text-center border-2 border-dashed rounded-2xl">
                        <CreditCard className="w-12 h-12 text-slate-800 mx-auto mb-4 opacity-20" />
-                       <p className="text-slate-600 italic uppercase text-[10px] tracking-widest font-bold">Ojo de Halcón en espera de comprobantes...</p>
+                       <p className="text-slate-600 italic uppercase text-[10px] tracking-widest font-bold">Sin comprobantes pendientes.</p>
                     </Card>
                  ) : paymentAssets.map(pay => {
                     const trust = getTrustScore(pay.ocr_content);
@@ -312,8 +362,8 @@ const Payments = () => {
                           </div>
 
                           <div className="bg-[#050505] p-4 rounded-xl border border-[#222225] shadow-inner space-y-3">
-                             <p className="text-[9px] text-indigo-400 font-bold uppercase tracking-widest mb-2 flex items-center gap-2">
-                                <Terminal className="w-3.5 h-3.5"/> Análisis Forense IA:
+                             <p className="text-[9px] text-emerald-400 font-bold uppercase tracking-widest mb-2 flex items-center gap-2">
+                                <Terminal className="w-3.5 h-3.5"/> OCR Data:
                              </p>
                              <div className="text-[10px] text-slate-300 font-mono whitespace-pre-wrap leading-relaxed max-h-40 overflow-y-auto custom-scrollbar">
                                 {pay.ocr_content || "Iniciando escaneo de seguridad..."}
@@ -322,64 +372,14 @@ const Payments = () => {
                           
                           <Button 
                             onClick={() => { setSelectedAsset(pay); setIsLinkDialogOpen(true); }}
-                            className="w-full bg-indigo-600 hover:bg-indigo-500 h-11 rounded-xl text-[10px] font-bold uppercase tracking-widest shadow-lg"
+                            className="w-full bg-emerald-600 hover:bg-emerald-500 h-11 rounded-xl text-[10px] font-bold uppercase tracking-widest shadow-lg text-slate-950"
                           >
-                             <UserPlus className="w-4 h-4 mr-2" /> VINCULAR PAGO A CLIENTE
+                             <UserPlus className="w-4 h-4 mr-2" /> VINCULAR Y APROBAR VENTA
                           </Button>
                        </CardContent>
                     </Card>
                  )})}
               </div>
-           </TabsContent>
-
-           {/* TAB: INTENCIONES (CIERRE) */}
-           <TabsContent value="intenciones" className="mt-6">
-              <Card className="bg-[#0f0f11] border-[#222225] border-t-4 border-t-indigo-500 shadow-2xl rounded-2xl overflow-hidden">
-                 <CardHeader className="bg-[#161618] border-b border-[#222225]">
-                    <CardTitle className="text-white text-base flex items-center gap-2 font-bold tracking-wide"><Target className="w-5 h-5 text-indigo-400" /> Embudo Final: Esperando Pago</CardTitle>
-                    <CardDescription className="text-xs text-slate-400">
-                       Clientes que han mostrado intención ALTA de compra y se les ha enviado un link de WooCommerce o los datos para depósito.
-                    </CardDescription>
-                 </CardHeader>
-                 <CardContent className="p-0">
-                    <Table>
-                       <TableHeader>
-                          <TableRow className="border-[#222225] bg-[#121214] hover:bg-[#121214]">
-                             <TableHead className="text-slate-500 uppercase text-[10px] font-bold tracking-widest pl-6">Cliente</TableHead>
-                             <TableHead className="text-slate-500 uppercase text-[10px] font-bold tracking-widest">Estatus</TableHead>
-                             <TableHead className="text-right uppercase text-[10px] font-bold tracking-widest pr-6">Acción</TableHead>
-                          </TableRow>
-                       </TableHeader>
-                       <TableBody>
-                          {intents.length === 0 ? (
-                             <TableRow><TableCell colSpan={3} className="h-48 text-center text-slate-500 text-xs italic font-bold uppercase tracking-widest">No hay clientes en fase de cierre.</TableCell></TableRow>
-                          ) : intents.map(lead => (
-                             <TableRow key={lead.id} className="border-[#222225] hover:bg-[#161618] transition-colors">
-                                <TableCell className="pl-6">
-                                   <div className="flex items-center gap-4">
-                                      <div className="w-10 h-10 rounded-xl bg-[#0a0a0c] flex items-center justify-center text-indigo-400 font-bold border border-[#222225] shadow-inner shrink-0">
-                                         {lead.nombre?.substring(0,2).toUpperCase() || 'NA'}
-                                      </div>
-                                      <div className="flex flex-col">
-                                         <p className="text-sm font-bold text-white">{lead.nombre || lead.telefono}</p>
-                                         <p className="text-[10px] text-slate-500 font-mono mt-0.5">{lead.telefono}</p>
-                                      </div>
-                                   </div>
-                                </TableCell>
-                                <TableCell>
-                                   <Badge variant="outline" className="text-[9px] border-indigo-500/30 text-indigo-400 bg-indigo-500/10 uppercase font-bold tracking-widest h-6 px-2">ESPERANDO PAGO</Badge>
-                                </TableCell>
-                                <TableCell className="text-right pr-6">
-                                   <Button variant="ghost" size="sm" className="h-9 rounded-xl border border-[#333336] bg-[#0a0a0c] hover:bg-[#1a1a1d] text-slate-300 text-[10px] font-bold uppercase tracking-widest" onClick={() => window.location.href=`/leads?id=${lead.id}`}>
-                                      Revisar Chat <ArrowRight className="w-3.5 h-3.5 ml-2 text-indigo-400" />
-                                   </Button>
-                                </TableCell>
-                             </TableRow>
-                          ))}
-                       </TableBody>
-                    </Table>
-                 </CardContent>
-              </Card>
            </TabsContent>
         </Tabs>
 
@@ -387,15 +387,15 @@ const Payments = () => {
         <Dialog open={isLinkDialogOpen} onOpenChange={setIsLinkDialogOpen}>
            <DialogContent className="bg-[#0f0f11] border-[#222225] text-white max-w-md rounded-3xl p-0 overflow-hidden">
               <DialogHeader className="p-6 bg-[#161618] border-b border-[#222225]">
-                 <DialogTitle className="text-indigo-400 text-lg flex items-center gap-2"><UserPlus className="w-5 h-5"/> Vincular Comprobante a Cliente</DialogTitle>
-                 <DialogDescription className="text-slate-400 text-xs mt-1">Selecciona al cliente que envió este depósito por chat. Esto marcará su venta como pagada (Cerrada).</DialogDescription>
+                 <DialogTitle className="text-emerald-500 text-lg flex items-center gap-2"><CheckCircle2 className="w-5 h-5"/> Aprobar Venta</DialogTitle>
+                 <DialogDescription className="text-slate-400 text-xs mt-1">Selecciona al cliente que envió este depósito por chat. Esto marcará su venta como GANADA (Pagada).</DialogDescription>
               </DialogHeader>
               <div className="p-6 space-y-4 bg-[#0a0a0c]">
                  <div className="relative">
                     <Search className="absolute left-3 top-3 h-4 w-4 text-slate-500" />
                     <Input 
                         placeholder="Buscar por nombre o teléfono..." 
-                        className="pl-10 bg-[#121214] border-[#222225] h-11 rounded-xl text-slate-200 focus-visible:ring-indigo-500"
+                        className="pl-10 bg-[#121214] border-[#222225] h-11 rounded-xl text-slate-200 focus-visible:ring-emerald-500"
                         value={searchLead}
                         onChange={e => setSearchLead(e.target.value)}
                     />
@@ -407,13 +407,13 @@ const Payments = () => {
                              key={lead.id}
                              onClick={() => handleLinkAndApprove(lead)}
                              disabled={linking}
-                             className="w-full text-left p-3 rounded-xl hover:bg-[#161618] border border-transparent hover:border-indigo-500/30 transition-all flex justify-between items-center group"
+                             className="w-full text-left p-3 rounded-xl hover:bg-[#161618] border border-transparent hover:border-emerald-500/30 transition-all flex justify-between items-center group"
                           >
                              <div>
-                                <p className="text-sm font-bold text-slate-200 group-hover:text-indigo-400 transition-colors">{lead.nombre || 'Sin nombre'}</p>
+                                <p className="text-sm font-bold text-slate-200 group-hover:text-emerald-400 transition-colors">{lead.nombre || 'Sin nombre'}</p>
                                 <p className="text-[10px] text-slate-500 font-mono mt-0.5">{lead.telefono}</p>
                              </div>
-                             <ArrowRight className="w-4 h-4 text-slate-600 group-hover:text-indigo-500 transition-colors" />
+                             <ArrowRight className="w-4 h-4 text-slate-600 group-hover:text-emerald-500 transition-colors" />
                           </button>
                        ))}
                     </div>

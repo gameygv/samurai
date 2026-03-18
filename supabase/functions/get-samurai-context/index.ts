@@ -54,16 +54,29 @@ serve(async (req) => {
 
     const bankInfo = `Banco: ${getConfig('bank_name')}\nCuenta: ${getConfig('bank_account')}\nCLABE: ${getConfig('bank_clabe')}\nTitular: ${getConfig('bank_holder')}`;
 
+    // AQUI ESTÁ LA PROTECCIÓN CRÍTICA PARA DATOS Y PAGOS
+    const activeLeadMemory = `
+=== ESTADO ACTUAL DEL PROSPECTO (MEMORIA) ===
+Nombre conocido: ${lead.nombre && !lead.nombre.includes('Nuevo') ? lead.nombre : 'NO PROPORCIONADO'}
+Email capturado: ${lead.email || 'NO PROPORCIONADO'}
+Ciudad: ${lead.ciudad || 'NO PROPORCIONADA'}
+
+REGLAS ESTRICTAS DE MEMORIA Y VENTAS:
+1. SI EL EMAIL O LA CIUDAD YA ESTÁN CAPTURADOS, NO VUELVAS A PEDIRLOS BAJO NINGUNA CIRCUNSTANCIA.
+2. PAGOS: Si el cliente dice "ya pagué", "listo" o envía una imagen de comprobante, NUNCA le confirmes que el pago está validado o completo. Tu respuesta DEBE SER SIEMPRE: "¡Excelente! He recibido tu confirmación. En breve nuestro sistema automático o un asesor verificará el comprobante y validará tu acceso."
+`;
+
     const voiceInstruction = `
 ### REGLA DE OJO DE HALCÓN (AUDICIÓN):
 1. Cuentas con un módulo de transcripción avanzada (OpenAI Whisper). 
 2. Si ves un mensaje que empieza con "[TRANSCRIPCIÓN DE NOTA DE VOZ]:", significa que el cliente te envió un audio y ya fue procesado para ti. 
-3. RESPONDE como si hubieras escuchado el audio perfectamente. NUNCA digas "no puedo escuchar audios" o "soy una IA de texto". Tu respuesta debe ser fluida y natural.
+3. RESPONDE como si hubieras escuchado el audio perfectamente.
 `;
 
-    // AHORA SÍ CONSTRUIMOS EL CEREBRO COMPLETO CON REGLAS CIA Y CIERRE
     const systemPrompt = `
 ${voiceInstruction}
+${activeLeadMemory}
+
 ${getConfig('prompt_alma_samurai')}
 ${getConfig('prompt_adn_core')}
 ${getConfig('prompt_estrategia_cierre')}
@@ -76,7 +89,7 @@ ${kbContext}
 ${mediaContext}
 ${wcContext}
 
-=== DATOS DE PAGO ===
+=== DATOS DE PAGO BANCARIO ===
 ${bankInfo}
 `;
 

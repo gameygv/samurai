@@ -6,7 +6,7 @@ import { corsHeaders } from '../_shared/cors.ts'
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders })
 
-  console.log("[process-followups] Iniciando ciclo AI-Driven + Retargeting + Routing...");
+  console.log("[process-followups] Iniciando ciclo AI-Driven + Retargeting + Routing + Limpieza...");
 
   try {
     const supabaseClient = createClient(
@@ -26,13 +26,11 @@ serve(async (req) => {
         const explorationConfig = followupConfigs.find(c => c.strategy_type === 'exploration');
         const salesConfig = followupConfigs.find(c => c.strategy_type === 'sales');
         
-        // Verificar horario de envío (9 AM a 20 PM por defecto)
         const currentHour = new Date().getUTCHours() - 6; // Ajuste aprox a CST
         const activeConfigHour = explorationConfig || salesConfig;
         
         if (activeConfigHour && currentHour >= (activeConfigHour.start_hour || 9) && currentHour <= (activeConfigHour.end_hour || 20)) {
             
-            // Buscar leads estancados y con IA activa
             const { data: stagnantLeads } = await supabaseClient.from('leads')
                 .select('id, nombre, telefono, channel_id, last_message_at, followup_stage, buying_intent')
                 .eq('ai_paused', false)
@@ -102,7 +100,7 @@ serve(async (req) => {
                       buying_intent: 'COMPRADO', payment_status: 'VALID', summary: `VENTA AUTOMÁTICA DETECTADA EN WC. Pedido: #${paidOrder.id}`
                    }).eq('id', lead.id);
 
-                   const thanksMsg = `¡Hola *${lead.nombre}*! 👋 He detectado tu pago correctamente. ¡Muchas gracias por tu confianza! \n\nEn breve recibirás más detalles por correo. ¡Estamos muy felices de que te unas! 😊`;
+                   const thanksMsg = `¡Hola *${lead.nombre}*! 👋 He detectado tu pago correctamente. ¡Muchas gracias por tu confianza! \n\nEn breve recibirás más detalles por correo. ¡Estamos muy felices de que te uniste! 😊`;
                    
                    await supabaseClient.functions.invoke('send-message-v3', {
                       body: { channel_id: lead.channel_id, phone: lead.telefono, message: thanksMsg }
@@ -138,6 +136,24 @@ serve(async (req) => {
                 }
             }
         }
+    }
+
+    // ========================================================
+    // 4. LIMPIEZA AUTOMÁTICA (DESCARTAR A PERDIDO)
+    // ========================================================
+    const daysToLost = parseInt(getConfig('days_to_lost_lead') || '14');
+    const lostDateThreshold = new Date();
+    lostDateThreshold.setDate(lostDateThreshold.getDate() - daysToLost);
+
+    const { data: leadsToLose } = await supabaseClient.from('leads')
+        .select('id')
+        .not('buying_intent', 'in', '("COMPRADO","PERDIDO")')
+        .lt('last_message_at', lostDateThreshold.toISOString());
+
+    if (leadsToLose && leadsToLose.length > 0) {
+        const ids = leadsToLose.map(l => l.id);
+        await supabaseClient.from('leads').update({ buying_intent: 'PERDIDO' }).in('id', ids);
+        console.log(`[process-followups] ${ids.length} leads movidos a PERDIDO por inactividad.`);
     }
 
     return new Response(JSON.stringify({ success: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });

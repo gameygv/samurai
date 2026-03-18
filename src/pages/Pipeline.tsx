@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { 
   Trello, Loader2, Fingerprint, Image, Target, DollarSign, UserPlus, 
-  MapPin, CheckCircle2, Bot, Clock, AlertTriangle, MessageCircle, Wallet, CalendarDays
+  MapPin, CheckCircle2, Bot, Clock, AlertTriangle, MessageCircle, Wallet, CalendarDays, XCircle
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import ChatViewer from '@/components/ChatViewer';
@@ -95,7 +95,8 @@ const Pipeline = () => {
     { id: 'BAJO', title: 'Data Hunting', icon: Fingerprint, color: 'border-slate-800', headerBg: 'bg-[#161618]', dot: 'bg-slate-500' },
     { id: 'MEDIO', title: 'Seducción', icon: Image, color: 'border-indigo-900/30', headerBg: 'bg-indigo-950/20', dot: 'bg-indigo-500' },
     { id: 'ALTO', title: 'Cierre ($)', icon: Target, color: 'border-amber-900/30', headerBg: 'bg-amber-950/20', dot: 'bg-amber-500' },
-    { id: 'COMPRADO', title: 'Ganado', icon: CheckCircle2, color: 'border-emerald-900/30', headerBg: 'bg-emerald-950/20', dot: 'bg-emerald-500' }
+    { id: 'COMPRADO', title: 'Ganado', icon: CheckCircle2, color: 'border-emerald-900/30', headerBg: 'bg-emerald-950/20', dot: 'bg-emerald-500' },
+    { id: 'PERDIDO', title: 'Perdido / Descartado', icon: XCircle, color: 'border-red-900/30', headerBg: 'bg-red-950/20', dot: 'bg-red-500' }
   ];
 
   const allTags = [...globalTags, ...localTags];
