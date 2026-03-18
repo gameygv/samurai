@@ -44,7 +44,6 @@ export const MemoryPanel = ({
   const [agents, setAgents] = useState<any[]>([]);
   const [channels, setChannels] = useState<any[]>([]);
   
-  // Tag System
   const [localTags, setLocalTags] = useState<{id: string, text: string, color: string}[]>([]);
   const [globalTags, setGlobalTags] = useState<{id: string, text: string, color: string}[]>([]);
   
@@ -56,11 +55,16 @@ export const MemoryPanel = ({
   const [tacticalOpen, setTacticalOpen] = useState(true);
   const [tagsOpen, setTagsOpen] = useState(true);
 
+  // Lógica defensiva para evitar el crash de pantalla blanca
+  const emailVal = currentAnalysis?.email || '';
+  const nombreVal = currentAnalysis?.nombre || '';
+  const ciudadVal = currentAnalysis?.ciudad || '';
+
   const capiFields = [
      true, 
-     !!(currentAnalysis.email && currentAnalysis.email.includes('@')),
-     !!(currentAnalysis.nombre && !currentAnalysis.nombre.toLowerCase().includes('nuevo')),
-     !!(currentAnalysis.ciudad && currentAnalysis.ciudad.length > 2)
+     !!(emailVal && emailVal.includes('@')),
+     !!(nombreVal && !nombreVal.toLowerCase().includes('nuevo')),
+     !!(ciudadVal && ciudadVal.length > 2)
   ];
   const healthScore = capiFields.filter(Boolean).length;
   const healthPercent = Math.round((healthScore / 4) * 100);
@@ -194,7 +198,6 @@ export const MemoryPanel = ({
       await supabase.from('leads').update({ tags: newTags }).eq('id', currentAnalysis.id);
   };
 
-  // Funciones de Recordatorios
   const handleAddReminder = () => {
       const newReminders = [...(memoryForm.reminders || []), { id: Date.now().toString(), title: '', datetime: '', notify_minutes: 15 }];
       setMemoryForm({...memoryForm, reminders: newReminders});
@@ -311,7 +314,6 @@ export const MemoryPanel = ({
                     </div>
                  </div>
 
-                 {/* SECCIÓN RECORDATORIOS (MODO EDICIÓN) */}
                  <div className="pt-3 border-t border-[#222225] space-y-3">
                     <Label className="text-[10px] text-amber-500 uppercase tracking-widest flex items-center justify-between font-bold">
                        <span className="flex items-center gap-1.5"><Bell className="w-3.5 h-3.5"/> Agendar Seguimiento</span>
@@ -379,7 +381,6 @@ export const MemoryPanel = ({
                     )}
                  </div>
 
-                 {/* SECCIÓN RECORDATORIOS (MODO LECTURA) */}
                  {currentAnalysis.reminders && currentAnalysis.reminders.length > 0 && (
                     <div className="pt-2 border-t border-[#1a1a1a]">
                        <span className="text-[10px] font-bold text-amber-500 uppercase tracking-widest flex items-center gap-2 mb-3">
