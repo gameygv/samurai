@@ -17,18 +17,21 @@ serve(async (req) => {
 
   try {
     const cleanPhone = phone?.replace(/\D/g, '');
-    const { data: lead } = await supabaseClient.from('leads').select('*').eq('telefono', cleanPhone).single();
+    let { data: lead } = await supabaseClient.from('leads').select('*').eq('telefono', cleanPhone).single();
     
     if (!lead) return new Response('lead_not_found');
 
-    // 1. SIEMPRE DISPARAR LA INTELIGENCIA (Extraer datos)
-    // No importa si la IA está pausada, queremos capturar nombres y ciudades.
+    // 1. SIEMPRE DISPARAR LA INTELIGENCIA (Extraer datos) Y ESPERAR A QUE TERMINE
     await supabaseClient.functions.invoke('analyze-leads', { body: { lead_id: lead.id } });
 
-    // 2. SI EL BOT ESTÁ PAUSADO, AQUÍ TERMINAMOS (No responde al cliente)
+    // 2. RECARGAR EL LEAD FRESCO PARA QUE LA IA VEA LOS DATOS NUEVOS
+    const { data: updatedLead } = await supabaseClient.from('leads').select('*').eq('id', lead.id).single();
+    if (updatedLead) lead = updatedLead;
+
+    // 3. SI EL BOT ESTÁ PAUSADO, AQUÍ TERMINAMOS
     if (lead.ai_paused) return new Response('skipped_due_to_pause');
 
-    // 3. GENERAR RESPUESTA IA (Solo si no está pausado)
+    // 4. GENERAR RESPUESTA IA CON MEMORIA FRESCA
     const { data: configs } = await supabaseClient.from('app_config').select('key, value');
     const configMap = configs?.reduce((acc, item) => ({...acc, [item.key]: item.value}), {});
     const openaiKey = configMap['openai_api_key'];

@@ -119,53 +119,59 @@ serve(async (req) => {
       await supabaseClient.from('leads').update({ last_message_at: new Date().toISOString(), followup_stage: 0 }).eq('id', lead.id);
     }
 
+    // Guardar el mensaje del cliente en la BD
     await supabaseClient.from('conversaciones').insert({ 
         lead_id: lead.id, emisor: 'CLIENTE', mensaje: text || " ", platform: 'WHATSAPP',
         metadata: { msgId: messageId, mediaUrl: finalMediaUrl, mediaType }
     });
 
-    const analyzeTask = supabaseClient.functions.invoke('analyze-leads', { body: { lead_id: lead.id, force: false } });
-    let aiTask = Promise.resolve();
+    // 1. ESPERAR A QUE EL ANALISTA TERMINE DE EXTRAER DATOS (Email, Ciudad, Intent)
+    await supabaseClient.functions.invoke('analyze-leads', { body: { lead_id: lead.id, force: false } });
 
-    if (!lead.ai_paused) {
-       aiTask = (async () => {
-           const { data: configs } = await supabaseClient.from('app_config').select('key, value');
-           const configMap = configs?.reduce((acc, item) => ({...acc, [item.key]: item.value}), {});
-           const openaiKey = configMap['openai_api_key'];
-
-           if (openaiKey) {
-              const { data: context } = await supabaseClient.functions.invoke('get-samurai-context', { body: { lead, platform: 'WHATSAPP' } });
-              const { data: historyData } = await supabaseClient.from('conversaciones').select('emisor, mensaje').eq('lead_id', lead.id).order('created_at', { ascending: false }).limit(12);
-              const history = (historyData || []).reverse();
-              const messages = [ { role: 'system', content: context.system_prompt }, ...history.map(h => ({ role: (['IA', 'SAMURAI', 'BOT'].includes(h.emisor)) ? 'assistant' : 'user', content: h.mensaje })) ];
-
-              const aiRes = await fetch("https://api.openai.com/v1/chat/completions", {
-                method: 'POST', headers: { 'Authorization': `Bearer ${openaiKey}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ model: "gpt-4o", messages, temperature: 0.4 })
-              });
-
-              const aiData = await aiRes.json();
-              let aiText = aiData.choices?.[0]?.message?.content || '';
-
-              if (aiText) {
-                 let mediaUrlToSend = null;
-                 const match = aiText.match(/<<MEDIA:\s*(.+?)\s*>>/i);
-                 if (match) { mediaUrlToSend = match[1].trim(); aiText = aiText.replace(match[0], '').trim(); }
-
-                 await supabaseClient.functions.invoke('send-message-v3', {
-                    body: { channel_id: lead.channel_id, phone: senderPhone, message: aiText, mediaData: mediaUrlToSend ? { url: mediaUrlToSend, type: 'image' } : undefined }
-                 });
-
-                 await supabaseClient.from('conversaciones').insert({ 
-                    lead_id: lead.id, emisor: 'SAMURAI', mensaje: aiText || "[Poster Enviado]", platform: 'WHATSAPP',
-                    metadata: mediaUrlToSend ? { mediaUrl: mediaUrlToSend, mediaType: 'image' } : {}
-                 });
-              }
-           }
-       })();
+    // 2. RECARGAR EL LEAD FRESCO DESDE LA BASE DE DATOS
+    const { data: updatedLead } = await supabaseClient.from('leads').select('*').eq('id', lead.id).single();
+    if (updatedLead) {
+        lead = updatedLead; // Ahora el lead tiene el email que acaba de guardar el analista
     }
 
-    await Promise.allSettled([analyzeTask, aiTask]);
+    // 3. RESPONDER SI LA IA ESTÁ ACTIVA
+    if (!lead.ai_paused) {
+       const { data: configs } = await supabaseClient.from('app_config').select('key, value');
+       const configMap = configs?.reduce((acc, item) => ({...acc, [item.key]: item.value}), {});
+       const openaiKey = configMap['openai_api_key'];
+
+       if (openaiKey) {
+          // El contexto ahora se genera con el lead actualizado (memoria fresca)
+          const { data: context } = await supabaseClient.functions.invoke('get-samurai-context', { body: { lead, platform: 'WHATSAPP' } });
+          const { data: historyData } = await supabaseClient.from('conversaciones').select('emisor, mensaje').eq('lead_id', lead.id).order('created_at', { ascending: false }).limit(12);
+          const history = (historyData || []).reverse();
+          const messages = [ { role: 'system', content: context.system_prompt }, ...history.map(h => ({ role: (['IA', 'SAMURAI', 'BOT'].includes(h.emisor)) ? 'assistant' : 'user', content: h.mensaje })) ];
+
+          const aiRes = await fetch("https://api.openai.com/v1/chat/completions", {
+            method: 'POST', headers: { 'Authorization': `Bearer ${openaiKey}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ model: "gpt-4o", messages, temperature: 0.4 })
+          });
+
+          const aiData = await aiRes.json();
+          let aiText = aiData.choices?.[0]?.message?.content || '';
+
+          if (aiText) {
+             let mediaUrlToSend = null;
+             const match = aiText.match(/<<MEDIA:\s*(.+?)\s*>>/i);
+             if (match) { mediaUrlToSend = match[1].trim(); aiText = aiText.replace(match[0], '').trim(); }
+
+             await supabaseClient.functions.invoke('send-message-v3', {
+                body: { channel_id: lead.channel_id, phone: senderPhone, message: aiText, mediaData: mediaUrlToSend ? { url: mediaUrlToSend, type: 'image' } : undefined }
+             });
+
+             await supabaseClient.from('conversaciones').insert({ 
+                lead_id: lead.id, emisor: 'SAMURAI', mensaje: aiText || "[Poster Enviado]", platform: 'WHATSAPP',
+                metadata: mediaUrlToSend ? { mediaUrl: mediaUrlToSend, mediaType: 'image' } : {}
+             });
+          }
+       }
+    }
+
     return new Response('ok', { headers: corsHeaders });
   } catch (err) {
     await logTrace(`ERROR CRÍTICO: ${err.message}`, true);
