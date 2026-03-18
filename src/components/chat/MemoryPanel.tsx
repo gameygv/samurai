@@ -69,8 +69,12 @@ export const MemoryPanel = ({
   const healthScore = capiFields.filter(Boolean).length;
   const healthPercent = Math.round((healthScore / 4) * 100);
 
-  // Validaciones seguras para arrays e IDs
-  const validReminders = Array.isArray(currentAnalysis?.reminders) ? currentAnalysis.reminders : [];
+  // Validaciones súper estrictas para listas (Evita el "map is not a function")
+  const safeReminders = Array.isArray(currentAnalysis?.reminders) ? currentAnalysis.reminders : 
+      (typeof currentAnalysis?.reminders === 'string' ? 
+        (function(){ try { const p = JSON.parse(currentAnalysis.reminders); return Array.isArray(p) ? p : [] } catch(e){ return [] } })() 
+      : []);
+
   const safeAgents = Array.isArray(agents) ? agents : [];
   const safeChannels = Array.isArray(channels) ? channels : [];
   
@@ -390,13 +394,13 @@ export const MemoryPanel = ({
                     )}
                  </div>
 
-                 {validReminders.length > 0 && (
+                 {safeReminders.length > 0 && (
                     <div className="pt-2 border-t border-[#1a1a1a]">
                        <span className="text-[10px] font-bold text-amber-500 uppercase tracking-widest flex items-center gap-2 mb-3">
                           <Bell className="w-3.5 h-3.5"/> Tareas / Follow-Ups
                        </span>
                        <div className="space-y-2">
-                          {validReminders.map((r: any) => (
+                          {safeReminders.map((r: any) => (
                              <div key={r.id} className="bg-[#121214] border border-[#222225] p-3 rounded-xl flex justify-between items-center">
                                 <span className="text-xs text-slate-200 font-bold truncate pr-4">{r.title || 'Seguimiento'}</span>
                                 <span className="text-[10px] text-amber-500 font-mono bg-amber-500/10 px-2 py-1 rounded-md shrink-0">

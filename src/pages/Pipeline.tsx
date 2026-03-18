@@ -177,7 +177,7 @@ const Pipeline = () => {
                            </div>
 
                            {/* Tags Area */}
-                           {lead.tags && lead.tags.length > 0 && (
+                           {Array.isArray(lead.tags) && lead.tags.length > 0 && (
                                <div className="pl-2 flex gap-1.5 flex-wrap">
                                    {lead.tags.slice(0,3).map((t: string) => {
                                        const tagConf = allTags.find(lt => lt.text === t);

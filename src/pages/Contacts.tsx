@@ -85,8 +85,8 @@ const Contacts = () => {
      if (data) {
         const local = data.find(d => d.key === `agent_tags_${user.id}`)?.value;
         const global = data.find(d => d.key === 'global_tags')?.value;
-        if (local) try { setLocalTags(JSON.parse(local)); } catch(e) {}
-        if (global) try { setGlobalTags(JSON.parse(global)); } catch(e) {}
+        if (local) { try { const parsed = JSON.parse(local); if (Array.isArray(parsed)) setLocalTags(parsed); } catch(e) {} }
+        if (global) { try { const parsed = JSON.parse(global); if (Array.isArray(parsed)) setGlobalTags(parsed); } catch(e) {} }
      }
   };
 
@@ -307,7 +307,7 @@ const Contacts = () => {
                <SelectContent className="bg-[#121214] border-[#222225] text-white rounded-xl max-h-[300px]">
                   <SelectItem value="ALL">Todas las Etiquetas</SelectItem>
                   {allTags.map(t => (
-                      <SelectItem key={t.id} value={t.text} className="focus:bg-[#161618]">
+                      <SelectItem key={t.id || t.text} value={t.text} className="focus:bg-[#161618]">
                           <div className="flex items-center gap-2">
                              <div className="w-2 h-2 rounded-full" style={{backgroundColor: t.color}}></div>
                              {t.text}
@@ -407,7 +407,7 @@ const Contacts = () => {
                                {contact.grupo && <span className="ml-2 text-indigo-400 font-bold">• {contact.grupo}</span>}
                             </span>
                             {/* Renderizado Estético de Etiquetas (Glow oscuro) */}
-                            {contact.tags && contact.tags.length > 0 && (
+                            {Array.isArray(contact.tags) && contact.tags.length > 0 && (
                                 <div className="flex gap-1.5 flex-wrap mt-1">
                                     {contact.tags.map((t: string) => {
                                         const tagConf = allTags.find(lt => lt.text === t);
