@@ -84,7 +84,9 @@ export const LeadRow = ({ lead, allTags, onClick }: LeadRowProps) => {
       <TableCell>
         <Badge variant="outline" className={cn(
           "text-[9px] uppercase font-bold tracking-widest px-3 py-1 border shadow-sm",
-          intent === 'COMPRADO' ? "border-emerald-500/50 text-emerald-400 bg-emerald-500/10" : "border-[#333336] text-slate-400 bg-[#121214]"
+          intent === 'COMPRADO' ? "border-emerald-500/50 text-emerald-400 bg-emerald-500/10" : 
+          intent === 'PERDIDO' ? "border-red-500/50 text-red-400 bg-red-500/10" :
+          "border-[#333336] text-slate-400 bg-[#121214]"
         )}>
           {intent}
         </Badge>

@@ -154,7 +154,7 @@ const Leads = () => {
           </div>
 
           <Select value={selectedIntent} onValueChange={setSelectedIntent}>
-            <SelectTrigger className="w-[150px] h-9 bg-[#161618] border-[#222225] rounded-xl text-xs text-slate-300">
+            <SelectTrigger className="w-[160px] h-9 bg-[#161618] border-[#222225] rounded-xl text-xs text-slate-300">
               <SelectValue placeholder="Intención" />
             </SelectTrigger>
             <SelectContent className="bg-[#121214] border-[#222225] text-white rounded-xl">
@@ -163,6 +163,7 @@ const Leads = () => {
               <SelectItem value="MEDIO">Seducción (Medio)</SelectItem>
               <SelectItem value="ALTO">Cierre (Alto)</SelectItem>
               <SelectItem value="COMPRADO">Ganado (Comprado)</SelectItem>
+              <SelectItem value="PERDIDO">Perdido / Descartado</SelectItem>
             </SelectContent>
           </Select>
 

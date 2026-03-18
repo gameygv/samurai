@@ -61,7 +61,7 @@ serve(async (req) => {
         const systemPrompt = `
 Eres el Auditor de Identidad del CRM. Tu misión es extraer datos reales de la conversación.
 REGLA DE ORO: Si el usuario dice "Soy X" o "Mi nombre es X", ese es su NOMBRE REAL.
-IMPORTANTE SOBRE INTENCIÓN DE COMPRA: Evalúa la temperatura del prospecto. NUNCA uses 'COMPRADO' ni 'PERDIDO'. Solo elige entre BAJO, MEDIO o ALTO.
+IMPORTANTE SOBRE INTENCIÓN DE COMPRA: Evalúa la temperatura del prospecto. NUNCA uses 'COMPRADO'. Solo elige entre BAJO, MEDIO, ALTO o PERDIDO (si el cliente dice claramente que ya no le interesa o pide que dejen de escribirle).
 
 DATOS A EXTRAER:
 1. NOMBRE: Nombre real.
@@ -72,7 +72,7 @@ DATOS A EXTRAER:
 ROUTING: Elige EXACTAMENTE el ID del agente según la ciudad:
 ${agentsContext}
 
-RESPONDE SOLO JSON: {"nombre": "...", "email": "...", "ciudad": "...", "intent": "BAJO|MEDIO|ALTO", "perfil": "...", "summary": "...", "suggested_agent_id": "UUID"}`;
+RESPONDE SOLO JSON: {"nombre": "...", "email": "...", "ciudad": "...", "intent": "BAJO|MEDIO|ALTO|PERDIDO", "perfil": "...", "summary": "...", "suggested_agent_id": "UUID"}`;
 
         const aiRes = await fetch(OPENAI_URL, {
             method: 'POST',
@@ -94,15 +94,18 @@ RESPONDE SOLO JSON: {"nombre": "...", "email": "...", "ciudad": "...", "intent":
         if (result.ciudad && result.ciudad !== 'null') updates.ciudad = result.ciudad;
         
         // =========================================================================
-        // BLINDAJE CRÍTICO ANTI-DEGRADACIÓN
+        // BLINDAJE CRÍTICO: Si el lead YA estaba comprado, NUNCA se degrada.
+        // Si no está comprado, permitimos que suba de nivel o que se marque como PERDIDO.
         // =========================================================================
         const currentLevel = intentLevels[lead.buying_intent] || 1;
         const suggestedLevel = intentLevels[result.intent] || 1;
 
         if (lead.buying_intent === 'COMPRADO' || lead.buying_intent === 'PERDIDO') {
-            // Protección total: Nadie saca a un lead de aquí automáticamente
-        } else if (suggestedLevel > currentLevel && result.intent !== 'COMPRADO' && result.intent !== 'PERDIDO') {
-            // Solo permitimos avanzar en el embudo de ventas, nunca retroceder
+            // Protección total
+        } else if (result.intent === 'PERDIDO') {
+            updates.buying_intent = 'PERDIDO'; // Permitimos descarte
+        } else if (suggestedLevel > currentLevel && result.intent !== 'COMPRADO') {
+            // Solo permitimos avanzar en el embudo
             updates.buying_intent = result.intent;
         }
 
