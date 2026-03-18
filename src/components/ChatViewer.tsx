@@ -79,9 +79,27 @@ const ChatViewer = ({ lead: initialLead, open, onOpenChange }: ChatViewerProps) 
            wcBaseUrl: config.wc_url || '',
            bankInfo: `Banco: ${config.bank_name}\nCuenta: ${config.bank_account}\nCLABE: ${config.bank_clabe}\nTitular: ${config.bank_holder}`
         });
-        try { if (config.quick_replies) setGlobalReplies(JSON.parse(config.quick_replies)); } catch (e) {}
-        try { if (config[`agent_templates_${user.id}`]) setLocalReplies(JSON.parse(config[`agent_templates_${user.id}`])); } catch (e) {}
-        try { if (config.wc_products) setProducts(JSON.parse(config.wc_products)); } catch (e) {}
+        
+        try { 
+           if (config.quick_replies) {
+              const parsed = JSON.parse(config.quick_replies);
+              if (Array.isArray(parsed)) setGlobalReplies(parsed);
+           }
+        } catch (e) {}
+        
+        try { 
+           if (config[`agent_templates_${user.id}`]) {
+              const parsed = JSON.parse(config[`agent_templates_${user.id}`]);
+              if (Array.isArray(parsed)) setLocalReplies(parsed);
+           }
+        } catch (e) {}
+        
+        try { 
+           if (config.wc_products) {
+              const parsed = JSON.parse(config.wc_products);
+              if (Array.isArray(parsed)) setProducts(parsed);
+           }
+        } catch (e) {}
      }
   };
 
@@ -106,8 +124,8 @@ const ChatViewer = ({ lead: initialLead, open, onOpenChange }: ChatViewerProps) 
     try {
       const transcript = msgs.slice(-8).map(m => `${m.emisor}: ${m.mensaje}`).join('\n');
       const { data, error } = await supabase.functions.invoke('get-ai-suggestions', { body: { lead_id: leadId, transcript } });
-      if (!error && data?.suggestions) setSuggestions(data.suggestions);
-    } finally { setLoadingSuggestions(false); }
+      if (!error && data?.suggestions && Array.isArray(data.suggestions)) setSuggestions(data.suggestions);
+    } catch(e) {} finally { setLoadingSuggestions(false); }
   };
 
   const handleAutoGenerate = async () => {
@@ -192,18 +210,38 @@ const ChatViewer = ({ lead: initialLead, open, onOpenChange }: ChatViewerProps) 
                          </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="start" className="bg-slate-900 border-slate-800 text-white w-64 max-h-[300px] overflow-y-auto">
-                         {products.map(p => (
-                             <DropdownMenuItem key={p.id} onClick={() => setDraftMessage(`${quickActions.wcBaseUrl}/checkout/?add-to-cart=${p.wc_id}`)} className="cursor-pointer text-xs">
-                                <ShoppingCart className="w-3 h-3 mr-2 text-indigo-400 shrink-0" /><span>{p.title}</span>
-                             </DropdownMenuItem>
-                         ))}
-                         <DropdownMenuSeparator className="bg-slate-800 my-2"/>
+                         {Array.isArray(products) && products.length > 0 && (
+                            <>
+                               <DropdownMenuLabel className="text-[10px] uppercase text-slate-500 font-bold">Catálogo</DropdownMenuLabel>
+                               {products.map(p => (
+                                   <DropdownMenuItem key={p.id || p.title} onClick={() => setDraftMessage(`${quickActions.wcBaseUrl}/checkout/?add-to-cart=${p.wc_id}`)} className="cursor-pointer text-xs focus:bg-[#161618] focus:text-white">
+                                      <ShoppingCart className="w-3 h-3 mr-2 text-indigo-400 shrink-0" /><span className="truncate">{p.title}</span>
+                                   </DropdownMenuItem>
+                               ))}
+                               <DropdownMenuSeparator className="bg-slate-800 my-2"/>
+                            </>
+                         )}
                          <DropdownMenuItem onClick={() => setDraftMessage(quickActions.bankInfo)} className="cursor-pointer text-xs"><CreditCard className="w-3 h-3 mr-2 text-indigo-400" /> Datos Bancarios</DropdownMenuItem>
-                         {globalReplies.map((qr) => (
-                            <DropdownMenuItem key={qr.id} onClick={() => setDraftMessage(qr.text)} className="cursor-pointer text-xs">
-                               <MessageSquarePlus className="w-3 h-3 mr-2 text-indigo-400 shrink-0" /><span>{qr.title}</span>
-                            </DropdownMenuItem>
-                         ))}
+                         
+                         {Array.isArray(globalReplies) && globalReplies.length > 0 && <>
+                            <DropdownMenuSeparator className="bg-slate-800 my-2"/>
+                            <DropdownMenuLabel className="text-[10px] uppercase text-slate-500 font-bold">Plantillas Globales</DropdownMenuLabel>
+                            {globalReplies.map((qr) => (
+                               <DropdownMenuItem key={qr.id || qr.title} onClick={() => setDraftMessage(qr.text)} className="cursor-pointer text-xs focus:bg-[#161618] focus:text-white">
+                                  <MessageSquarePlus className="w-3 h-3 mr-2 text-indigo-400 shrink-0" /><span className="truncate">{qr.title}</span>
+                               </DropdownMenuItem>
+                            ))}
+                         </>}
+
+                         {Array.isArray(localReplies) && localReplies.length > 0 && <>
+                            <DropdownMenuSeparator className="bg-slate-800 my-2"/>
+                            <DropdownMenuLabel className="text-[10px] uppercase text-slate-500 font-bold">Mis Plantillas Privadas</DropdownMenuLabel>
+                            {localReplies.map((qr) => (
+                               <DropdownMenuItem key={qr.id || qr.title} onClick={() => setDraftMessage(qr.text)} className="cursor-pointer text-xs focus:bg-[#161618] focus:text-white">
+                                  <MessageSquarePlus className="w-3 h-3 mr-2 text-amber-500 shrink-0" /><span className="truncate">{qr.title}</span>
+                               </DropdownMenuItem>
+                            ))}
+                         </>}
                       </DropdownMenuContent>
                    </DropdownMenu>
                 }

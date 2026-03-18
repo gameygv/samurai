@@ -15,7 +15,8 @@ interface ChatHeaderProps {
 
 export const ChatHeader = ({ lead, isAiPaused, sending, onSendCommand }: ChatHeaderProps) => {
   const { isManager } = useAuth();
-  const initials = (lead?.nombre?.substring(0, 2) || 'CL').toUpperCase();
+  const safeName = String(lead?.nombre || 'Cliente');
+  const initials = safeName.substring(0, 2).toUpperCase() || 'CL';
 
   const getIntentBadge = (intent: string) => {
      const i = (intent || 'BAJO').toUpperCase();
@@ -36,7 +37,7 @@ export const ChatHeader = ({ lead, isAiPaused, sending, onSendCommand }: ChatHea
         </Avatar>
         <div className="flex flex-col">
           <div className="text-sm font-bold truncate max-w-[250px] flex items-center gap-2">
-            {lead?.nombre || 'Cliente'}
+            {safeName}
             <Badge variant="outline" className="text-[9px] border-slate-700 text-slate-500 h-4 px-1 uppercase hidden sm:inline-flex">
               {lead?.platform || 'WhatsApp'}
             </Badge>

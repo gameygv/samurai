@@ -55,10 +55,10 @@ export const MemoryPanel = ({
   const [tacticalOpen, setTacticalOpen] = useState(true);
   const [tagsOpen, setTagsOpen] = useState(true);
 
-  // Lógica defensiva para evitar el crash de pantalla blanca
-  const emailVal = currentAnalysis?.email || '';
-  const nombreVal = currentAnalysis?.nombre || '';
-  const ciudadVal = currentAnalysis?.ciudad || '';
+  // Lógica defensiva ABSOLUTA para evitar crash
+  const emailVal = String(currentAnalysis?.email || '');
+  const nombreVal = String(currentAnalysis?.nombre || '');
+  const ciudadVal = String(currentAnalysis?.ciudad || '');
 
   const capiFields = [
      true, 
@@ -68,6 +68,15 @@ export const MemoryPanel = ({
   ];
   const healthScore = capiFields.filter(Boolean).length;
   const healthPercent = Math.round((healthScore / 4) * 100);
+
+  // Validaciones seguras para arrays e IDs
+  const validReminders = Array.isArray(currentAnalysis?.reminders) ? currentAnalysis.reminders : [];
+  const safeAgents = Array.isArray(agents) ? agents : [];
+  const safeChannels = Array.isArray(channels) ? channels : [];
+  
+  const currentAgentName = safeAgents.find(a => a.id === currentAnalysis?.assigned_to)?.full_name || 'Bot Global';
+  const currentChannelName = safeChannels.find(c => c.id === currentAnalysis?.channel_id)?.name || 'Canal Desconocido';
+  const allAvailableTags = [...(Array.isArray(globalTags) ? globalTags : []), ...(Array.isArray(localTags) ? localTags : [])];
 
   useEffect(() => { 
     fetchAgents(); 
@@ -111,8 +120,8 @@ export const MemoryPanel = ({
      if (data) {
         const local = data.find(d => d.key === `agent_tags_${user.id}`)?.value;
         const global = data.find(d => d.key === 'global_tags')?.value;
-        if (local) try { setLocalTags(JSON.parse(local)); } catch(e) {}
-        if (global) try { setGlobalTags(JSON.parse(global)); } catch(e) {}
+        if (local) { try { const parsed = JSON.parse(local); if (Array.isArray(parsed)) setLocalTags(parsed); } catch(e) {} }
+        if (global) { try { const parsed = JSON.parse(global); if (Array.isArray(parsed)) setGlobalTags(parsed); } catch(e) {} }
      }
   };
 
@@ -184,7 +193,7 @@ export const MemoryPanel = ({
   };
 
   const handleAddTag = async (tagText: string) => {
-      const currentTags = memoryForm.tags || [];
+      const currentTags = Array.isArray(memoryForm.tags) ? memoryForm.tags : [];
       if (currentTags.includes(tagText)) return;
 
       const newTags = [...currentTags, tagText];
@@ -193,27 +202,27 @@ export const MemoryPanel = ({
   };
 
   const handleRemoveTag = async (tagText: string) => {
-      const newTags = (memoryForm.tags || []).filter((t: string) => t !== tagText);
+      const currentTags = Array.isArray(memoryForm.tags) ? memoryForm.tags : [];
+      const newTags = currentTags.filter((t: string) => t !== tagText);
       setMemoryForm({...memoryForm, tags: newTags});
       await supabase.from('leads').update({ tags: newTags }).eq('id', currentAnalysis.id);
   };
 
   const handleAddReminder = () => {
-      const newReminders = [...(memoryForm.reminders || []), { id: Date.now().toString(), title: '', datetime: '', notify_minutes: 15 }];
+      const currentRems = Array.isArray(memoryForm.reminders) ? memoryForm.reminders : [];
+      const newReminders = [...currentRems, { id: Date.now().toString(), title: '', datetime: '', notify_minutes: 15 }];
       setMemoryForm({...memoryForm, reminders: newReminders});
   };
   const handleUpdateReminder = (id: string, field: string, val: any) => {
-      const newReminders = memoryForm.reminders.map((r: any) => r.id === id ? { ...r, [field]: val } : r);
+      const currentRems = Array.isArray(memoryForm.reminders) ? memoryForm.reminders : [];
+      const newReminders = currentRems.map((r: any) => r.id === id ? { ...r, [field]: val } : r);
       setMemoryForm({...memoryForm, reminders: newReminders});
   };
   const handleRemoveReminder = (id: string) => {
-      const newReminders = memoryForm.reminders.filter((r: any) => r.id !== id);
+      const currentRems = Array.isArray(memoryForm.reminders) ? memoryForm.reminders : [];
+      const newReminders = currentRems.filter((r: any) => r.id !== id);
       setMemoryForm({...memoryForm, reminders: newReminders});
   };
-
-  const currentAgentName = agents.find(a => a.id === currentAnalysis.assigned_to)?.full_name || 'Bot Global';
-  const currentChannelName = channels.find(c => c.id === currentAnalysis.channel_id)?.name || 'Canal Desconocido';
-  const allAvailableTags = [...globalTags, ...localTags];
 
   return (
     <div className="w-full flex-shrink-0 bg-[#0a0a0c] flex flex-col h-full text-slate-300">
@@ -254,7 +263,7 @@ export const MemoryPanel = ({
               <div className="flex justify-between items-center">
                  <span className="text-[10px] text-[#7A8A9E]">Dictamen IA:</span>
                  <Badge variant="outline" className="text-[9px] border-[#222225] bg-[#0a0a0c] text-[#7A8A9E] h-5 px-2">
-                    {currentAnalysis.payment_status === 'VALID' ? 'APROBADO' : currentAnalysis.payment_status === 'INVALID' ? 'RECHAZADO' : 'SIN COMPROBANTE'}
+                    {currentAnalysis?.payment_status === 'VALID' ? 'APROBADO' : currentAnalysis?.payment_status === 'INVALID' ? 'RECHAZADO' : 'SIN COMPROBANTE'}
                  </Badge>
               </div>
               <div className="flex gap-3">
@@ -298,7 +307,7 @@ export const MemoryPanel = ({
                         <SelectTrigger className="h-8 text-xs bg-slate-950 border-slate-800"><SelectValue /></SelectTrigger>
                         <SelectContent className="bg-slate-900 border-slate-800 text-white">
                             <SelectItem value="unassigned">Bot Global</SelectItem>
-                            {agents.map(a => <SelectItem key={a.id} value={a.id}>{a.full_name}</SelectItem>)}
+                            {safeAgents.map(a => <SelectItem key={a.id} value={a.id}>{a.full_name}</SelectItem>)}
                         </SelectContent>
                         </Select>
                     </div>
@@ -308,7 +317,7 @@ export const MemoryPanel = ({
                         <SelectTrigger className="h-8 text-xs bg-slate-950 border-slate-800"><SelectValue /></SelectTrigger>
                         <SelectContent className="bg-slate-900 border-slate-800 text-white">
                             <SelectItem value="default">Instancia Principal</SelectItem>
-                            {channels.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                            {safeChannels.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
                         </SelectContent>
                         </Select>
                     </div>
@@ -322,10 +331,10 @@ export const MemoryPanel = ({
                        </Button>
                     </Label>
                     <div className="space-y-2">
-                       {memoryForm.reminders?.length === 0 ? (
+                       {!Array.isArray(memoryForm.reminders) || memoryForm.reminders.length === 0 ? (
                           <p className="text-[9px] text-slate-500 italic text-center py-2">No hay tareas programadas.</p>
                        ) : (
-                          memoryForm.reminders?.map((r: any) => (
+                          memoryForm.reminders.map((r: any) => (
                              <ReminderItem key={r.id} reminder={r} onUpdate={handleUpdateReminder} onRemove={handleRemoveReminder} />
                           ))
                        )}
@@ -354,7 +363,7 @@ export const MemoryPanel = ({
                                    </SelectTrigger>
                                    <SelectContent className="bg-[#121214] border-[#222225] text-white text-xs">
                                        <SelectItem value="unassigned">Bot Global</SelectItem>
-                                       {agents.map(a => <SelectItem key={a.id} value={a.id}>{a.full_name}</SelectItem>)}
+                                       {safeAgents.map(a => <SelectItem key={a.id} value={a.id}>{a.full_name}</SelectItem>)}
                                    </SelectContent>
                                 </Select>
                              ) : (
@@ -368,26 +377,26 @@ export const MemoryPanel = ({
                           <div className="col-span-2">
                              <span className="text-[9px] text-[#7A8A9E] uppercase font-bold tracking-widest">Resumen IA</span>
                              <p className="text-[11px] text-emerald-400/80 italic mt-1 leading-relaxed">
-                                {currentAnalysis.summary || 'Generando resumen...'}
+                                {currentAnalysis?.summary || 'Generando resumen...'}
                              </p>
                           </div>
                           <div className="col-span-2">
                              <span className="text-[9px] text-[#7A8A9E] uppercase font-bold tracking-widest">Perfil Psicográfico</span>
                              <p className="text-[11px] text-amber-500/80 italic mt-1 leading-relaxed">
-                                {currentAnalysis.perfil_psicologico || 'Analizando conversaciones para perfilar...'}
+                                {currentAnalysis?.perfil_psicologico || 'Analizando conversaciones para perfilar...'}
                              </p>
                           </div>
                        </div>
                     )}
                  </div>
 
-                 {currentAnalysis.reminders && currentAnalysis.reminders.length > 0 && (
+                 {validReminders.length > 0 && (
                     <div className="pt-2 border-t border-[#1a1a1a]">
                        <span className="text-[10px] font-bold text-amber-500 uppercase tracking-widest flex items-center gap-2 mb-3">
                           <Bell className="w-3.5 h-3.5"/> Tareas / Follow-Ups
                        </span>
                        <div className="space-y-2">
-                          {currentAnalysis.reminders.map((r: any) => (
+                          {validReminders.map((r: any) => (
                              <div key={r.id} className="bg-[#121214] border border-[#222225] p-3 rounded-xl flex justify-between items-center">
                                 <span className="text-xs text-slate-200 font-bold truncate pr-4">{r.title || 'Seguimiento'}</span>
                                 <span className="text-[10px] text-amber-500 font-mono bg-amber-500/10 px-2 py-1 rounded-md shrink-0">
@@ -406,9 +415,9 @@ export const MemoryPanel = ({
                     </button>
                     {tagsOpen && (
                        <div className="flex flex-wrap gap-2 items-center pt-3 pb-2">
-                          {(memoryForm.tags || []).map((t: string) => {
+                          {Array.isArray(memoryForm.tags) && memoryForm.tags.map((t: string) => {
                              const tagConf = allAvailableTags.find(lt => lt.text === t);
-                             const isGlobal = globalTags.some(gt => gt.text === t);
+                             const isGlobal = Array.isArray(globalTags) && globalTags.some(gt => gt.text === t);
                              
                              const bgColor = tagConf ? tagConf.color + '15' : '#161618';
                              const textColor = tagConf ? tagConf.color : '#94a3b8';
@@ -429,7 +438,7 @@ export const MemoryPanel = ({
                                 <Plus className="w-3 h-3 mr-1" /> Añadir
                              </SelectTrigger>
                              <SelectContent className="bg-[#121214] border-[#222225] max-h-64">
-                                {globalTags.length > 0 && (
+                                {Array.isArray(globalTags) && globalTags.length > 0 && (
                                    <div className="py-1.5 px-2">
                                       <div className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1 px-1">Globales (Equipo)</div>
                                       {globalTags.map(tag => (
@@ -443,7 +452,7 @@ export const MemoryPanel = ({
                                    </div>
                                 )}
                                 
-                                {localTags.length > 0 && (
+                                {Array.isArray(localTags) && localTags.length > 0 && (
                                    <div className="py-1.5 px-2 border-t border-[#222225]">
                                       <div className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1 px-1">Privadas (Solo tú)</div>
                                       {localTags.map(tag => (
@@ -473,7 +482,7 @@ export const MemoryPanel = ({
                        </span>
                        <div>
                           <FinancialStatusBadge 
-                             leadId={currentAnalysis.id} 
+                             leadId={currentAnalysis?.id} 
                              currentStatus={contactData?.financial_status || 'Sin transacción'} 
                              isManager={isManager} 
                              onUpdate={() => {
@@ -515,12 +524,12 @@ export const MemoryPanel = ({
             onClick={onToggleFollowup} 
             className={cn(
                "w-full h-12 text-[10px] font-bold tracking-widest uppercase rounded-xl border transition-all duration-300 shadow-none", 
-               currentAnalysis.ai_paused 
+               currentAnalysis?.ai_paused 
                   ? "bg-emerald-950/30 text-emerald-500 border-emerald-900/50 hover:bg-emerald-900/40" 
                   : "bg-[#3d0f0f] text-red-400 border-[#5e1616] hover:bg-[#5e1616] hover:text-white"
             )}
          >
-            {currentAnalysis.ai_paused ? "▶ ACTIVAR IA (ESTE CHAT)" : "⏸ PAUSAR IA (ESTE CHAT)"}
+            {currentAnalysis?.ai_paused ? "▶ ACTIVAR IA (ESTE CHAT)" : "⏸ PAUSAR IA (ESTE CHAT)"}
          </Button>
       </div>
 

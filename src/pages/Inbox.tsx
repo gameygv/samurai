@@ -23,9 +23,6 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, 
   DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter
-} from "@/components/ui/dialog";
 
 const Inbox = () => {
   const { user, isManager, isDev } = useAuth();
@@ -36,11 +33,6 @@ const Inbox = () => {
   const [loadingLeads, setLoadingLeads] = useState(true);
   const [sending, setSending] = useState(false);
   
-  // Emergency Manual Input
-  const [isEmergencyOpen, setIsEmergencyOpen] = useState(false);
-  const [manualClientText, setManualClientText] = useState("");
-  const [processingManual, setProcessingManual] = useState(false);
-
   const [quickActions, setQuickActions] = useState<any>({});
   const [globalReplies, setGlobalReplies] = useState<any[]>([]);
   const [localReplies, setLocalReplies] = useState<any[]>([]);
@@ -109,18 +101,8 @@ const Inbox = () => {
      if (data) {
         const local = data.find(d => d.key === `agent_tags_${user.id}`)?.value;
         const global = data.find(d => d.key === 'global_tags')?.value;
-        if (local) {
-           try { 
-              const parsed = JSON.parse(local);
-              if (Array.isArray(parsed)) setLocalTags(parsed);
-           } catch(e) {}
-        }
-        if (global) {
-           try { 
-              const parsed = JSON.parse(global);
-              if (Array.isArray(parsed)) setGlobalTags(parsed);
-           } catch(e) {}
-        }
+        if (local) { try { const parsed = JSON.parse(local); if (Array.isArray(parsed)) setLocalTags(parsed); } catch(e) {} }
+        if (global) { try { const parsed = JSON.parse(global); if (Array.isArray(parsed)) setGlobalTags(parsed); } catch(e) {} }
      }
   };
 
@@ -131,26 +113,9 @@ const Inbox = () => {
        const config: any = data.reduce((acc, item) => ({...acc, [item.key]: item.value}), {});
        setQuickActions({ wcBaseUrl: config.wc_url || '', bankInfo: `Banco: ${config.bank_name}\nCuenta: ${config.bank_account}\nCLABE: ${config.bank_clabe}\nTitular: ${config.bank_holder}` });
        
-       try { 
-          if (config.quick_replies) {
-             const parsed = JSON.parse(config.quick_replies);
-             if (Array.isArray(parsed)) setGlobalReplies(parsed);
-          }
-       } catch (e) {}
-       
-       try { 
-          if (config[`agent_templates_${user.id}`]) {
-             const parsed = JSON.parse(config[`agent_templates_${user.id}`]);
-             if (Array.isArray(parsed)) setLocalReplies(parsed);
-          }
-       } catch (e) {}
-       
-       try { 
-          if (config.wc_products) {
-             const parsed = JSON.parse(config.wc_products);
-             if (Array.isArray(parsed)) setProducts(parsed);
-          }
-       } catch (e) {}
+       try { if (config.quick_replies) { const parsed = JSON.parse(config.quick_replies); if (Array.isArray(parsed)) setGlobalReplies(parsed); } } catch (e) {}
+       try { if (config[`agent_templates_${user.id}`]) { const parsed = JSON.parse(config[`agent_templates_${user.id}`]); if (Array.isArray(parsed)) setLocalReplies(parsed); } } catch (e) {}
+       try { if (config.wc_products) { const parsed = JSON.parse(config.wc_products); if (Array.isArray(parsed)) setProducts(parsed); } } catch (e) {}
     }
   };
 
@@ -218,12 +183,14 @@ const Inbox = () => {
   };
 
   const updateMemoryForm = (data: any) => {
+    let rems = [];
+    try { rems = data.reminders ? (typeof data.reminders === 'string' ? JSON.parse(data.reminders) : data.reminders) : []; } catch(e){}
     setMemoryForm({
        nombre: data.nombre || '', email: data.email || '', summary: data.summary || '',
        mood: data.estado_emocional_actual || 'NEUTRO', buying_intent: data.buying_intent || 'BAJO',
        ciudad: data.ciudad || '', perfil_psicologico: data.perfil_psicologico || '', assigned_to: data.assigned_to || '',
        tags: Array.isArray(data.tags) ? data.tags : [], 
-       reminders: Array.isArray(data.reminders) ? data.reminders : []
+       reminders: Array.isArray(rems) ? rems : []
     });
   };
 
@@ -239,10 +206,7 @@ const Inbox = () => {
          });
          if (error) throw error;
          return data.answer as string;
-      } catch (e) {
-         console.error(e);
-         return null;
-      }
+      } catch (e) { return null; }
   };
 
   const saveMemory = async () => {
@@ -351,30 +315,32 @@ const Inbox = () => {
                                  </Button>
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="start" className="bg-[#0a0a0c] border-[#222225] text-white w-64 max-h-[300px] overflow-y-auto">
-                                 <DropdownMenuLabel className="text-[10px] uppercase text-slate-500 font-bold">Catálogo</DropdownMenuLabel>
-                                 {products.map(p => (
-                                     <DropdownMenuItem key={p.id} onClick={() => setDraftMessage(`${quickActions.wcBaseUrl}/checkout/?add-to-cart=${p.wc_id}`)} className="cursor-pointer text-xs focus:bg-[#161618] focus:text-white">
-                                        <ShoppingCart className="w-3 h-3 mr-2 text-indigo-400 shrink-0" /><span className="truncate">{p.title}</span>
-                                     </DropdownMenuItem>
-                                 ))}
-                                 <DropdownMenuSeparator className="bg-[#222225] my-2"/>
+                                 {Array.isArray(products) && products.length > 0 && <>
+                                    <DropdownMenuLabel className="text-[10px] uppercase text-slate-500 font-bold">Catálogo</DropdownMenuLabel>
+                                    {products.map(p => (
+                                        <DropdownMenuItem key={p.id || p.title} onClick={() => setDraftMessage(`${quickActions.wcBaseUrl}/checkout/?add-to-cart=${p.wc_id}`)} className="cursor-pointer text-xs focus:bg-[#161618] focus:text-white">
+                                           <ShoppingCart className="w-3 h-3 mr-2 text-indigo-400 shrink-0" /><span className="truncate">{p.title}</span>
+                                        </DropdownMenuItem>
+                                    ))}
+                                    <DropdownMenuSeparator className="bg-[#222225] my-2"/>
+                                 </>}
                                  <DropdownMenuItem onClick={() => setDraftMessage(quickActions.bankInfo)} className="cursor-pointer text-xs focus:bg-[#161618] focus:text-white"><CreditCard className="w-3 h-3 mr-2 text-indigo-400" /> Datos Bancarios</DropdownMenuItem>
                                  
-                                 {globalReplies.length > 0 && <>
+                                 {Array.isArray(globalReplies) && globalReplies.length > 0 && <>
                                     <DropdownMenuSeparator className="bg-[#222225] my-2"/>
                                     <DropdownMenuLabel className="text-[10px] uppercase text-slate-500 font-bold">Plantillas Globales</DropdownMenuLabel>
                                     {globalReplies.map((qr) => (
-                                       <DropdownMenuItem key={qr.id} onClick={() => setDraftMessage(qr.text)} className="cursor-pointer text-xs focus:bg-[#161618] focus:text-white">
+                                       <DropdownMenuItem key={qr.id || qr.title} onClick={() => setDraftMessage(qr.text)} className="cursor-pointer text-xs focus:bg-[#161618] focus:text-white">
                                           <MessageSquarePlus className="w-3 h-3 mr-2 text-indigo-400 shrink-0" /><span className="truncate">{qr.title}</span>
                                        </DropdownMenuItem>
                                     ))}
                                  </>}
 
-                                 {localReplies.length > 0 && <>
+                                 {Array.isArray(localReplies) && localReplies.length > 0 && <>
                                     <DropdownMenuSeparator className="bg-[#222225] my-2"/>
                                     <DropdownMenuLabel className="text-[10px] uppercase text-slate-500 font-bold">Mis Plantillas Privadas</DropdownMenuLabel>
                                     {localReplies.map((qr) => (
-                                       <DropdownMenuItem key={qr.id} onClick={() => setDraftMessage(qr.text)} className="cursor-pointer text-xs focus:bg-[#161618] focus:text-white">
+                                       <DropdownMenuItem key={qr.id || qr.title} onClick={() => setDraftMessage(qr.text)} className="cursor-pointer text-xs focus:bg-[#161618] focus:text-white">
                                           <MessageSquarePlus className="w-3 h-3 mr-2 text-amber-500 shrink-0" /><span className="truncate">{qr.title}</span>
                                        </DropdownMenuItem>
                                     ))}
@@ -386,7 +352,7 @@ const Inbox = () => {
                  </div>
               </>
            ) : (
-              <div className="flex flex-col items-center justify-center text-slate-500">
+              <div className="flex flex-col items-center justify-center text-slate-500 h-full">
                  <MessageCircle className="w-12 h-12 mb-4 opacity-20" />
                  <p className="text-xs uppercase font-bold tracking-widest">Selecciona un chat</p>
               </div>
