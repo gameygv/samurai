@@ -14,7 +14,13 @@ interface LeadRowProps {
 
 export const LeadRow = ({ lead, allTags, onClick }: LeadRowProps) => {
   if (!lead) return null;
-  const intent = (lead.buying_intent || 'BAJO').toUpperCase();
+  
+  // Forzamos conversión a string para evitar crashes de React
+  const nombre = String(lead.nombre || lead.telefono || 'Sin nombre');
+  const telefono = String(lead.telefono || '');
+  const email = String(lead.email || '');
+  const ciudad = String(lead.ciudad || '');
+  const intent = String(lead.buying_intent || 'BAJO').toUpperCase();
   const tags = Array.isArray(lead.tags) ? lead.tags : [];
   const tagsConfig = Array.isArray(allTags) ? allTags : [];
   
@@ -23,22 +29,22 @@ export const LeadRow = ({ lead, allTags, onClick }: LeadRowProps) => {
       <TableCell className="pl-6 py-4">
         <div className="flex items-center gap-4">
           <div className="w-10 h-10 rounded-xl bg-[#121214] border border-[#222225] flex items-center justify-center font-bold text-indigo-400 text-sm shadow-inner shrink-0">
-            {lead.nombre?.substring(0, 2).toUpperCase() || '??'}
+            {nombre.substring(0, 2).toUpperCase()}
           </div>
           <div className="flex flex-col">
-            <span className="font-bold text-slate-100 text-sm group-hover:text-indigo-300 transition-colors">{lead.nombre || 'Sin Nombre'}</span>
-            <span className="text-[11px] text-slate-500 font-mono mt-0.5">{lead.telefono}</span>
+            <span className="font-bold text-slate-100 text-sm group-hover:text-indigo-300 transition-colors">{nombre}</span>
+            <span className="text-[11px] text-slate-500 font-mono mt-0.5">{telefono}</span>
           </div>
         </div>
       </TableCell>
       <TableCell>
         <div className="flex flex-col gap-2">
           <div className="flex items-center gap-4">
-             <div className={cn("flex items-center gap-1.5 text-[10px]", lead.email ? "text-emerald-400 font-bold" : "text-slate-600 italic")}>
-               <Mail className="w-3 h-3" /> {lead.email || 'Sin Email'}
+             <div className={cn("flex items-center gap-1.5 text-[10px]", email ? "text-emerald-400 font-bold" : "text-slate-600 italic")}>
+               <Mail className="w-3 h-3" /> {email || 'Sin Email'}
              </div>
-             <div className={cn("flex items-center gap-1.5 text-[10px]", lead.ciudad ? "text-indigo-300 font-bold" : "text-slate-600 italic")}>
-               <MapPin className="w-3 h-3" /> {lead.ciudad || 'Sin Ciudad'}
+             <div className={cn("flex items-center gap-1.5 text-[10px]", ciudad ? "text-indigo-300 font-bold" : "text-slate-600 italic")}>
+               <MapPin className="w-3 h-3" /> {ciudad || 'Sin Ciudad'}
              </div>
           </div>
           
@@ -47,13 +53,9 @@ export const LeadRow = ({ lead, allTags, onClick }: LeadRowProps) => {
                  {tags.map((rawTag: any, idx: number) => {
                      const tagText = extractTagText(rawTag);
                      if (!tagText) return null;
-
                      const tagConf = tagsConfig.find(lt => lt.text === tagText);
-                     const bgColor = tagConf ? tagConf.color + '15' : '#1e293b';
-                     const textColor = tagConf ? tagConf.color : '#94a3b8';
-                     const borderColor = tagConf ? tagConf.color + '40' : '#334155';
                      return (
-                         <Badge key={`${tagText}-${idx}`} style={{ backgroundColor: bgColor, color: textColor, borderColor }} className="text-[8px] h-5 px-2 font-bold uppercase tracking-widest border">
+                         <Badge key={`${tagText}-${idx}`} style={{ backgroundColor: (tagConf?.color || '#475569') + '15', color: tagConf?.color || '#94a3b8', borderColor: (tagConf?.color || '#475569') + '40' }} className="text-[8px] h-5 px-2 font-bold uppercase tracking-widest border">
                              {tagText}
                          </Badge>
                      );
@@ -65,15 +67,12 @@ export const LeadRow = ({ lead, allTags, onClick }: LeadRowProps) => {
       <TableCell className="text-center">
         <div className="inline-flex flex-col items-center bg-[#121214] px-4 py-1.5 rounded-xl border border-[#222225]">
            <span className="text-xs font-bold text-indigo-400 font-mono">{lead.lead_score || 0}</span>
-           <span className="text-[8px] text-slate-600 uppercase font-bold tracking-widest mt-0.5">Score</span>
         </div>
       </TableCell>
       <TableCell>
         <Badge variant="outline" className={cn(
           "text-[9px] uppercase font-bold tracking-widest px-3 py-1 border shadow-sm",
-          intent === 'COMPRADO' ? "border-emerald-500/50 text-emerald-400 bg-emerald-500/10" :
-          intent === 'ALTO' ? "border-amber-500/50 text-amber-400 bg-amber-500/10" :
-          "border-[#333336] text-slate-400 bg-[#121214]"
+          intent === 'COMPRADO' ? "border-emerald-500/50 text-emerald-400 bg-emerald-500/10" : "border-[#333336] text-slate-400 bg-[#121214]"
         )}>
           {intent}
         </Badge>

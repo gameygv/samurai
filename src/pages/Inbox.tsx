@@ -26,7 +26,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 const Inbox = () => {
-  const { user, isManager, isDev } = useAuth();
+  const { user, isManager } = useAuth();
   const [leads, setLeads] = useState<any[]>([]);
   const [filteredLeads, setFilteredLeads] = useState<any[]>([]);
   const [activeLead, setActiveLead] = useState<any>(null);
@@ -73,10 +73,14 @@ const Inbox = () => {
   useEffect(() => {
     const term = searchTerm.toLowerCase();
     setFilteredLeads(leads.filter(l => {
+      const leadName = String(l.nombre || '').toLowerCase();
+      const leadPhone = String(l.telefono || '');
+      const leadCity = String(l.ciudad || '').toLowerCase();
       const contactTags = Array.isArray(l.tags) ? l.tags.map(extractTagText) : [];
-      return (l.nombre || '').toLowerCase().includes(term) || 
-             (l.telefono || '').includes(term) || 
-             (l.ciudad || '').toLowerCase().includes(term) ||
+      
+      return leadName.includes(term) || 
+             leadPhone.includes(term) || 
+             leadCity.includes(term) ||
              contactTags.some((t: string) => t.toLowerCase().includes(term));
     }));
   }, [searchTerm, leads]);
@@ -142,14 +146,11 @@ const Inbox = () => {
          await supabase.from('leads').update({ ai_paused: isPaused }).eq('id', activeLead.id);
          await supabase.from('conversaciones').insert({ lead_id: activeLead.id, mensaje: `IA ${isPaused ? 'Pausada' : 'Activada'} manualmente.`, emisor: 'NOTA', platform: 'PANEL_INTERNO' });
          toast.success(`Samurai ${isPaused ? 'Pausado' : 'Activado'}`);
-         setDraftMessage('');
          return;
       }
-
       if (isInternalNote) {
          await supabase.from('conversaciones').insert({ lead_id: activeLead.id, mensaje: text, emisor: 'NOTA', platform: 'PANEL_INTERNO' });
          toast.success("Nota guardada.");
-         setDraftMessage('');
          return; 
       }
 
@@ -166,20 +167,16 @@ const Inbox = () => {
         mediaData = { url: publicUrl, type, mimetype: file.type, name: file.name };
       }
 
-      const apiResponse = await sendEvolutionMessage(activeLead.telefono, text, activeLead.id, mediaData);
+      await sendEvolutionMessage(activeLead.telefono, text, activeLead.id, mediaData);
       
-      const textToSave = text || (file ? `[ARCHIVO ENVIADO: ${file.name}]` : '');
-      const finalMessage = apiResponse ? textToSave : `[PRUEBA / WA DESCONECTADO] ${textToSave}`;
-
       await supabase.from('conversaciones').insert({ 
-        lead_id: activeLead.id, mensaje: finalMessage, emisor: 'HUMANO', platform: 'PANEL',
+        lead_id: activeLead.id, mensaje: text || (file ? `[ARCHIVO ENVIADO: ${file.name}]` : ''), emisor: 'HUMANO', platform: 'PANEL',
         metadata: mediaData ? { mediaUrl: mediaData.url, mediaType: mediaData.type, fileName: mediaData.name } : {}
       });
 
       if (user && text) {
           supabase.functions.invoke('evaluate-agent', { body: { agent_id: user.id, lead_id: activeLead.id, message_text: text } }).catch(() => {});
       }
-
       setDraftMessage('');
     } catch (err: any) { toast.error('Error: ' + err.message); } finally { setSending(false); }
   };
@@ -188,9 +185,9 @@ const Inbox = () => {
     let rems = [];
     try { rems = data.reminders ? (typeof data.reminders === 'string' ? JSON.parse(data.reminders) : data.reminders) : []; } catch(e){}
     setMemoryForm({
-       nombre: data.nombre || '', email: data.email || '', summary: data.summary || '',
-       mood: data.estado_emocional_actual || 'NEUTRO', buying_intent: data.buying_intent || 'BAJO',
-       ciudad: data.ciudad || '', perfil_psicologico: data.perfil_psicologico || '', assigned_to: data.assigned_to || '',
+       nombre: String(data.nombre || ''), email: String(data.email || ''), summary: String(data.summary || ''),
+       mood: String(data.estado_emocional_actual || 'NEUTRO'), buying_intent: String(data.buying_intent || 'BAJO'),
+       ciudad: String(data.ciudad || ''), perfil_psicologico: String(data.perfil_psicologico || ''), assigned_to: data.assigned_to || '',
        tags: Array.isArray(data.tags) ? data.tags : [], 
        reminders: Array.isArray(rems) ? rems : []
     });
@@ -199,10 +196,7 @@ const Inbox = () => {
   const handleAutoGenerate = async () => {
       try {
          if (!messages) return null;
-         const history = messages.slice(-15).map(m => ({ 
-             role: (m.emisor === 'IA' || m.emisor === 'SAMURAI' ? 'bot' : 'user'), 
-             text: m.mensaje 
-         }));
+         const history = messages.slice(-15).map(m => ({ role: (m.emisor === 'IA' || m.emisor === 'SAMURAI' ? 'bot' : 'user'), text: m.mensaje }));
          const { data, error } = await supabase.functions.invoke('simulate-samurai', {
             body: { question: "Por favor genera la mejor respuesta corta y persuasiva para continuar esta conversación como un experto humano.", history, customPrompts: null }
          });
@@ -255,14 +249,14 @@ const Inbox = () => {
                        <button key={lead.id} onClick={() => setActiveLead(lead)}
                          className={cn("w-full text-left p-4 hover:bg-[#161618] transition-colors flex items-start gap-3 relative", activeLead?.id === lead.id ? "bg-[#161618] border-l-2 border-l-indigo-500" : "")}>
                           <Avatar className="h-10 w-10 border border-[#222225] bg-[#121214]">
-                               <AvatarFallback className="bg-transparent text-indigo-400 font-bold">{lead.nombre?.substring(0,2).toUpperCase() || 'CL'}</AvatarFallback>
+                               <AvatarFallback className="bg-transparent text-indigo-400 font-bold">{String(lead.nombre || 'CL').substring(0,2).toUpperCase()}</AvatarFallback>
                           </Avatar>
                           <div className="flex-1 min-w-0">
                              <div className="flex justify-between items-baseline mb-0.5">
-                                <span className={cn("font-bold truncate text-sm flex-1", activeLead?.id === lead.id ? "text-indigo-400" : "text-slate-200")}>{lead.nombre || lead.telefono}</span>
+                                <span className={cn("font-bold truncate text-sm flex-1", activeLead?.id === lead.id ? "text-indigo-400" : "text-slate-200")}>{String(lead.nombre || lead.telefono)}</span>
                              </div>
                              <div className="flex items-center gap-2 text-[10px] text-slate-400 mt-0.5">
-                                {lead.ciudad && <span className="flex items-center gap-1 font-bold text-indigo-300"><MapPin className="w-2.5 h-2.5"/>{lead.ciudad}</span>}
+                                {lead.ciudad && <span className="flex items-center gap-1 font-bold text-indigo-300"><MapPin className="w-2.5 h-2.5"/>{String(lead.ciudad)}</span>}
                                 {lead.email && <span className="flex items-center gap-1 text-emerald-400"><Mail className="w-2.5 h-2.5"/>OK</span>}
                              </div>
                              {Array.isArray(lead.tags) && lead.tags.length > 0 && (
@@ -271,10 +265,7 @@ const Inbox = () => {
                                       const t = extractTagText(rawTag);
                                       if (!t) return null;
                                       const tagConf = allTags.find(lt => lt.text === t);
-                                      const bgColor = tagConf ? tagConf.color + '20' : '#1e293b';
-                                      const textColor = tagConf ? tagConf.color : '#94a3b8';
-                                      const borderColor = tagConf ? tagConf.color + '50' : '#334155';
-                                      return <Badge key={`${t}-${idx}`} variant="outline" className="text-[8px] h-3.5 px-1 font-medium" style={{ backgroundColor: bgColor, color: textColor, borderColor }}>{t}</Badge>
+                                      return <Badge key={`${t}-${idx}`} variant="outline" className="text-[8px] h-3.5 px-1 font-medium" style={{ backgroundColor: (tagConf?.color || '#1e293b') + '20', color: tagConf?.color || '#94a3b8', borderColor: (tagConf?.color || '#334155') + '50' }}>{t}</Badge>
                                    })}
                                 </div>
                              )}
@@ -292,8 +283,8 @@ const Inbox = () => {
                  <div className="h-16 px-4 bg-[#0a0a0c]/80 backdrop-blur-md border-b border-[#1a1a1a] flex items-center justify-between shrink-0">
                     <div className="flex items-center gap-3">
                        <div className="flex flex-col">
-                          <span className="font-bold text-white">{activeLead.nombre || activeLead.telefono}</span>
-                          <span className="text-[10px] text-slate-400 font-mono">{activeLead.telefono}</span>
+                          <span className="font-bold text-white">{String(activeLead.nombre || activeLead.telefono)}</span>
+                          <span className="text-[10px] text-slate-400 font-mono">{String(activeLead.telefono)}</span>
                        </div>
                     </div>
                     <div className="flex items-center gap-2">
@@ -323,7 +314,7 @@ const Inbox = () => {
                                     <DropdownMenuLabel className="text-[10px] uppercase text-slate-500 font-bold">Catálogo</DropdownMenuLabel>
                                     {products.map(p => (
                                         <DropdownMenuItem key={p.id || p.title} onClick={() => setDraftMessage(`${quickActions.wcBaseUrl}/checkout/?add-to-cart=${p.wc_id}`)} className="cursor-pointer text-xs focus:bg-[#161618] focus:text-white">
-                                           <ShoppingCart className="w-3 h-3 mr-2 text-indigo-400 shrink-0" /><span className="truncate">{p.title}</span>
+                                           <ShoppingCart className="w-3 h-3 mr-2 text-indigo-400 shrink-0" /><span className="truncate">{String(p.title)}</span>
                                         </DropdownMenuItem>
                                     ))}
                                     <DropdownMenuSeparator className="bg-[#222225] my-2"/>
@@ -335,17 +326,7 @@ const Inbox = () => {
                                     <DropdownMenuLabel className="text-[10px] uppercase text-slate-500 font-bold">Plantillas Globales</DropdownMenuLabel>
                                     {globalReplies.map((qr) => (
                                        <DropdownMenuItem key={qr.id || qr.title} onClick={() => setDraftMessage(qr.text)} className="cursor-pointer text-xs focus:bg-[#161618] focus:text-white">
-                                          <MessageSquarePlus className="w-3 h-3 mr-2 text-indigo-400 shrink-0" /><span className="truncate">{qr.title}</span>
-                                       </DropdownMenuItem>
-                                    ))}
-                                 </>}
-
-                                 {Array.isArray(localReplies) && localReplies.length > 0 && <>
-                                    <DropdownMenuSeparator className="bg-[#222225] my-2"/>
-                                    <DropdownMenuLabel className="text-[10px] uppercase text-slate-500 font-bold">Mis Plantillas Privadas</DropdownMenuLabel>
-                                    {localReplies.map((qr) => (
-                                       <DropdownMenuItem key={qr.id || qr.title} onClick={() => setDraftMessage(qr.text)} className="cursor-pointer text-xs focus:bg-[#161618] focus:text-white">
-                                          <MessageSquarePlus className="w-3 h-3 mr-2 text-amber-500 shrink-0" /><span className="truncate">{qr.title}</span>
+                                          <MessageSquarePlus className="w-3 h-3 mr-2 text-indigo-400 shrink-0" /><span className="truncate">{String(qr.title)}</span>
                                        </DropdownMenuItem>
                                     ))}
                                  </>}
