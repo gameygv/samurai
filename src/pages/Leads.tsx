@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import Layout from '@/components/Layout';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent } from '@/components/ui/card';
-import { Table, TableBody, TableCell, TableHeader, TableRow, TableHead } from '@/components/ui/table';
+import { Table, TableBody, TableHeader, TableRow, TableHead, TableCell } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -13,10 +13,11 @@ import { CreateLeadDialog } from '@/components/leads/CreateLeadDialog';
 import ChatViewer from '@/components/ChatViewer';
 import { toast } from 'sonner';
 import { useAuth } from '@/context/AuthContext';
+import { normalizeLeadForChat } from '@/lib/chat-normalizer';
 
 const Leads = () => {
   const { user, isManager } = useAuth();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams] = useSearchParams();
   const [leads, setLeads] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [analyzing, setAnalyzing] = useState(false);
@@ -26,78 +27,75 @@ const Leads = () => {
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
 
-  // Filtros
   const [selectedTagFilter, setSelectedTagFilter] = useState<string>('ALL');
   const [selectedIntent, setSelectedIntent] = useState<string>('ALL');
   const [globalTags, setGlobalTags] = useState<any[]>([]);
   const [localTags, setLocalTags] = useState<any[]>([]);
 
   useEffect(() => { 
-      fetchLeads(); 
-      if (user) fetchTags();
+    fetchLeads(); 
+    if (user) fetchTags();
   }, [user]);
 
   const fetchLeads = async () => {
     setLoading(true);
     try {
-        let query = supabase.from('leads').select('*').order('last_message_at', { ascending: false });
-        if (!isManager && user?.id) query = query.eq('assigned_to', user.id);
-        
-        const { data, error } = await query;
-        if (error) throw error;
-        
-        const leadsList = data || [];
-        setLeads(leadsList);
+      let query = supabase.from('leads').select('*').order('last_message_at', { ascending: false });
+      if (!isManager && user?.id) query = query.eq('assigned_to', user.id);
+      
+      const { data, error } = await query;
+      if (error) throw error;
+      
+      const leadsList = data || [];
+      setLeads(leadsList);
 
-        // Soporte para abrir lead específico vía URL (?id=UUID)
-        const targetId = searchParams.get('id');
-        if (targetId) {
-            const target = leadsList.find(l => l.id === targetId);
-            if (target) {
-                setSelectedLead(target);
-                setIsChatOpen(true);
-            }
+      const targetId = searchParams.get('id');
+      if (targetId) {
+        const target = leadsList.find(l => l.id === targetId);
+        if (target) {
+          setSelectedLead(normalizeLeadForChat(target));
+          setIsChatOpen(true);
         }
+      }
     } catch (err: any) {
-        toast.error("Error al cargar leads: " + err.message);
+      toast.error("Error al cargar leads: " + err.message);
     } finally {
-        setLoading(false);
+      setLoading(false);
     }
   };
 
   const fetchTags = async () => {
-     if(!user) return;
-     const { data } = await supabase.from('app_config').select('key, value').in('key', [`agent_tags_${user.id}`, 'global_tags']);
-     if (data) {
-        const local = data.find(d => d.key === `agent_tags_${user.id}`)?.value;
-        const global = data.find(d => d.key === 'global_tags')?.value;
-        if (local) try { setLocalTags(JSON.parse(local)); } catch(e) {}
-        if (global) try { setGlobalTags(JSON.parse(global)); } catch(e) {}
-     }
+    if (!user) return;
+    const { data } = await supabase.from('app_config').select('key, value').in('key', [`agent_tags_${user.id}`, 'global_tags']);
+    if (data) {
+      const local = data.find(d => d.key === `agent_tags_${user.id}`)?.value;
+      const global = data.find(d => d.key === 'global_tags')?.value;
+      if (local) try { const parsed = JSON.parse(local); if (Array.isArray(parsed)) setLocalTags(parsed); } catch {}
+      if (global) try { const parsed = JSON.parse(global); if (Array.isArray(parsed)) setGlobalTags(parsed); } catch {}
+    }
   };
 
   const handleRunMassAnalysis = async () => {
-     setAnalyzing(true);
-     toast.info("Iniciando escaneo profundo de chats...");
-     try {
-        const { error } = await supabase.functions.invoke('analyze-leads', { body: { force: true } });
-        if (error) throw error;
-        toast.success("Análisis completado. Perfiles actualizados.");
-        fetchLeads();
-     } catch (err: any) {
-        toast.error("Error en el motor de IA: " + err.message);
-     } finally {
-        setAnalyzing(false);
-     }
+    setAnalyzing(true);
+    toast.info("Iniciando escaneo profundo de chats...");
+    try {
+      const { error } = await supabase.functions.invoke('analyze-leads', { body: { force: true } });
+      if (error) throw error;
+      toast.success("Análisis completado. Perfiles actualizados.");
+      fetchLeads();
+    } catch (err: any) {
+      toast.error("Error en el motor de IA: " + err.message);
+    } finally {
+      setAnalyzing(false);
+    }
   };
 
-  const allTags = [...(Array.isArray(globalTags) ? globalTags : []), ...(Array.isArray(localTags) ? localTags : [])];
+  const allTags = [...globalTags, ...localTags];
 
   const filtered = leads.filter(l => {
     const term = searchTerm.toLowerCase().trim();
     const contactTags = Array.isArray(l.tags) ? l.tags : [];
     
-    // Búsqueda textual (Safe check)
     const nombre = (l.nombre || '').toLowerCase();
     const telefono = (l.telefono || '').toLowerCase();
     const ciudad = (l.ciudad || '').toLowerCase();
@@ -124,13 +122,13 @@ const Leads = () => {
           </div>
           <div className="flex gap-3">
             <Button 
-               variant="outline" 
-               className="border-[#333336] bg-[#0a0a0c] hover:bg-[#161618] text-amber-500 h-10 px-4 font-bold rounded-xl text-[10px] uppercase tracking-widest"
-               onClick={handleRunMassAnalysis}
-               disabled={analyzing}
+              variant="outline" 
+              className="border-[#333336] bg-[#0a0a0c] hover:bg-[#161618] text-amber-500 h-10 px-4 font-bold rounded-xl text-[10px] uppercase tracking-widest"
+              onClick={handleRunMassAnalysis}
+              disabled={analyzing}
             >
-               {analyzing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Sparkles className="w-4 h-4 mr-2" />}
-               Forzar Análisis IA
+              {analyzing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Sparkles className="w-4 h-4 mr-2" />}
+              Forzar Análisis IA
             </Button>
             <Button onClick={() => setIsCreateOpen(true)} className="bg-indigo-600 hover:bg-indigo-700 text-white p-2.5 px-6 rounded-xl shadow-lg transition-all font-bold text-[10px] uppercase tracking-widest">
               <UserPlus className="w-4 h-4 mr-2" /> Nuevo Lead
@@ -139,45 +137,45 @@ const Leads = () => {
         </div>
 
         <div className="flex flex-wrap items-center gap-3 bg-[#0f0f11] p-3 rounded-2xl border border-[#222225] shadow-md">
-            <div className="flex items-center gap-2 pl-2 border-r border-[#222225] pr-4">
-                <Filter className="w-4 h-4 text-slate-500" />
-                <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Filtros</span>
-            </div>
-            
-            <div className="relative flex-1 min-w-[200px]">
-              <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-500" />
-              <Input placeholder="Buscar por nombre o teléfono..." className="pl-10 h-9 bg-[#161618] border-[#222225] rounded-xl text-xs focus-visible:ring-indigo-500/50 text-white" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
-            </div>
+          <div className="flex items-center gap-2 pl-2 border-r border-[#222225] pr-4">
+            <Filter className="w-4 h-4 text-slate-500" />
+            <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Filtros</span>
+          </div>
+          
+          <div className="relative flex-1 min-w-[200px]">
+            <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-500" />
+            <Input placeholder="Buscar por nombre o teléfono..." className="pl-10 h-9 bg-[#161618] border-[#222225] rounded-xl text-xs focus-visible:ring-indigo-500/50 text-white" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+          </div>
 
-            <Select value={selectedIntent} onValueChange={setSelectedIntent}>
-               <SelectTrigger className="w-[150px] h-9 bg-[#161618] border-[#222225] rounded-xl text-xs text-slate-300">
-                  <SelectValue placeholder="Intención" />
-               </SelectTrigger>
-               <SelectContent className="bg-[#121214] border-[#222225] text-white rounded-xl">
-                  <SelectItem value="ALL">Cualquier Etapa</SelectItem>
-                  <SelectItem value="BAJO">Data Hunting (Bajo)</SelectItem>
-                  <SelectItem value="MEDIO">Seducción (Medio)</SelectItem>
-                  <SelectItem value="ALTO">Cierre (Alto)</SelectItem>
-                  <SelectItem value="COMPRADO">Ganado (Comprado)</SelectItem>
-               </SelectContent>
-            </Select>
+          <Select value={selectedIntent} onValueChange={setSelectedIntent}>
+            <SelectTrigger className="w-[150px] h-9 bg-[#161618] border-[#222225] rounded-xl text-xs text-slate-300">
+              <SelectValue placeholder="Intención" />
+            </SelectTrigger>
+            <SelectContent className="bg-[#121214] border-[#222225] text-white rounded-xl">
+              <SelectItem value="ALL">Cualquier Etapa</SelectItem>
+              <SelectItem value="BAJO">Data Hunting (Bajo)</SelectItem>
+              <SelectItem value="MEDIO">Seducción (Medio)</SelectItem>
+              <SelectItem value="ALTO">Cierre (Alto)</SelectItem>
+              <SelectItem value="COMPRADO">Ganado (Comprado)</SelectItem>
+            </SelectContent>
+          </Select>
 
-            <Select value={selectedTagFilter} onValueChange={setSelectedTagFilter}>
-               <SelectTrigger className="w-[160px] h-9 bg-[#161618] border-[#222225] rounded-xl text-xs text-slate-300">
-                  <SelectValue placeholder="Etiqueta" />
-               </SelectTrigger>
-               <SelectContent className="bg-[#121214] border-[#222225] text-white rounded-xl max-h-[300px]">
-                  <SelectItem value="ALL">Todas las Etiquetas</SelectItem>
-                  {allTags.map(t => (
-                      <SelectItem key={t.id || t.text} value={t.text} className="focus:bg-[#161618]">
-                          <div className="flex items-center gap-2">
-                             <div className="w-2 h-2 rounded-full" style={{backgroundColor: t.color}}></div>
-                             {t.text}
-                          </div>
-                      </SelectItem>
-                  ))}
-               </SelectContent>
-            </Select>
+          <Select value={selectedTagFilter} onValueChange={setSelectedTagFilter}>
+            <SelectTrigger className="w-[160px] h-9 bg-[#161618] border-[#222225] rounded-xl text-xs text-slate-300">
+              <SelectValue placeholder="Etiqueta" />
+            </SelectTrigger>
+            <SelectContent className="bg-[#121214] border-[#222225] text-white rounded-xl max-h-[300px]">
+              <SelectItem value="ALL">Todas las Etiquetas</SelectItem>
+              {allTags.map(t => (
+                <SelectItem key={t.id || t.text} value={t.text} className="focus:bg-[#161618]">
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: t.color }}></div>
+                    {t.text}
+                  </div>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
 
         <Card className="bg-[#0f0f11] border-[#222225] shadow-2xl rounded-2xl overflow-hidden min-h-[400px]">
@@ -202,7 +200,7 @@ const Leads = () => {
                     key={lead.id} 
                     lead={lead} 
                     allTags={allTags} 
-                    onClick={() => { setSelectedLead(lead); setIsChatOpen(true); }} 
+                    onClick={() => { setSelectedLead(normalizeLeadForChat(lead)); setIsChatOpen(true); }} 
                   />
                 ))
               )}
