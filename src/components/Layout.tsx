@@ -5,7 +5,7 @@ import {
   LayoutDashboard, Brain, Settings as SettingsIcon, Database, LogOut, 
   Users, FileText, UserCircle, MessageSquare, Contact, Tag,
   GitBranch, Link as LinkIcon, Image, Sparkles, BookOpen, Clock,
-  Archive, Globe, CreditCard, BarChart3, Zap, Trello, Menu, Activity, Search, MessageCircle, Shield, AlertCircle, Command
+  Archive, Globe, CreditCard, BarChart3, Zap, Trello, Menu, Activity, Search, MessageCircle, Shield, AlertCircle, Command, GraduationCap
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/context/AuthContext';
@@ -18,11 +18,10 @@ import { Dialog, DialogContent } from '@/components/ui/dialog';
 const Layout = ({ children }: { children: React.ReactNode }) => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { profile, signOut, isAdmin, isDev } = useAuth();
+  const { profile, signOut, isAdmin, isDev, isManager } = useAuth();
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [brandName, setBrandName] = useState('Samurai Workspace');
 
-  // Command Palette State
   const [searchOpen, setSearchOpen] = useState(false);
   const [globalQuery, setGlobalQuery] = useState('');
   const [searchResults, setSearchResults] = useState<any[]>([]);
@@ -89,6 +88,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
         { icon: MessageSquare, label: 'Radar Leads', path: '/leads', roles: ['any'] },
         { icon: Contact, label: 'Contactos', path: '/contacts', roles: ['any'] },
         { icon: Tag, label: 'Mis Plantillas', path: '/tools', roles: ['any'] },
+        { icon: GraduationCap, label: 'Academia', path: '/academic', roles: ['admin', 'dev', 'gerente'] },
         { icon: CreditCard, label: 'Pagos & Ventas', path: '/payments', roles: ['any'] },
         { icon: Archive, label: 'Archivo de Chats', path: '/archive', roles: ['any'] },
       ]
@@ -124,10 +124,10 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
             const visibleItems = group.items.filter(item => 
                item.roles.includes('any') || 
                (isAdmin && item.roles.includes('admin')) || 
-               (isDev && item.roles.includes('dev'))
+               (isDev && item.roles.includes('dev')) ||
+               (isManager && item.roles.includes('gerente'))
             );
 
-            // Oculta el título de la sección si no hay items visibles
             if (visibleItems.length === 0) return null;
 
             return (

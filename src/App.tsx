@@ -26,6 +26,7 @@ import Pipeline from "./pages/Pipeline";
 import Inbox from "./pages/Inbox";
 import WebhookDiag from "./pages/WebhookDiag";
 import AgentTools from "./pages/AgentTools";
+import AcademicCatalog from "./pages/AcademicCatalog";
 import { Loader2 } from "lucide-react";
 
 const queryClient = new QueryClient();
@@ -56,6 +57,13 @@ const AdminRoute = ({ children }: { children: React.ReactNode }) => {
     return <>{children}</>;
 };
 
+const ManagerRoute = ({ children }: { children: React.ReactNode }) => {
+    const { isManager, loading } = useAuth();
+    if (loading) return null;
+    if (!isManager) return <Navigate to="/" replace />;
+    return <>{children}</>;
+};
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
@@ -76,6 +84,8 @@ const App = () => (
             <Route path="/pipeline" element={<PrivateRoute><Pipeline /></PrivateRoute>} />
             <Route path="/archive" element={<PrivateRoute><Archive /></PrivateRoute>} />
             <Route path="/payments" element={<PrivateRoute><Payments /></PrivateRoute>} />
+            
+            <Route path="/academic" element={<PrivateRoute><ManagerRoute><AcademicCatalog /></ManagerRoute></PrivateRoute>} />
             
             <Route path="/activity" element={<PrivateRoute><AdminRoute><Activity /></AdminRoute></PrivateRoute>} />
             <Route path="/brain" element={<PrivateRoute><AdminRoute><AgentBrain /></AdminRoute></PrivateRoute>} />
