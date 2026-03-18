@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import Layout from '@/components/Layout';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent } from '@/components/ui/card';
@@ -15,24 +16,54 @@ import { useAuth } from '@/context/AuthContext';
 
 const Leads = () => {
   const { user, isManager } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [leads, setLeads] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [analyzing, setAnalyzing] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  
   const [selectedLead, setSelectedLead] = useState<any>(null);
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
 
-  // Filters
+  // Filtros
   const [selectedTagFilter, setSelectedTagFilter] = useState<string>('ALL');
   const [selectedIntent, setSelectedIntent] = useState<string>('ALL');
-  const [globalTags, setGlobalTags] = useState<{id: string, text: string, color: string}[]>([]);
-  const [localTags, setLocalTags] = useState<{id: string, text: string, color: string}[]>([]);
+  const [globalTags, setGlobalTags] = useState<any[]>([]);
+  const [localTags, setLocalTags] = useState<any[]>([]);
 
   useEffect(() => { 
       fetchLeads(); 
       if (user) fetchTags();
   }, [user]);
+
+  const fetchLeads = async () => {
+    setLoading(true);
+    try {
+        let query = supabase.from('leads').select('*').order('last_message_at', { ascending: false });
+        if (!isManager && user?.id) query = query.eq('assigned_to', user.id);
+        
+        const { data, error } = await query;
+        if (error) throw error;
+        
+        const leadsList = data || [];
+        setLeads(leadsList);
+
+        // Soporte para abrir lead específico vía URL (?id=UUID)
+        const targetId = searchParams.get('id');
+        if (targetId) {
+            const target = leadsList.find(l => l.id === targetId);
+            if (target) {
+                setSelectedLead(target);
+                setIsChatOpen(true);
+            }
+        }
+    } catch (err: any) {
+        toast.error("Error al cargar leads: " + err.message);
+    } finally {
+        setLoading(false);
+    }
+  };
 
   const fetchTags = async () => {
      if(!user) return;
@@ -45,20 +76,11 @@ const Leads = () => {
      }
   };
 
-  const fetchLeads = async () => {
-    setLoading(true);
-    let query = supabase.from('leads').select('*').order('last_message_at', { ascending: false });
-    if (!isManager) query = query.eq('assigned_to', user?.id);
-    const { data } = await query;
-    if (data) setLeads(data);
-    setLoading(false);
-  };
-
   const handleRunMassAnalysis = async () => {
      setAnalyzing(true);
      toast.info("Iniciando escaneo profundo de chats...");
      try {
-        const { data, error } = await supabase.functions.invoke('analyze-leads', { body: { force: true } });
+        const { error } = await supabase.functions.invoke('analyze-leads', { body: { force: true } });
         if (error) throw error;
         toast.success("Análisis completado. Perfiles actualizados.");
         fetchLeads();
@@ -69,13 +91,18 @@ const Leads = () => {
      }
   };
 
-  const allTags = [...globalTags, ...localTags];
+  const allTags = [...(Array.isArray(globalTags) ? globalTags : []), ...(Array.isArray(localTags) ? localTags : [])];
 
   const filtered = leads.filter(l => {
-    const term = searchTerm.toLowerCase();
+    const term = searchTerm.toLowerCase().trim();
     const contactTags = Array.isArray(l.tags) ? l.tags : [];
     
-    const matchesSearch = l.nombre?.toLowerCase().includes(term) || l.telefono?.includes(term) || l.ciudad?.toLowerCase().includes(term);
+    // Búsqueda textual (Safe check)
+    const nombre = (l.nombre || '').toLowerCase();
+    const telefono = (l.telefono || '').toLowerCase();
+    const ciudad = (l.ciudad || '').toLowerCase();
+    
+    const matchesSearch = term === '' || nombre.includes(term) || telefono.includes(term) || ciudad.includes(term);
     const matchesTag = selectedTagFilter === 'ALL' || contactTags.includes(selectedTagFilter);
     const matchesIntent = selectedIntent === 'ALL' || (l.buying_intent || 'BAJO').toUpperCase() === selectedIntent;
 
@@ -105,13 +132,12 @@ const Leads = () => {
                {analyzing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Sparkles className="w-4 h-4 mr-2" />}
                Forzar Análisis IA
             </Button>
-            <Button onClick={() => setIsCreateOpen(true)} className="bg-indigo-600 hover:bg-indigo-500 text-white p-2.5 px-6 rounded-xl shadow-lg transition-all font-bold text-[10px] uppercase tracking-widest">
+            <Button onClick={() => setIsCreateOpen(true)} className="bg-indigo-600 hover:bg-indigo-700 text-white p-2.5 px-6 rounded-xl shadow-lg transition-all font-bold text-[10px] uppercase tracking-widest">
               <UserPlus className="w-4 h-4 mr-2" /> Nuevo Lead
             </Button>
           </div>
         </div>
 
-        {/* BARRA DE FILTROS */}
         <div className="flex flex-wrap items-center gap-3 bg-[#0f0f11] p-3 rounded-2xl border border-[#222225] shadow-md">
             <div className="flex items-center gap-2 pl-2 border-r border-[#222225] pr-4">
                 <Filter className="w-4 h-4 text-slate-500" />
@@ -128,11 +154,11 @@ const Leads = () => {
                   <SelectValue placeholder="Intención" />
                </SelectTrigger>
                <SelectContent className="bg-[#121214] border-[#222225] text-white rounded-xl">
-                  <SelectItem value="ALL" className="focus:bg-[#161618]">Cualquier Etapa</SelectItem>
-                  <SelectItem value="BAJO" className="focus:bg-[#161618]">Data Hunting (Bajo)</SelectItem>
-                  <SelectItem value="MEDIO" className="focus:bg-[#161618]">Seducción (Medio)</SelectItem>
-                  <SelectItem value="ALTO" className="focus:bg-[#161618]">Cierre (Alto)</SelectItem>
-                  <SelectItem value="COMPRADO" className="focus:bg-[#161618]">Ganado (Comprado)</SelectItem>
+                  <SelectItem value="ALL">Cualquier Etapa</SelectItem>
+                  <SelectItem value="BAJO">Data Hunting (Bajo)</SelectItem>
+                  <SelectItem value="MEDIO">Seducción (Medio)</SelectItem>
+                  <SelectItem value="ALTO">Cierre (Alto)</SelectItem>
+                  <SelectItem value="COMPRADO">Ganado (Comprado)</SelectItem>
                </SelectContent>
             </Select>
 
@@ -143,7 +169,7 @@ const Leads = () => {
                <SelectContent className="bg-[#121214] border-[#222225] text-white rounded-xl max-h-[300px]">
                   <SelectItem value="ALL">Todas las Etiquetas</SelectItem>
                   {allTags.map(t => (
-                      <SelectItem key={t.id} value={t.text} className="focus:bg-[#161618]">
+                      <SelectItem key={t.id || t.text} value={t.text} className="focus:bg-[#161618]">
                           <div className="flex items-center gap-2">
                              <div className="w-2 h-2 rounded-full" style={{backgroundColor: t.color}}></div>
                              {t.text}
@@ -170,9 +196,16 @@ const Leads = () => {
                 <TableRow><TableCell colSpan={5} className="h-60 text-center"><Loader2 className="animate-spin inline-block text-indigo-500" /></TableCell></TableRow>
               ) : filtered.length === 0 ? (
                 <TableRow><TableCell colSpan={5} className="h-60 text-center text-slate-600 italic text-[10px] uppercase font-bold tracking-widest">No hay leads que coincidan.</TableCell></TableRow>
-              ) : filtered.map(lead => (
-                <LeadRow key={lead.id} lead={lead} allTags={allTags} onClick={() => { setSelectedLead(lead); setIsChatOpen(true); }} />
-              ))}
+              ) : (
+                filtered.map(lead => (
+                  <LeadRow 
+                    key={lead.id} 
+                    lead={lead} 
+                    allTags={allTags} 
+                    onClick={() => { setSelectedLead(lead); setIsChatOpen(true); }} 
+                  />
+                ))
+              )}
             </TableBody>
           </Table>
         </Card>
