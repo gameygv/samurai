@@ -43,8 +43,8 @@ export const EditContactDialog = ({ open, onOpenChange, contact, existingGroups,
     if (contact && open) {
       let ar = [];
       let inn = [];
-      try { ar = Array.isArray(contact.academic_record) ? contact.academic_record : (typeof contact.academic_record === 'string' ? JSON.parse(contact.academic_record) : []); } catch(e){}
-      try { inn = Array.isArray(contact.internal_notes) ? contact.internal_notes : (typeof contact.internal_notes === 'string' ? JSON.parse(contact.internal_notes) : []); } catch(e){}
+      try { ar = Array.isArray(contact.academic_record) ? contact.academic_record : (typeof contact.academic_record === 'string' ? JSON.parse(contact.academic_record) : []); } catch(e){ ar = []; }
+      try { inn = Array.isArray(contact.internal_notes) ? contact.internal_notes : (typeof contact.internal_notes === 'string' ? JSON.parse(contact.internal_notes) : []); } catch(e){ inn = []; }
 
       setFormData({
         nombre: contact.nombre || '', apellido: contact.apellido || '', telefono: contact.telefono || '',
@@ -63,10 +63,19 @@ export const EditContactDialog = ({ open, onOpenChange, contact, existingGroups,
         const c = data.find(d => d.key === 'academic_courses')?.value;
         const l = data.find(d => d.key === 'academic_locations')?.value;
         const t = data.find(d => d.key === 'academic_teachers')?.value;
+        
+        const parseSafe = (val: string | undefined) => {
+            if (!val) return [];
+            try {
+                const parsed = JSON.parse(val);
+                return Array.isArray(parsed) ? parsed : [];
+            } catch { return []; }
+        };
+
         setCatalog({
-            courses: c ? JSON.parse(c) : [],
-            locations: l ? JSON.parse(l) : [],
-            teachers: t ? JSON.parse(t) : []
+            courses: parseSafe(c),
+            locations: parseSafe(l),
+            teachers: parseSafe(t)
         });
     }
   };
@@ -227,21 +236,34 @@ export const EditContactDialog = ({ open, onOpenChange, contact, existingGroups,
                       <h4 className="text-[10px] uppercase tracking-widest font-bold text-indigo-400 flex items-center gap-2"><Plus className="w-3.5 h-3.5"/> Registrar Nuevo Curso</h4>
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                          <div className="space-y-1.5"><Label className="text-[9px] text-slate-500 uppercase tracking-widest">Curso / Taller</Label>
-                            <Select value={newCourse.course} onValueChange={v => setNewCourse({...newCourse, course: v})}>
+                            {/* Protección contra strings vacíos para evitar crash de Radix UI */}
+                            <Select value={newCourse.course || undefined} onValueChange={v => setNewCourse({...newCourse, course: v})}>
                                <SelectTrigger className="h-10 text-xs bg-[#0a0a0c] border-[#222225]"><SelectValue placeholder="Seleccionar..."/></SelectTrigger>
-                               <SelectContent className="bg-[#121214] border-[#222225] text-white max-h-[200px]">{catalog.courses.map(c => <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>)}</SelectContent>
+                               <SelectContent className="bg-[#121214] border-[#222225] text-white max-h-[200px]">
+                                 {catalog.courses.filter(c => c.name && c.name.trim() !== '').map(c => (
+                                     <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>
+                                 ))}
+                               </SelectContent>
                             </Select>
                          </div>
                          <div className="space-y-1.5"><Label className="text-[9px] text-slate-500 uppercase tracking-widest">Sede</Label>
-                            <Select value={newCourse.location} onValueChange={v => setNewCourse({...newCourse, location: v})}>
+                            <Select value={newCourse.location || undefined} onValueChange={v => setNewCourse({...newCourse, location: v})}>
                                <SelectTrigger className="h-10 text-xs bg-[#0a0a0c] border-[#222225]"><SelectValue placeholder="Opcional..."/></SelectTrigger>
-                               <SelectContent className="bg-[#121214] border-[#222225] text-white max-h-[200px]">{catalog.locations.map(c => <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>)}</SelectContent>
+                               <SelectContent className="bg-[#121214] border-[#222225] text-white max-h-[200px]">
+                                 {catalog.locations.filter(c => c.name && c.name.trim() !== '').map(c => (
+                                     <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>
+                                 ))}
+                               </SelectContent>
                             </Select>
                          </div>
                          <div className="space-y-1.5"><Label className="text-[9px] text-slate-500 uppercase tracking-widest">Profesor</Label>
-                            <Select value={newCourse.teacher} onValueChange={v => setNewCourse({...newCourse, teacher: v})}>
+                            <Select value={newCourse.teacher || undefined} onValueChange={v => setNewCourse({...newCourse, teacher: v})}>
                                <SelectTrigger className="h-10 text-xs bg-[#0a0a0c] border-[#222225]"><SelectValue placeholder="Opcional..."/></SelectTrigger>
-                               <SelectContent className="bg-[#121214] border-[#222225] text-white max-h-[200px]">{catalog.teachers.map(c => <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>)}</SelectContent>
+                               <SelectContent className="bg-[#121214] border-[#222225] text-white max-h-[200px]">
+                                 {catalog.teachers.filter(c => c.name && c.name.trim() !== '').map(c => (
+                                     <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>
+                                 ))}
+                               </SelectContent>
                             </Select>
                          </div>
                          <div className="space-y-1.5"><Label className="text-[9px] text-slate-500 uppercase tracking-widest">Fecha</Label>
@@ -264,7 +286,7 @@ export const EditContactDialog = ({ open, onOpenChange, contact, existingGroups,
                                   <div>
                                      <h5 className="font-bold text-indigo-300 text-sm">{ar.course}</h5>
                                      <div className="flex items-center gap-3 mt-1.5 text-[10px] text-slate-500 font-mono">
-                                        <span className="flex items-center gap-1"><Calendar className="w-3 h-3"/> {new Date(ar.date).toLocaleDateString()}</span>
+                                        <span className="flex items-center gap-1"><Calendar className="w-3 h-3"/> {ar.date ? new Date(ar.date).toLocaleDateString() : 'Sin fecha'}</span>
                                         {ar.location && <span className="flex items-center gap-1"><MapPin className="w-3 h-3"/> {ar.location}</span>}
                                         {ar.teacher && <span className="flex items-center gap-1"><UserCheck className="w-3 h-3"/> {ar.teacher}</span>}
                                      </div>
