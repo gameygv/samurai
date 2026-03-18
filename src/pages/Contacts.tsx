@@ -27,6 +27,7 @@ import { EditContactDialog } from '@/components/contacts/EditContactDialog';
 import { CreateCreditSaleDialog } from '@/components/contacts/CreateCreditSaleDialog';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/context/AuthContext';
+import { extractTagText, parseTagsSafe } from '@/lib/tag-parser';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogHeader, AlertDialogTitle, AlertDialogFooter
@@ -77,8 +78,8 @@ const Contacts = () => {
     if (data) {
       const local = data.find(d => d.key === `agent_tags_${user.id}`)?.value;
       const global = data.find(d => d.key === 'global_tags')?.value;
-      if (local) { try { const parsed = JSON.parse(local); if (Array.isArray(parsed)) setLocalTags(parsed); } catch {} }
-      if (global) { try { const parsed = JSON.parse(global); if (Array.isArray(parsed)) setGlobalTags(parsed); } catch {} }
+      if (local) setLocalTags(parseTagsSafe(local));
+      if (global) setGlobalTags(parseTagsSafe(global));
     }
   };
 
@@ -168,14 +169,8 @@ const Contacts = () => {
   };
 
   const handleOpenChat = async (contact: any) => {
-    // Si ya tiene lead_id, buscamos el lead real de la BD
     if (contact.lead_id) {
-      const { data: lead } = await supabase
-        .from('leads')
-        .select('*')
-        .eq('id', contact.lead_id)
-        .maybeSingle();
-
+      const { data: lead } = await supabase.from('leads').select('*').eq('id', contact.lead_id).maybeSingle();
       if (lead) {
         setSelectedLead(lead);
         setIsChatOpen(true);
@@ -183,7 +178,6 @@ const Contacts = () => {
       }
     }
 
-    // Si no tiene lead, lo creamos
     const tid = toast.loading("Iniciando chat...");
     try {
       const { data: newLead, error } = await supabase.from('leads').insert({
@@ -217,20 +211,23 @@ const Contacts = () => {
     if (dataToExport.length === 0) return toast.error("No hay datos para exportar.");
     const tid = toast.loading("Generando archivo CSV...");
     try {
-      const exportFormat = dataToExport.map(c => ({
-        Nombre: c.nombre || '',
-        Apellido: c.apellido || '',
-        Telefono: c.telefono || '',
-        Email: c.email || '',
-        Ciudad: c.ciudad || '',
-        Estado: c.estado || '',
-        CP: c.cp || '',
-        Grupo: c.grupo || '',
-        Etiquetas: Array.isArray(c.tags) ? c.tags.join(', ') : '',
-        Estatus_Financiero: c.financial_status || 'Sin transacción',
-        Deuda_Total: c.total_debt || 0,
-        Intencion_Compra: c.leads?.buying_intent || 'N/A'
-      }));
+      const exportFormat = dataToExport.map(c => {
+        const safeTags = Array.isArray(c.tags) ? c.tags.map((t: any) => extractTagText(t)).filter(Boolean).join(', ') : '';
+        return {
+          Nombre: c.nombre || '',
+          Apellido: c.apellido || '',
+          Telefono: c.telefono || '',
+          Email: c.email || '',
+          Ciudad: c.ciudad || '',
+          Estado: c.estado || '',
+          CP: c.cp || '',
+          Grupo: c.grupo || '',
+          Etiquetas: safeTags,
+          Estatus_Financiero: c.financial_status || 'Sin transacción',
+          Deuda_Total: c.total_debt || 0,
+          Intencion_Compra: c.leads?.buying_intent || 'N/A'
+        };
+      });
 
       const csv = Papa.unparse(exportFormat);
       const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
@@ -249,7 +246,8 @@ const Contacts = () => {
 
   const filteredContacts = contacts.filter(c => {
     const term = searchTerm.toLowerCase();
-    const contactTags = Array.isArray(c.tags) ? c.tags : [];
+    const contactTags = Array.isArray(c.tags) ? c.tags.map((t:any) => extractTagText(t)) : [];
+    
     const matchesSearch = c.nombre?.toLowerCase().includes(term) || c.apellido?.toLowerCase().includes(term) || c.telefono?.includes(term) || c.email?.toLowerCase().includes(term);
     const matchesGroup = selectedGroup === 'ALL' || c.grupo === selectedGroup;
     const matchesCity = selectedCity === 'ALL' || c.ciudad === selectedCity;
@@ -298,10 +296,12 @@ const Contacts = () => {
             <Filter className="w-4 h-4 text-slate-500" />
             <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Segmentación</span>
           </div>
+          
           <div className="relative flex-1 min-w-[200px]">
             <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-500" />
             <Input placeholder="Buscar por nombre, email o tel..." className="pl-10 h-10 bg-[#161618] border-[#222225] rounded-xl text-xs focus-visible:ring-indigo-500/50 text-white" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
           </div>
+
           <Select value={selectedGroup} onValueChange={setSelectedGroup}>
             <SelectTrigger className="w-[150px] h-10 bg-[#161618] border-[#222225] rounded-xl text-xs text-slate-300"><SelectValue placeholder="Grupo" /></SelectTrigger>
             <SelectContent className="bg-slate-900 border-slate-800 text-white rounded-xl max-h-[300px]">
@@ -309,6 +309,7 @@ const Contacts = () => {
               {groups.map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}
             </SelectContent>
           </Select>
+
           <Select value={selectedCity} onValueChange={setSelectedCity}>
             <SelectTrigger className="w-[150px] h-10 bg-[#161618] border-[#222225] rounded-xl text-xs text-slate-300"><SelectValue placeholder="Ciudad" /></SelectTrigger>
             <SelectContent className="bg-slate-900 border-slate-800 text-white rounded-xl max-h-[300px]">
@@ -316,6 +317,7 @@ const Contacts = () => {
               {cities.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
             </SelectContent>
           </Select>
+
           <Select value={selectedTagFilter} onValueChange={setSelectedTagFilter}>
             <SelectTrigger className="w-[150px] h-10 bg-[#161618] border-[#222225] rounded-xl text-xs text-slate-300"><SelectValue placeholder="Etiqueta" /></SelectTrigger>
             <SelectContent className="bg-[#121214] border-[#222225] text-white rounded-xl max-h-[300px]">
@@ -327,6 +329,7 @@ const Contacts = () => {
               ))}
             </SelectContent>
           </Select>
+
           {isManager && (
             <>
               <Select value={selectedStatusFilter} onValueChange={setSelectedStatusFilter}>
@@ -346,6 +349,7 @@ const Contacts = () => {
               </Select>
             </>
           )}
+
           {hasActiveFilters && filteredContacts.length > 0 && (
             <Button onClick={handleToggleSelectAll} variant="secondary" className={cn("h-10 px-4 ml-auto rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all", selectedIds.length === filteredContacts.length ? "bg-indigo-600/20 text-indigo-400 border border-indigo-500/30" : "bg-[#161618] text-slate-300 hover:bg-[#222225] border border-[#333336]")}>
               <CheckSquare className="w-3.5 h-3.5 mr-2" />
@@ -389,9 +393,11 @@ const Contacts = () => {
                         <span className={cn("text-[10px] flex items-center gap-1.5", contact.ciudad ? "text-slate-300" : "text-slate-600 italic")}><MapPin className="w-3 h-3" /> {contact.ciudad || 'Sin ciudad'}{contact.grupo && <span className="ml-2 text-indigo-400 font-bold">• {contact.grupo}</span>}</span>
                         {Array.isArray(contact.tags) && contact.tags.length > 0 && (
                           <div className="flex gap-1.5 flex-wrap mt-1">
-                            {contact.tags.map((t: string) => {
+                            {contact.tags.map((rawTag: any, idx: number) => {
+                              const t = extractTagText(rawTag);
+                              if (!t) return null;
                               const tagConf = allTags.find(lt => lt.text === t);
-                              return <Badge key={t} style={{ backgroundColor: (tagConf?.color || '#475569') + '15', color: tagConf?.color || '#94a3b8', borderColor: (tagConf?.color || '#475569') + '40' }} className="text-[9px] h-5 px-2 font-bold uppercase tracking-widest border">{t}</Badge>;
+                              return <Badge key={`${t}-${idx}`} style={{ backgroundColor: (tagConf?.color || '#475569') + '15', color: tagConf?.color || '#94a3b8', borderColor: (tagConf?.color || '#475569') + '40' }} className="text-[9px] h-5 px-2 font-bold uppercase tracking-widest border">{t}</Badge>;
                             })}
                           </div>
                         )}

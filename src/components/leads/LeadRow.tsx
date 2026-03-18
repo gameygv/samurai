@@ -4,6 +4,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Mail, MapPin, Target, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { extractTagText } from '@/lib/tag-parser';
 
 interface LeadRowProps {
   lead: any;
@@ -43,14 +44,17 @@ export const LeadRow = ({ lead, allTags, onClick }: LeadRowProps) => {
           
           {tags.length > 0 && (
              <div className="flex gap-1.5 flex-wrap mt-1">
-                 {tags.map((t: string) => {
-                     const tagConf = tagsConfig.find(lt => lt.text === t);
+                 {tags.map((rawTag: any, idx: number) => {
+                     const tagText = extractTagText(rawTag);
+                     if (!tagText) return null;
+
+                     const tagConf = tagsConfig.find(lt => lt.text === tagText);
                      const bgColor = tagConf ? tagConf.color + '15' : '#1e293b';
                      const textColor = tagConf ? tagConf.color : '#94a3b8';
                      const borderColor = tagConf ? tagConf.color + '40' : '#334155';
                      return (
-                         <Badge key={t} style={{ backgroundColor: bgColor, color: textColor, borderColor }} className="text-[8px] h-5 px-2 font-bold uppercase tracking-widest border">
-                             {t}
+                         <Badge key={`${tagText}-${idx}`} style={{ backgroundColor: bgColor, color: textColor, borderColor }} className="text-[8px] h-5 px-2 font-bold uppercase tracking-widest border">
+                             {tagText}
                          </Badge>
                      );
                  })}

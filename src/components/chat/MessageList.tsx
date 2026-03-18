@@ -16,15 +16,22 @@ export const MessageList = ({ messages, loading }: MessageListProps) => {
   }, [messages]);
 
   const formatMessageTime = (dateStr: string) => {
-    const date = new Date(dateStr);
-    const today = new Date();
-    const isToday = date.getDate() === today.getDate() && 
-                    date.getMonth() === today.getMonth() && 
-                    date.getFullYear() === today.getFullYear();
-    
-    const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    if (isToday) return timeStr;
-    return `${date.toLocaleDateString([], { day: '2-digit', month: '2-digit' })} ${timeStr}`;
+    if (!dateStr) return '';
+    try {
+      const date = new Date(dateStr);
+      if (isNaN(date.getTime())) return ''; // Protege contra fechas corruptas en DB (RangeError)
+      
+      const today = new Date();
+      const isToday = date.getDate() === today.getDate() && 
+                      date.getMonth() === today.getMonth() && 
+                      date.getFullYear() === today.getFullYear();
+      
+      const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      if (isToday) return timeStr;
+      return `${date.toLocaleDateString([], { day: '2-digit', month: '2-digit' })} ${timeStr}`;
+    } catch (e) {
+      return '';
+    }
   };
 
   const renderMessageContent = (msg: any) => {
@@ -34,7 +41,7 @@ export const MessageList = ({ messages, loading }: MessageListProps) => {
     let audioUrl = null;
     let docName = null;
 
-    // Limpieza de etiquetas multimedia para que no se vean duplicadas
+    // Limpieza de etiquetas multimedia
     text = text.replace(/\[(Imagen|Video|Audio|Documento|Sticker)\]/gi, '').trim();
 
     if (msg.metadata?.mediaUrl) {
@@ -48,7 +55,6 @@ export const MessageList = ({ messages, loading }: MessageListProps) => {
       }
     }
 
-    // Detectar si es una transcripción de Whisper
     let isTranscription = false;
     let cleanText = text;
     if (text.includes('[TRANSCRIPCIÓN DE NOTA DE VOZ]:')) {
@@ -61,14 +67,12 @@ export const MessageList = ({ messages, loading }: MessageListProps) => {
 
     return (
       <div className="flex flex-col gap-2">
-        {/* Renderizado de Imágenes */}
         {imageUrl && (
           <a href={imageUrl} target="_blank" rel="noopener noreferrer" className="block overflow-hidden rounded-lg">
             <img src={imageUrl} alt="Adjunto" className="w-full max-w-[280px] h-auto max-h-80 object-contain rounded-lg border border-white/10" loading="lazy" />
           </a>
         )}
         
-        {/* Renderizado de Audios */}
         {audioUrl && (
           <audio controls className="h-10 w-full max-w-[250px] rounded-md outline-none">
             <source src={audioUrl} type="audio/ogg" />
@@ -77,7 +81,6 @@ export const MessageList = ({ messages, loading }: MessageListProps) => {
           </audio>
         )}
 
-        {/* Renderizado de Documentos */}
         {docUrl && !audioUrl && (
           <a href={docUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 p-3 bg-slate-950/40 rounded-xl border border-white/10">
             <FileText className="w-5 h-5 text-amber-500 shrink-0" />
@@ -85,7 +88,6 @@ export const MessageList = ({ messages, loading }: MessageListProps) => {
           </a>
         )}
 
-        {/* Renderizado de Transcripción Whisper */}
         {isTranscription && cleanText && (
            <div className="mt-1 p-2.5 bg-indigo-950/30 border border-indigo-500/30 rounded-lg text-indigo-200">
               <p className="text-[9px] font-bold uppercase tracking-widest text-indigo-400 flex items-center gap-1 mb-1">
@@ -95,7 +97,6 @@ export const MessageList = ({ messages, loading }: MessageListProps) => {
            </div>
         )}
 
-        {/* Texto Normal */}
         {!isTranscription && text && <p className="whitespace-pre-wrap text-sm leading-relaxed">{text}</p>}
       </div>
     );
