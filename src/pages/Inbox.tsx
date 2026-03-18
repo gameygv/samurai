@@ -19,6 +19,7 @@ import { MemoryPanel } from '@/components/chat/MemoryPanel';
 import { AiSuggestions } from '@/components/chat/AiSuggestions';
 import { sendEvolutionMessage } from '@/utils/messagingService';
 import { useRealtimeMessages } from '@/hooks/useRealtimeMessages';
+import { extractTagText } from '@/lib/tag-parser';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, 
   DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
@@ -71,12 +72,13 @@ const Inbox = () => {
 
   useEffect(() => {
     const term = searchTerm.toLowerCase();
-    setFilteredLeads(leads.filter(l => 
-      (l.nombre || '').toLowerCase().includes(term) || 
-      (l.telefono || '').includes(term) || 
-      (l.ciudad || '').toLowerCase().includes(term) ||
-      (Array.isArray(l.tags) && l.tags.some((t: string) => t.toLowerCase().includes(term)))
-    ));
+    setFilteredLeads(leads.filter(l => {
+      const contactTags = Array.isArray(l.tags) ? l.tags.map(extractTagText) : [];
+      return (l.nombre || '').toLowerCase().includes(term) || 
+             (l.telefono || '').includes(term) || 
+             (l.ciudad || '').toLowerCase().includes(term) ||
+             contactTags.some((t: string) => t.toLowerCase().includes(term));
+    }));
   }, [searchTerm, leads]);
 
   const fetchLeads = async (showLoader = true) => {
@@ -265,12 +267,14 @@ const Inbox = () => {
                              </div>
                              {Array.isArray(lead.tags) && lead.tags.length > 0 && (
                                 <div className="flex gap-1 mt-1.5 flex-wrap">
-                                   {lead.tags.map((t: string) => {
+                                   {lead.tags.map((rawTag: any, idx: number) => {
+                                      const t = extractTagText(rawTag);
+                                      if (!t) return null;
                                       const tagConf = allTags.find(lt => lt.text === t);
                                       const bgColor = tagConf ? tagConf.color + '20' : '#1e293b';
                                       const textColor = tagConf ? tagConf.color : '#94a3b8';
                                       const borderColor = tagConf ? tagConf.color + '50' : '#334155';
-                                      return <Badge key={t} variant="outline" className="text-[8px] h-3.5 px-1 font-medium" style={{ backgroundColor: bgColor, color: textColor, borderColor }}>{t}</Badge>
+                                      return <Badge key={`${t}-${idx}`} variant="outline" className="text-[8px] h-3.5 px-1 font-medium" style={{ backgroundColor: bgColor, color: textColor, borderColor }}>{t}</Badge>
                                    })}
                                 </div>
                              )}

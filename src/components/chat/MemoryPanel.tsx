@@ -16,6 +16,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { CreateCreditSaleDialog } from '@/components/contacts/CreateCreditSaleDialog';
 import { EditContactDialog } from '@/components/contacts/EditContactDialog';
 import { ReminderItem } from '@/components/chat/memory/ReminderItem';
+import { extractTagText } from '@/lib/tag-parser';
 
 interface MemoryPanelProps {
   currentAnalysis: any;
@@ -69,12 +70,8 @@ export const MemoryPanel = ({
   const healthScore = capiFields.filter(Boolean).length;
   const healthPercent = Math.round((healthScore / 4) * 100);
 
-  // Validaciones súper estrictas para listas (Evita el "map is not a function")
-  const safeReminders = Array.isArray(currentAnalysis?.reminders) ? currentAnalysis.reminders : 
-      (typeof currentAnalysis?.reminders === 'string' ? 
-        (function(){ try { const p = JSON.parse(currentAnalysis.reminders); return Array.isArray(p) ? p : [] } catch(e){ return [] } })() 
-      : []);
-
+  // Validaciones súper estrictas para listas
+  const safeReminders = Array.isArray(currentAnalysis?.reminders) ? currentAnalysis.reminders : [];
   const safeAgents = Array.isArray(agents) ? agents : [];
   const safeChannels = Array.isArray(channels) ? channels : [];
   
@@ -198,16 +195,16 @@ export const MemoryPanel = ({
 
   const handleAddTag = async (tagText: string) => {
       const currentTags = Array.isArray(memoryForm.tags) ? memoryForm.tags : [];
-      if (currentTags.includes(tagText)) return;
+      if (currentTags.some((ct: any) => extractTagText(ct) === tagText)) return;
 
       const newTags = [...currentTags, tagText];
       setMemoryForm({...memoryForm, tags: newTags});
       await supabase.from('leads').update({ tags: newTags }).eq('id', currentAnalysis.id);
   };
 
-  const handleRemoveTag = async (tagText: string) => {
+  const handleRemoveTag = async (rawTag: any) => {
       const currentTags = Array.isArray(memoryForm.tags) ? memoryForm.tags : [];
-      const newTags = currentTags.filter((t: string) => t !== tagText);
+      const newTags = currentTags.filter((t: any) => extractTagText(t) !== extractTagText(rawTag));
       setMemoryForm({...memoryForm, tags: newTags});
       await supabase.from('leads').update({ tags: newTags }).eq('id', currentAnalysis.id);
   };
@@ -419,7 +416,10 @@ export const MemoryPanel = ({
                     </button>
                     {tagsOpen && (
                        <div className="flex flex-wrap gap-2 items-center pt-3 pb-2">
-                          {Array.isArray(memoryForm.tags) && memoryForm.tags.map((t: string) => {
+                          {Array.isArray(memoryForm.tags) && memoryForm.tags.map((rawTag: any) => {
+                             const t = extractTagText(rawTag);
+                             if (!t) return null;
+
                              const tagConf = allAvailableTags.find(lt => lt.text === t);
                              const isGlobal = Array.isArray(globalTags) && globalTags.some(gt => gt.text === t);
                              
@@ -432,7 +432,7 @@ export const MemoryPanel = ({
                                      {isGlobal ? <Globe className="w-2.5 h-2.5 opacity-70" /> : <User className="w-2.5 h-2.5 opacity-70" />}
                                    </span>
                                    {t}
-                                   <button onClick={() => handleRemoveTag(t)} className="ml-0.5 hover:bg-black/20 rounded-full p-0.5 transition-colors"><X className="w-3 h-3"/></button>
+                                   <button onClick={() => handleRemoveTag(rawTag)} className="ml-0.5 hover:bg-black/20 rounded-full p-0.5 transition-colors"><X className="w-3 h-3"/></button>
                                 </Badge>
                              );
                           })}

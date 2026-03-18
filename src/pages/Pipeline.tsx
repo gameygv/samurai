@@ -18,6 +18,7 @@ import { toast } from 'sonner';
 import { useAuth } from '@/context/AuthContext';
 import { formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
+import { extractTagText } from '@/lib/tag-parser';
 
 const Pipeline = () => {
   const { user, isManager } = useAuth();
@@ -181,12 +182,14 @@ const Pipeline = () => {
 
                            {Array.isArray(lead.tags) && lead.tags.length > 0 && (
                                <div className="pl-2 flex gap-1.5 flex-wrap">
-                                   {lead.tags.slice(0,3).map((t: string) => {
+                                   {lead.tags.slice(0,3).map((rawTag: any, idx: number) => {
+                                       const t = extractTagText(rawTag);
+                                       if (!t) return null;
                                        const tagConf = allTags.find(lt => lt.text === t);
                                        const bgColor = tagConf ? tagConf.color + '15' : '#1e293b';
                                        const textColor = tagConf ? tagConf.color : '#94a3b8';
                                        const borderColor = tagConf ? tagConf.color + '40' : '#334155';
-                                       return <Badge key={t} style={{ backgroundColor: bgColor, color: textColor, borderColor }} className="text-[8px] h-4 px-1.5 font-bold uppercase border tracking-widest truncate max-w-[80px]">{t}</Badge>
+                                       return <Badge key={`${t}-${idx}`} style={{ backgroundColor: bgColor, color: textColor, borderColor }} className="text-[8px] h-4 px-1.5 font-bold uppercase border tracking-widest truncate max-w-[80px]">{t}</Badge>
                                    })}
                                    {lead.tags.length > 3 && <Badge variant="outline" className="text-[8px] h-4 px-1 border-[#222225] text-slate-500">+{lead.tags.length - 3}</Badge>}
                                </div>

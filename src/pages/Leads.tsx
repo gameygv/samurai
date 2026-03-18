@@ -13,6 +13,7 @@ import { CreateLeadDialog } from '@/components/leads/CreateLeadDialog';
 import ChatViewer from '@/components/ChatViewer';
 import { toast } from 'sonner';
 import { useAuth } from '@/context/AuthContext';
+import { extractTagText } from '@/lib/tag-parser';
 
 const Leads = () => {
   const { user, isManager } = useAuth();
@@ -93,7 +94,7 @@ const Leads = () => {
 
   const filtered = leads.filter(l => {
     const term = searchTerm.toLowerCase().trim();
-    const contactTags = Array.isArray(l.tags) ? l.tags : [];
+    const contactTags = Array.isArray(l.tags) ? l.tags.map(extractTagText) : [];
     
     const nombre = (l.nombre || '').toLowerCase();
     const telefono = (l.telefono || '').toLowerCase();
