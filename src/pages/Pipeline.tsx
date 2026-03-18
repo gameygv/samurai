@@ -85,6 +85,11 @@ const Pipeline = () => {
       } catch(e) { return 'recientemente'; }
   };
 
+  const handleOpenChat = (lead: any) => {
+    setSelectedLead(lead);
+    setIsChatOpen(true);
+  };
+
   const columns = [
     { id: 'BAJO', title: 'Data Hunting', icon: Fingerprint, color: 'border-slate-800', headerBg: 'bg-[#161618]', dot: 'bg-slate-500' },
     { id: 'MEDIO', title: 'Seducción', icon: Image, color: 'border-indigo-900/30', headerBg: 'bg-indigo-950/20', dot: 'bg-indigo-500' },
@@ -144,10 +149,9 @@ const Pipeline = () => {
                      const score = lead.lead_score || 0;
                      
                      return (
-                     <div key={lead.id} draggable onDragStart={(e) => handleDragStart(e, lead.id)} onClick={() => { setSelectedLead(lead); setIsChatOpen(true); }} className="cursor-pointer group">
+                     <div key={lead.id} draggable onDragStart={(e) => handleDragStart(e, lead.id)} onClick={() => handleOpenChat(lead)} className="cursor-pointer group">
                         <Card className="bg-[#121214] border-[#222225] hover:border-indigo-500/50 transition-all p-4 space-y-4 shadow-lg group-hover:shadow-indigo-500/10 rounded-2xl relative overflow-hidden">
                            
-                           {/* Highlight Line */}
                            <div className={cn("absolute left-0 top-0 bottom-0 w-1 opacity-50 group-hover:opacity-100 transition-opacity", col.dot)} />
 
                            <div className="flex justify-between items-start pl-2">
@@ -165,7 +169,6 @@ const Pipeline = () => {
                               </Avatar>
                            </div>
 
-                           {/* Score Bar */}
                            <div className="pl-2 space-y-1.5">
                                <div className="flex justify-between text-[8px] font-bold uppercase tracking-widest text-[#7A8A9E]">
                                    <span>IA Score</span>
@@ -176,7 +179,6 @@ const Pipeline = () => {
                                </div>
                            </div>
 
-                           {/* Tags Area */}
                            {Array.isArray(lead.tags) && lead.tags.length > 0 && (
                                <div className="pl-2 flex gap-1.5 flex-wrap">
                                    {lead.tags.slice(0,3).map((t: string) => {

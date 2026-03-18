@@ -27,7 +27,6 @@ import { EditContactDialog } from '@/components/contacts/EditContactDialog';
 import { CreateCreditSaleDialog } from '@/components/contacts/CreateCreditSaleDialog';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/context/AuthContext';
-import { normalizeLeadForChat } from '@/lib/chat-normalizer';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogHeader, AlertDialogTitle, AlertDialogFooter
@@ -168,9 +167,8 @@ const Contacts = () => {
     }
   };
 
-  // ✅ FUNCIÓN CORREGIDA: abre el chat directamente sin async/await innecesario
   const handleOpenChat = async (contact: any) => {
-    // Si ya tiene lead_id, buscamos el lead y abrimos
+    // Si ya tiene lead_id, buscamos el lead real de la BD
     if (contact.lead_id) {
       const { data: lead } = await supabase
         .from('leads')
@@ -179,7 +177,7 @@ const Contacts = () => {
         .maybeSingle();
 
       if (lead) {
-        setSelectedLead(normalizeLeadForChat(lead));
+        setSelectedLead(lead);
         setIsChatOpen(true);
         return;
       }
@@ -207,7 +205,7 @@ const Contacts = () => {
       await supabase.from('contacts').update({ lead_id: newLead.id }).eq('id', contact.id);
 
       toast.success("Chat listo.", { id: tid });
-      setSelectedLead(normalizeLeadForChat(newLead));
+      setSelectedLead(newLead);
       setIsChatOpen(true);
       fetchContacts();
     } catch (err: any) {
@@ -300,64 +298,46 @@ const Contacts = () => {
             <Filter className="w-4 h-4 text-slate-500" />
             <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Segmentación</span>
           </div>
-
           <div className="relative flex-1 min-w-[200px]">
             <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-500" />
             <Input placeholder="Buscar por nombre, email o tel..." className="pl-10 h-10 bg-[#161618] border-[#222225] rounded-xl text-xs focus-visible:ring-indigo-500/50 text-white" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
           </div>
-
           <Select value={selectedGroup} onValueChange={setSelectedGroup}>
-            <SelectTrigger className="w-[150px] h-10 bg-[#161618] border-[#222225] rounded-xl text-xs text-slate-300">
-              <SelectValue placeholder="Grupo" />
-            </SelectTrigger>
+            <SelectTrigger className="w-[150px] h-10 bg-[#161618] border-[#222225] rounded-xl text-xs text-slate-300"><SelectValue placeholder="Grupo" /></SelectTrigger>
             <SelectContent className="bg-slate-900 border-slate-800 text-white rounded-xl max-h-[300px]">
               <SelectItem value="ALL">Cualquier Grupo</SelectItem>
               {groups.map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}
             </SelectContent>
           </Select>
-
           <Select value={selectedCity} onValueChange={setSelectedCity}>
-            <SelectTrigger className="w-[150px] h-10 bg-[#161618] border-[#222225] rounded-xl text-xs text-slate-300">
-              <SelectValue placeholder="Ciudad" />
-            </SelectTrigger>
+            <SelectTrigger className="w-[150px] h-10 bg-[#161618] border-[#222225] rounded-xl text-xs text-slate-300"><SelectValue placeholder="Ciudad" /></SelectTrigger>
             <SelectContent className="bg-slate-900 border-slate-800 text-white rounded-xl max-h-[300px]">
               <SelectItem value="ALL">Cualquier Ciudad</SelectItem>
               {cities.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
             </SelectContent>
           </Select>
-
           <Select value={selectedTagFilter} onValueChange={setSelectedTagFilter}>
-            <SelectTrigger className="w-[150px] h-10 bg-[#161618] border-[#222225] rounded-xl text-xs text-slate-300">
-              <SelectValue placeholder="Etiqueta" />
-            </SelectTrigger>
+            <SelectTrigger className="w-[150px] h-10 bg-[#161618] border-[#222225] rounded-xl text-xs text-slate-300"><SelectValue placeholder="Etiqueta" /></SelectTrigger>
             <SelectContent className="bg-[#121214] border-[#222225] text-white rounded-xl max-h-[300px]">
               <SelectItem value="ALL">Todas las Etiquetas</SelectItem>
               {allTags.map(t => (
                 <SelectItem key={t.id || t.text} value={t.text} className="focus:bg-[#161618]">
-                  <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: t.color }}></div>
-                    {t.text}
-                  </div>
+                  <div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full" style={{ backgroundColor: t.color }}></div>{t.text}</div>
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
-
           {isManager && (
             <>
               <Select value={selectedStatusFilter} onValueChange={setSelectedStatusFilter}>
-                <SelectTrigger className="w-[150px] h-10 bg-[#161618] border-[#222225] rounded-xl text-xs text-slate-300">
-                  <SelectValue placeholder="Finanzas" />
-                </SelectTrigger>
+                <SelectTrigger className="w-[150px] h-10 bg-[#161618] border-[#222225] rounded-xl text-xs text-slate-300"><SelectValue placeholder="Finanzas" /></SelectTrigger>
                 <SelectContent className="bg-[#121214] border-[#222225] text-white rounded-xl">
                   <SelectItem value="ALL">Cualquier Estado</SelectItem>
                   {financialStatuses.map(s => <SelectItem key={s.id} value={s.id}>{s.id}</SelectItem>)}
                 </SelectContent>
               </Select>
               <Select value={debtFilter} onValueChange={setDebtFilter}>
-                <SelectTrigger className="w-[140px] h-10 bg-[#161618] border-[#222225] rounded-xl text-xs text-slate-300">
-                  <SelectValue placeholder="Deuda" />
-                </SelectTrigger>
+                <SelectTrigger className="w-[140px] h-10 bg-[#161618] border-[#222225] rounded-xl text-xs text-slate-300"><SelectValue placeholder="Deuda" /></SelectTrigger>
                 <SelectContent className="bg-[#121214] border-[#222225] text-white rounded-xl">
                   <SelectItem value="ALL">Cualquier Saldo</SelectItem>
                   <SelectItem value="CON_DEUDA">Con Deuda Activa</SelectItem>
@@ -366,7 +346,6 @@ const Contacts = () => {
               </Select>
             </>
           )}
-
           {hasActiveFilters && filteredContacts.length > 0 && (
             <Button onClick={handleToggleSelectAll} variant="secondary" className={cn("h-10 px-4 ml-auto rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all", selectedIds.length === filteredContacts.length ? "bg-indigo-600/20 text-indigo-400 border border-indigo-500/30" : "bg-[#161618] text-slate-300 hover:bg-[#222225] border border-[#333336]")}>
               <CheckSquare className="w-3.5 h-3.5 mr-2" />
@@ -380,9 +359,7 @@ const Contacts = () => {
             <Table>
               <TableHeader>
                 <TableRow className="border-b border-[#222225] bg-[#161618] hover:bg-[#161618]">
-                  <TableHead className="w-12 pl-6">
-                    <Checkbox checked={selectedIds.length > 0 && selectedIds.length === filteredContacts.length} onCheckedChange={handleToggleSelectAll} className="border-slate-600 data-[state=checked]:bg-indigo-500"/>
-                  </TableHead>
+                  <TableHead className="w-12 pl-6"><Checkbox checked={selectedIds.length > 0 && selectedIds.length === filteredContacts.length} onCheckedChange={handleToggleSelectAll} className="border-slate-600 data-[state=checked]:bg-indigo-500"/></TableHead>
                   <TableHead className="text-slate-500 text-[10px] uppercase font-bold tracking-widest py-4">Nombre y Contacto</TableHead>
                   <TableHead className="text-slate-500 text-[10px] uppercase font-bold tracking-widest">Ubicación & Etiquetas</TableHead>
                   {isManager && <TableHead className="text-slate-500 text-[10px] uppercase font-bold tracking-widest w-48">Finanzas & Deuda</TableHead>}
@@ -396,16 +373,10 @@ const Contacts = () => {
                   <TableRow><TableCell colSpan={isManager ? 5 : 4} className="h-60 text-center text-slate-600 italic uppercase text-[10px] tracking-widest font-bold">No hay resultados con estos filtros.</TableCell></TableRow>
                 ) : filteredContacts.map((contact) => (
                   <TableRow key={contact.id} className={cn("border-b border-[#161618] transition-colors", selectedIds.includes(contact.id) ? "bg-indigo-900/10" : "hover:bg-[#1a1a1d]")}>
-                    <TableCell className="pl-6">
-                      <Checkbox checked={selectedIds.includes(contact.id)} onCheckedChange={() => handleToggleSelect(contact.id)} className="border-slate-600 data-[state=checked]:bg-indigo-500"/>
-                    </TableCell>
+                    <TableCell className="pl-6"><Checkbox checked={selectedIds.includes(contact.id)} onCheckedChange={() => handleToggleSelect(contact.id)} className="border-slate-600 data-[state=checked]:bg-indigo-500"/></TableCell>
                     <TableCell className="py-4">
                       <div className="flex items-center gap-4">
-                        <Avatar className="h-10 w-10 border border-[#222225] bg-[#121214]">
-                          <AvatarFallback className="bg-transparent text-indigo-300 font-bold text-sm">
-                            {contact.nombre?.substring(0, 2).toUpperCase() || 'NA'}
-                          </AvatarFallback>
-                        </Avatar>
+                        <Avatar className="h-10 w-10 border border-[#222225] bg-[#121214]"><AvatarFallback className="bg-transparent text-indigo-300 font-bold text-sm">{contact.nombre?.substring(0, 2).toUpperCase() || 'NA'}</AvatarFallback></Avatar>
                         <div className="flex flex-col">
                           <span className="font-bold text-slate-100 text-sm">{contact.nombre} {contact.apellido}</span>
                           <span className="text-[11px] text-slate-500 font-mono mt-0.5 flex items-center gap-1.5"><Phone className="w-3 h-3"/> {contact.telefono}</span>
@@ -414,25 +385,13 @@ const Contacts = () => {
                     </TableCell>
                     <TableCell>
                       <div className="flex flex-col gap-2">
-                        <span className={cn("text-[10px] flex items-center gap-1.5", contact.email ? "text-slate-300" : "text-slate-600 italic")}>
-                          <Mail className="w-3 h-3" /> {contact.email || 'Sin email'}
-                        </span>
-                        <span className={cn("text-[10px] flex items-center gap-1.5", contact.ciudad ? "text-slate-300" : "text-slate-600 italic")}>
-                          <MapPin className="w-3 h-3" /> {contact.ciudad || 'Sin ciudad'}
-                          {contact.grupo && <span className="ml-2 text-indigo-400 font-bold">• {contact.grupo}</span>}
-                        </span>
+                        <span className={cn("text-[10px] flex items-center gap-1.5", contact.email ? "text-slate-300" : "text-slate-600 italic")}><Mail className="w-3 h-3" /> {contact.email || 'Sin email'}</span>
+                        <span className={cn("text-[10px] flex items-center gap-1.5", contact.ciudad ? "text-slate-300" : "text-slate-600 italic")}><MapPin className="w-3 h-3" /> {contact.ciudad || 'Sin ciudad'}{contact.grupo && <span className="ml-2 text-indigo-400 font-bold">• {contact.grupo}</span>}</span>
                         {Array.isArray(contact.tags) && contact.tags.length > 0 && (
                           <div className="flex gap-1.5 flex-wrap mt-1">
                             {contact.tags.map((t: string) => {
                               const tagConf = allTags.find(lt => lt.text === t);
-                              const bgColor = tagConf ? tagConf.color + '15' : '#1e293b';
-                              const textColor = tagConf ? tagConf.color : '#94a3b8';
-                              const borderColor = tagConf ? tagConf.color + '40' : '#334155';
-                              return (
-                                <Badge key={t} style={{ backgroundColor: bgColor, color: textColor, borderColor }} className="text-[9px] h-5 px-2 font-bold uppercase tracking-widest border">
-                                  {t}
-                                </Badge>
-                              );
+                              return <Badge key={t} style={{ backgroundColor: (tagConf?.color || '#475569') + '15', color: tagConf?.color || '#94a3b8', borderColor: (tagConf?.color || '#475569') + '40' }} className="text-[9px] h-5 px-2 font-bold uppercase tracking-widest border">{t}</Badge>;
                             })}
                           </div>
                         )}
@@ -442,35 +401,18 @@ const Contacts = () => {
                       <TableCell>
                         <div className="flex flex-col gap-2">
                           <FinancialStatusBadge contactId={contact.id} currentStatus={contact.financial_status || 'Sin transacción'} isManager={isManager} onUpdate={fetchContacts} />
-                          {contact.total_debt > 0 && (
-                            <span className="text-[11px] font-mono font-bold text-amber-500 flex items-center gap-1">
-                              <DollarSign className="w-3 h-3"/> {contact.total_debt.toLocaleString()}
-                            </span>
-                          )}
+                          {contact.total_debt > 0 && <span className="text-[11px] font-mono font-bold text-amber-500 flex items-center gap-1"><DollarSign className="w-3 h-3"/> {contact.total_debt.toLocaleString()}</span>}
                         </div>
                       </TableCell>
                     )}
                     <TableCell className="text-right pr-6">
                       <div className="flex justify-end items-center gap-3">
                         {isManager && (
-                          <button className="text-amber-500 hover:text-amber-400 text-[9px] font-bold uppercase tracking-widest flex items-center gap-1.5 transition-colors border border-amber-500/30 bg-amber-500/10 px-3 py-2 rounded-xl" onClick={() => { setContactForCredit(contact); setIsCreditOpen(true); }}>
-                            <Wallet className="w-3.5 h-3.5" /> CRÉDITO
-                          </button>
+                          <button className="text-amber-500 hover:text-amber-400 text-[9px] font-bold uppercase tracking-widest flex items-center gap-1.5 transition-colors border border-amber-500/30 bg-amber-500/10 px-3 py-2 rounded-xl" onClick={() => { setContactForCredit(contact); setIsCreditOpen(true); }}><Wallet className="w-3.5 h-3.5" /> CRÉDITO</button>
                         )}
-                        <button
-                          className="text-indigo-400 hover:text-indigo-300 text-[10px] font-bold uppercase tracking-widest flex items-center gap-1.5 transition-colors"
-                          onClick={() => handleOpenChat(contact)}
-                        >
-                          <ExternalLink className="w-3.5 h-3.5" /> CHAT
-                        </button>
-                        <button className="text-slate-500 hover:text-white transition-colors bg-[#161618] p-2 rounded-xl border border-[#222225]" onClick={() => { setContactToEdit(contact); setIsEditOpen(true); }} title="Editar Contacto">
-                          <Edit3 className="w-3.5 h-3.5" />
-                        </button>
-                        {isManager && (
-                          <button className="text-slate-500 hover:text-red-500 transition-colors bg-[#161618] p-2 rounded-xl border border-[#222225]" onClick={() => setContactToDelete(contact)} title="Eliminar">
-                            <X className="w-3.5 h-3.5" />
-                          </button>
-                        )}
+                        <button className="text-indigo-400 hover:text-indigo-300 text-[10px] font-bold uppercase tracking-widest flex items-center gap-1.5 transition-colors" onClick={() => handleOpenChat(contact)}><ExternalLink className="w-3.5 h-3.5" /> CHAT</button>
+                        <button className="text-slate-500 hover:text-white transition-colors bg-[#161618] p-2 rounded-xl border border-[#222225]" onClick={() => { setContactToEdit(contact); setIsEditOpen(true); }}><Edit3 className="w-3.5 h-3.5" /></button>
+                        {isManager && <button className="text-slate-500 hover:text-red-500 transition-colors bg-[#161618] p-2 rounded-xl border border-[#222225]" onClick={() => setContactToDelete(contact)}><X className="w-3.5 h-3.5" /></button>}
                       </div>
                     </TableCell>
                   </TableRow>
@@ -484,34 +426,15 @@ const Contacts = () => {
           <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 animate-in slide-in-from-bottom-4 duration-300">
             <div className="bg-[#0f0f11] border border-indigo-500/30 shadow-[0_20px_50px_rgba(0,0,0,0.8)] rounded-2xl px-6 py-4 flex items-center gap-6 backdrop-blur-xl">
               <div className="flex items-center gap-3 border-r border-[#222225] pr-6">
-                <div className="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center text-xs font-bold text-white shadow-lg">
-                  {selectedIds.length}
-                </div>
+                <div className="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center text-xs font-bold text-white shadow-lg">{selectedIds.length}</div>
                 <span className="text-[10px] font-bold text-slate-200 uppercase tracking-widest">Seleccionados</span>
               </div>
-
               <div className="flex items-center gap-3">
-                <Button variant="outline" onClick={() => handleExportCSV(contacts.filter(c => selectedIds.includes(c.id)))} className="bg-emerald-900/20 border-emerald-500/30 text-emerald-500 hover:bg-emerald-600 hover:text-slate-900 h-10 px-4 rounded-xl font-bold uppercase tracking-widest text-[10px]">
-                  <Download className="w-4 h-4 mr-2" /> Exportar
-                </Button>
-
-                <Button variant="outline" onClick={() => setIsMassMessageOpen(true)} className="bg-amber-900/20 border-amber-500/30 text-amber-500 hover:bg-amber-600 hover:text-slate-900 h-10 px-4 rounded-xl font-bold uppercase tracking-widest text-[10px]">
-                  <Megaphone className="w-4 h-4 mr-2" /> Lanzar Campaña
-                </Button>
-
-                <Button variant="outline" onClick={() => setIsMassGroupOpen(true)} className="bg-[#161618] border-[#222225] text-slate-300 hover:bg-indigo-600 hover:text-white h-10 px-4 rounded-xl font-bold uppercase tracking-widest text-[10px]">
-                  <FolderInput className="w-4 h-4 mr-2" /> Mover Grupo
-                </Button>
-
-                {isManager && (
-                  <Button variant="destructive" onClick={handleMassDelete} disabled={isDeleting} className="bg-red-950 border-red-900 text-red-500 hover:bg-red-600 hover:text-white h-10 px-4 rounded-xl font-bold uppercase tracking-widest text-[10px]">
-                    {isDeleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <X className="w-4 h-4 mr-2" />} Borrar
-                  </Button>
-                )}
-
-                <Button variant="ghost" onClick={() => setSelectedIds([])} className="text-slate-500 hover:text-white">
-                  <X className="w-4 h-4" />
-                </Button>
+                <Button variant="outline" onClick={() => handleExportCSV(contacts.filter(c => selectedIds.includes(c.id)))} className="bg-emerald-900/20 border-emerald-500/30 text-emerald-500 hover:bg-emerald-600 hover:text-slate-900 h-10 px-4 rounded-xl font-bold uppercase tracking-widest text-[10px]"><Download className="w-4 h-4 mr-2" /> Exportar</Button>
+                <Button variant="outline" onClick={() => setIsMassMessageOpen(true)} className="bg-amber-900/20 border-amber-500/30 text-amber-500 hover:bg-amber-600 hover:text-slate-900 h-10 px-4 rounded-xl font-bold uppercase tracking-widest text-[10px]"><Megaphone className="w-4 h-4 mr-2" /> Lanzar Campaña</Button>
+                <Button variant="outline" onClick={() => setIsMassGroupOpen(true)} className="bg-[#161618] border-[#222225] text-slate-300 hover:bg-indigo-600 hover:text-white h-10 px-4 rounded-xl font-bold uppercase tracking-widest text-[10px]"><FolderInput className="w-4 h-4 mr-2" /> Mover Grupo</Button>
+                {isManager && <Button variant="destructive" onClick={handleMassDelete} disabled={isDeleting} className="bg-red-950 border-red-900 text-red-500 hover:bg-red-600 hover:text-white h-10 px-4 rounded-xl font-bold uppercase tracking-widest text-[10px]">{isDeleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <X className="w-4 h-4 mr-2" />} Borrar</Button>}
+                <Button variant="ghost" onClick={() => setSelectedIds([])} className="text-slate-500 hover:text-white"><X className="w-4 h-4" /></Button>
               </div>
             </div>
           </div>
@@ -520,22 +443,10 @@ const Contacts = () => {
 
       <Dialog open={isMassGroupOpen} onOpenChange={setIsMassGroupOpen}>
         <DialogContent className="bg-[#0f0f11] border-[#222225] text-white max-w-sm rounded-3xl">
-          <DialogHeader>
-            <DialogTitle className="text-indigo-400 flex items-center gap-2"><FolderInput className="w-5 h-5"/> Asignar Grupo</DialogTitle>
-            <DialogDescription className="text-slate-400 text-xs">Mueve los {selectedIds.length} contactos a un nuevo grupo.</DialogDescription>
-          </DialogHeader>
+          <DialogHeader><DialogTitle className="text-indigo-400 flex items-center gap-2"><FolderInput className="w-5 h-5"/> Asignar Grupo</DialogTitle><DialogDescription className="text-slate-400 text-xs">Mueve los {selectedIds.length} contactos a un nuevo grupo.</DialogDescription></DialogHeader>
           <form onSubmit={handleMassGroupUpdate} className="space-y-4 pt-4">
-            <div className="space-y-2">
-              <Label className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Nombre del Grupo</Label>
-              <Input list="existing-groups-mass" value={massGroupName} onChange={e => setMassGroupName(e.target.value)} placeholder="Ej: Oferta Noviembre..." className="bg-[#161618] border-[#222225] h-11 rounded-xl text-white focus-visible:ring-indigo-500" required />
-              <datalist id="existing-groups-mass">{groups.map(g => <option key={g} value={g} />)}</datalist>
-            </div>
-            <DialogFooter>
-              <Button type="button" variant="ghost" onClick={() => setIsMassGroupOpen(false)}>Cancelar</Button>
-              <Button type="submit" disabled={isUpdatingGroup} className="bg-indigo-600 hover:bg-indigo-500 font-bold px-6 rounded-xl uppercase tracking-widest text-[10px]">
-                {isUpdatingGroup ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : 'Confirmar'}
-              </Button>
-            </DialogFooter>
+            <div className="space-y-2"><Label className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Nombre del Grupo</Label><Input list="existing-groups-mass" value={massGroupName} onChange={e => setMassGroupName(e.target.value)} placeholder="Ej: Oferta Noviembre..." className="bg-[#161618] border-[#222225] h-11 rounded-xl text-white focus-visible:ring-indigo-500" required /><datalist id="existing-groups-mass">{groups.map(g => <option key={g} value={g} />)}</datalist></div>
+            <DialogFooter><Button type="button" variant="ghost" onClick={() => setIsMassGroupOpen(false)}>Cancelar</Button><Button type="submit" disabled={isUpdatingGroup} className="bg-indigo-600 hover:bg-indigo-500 font-bold px-6 rounded-xl uppercase tracking-widest text-[10px]">{isUpdatingGroup ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : 'Confirmar'}</Button></DialogFooter>
           </form>
         </DialogContent>
       </Dialog>
@@ -543,10 +454,7 @@ const Contacts = () => {
       <AlertDialog open={!!contactToDelete} onOpenChange={() => !isDeleting && setContactToDelete(null)}>
         <AlertDialogContent className="bg-[#0f0f11] border-[#222225] text-white rounded-3xl">
           <AlertDialogHeader><AlertDialogTitle className="text-red-400">¿Eliminar permanentemente?</AlertDialogTitle></AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel className="bg-transparent border-[#222225] text-slate-400 hover:text-white rounded-xl h-11" disabled={isDeleting}>Cancelar</AlertDialogCancel>
-            <AlertDialogAction className="bg-red-600 hover:bg-red-500 rounded-xl h-11 font-bold" onClick={() => handleDeleteContact(contactToDelete)} disabled={isDeleting}>Borrar Definitivo</AlertDialogAction>
-          </AlertDialogFooter>
+          <AlertDialogFooter><AlertDialogCancel className="bg-transparent border-[#222225] text-slate-400 hover:text-white rounded-xl h-11" disabled={isDeleting}>Cancelar</AlertDialogCancel><AlertDialogAction className="bg-red-600 hover:bg-red-500 rounded-xl h-11 font-bold" onClick={() => handleDeleteContact(contactToDelete)} disabled={isDeleting}>Borrar Definitivo</AlertDialogAction></AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
 

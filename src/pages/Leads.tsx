@@ -13,7 +13,6 @@ import { CreateLeadDialog } from '@/components/leads/CreateLeadDialog';
 import ChatViewer from '@/components/ChatViewer';
 import { toast } from 'sonner';
 import { useAuth } from '@/context/AuthContext';
-import { normalizeLeadForChat } from '@/lib/chat-normalizer';
 
 const Leads = () => {
   const { user, isManager } = useAuth();
@@ -53,7 +52,7 @@ const Leads = () => {
       if (targetId) {
         const target = leadsList.find(l => l.id === targetId);
         if (target) {
-          setSelectedLead(normalizeLeadForChat(target));
+          setSelectedLead(target);
           setIsChatOpen(true);
         }
       }
@@ -108,7 +107,7 @@ const Leads = () => {
   });
 
   const handleOpenChat = (lead: any) => {
-    setSelectedLead(normalizeLeadForChat(lead));
+    setSelectedLead(lead);
     setIsChatOpen(true);
   };
 
