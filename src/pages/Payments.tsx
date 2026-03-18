@@ -6,18 +6,22 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription as DialogDesc } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { 
   CreditCard, Search, Loader2, CheckCircle2, Clock, 
   ExternalLink, RefreshCw, ShieldCheck, Target, Mail, MapPin, 
-  ShieldAlert, AlertTriangle, Terminal, Banknote, DollarSign, UserPlus, ArrowRight, CalendarDays, Wallet
+  ShieldAlert, AlertTriangle, Terminal, Banknote, DollarSign, UserPlus, ArrowRight, CalendarDays, Wallet, Trash2
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { Input } from '@/components/ui/input';
 import { useAuth } from '@/context/AuthContext';
 import { ManageCreditDialog } from '@/components/payments/ManageCreditDialog';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogHeader, AlertDialogTitle, AlertDialogFooter, AlertDialogDescription
+} from "@/components/ui/alert-dialog";
 
 const Payments = () => {
   const { isManager } = useAuth();
@@ -37,6 +41,10 @@ const Payments = () => {
   const [selectedSale, setSelectedSale] = useState<any>(null);
   const [isCreditDialogOpen, setIsCreditDialogOpen] = useState(false);
 
+  // Estados para eliminación de crédito
+  const [saleToDelete, setSaleToDelete] = useState<any>(null);
+  const [isDeletingSale, setIsDeletingSale] = useState(false);
+
   useEffect(() => { fetchAll(); }, []);
 
   const fetchAll = async () => {
@@ -47,7 +55,6 @@ const Payments = () => {
       const { data: allLeads } = await supabase.from('leads').select('id, nombre, telefono, email, ciudad, estado, cp, pais, apellido').limit(100);
         
       if (isManager) {
-        // En vez de cargar abonos sueltos, cargamos la Venta a Crédito completa
         const { data: salesData } = await supabase
           .from('credit_sales')
           .select(`
@@ -111,6 +118,34 @@ const Payments = () => {
      } finally {
         setLinking(false);
      }
+  };
+
+  const handleDeleteSale = async (sale: any) => {
+    setIsDeletingSale(true);
+    const tid = toast.loading("Eliminando venta a crédito permanentemente...");
+    try {
+      // 1. Eliminar cuotas (installments) para evitar problemas de llave foránea
+      await supabase.from('credit_installments').delete().eq('sale_id', sale.id);
+      
+      // 2. Eliminar la venta principal
+      const { error } = await supabase.from('credit_sales').delete().eq('id', sale.id);
+      if (error) throw error;
+      
+      // 3. Registrar en bitácora
+      await supabase.from('activity_logs').insert({
+         action: 'DELETE', resource: 'SYSTEM',
+         description: `Venta a crédito eliminada para ${sale.contact?.nombre || 'Cliente'} (${sale.concept})`, 
+         status: 'OK'
+      });
+
+      toast.success("Crédito eliminado con éxito.", { id: tid });
+      setSaleToDelete(null);
+      fetchAll();
+    } catch (err: any) {
+      toast.error(err.message, { id: tid });
+    } finally {
+      setIsDeletingSale(false);
+    }
   };
 
   const getTrustScore = (ocr: string) => {
@@ -181,7 +216,7 @@ const Payments = () => {
                                <TableHead className="text-slate-400 uppercase text-[10px] tracking-widest font-bold">Deuda Total</TableHead>
                                <TableHead className="text-slate-400 uppercase text-[10px] tracking-widest font-bold">Pagado</TableHead>
                                <TableHead className="text-slate-400 uppercase text-[10px] tracking-widest font-bold">Estado General</TableHead>
-                               <TableHead className="text-right uppercase text-[10px] tracking-widest font-bold pr-6">Acción</TableHead>
+                               <TableHead className="text-right uppercase text-[10px] tracking-widest font-bold pr-6">Acciones</TableHead>
                             </TableRow>
                          </TableHeader>
                          <TableBody>
@@ -202,7 +237,7 @@ const Payments = () => {
                                      <div className="flex flex-col">
                                         <span className="text-sm font-bold text-white">{contactName}</span>
                                         <span className="text-[10px] text-slate-500 font-mono mt-0.5">{sale.contact?.telefono}</span>
-                                        <span className="text-[10px] text-indigo-400 mt-1 truncate max-w-[200px]">{sale.concept}</span>
+                                        <span className="text-[10px] text-indigo-400 mt-1 truncate max-w-[200px]" title={sale.concept}>{sale.concept}</span>
                                      </div>
                                   </TableCell>
                                   <TableCell>
@@ -229,14 +264,25 @@ const Payments = () => {
                                      </Badge>
                                   </TableCell>
                                   <TableCell className="text-right pr-6">
-                                     <Button 
-                                        size="sm" 
-                                        variant="outline"
-                                        onClick={() => { setSelectedSale(sale); setIsCreditDialogOpen(true); }}
-                                        className="border-[#333336] bg-[#0a0a0c] text-amber-500 hover:bg-amber-500 hover:text-slate-950 font-bold text-[10px] uppercase tracking-widest rounded-xl shadow-sm h-9 px-4 transition-colors"
-                                     >
-                                        <Wallet className="w-3.5 h-3.5 mr-1.5" /> Gestionar
-                                     </Button>
+                                     <div className="flex justify-end gap-2 items-center">
+                                       <Button 
+                                          size="sm" 
+                                          variant="outline"
+                                          onClick={() => { setSelectedSale(sale); setIsCreditDialogOpen(true); }}
+                                          className="border-[#333336] bg-[#0a0a0c] text-amber-500 hover:bg-amber-500 hover:text-slate-950 font-bold text-[10px] uppercase tracking-widest rounded-xl shadow-sm h-9 px-4 transition-colors"
+                                       >
+                                          <Wallet className="w-3.5 h-3.5 mr-1.5" /> Gestionar
+                                       </Button>
+                                       <Button
+                                          variant="ghost"
+                                          size="icon"
+                                          onClick={() => setSaleToDelete(sale)}
+                                          className="text-slate-500 hover:text-red-500 hover:bg-red-500/10 h-9 w-9 rounded-xl transition-colors"
+                                          title="Eliminar Crédito"
+                                       >
+                                          <Trash2 className="w-4 h-4" />
+                                       </Button>
+                                     </div>
                                   </TableCell>
                                </TableRow>
                             )})}
@@ -247,9 +293,7 @@ const Payments = () => {
              </TabsContent>
            )}
 
-           {/* OTRAS TABS OMITIDAS EN LA VERSIÓN ESCRITA PARA BREVEDAD (Pero permanecen en el archivo real) */}
            <TabsContent value="intenciones" className="mt-6">
-              {/* Contenido inalterado */}
               <Card className="bg-[#0f0f11] border-[#222225] border-t-4 border-t-indigo-500 shadow-2xl rounded-2xl overflow-hidden">
                  <CardHeader className="bg-[#161618] border-b border-[#222225]">
                     <CardTitle className="text-white text-base flex items-center gap-2 font-bold tracking-wide"><Target className="w-5 h-5 text-indigo-400" /> Embudo Final: Esperando Venta Online</CardTitle>
@@ -265,7 +309,7 @@ const Payments = () => {
                        </TableHeader>
                        <TableBody>
                           {intents.length === 0 ? (
-                             <TableRow><TableCell colSpan={3} className="h-48 text-center text-slate-500 text-xs italic font-bold uppercase tracking-widest">No hay clientes.</TableCell></TableRow>
+                             <TableRow><TableCell colSpan={3} className="h-48 text-center text-slate-500 text-xs italic font-bold uppercase tracking-widest">No hay clientes en esta etapa.</TableCell></TableRow>
                           ) : intents.map(lead => (
                              <TableRow key={lead.id} className="border-[#222225] hover:bg-[#161618] transition-colors">
                                 <TableCell className="pl-6 font-bold text-white">{lead.nombre || lead.telefono}</TableCell>
@@ -280,9 +324,12 @@ const Payments = () => {
            </TabsContent>
 
            <TabsContent value="ocr" className="mt-6">
-              {/* Contenido inalterado */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                 {paymentAssets.map(pay => (
+                 {paymentAssets.length === 0 ? (
+                    <div className="col-span-full py-20 text-center text-slate-500 text-xs font-bold uppercase tracking-widest italic border-2 border-dashed border-[#222225] rounded-2xl">
+                       No hay comprobantes pendientes de validación.
+                    </div>
+                 ) : paymentAssets.map(pay => (
                     <Card key={pay.id} className="bg-[#0f0f11] border-[#222225] shadow-2xl rounded-2xl p-4">
                        <img src={pay.url} className="w-full h-48 object-contain rounded-lg border border-[#222225] mb-4"/>
                        <Button onClick={() => { setSelectedAsset(pay); setIsLinkDialogOpen(true); }} className="w-full bg-emerald-600 hover:bg-emerald-500">Vincular y Aprobar</Button>
@@ -292,7 +339,97 @@ const Payments = () => {
            </TabsContent>
         </Tabs>
 
-        {/* Dialogo de Vinculación OMITIDO POR BREVEDAD */}
+        {/* Diálogo Vincular Venta de Contado */}
+        <Dialog open={isLinkDialogOpen} onOpenChange={setIsLinkDialogOpen}>
+          <DialogContent className="bg-[#0f0f11] border-[#222225] text-white max-w-3xl rounded-3xl p-0 overflow-hidden shadow-2xl flex flex-col md:flex-row h-[80vh] md:h-[600px]">
+            <div className="w-full md:w-1/2 bg-[#0a0a0c] border-r border-[#222225] p-6 flex flex-col min-h-0">
+               <DialogHeader className="mb-4 shrink-0">
+                  <DialogTitle className="flex items-center gap-2 text-emerald-400 text-lg"><ShieldCheck className="w-5 h-5"/> Validar Comprobante</DialogTitle>
+                  <DialogDesc className="text-slate-400 text-xs">Busca al cliente en el CRM y adjudícale esta venta.</DialogDesc>
+               </DialogHeader>
+               
+               <div className="space-y-4 flex-1 flex flex-col min-h-0">
+                  <div className="relative shrink-0">
+                     <Search className="absolute left-3 top-3 h-4 w-4 text-slate-500" />
+                     <Input placeholder="Buscar nombre o teléfono..." value={searchLead} onChange={e => setSearchLead(e.target.value)} className="pl-10 bg-[#161618] border-[#222225] h-10 rounded-xl focus-visible:ring-emerald-500 text-sm" />
+                  </div>
+                  <ScrollArea className="flex-1 border border-[#222225] rounded-xl bg-[#121214]">
+                     <div className="divide-y divide-[#222225]">
+                        {filteredLeads.length === 0 ? (
+                           <div className="p-8 text-center text-slate-500 text-xs italic">No se encontraron clientes.</div>
+                        ) : filteredLeads.map(lead => (
+                           <div key={lead.id} className="p-3 hover:bg-[#161618] transition-colors flex justify-between items-center group">
+                              <div className="flex flex-col min-w-0 pr-2">
+                                 <span className="font-bold text-sm text-slate-200 truncate">{lead.nombre}</span>
+                                 <span className="text-[10px] text-slate-500 font-mono">{lead.telefono}</span>
+                              </div>
+                              <Button size="sm" onClick={() => handleLinkAndApprove(lead)} disabled={linking} className="bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold uppercase tracking-widest text-[9px] h-8 rounded-lg shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                                 Aprobar <ArrowRight className="w-3 h-3 ml-1"/>
+                              </Button>
+                           </div>
+                        ))}
+                     </div>
+                  </ScrollArea>
+               </div>
+            </div>
+
+            <div className="w-full md:w-1/2 bg-[#121214] p-6 flex flex-col gap-4 overflow-y-auto custom-scrollbar">
+               {selectedAsset && (
+                  <>
+                     <div className="rounded-xl overflow-hidden border border-[#222225] bg-black shadow-inner relative group">
+                        <img src={selectedAsset.url} className="w-full h-[250px] object-contain" alt="Comprobante" />
+                        <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                           <a href={selectedAsset.url} target="_blank" rel="noreferrer" className="text-white flex items-center gap-2 text-xs font-bold bg-white/20 px-4 py-2 rounded-lg backdrop-blur-md hover:bg-white/30 transition-colors">
+                              <ExternalLink className="w-4 h-4"/> Abrir en grande
+                           </a>
+                        </div>
+                     </div>
+
+                     <div className="bg-[#0a0a0c] border border-[#222225] rounded-xl p-4 space-y-3">
+                        <div className="flex justify-between items-center">
+                           <span className="text-[10px] font-bold uppercase tracking-widest text-indigo-400 flex items-center gap-1.5"><Terminal className="w-3.5 h-3.5"/> Ojo de Halcón (OCR)</span>
+                           <Badge variant="outline" className={cn("text-[9px] font-bold uppercase border bg-[#121214]", getTrustScore(selectedAsset.ocr_content).color)}>
+                              {getTrustScore(selectedAsset.ocr_content).label}
+                           </Badge>
+                        </div>
+                        <ScrollArea className="h-24 bg-black border border-[#222225] rounded-lg p-3">
+                           {selectedAsset.ocr_content ? (
+                              <p className="text-[10px] font-mono text-slate-400 leading-relaxed">{selectedAsset.ocr_content}</p>
+                           ) : (
+                              <p className="text-[10px] italic text-slate-600 text-center mt-6">Sin análisis OCR.</p>
+                           )}
+                        </ScrollArea>
+                     </div>
+                  </>
+               )}
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Diálogo de Confirmación para Eliminar Crédito */}
+        <AlertDialog open={!!saleToDelete} onOpenChange={(open) => !open && !isDeletingSale && setSaleToDelete(null)}>
+          <AlertDialogContent className="bg-[#0f0f11] border-[#222225] text-white rounded-3xl">
+            <AlertDialogHeader>
+               <AlertDialogTitle className="text-red-400 flex items-center gap-2">
+                  <Trash2 className="w-5 h-5" /> ¿Eliminar Venta a Crédito?
+               </AlertDialogTitle>
+               <AlertDialogDescription className="text-slate-400 text-sm">
+                  Estás a punto de eliminar el crédito de <strong>{saleToDelete?.contact?.nombre}</strong> por el concepto de <strong>{saleToDelete?.concept}</strong>.
+                  <br /><br />
+                  Esta acción borrará de forma permanente el historial de todas las cuotas y abonos asociados a este crédito. <strong className="text-red-400">Esta acción no se puede deshacer.</strong>
+               </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter className="mt-4">
+              <AlertDialogCancel disabled={isDeletingSale} className="bg-transparent border-[#222225] text-slate-400 hover:text-white rounded-xl h-11 uppercase font-bold text-[10px] tracking-widest">
+                 Cancelar
+              </AlertDialogCancel>
+              <AlertDialogAction disabled={isDeletingSale} onClick={() => handleDeleteSale(saleToDelete)} className="bg-red-600 hover:bg-red-500 text-white rounded-xl h-11 uppercase font-bold text-[10px] tracking-widest border-none shadow-lg">
+                 {isDeletingSale ? <Loader2 className="w-4 h-4 animate-spin mr-2"/> : <Trash2 className="w-4 h-4 mr-2"/>} Eliminar Definitivamente
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
       </div>
 
       <ManageCreditDialog open={isCreditDialogOpen} onOpenChange={setIsCreditDialogOpen} sale={selectedSale} onSuccess={fetchAll} />
