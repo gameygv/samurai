@@ -107,6 +107,11 @@ const Leads = () => {
     return matchesSearch && matchesTag && matchesIntent;
   });
 
+  const handleOpenChat = (lead: any) => {
+    setSelectedLead(normalizeLeadForChat(lead));
+    setIsChatOpen(true);
+  };
+
   return (
     <Layout>
       <div className="max-w-7xl mx-auto space-y-6 animate-in fade-in duration-500">
@@ -200,7 +205,7 @@ const Leads = () => {
                     key={lead.id} 
                     lead={lead} 
                     allTags={allTags} 
-                    onClick={() => { setSelectedLead(normalizeLeadForChat(lead)); setIsChatOpen(true); }} 
+                    onClick={() => handleOpenChat(lead)} 
                   />
                 ))
               )}
@@ -210,7 +215,9 @@ const Leads = () => {
       </div>
 
       <CreateLeadDialog open={isCreateOpen} onOpenChange={setIsCreateOpen} onSuccess={fetchLeads} />
-      {selectedLead && <ChatViewer lead={selectedLead} open={isChatOpen} onOpenChange={setIsChatOpen} />}
+      {selectedLead && (
+        <ChatViewer lead={selectedLead} open={isChatOpen} onOpenChange={setIsChatOpen} />
+      )}
     </Layout>
   );
 };

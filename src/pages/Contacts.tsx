@@ -168,46 +168,50 @@ const Contacts = () => {
     }
   };
 
+  // ✅ FUNCIÓN CORREGIDA: abre el chat directamente sin async/await innecesario
   const handleOpenChat = async (contact: any) => {
-    let leadId = contact.lead_id;
+    // Si ya tiene lead_id, buscamos el lead y abrimos
+    if (contact.lead_id) {
+      const { data: lead } = await supabase
+        .from('leads')
+        .select('*')
+        .eq('id', contact.lead_id)
+        .maybeSingle();
 
-    if (!leadId) {
-      const tid = toast.loading("Iniciando chat...");
-      try {
-        const { data: newLead, error } = await supabase.from('leads').insert({
-          nombre: contact.nombre || 'Contacto Importado',
-          telefono: contact.telefono,
-          email: contact.email,
-          ciudad: contact.ciudad,
-          estado: contact.estado,
-          cp: contact.cp,
-          pais: contact.pais,
-          tags: Array.isArray(contact.tags) ? contact.tags : [],
-          buying_intent: 'BAJO',
-          ai_paused: true,
-          summary: `Importado de Contactos.`
-        }).select().single();
-
-        if (error) throw error;
-
-        await supabase.from('contacts').update({ lead_id: newLead.id }).eq('id', contact.id);
-        toast.success("Chat listo.", { id: tid });
-        setSelectedLead(normalizeLeadForChat(newLead));
+      if (lead) {
+        setSelectedLead(normalizeLeadForChat(lead));
         setIsChatOpen(true);
-        fetchContacts();
-        return;
-      } catch (err: any) {
-        toast.error(err.message, { id: tid });
         return;
       }
     }
 
-    const { data: lead } = await supabase.from('leads').select('*').eq('id', leadId).maybeSingle();
-    if (lead) {
-      setSelectedLead(normalizeLeadForChat(lead));
+    // Si no tiene lead, lo creamos
+    const tid = toast.loading("Iniciando chat...");
+    try {
+      const { data: newLead, error } = await supabase.from('leads').insert({
+        nombre: contact.nombre || 'Contacto',
+        telefono: contact.telefono,
+        email: contact.email || null,
+        ciudad: contact.ciudad || null,
+        estado: contact.estado || null,
+        cp: contact.cp || null,
+        pais: contact.pais || 'mx',
+        tags: Array.isArray(contact.tags) ? contact.tags : [],
+        buying_intent: 'BAJO',
+        ai_paused: true,
+        summary: 'Importado desde Contactos.',
+      }).select().single();
+
+      if (error) throw error;
+
+      await supabase.from('contacts').update({ lead_id: newLead.id }).eq('id', contact.id);
+
+      toast.success("Chat listo.", { id: tid });
+      setSelectedLead(normalizeLeadForChat(newLead));
       setIsChatOpen(true);
-    } else {
-      toast.error("Chat no encontrado.");
+      fetchContacts();
+    } catch (err: any) {
+      toast.error(err.message, { id: tid });
     }
   };
 
@@ -453,7 +457,10 @@ const Contacts = () => {
                             <Wallet className="w-3.5 h-3.5" /> CRÉDITO
                           </button>
                         )}
-                        <button className="text-indigo-400 hover:text-indigo-300 text-[10px] font-bold uppercase tracking-widest flex items-center gap-1.5 transition-colors" onClick={() => handleOpenChat(contact)}>
+                        <button
+                          className="text-indigo-400 hover:text-indigo-300 text-[10px] font-bold uppercase tracking-widest flex items-center gap-1.5 transition-colors"
+                          onClick={() => handleOpenChat(contact)}
+                        >
                           <ExternalLink className="w-3.5 h-3.5" /> CHAT
                         </button>
                         <button className="text-slate-500 hover:text-white transition-colors bg-[#161618] p-2 rounded-xl border border-[#222225]" onClick={() => { setContactToEdit(contact); setIsEditOpen(true); }} title="Editar Contacto">
