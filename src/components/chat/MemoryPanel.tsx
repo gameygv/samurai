@@ -5,7 +5,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { 
-  Database, Loader2, Fingerprint, Trash2, Edit2, ChevronDown, User, Smartphone, Tag, Plus, ShieldAlert, Zap, X, Wallet, FileEdit, Globe, Bell
+  Database, Loader2, Fingerprint, Trash2, Edit2, ChevronDown, User, Smartphone, Tag, Plus, ShieldAlert, Zap, X, Wallet, FileEdit, Globe, Bell, Mail, MapPin
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -127,33 +127,6 @@ export const MemoryPanel = ({
      }
   };
 
-  const handleReportCia = async () => {
-      if (!correctionText.trim()) return;
-      setReporting(true);
-      try {
-          const { data: lastMsgs } = await supabase.from('conversaciones').select('mensaje, emisor').eq('lead_id', currentAnalysis.id).order('created_at', { ascending: false }).limit(2);
-          const clientMsg = lastMsgs?.find(m => m.emisor === 'CLIENTE')?.mensaje || 'Contexto de chat activo';
-          const aiMsg = lastMsgs?.find(m => m.emisor !== 'CLIENTE')?.mensaje || 'N/A';
-
-          await supabase.from('errores_ia').insert({
-              usuario_id: user?.id,
-              cliente_id: currentAnalysis.id,
-              mensaje_cliente: String(clientMsg),
-              respuesta_ia: String(aiMsg),
-              correccion_sugerida: correctionText,
-              estado_correccion: 'REPORTADA',
-              categoria: 'CONDUCTA',
-              created_by: profile?.full_name || 'Agente'
-          });
-          toast.success("Regla enviada a la Bitácora #CIA.");
-          setCorrectionText('');
-      } catch (err: any) {
-          toast.error("Fallo al reportar.");
-      } finally {
-          setReporting(false);
-      }
-  };
-
   const handleRunAnalysis = async () => {
      setAnalyzing(true);
      try {
@@ -166,21 +139,13 @@ export const MemoryPanel = ({
      }
   };
 
-  const handleDirectAgentChange = async (newAgentId: string) => {
-      const val = newAgentId === "unassigned" ? null : newAgentId;
-      try {
-          await supabase.from('leads').update({ assigned_to: val }).eq('id', currentAnalysis.id);
-          setMemoryForm({...memoryForm, assigned_to: val});
-          toast.success("Asignación de asesor actualizada.");
-      } catch (e) {
-          toast.error("Error al reasignar.");
-      }
-  };
-
   const handleUpdatePaymentStatus = async (status: string) => {
      try {
          const updates: any = { payment_status: status };
-         if (status === 'VALID') updates.buying_intent = 'COMPRADO';
+         if (status === 'VALID') {
+             updates.buying_intent = 'COMPRADO';
+             updates.followup_stage = 100;
+         }
          await supabase.from('leads').update(updates).eq('id', currentAnalysis.id);
          toast.success("Auditoría actualizada.");
          if (onAnalysisComplete) onAnalysisComplete();
@@ -272,6 +237,19 @@ export const MemoryPanel = ({
                              <span className="text-[9px] text-[#7A8A9E] uppercase font-bold tracking-widest">Canal</span>
                              <p className="text-[11px] text-indigo-400 mt-1 flex items-center gap-1.5 font-bold"><Smartphone className="w-3 h-3 text-indigo-400"/> {currentChannelName}</p>
                           </div>
+                          
+                          {/* DATO AÑADIDO: EMAIL Y CIUDAD EN LECTURA */}
+                          <div className="col-span-2 grid grid-cols-2 gap-4 mt-1 mb-1 p-3 bg-[#121214] rounded-xl border border-[#222225]">
+                             <div className="overflow-hidden">
+                                <span className="text-[9px] text-[#7A8A9E] uppercase font-bold tracking-widest flex items-center gap-1"><Mail className="w-3 h-3"/> Email</span>
+                                <p className="text-[11px] text-slate-300 mt-1 truncate" title={emailVal || 'No capturado'}>{emailVal || 'N/A'}</p>
+                             </div>
+                             <div className="overflow-hidden">
+                                <span className="text-[9px] text-[#7A8A9E] uppercase font-bold tracking-widest flex items-center gap-1"><MapPin className="w-3 h-3"/> Ciudad</span>
+                                <p className="text-[11px] text-slate-300 mt-1 truncate" title={ciudadVal || 'No capturada'}>{ciudadVal || 'N/A'}</p>
+                             </div>
+                          </div>
+
                           <div className="col-span-2">
                              <span className="text-[9px] text-[#7A8A9E] uppercase font-bold tracking-widest">Resumen IA</span>
                              <p className="text-[11px] text-emerald-400/80 italic mt-1 leading-relaxed">{summaryVal}</p>

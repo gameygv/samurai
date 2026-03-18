@@ -48,7 +48,12 @@ export const MessageInput = ({ onSendMessage, sending, isAiPaused, initialValue 
      setGenerating(true);
      try {
          const draft = await onAutoGenerate();
-         if (draft) setMessage(draft);
+         if (draft) {
+             setMessage(draft); // Inyectar directamente al input local
+             toast.success("Sugerencia generada.");
+         } else {
+             toast.error("La IA no pudo generar una sugerencia.");
+         }
      } catch(e: any) {
          toast.error("Fallo al generar sugerencia.");
      } finally {

@@ -1,5 +1,4 @@
 import React, { useRef, useEffect } from 'react';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Loader2, StickyNote, FileText, Mic } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -102,7 +101,7 @@ export const MessageList = ({ messages, loading }: MessageListProps) => {
   };
 
   return (
-    <ScrollArea className="flex-1 w-full h-full p-6 bg-[#0a0a0c]">
+    <div className="flex-1 overflow-y-auto custom-scrollbar p-6 bg-[#0a0a0c]">
       {loading ? (
         <div className="flex h-full items-center justify-center text-slate-500 text-xs gap-2">
            <Loader2 className="w-4 h-4 animate-spin text-indigo-500" /> Sincronizando...
@@ -148,6 +147,6 @@ export const MessageList = ({ messages, loading }: MessageListProps) => {
           <div ref={scrollRef} />
         </div>
       )}
-    </ScrollArea>
+    </div>
   );
 };

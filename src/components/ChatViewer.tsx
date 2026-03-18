@@ -28,7 +28,6 @@ interface ChatViewerProps {
 export default function ChatViewer({ lead, open, onOpenChange }: ChatViewerProps) {
   const { user } = useAuth();
   
-  // Mantenemos una copia local del lead para que el MemoryPanel se actualice en vivo
   const [liveLead, setLiveLead] = useState<any>(lead || {});
   const leadId = liveLead?.id || null;
   
@@ -66,6 +65,15 @@ export default function ChatViewer({ lead, open, onOpenChange }: ChatViewerProps
     }
   }, [leadId, open, messages?.length]);
 
+  const refreshLeadData = async () => {
+     if (!leadId) return;
+     const { data } = await supabase.from('leads').select('*').eq('id', leadId).single();
+     if (data) {
+         setLiveLead(data);
+         updateMemoryForm(data);
+     }
+  };
+
   const fetchQuickActions = async () => {
     if(!user) return;
     const { data } = await supabase.from('app_config').select('key, value').in('key', ['wc_url', 'bank_name', 'bank_account', 'bank_clabe', 'bank_holder', 'quick_replies', 'wc_products', `agent_templates_${user.id}`]);
@@ -100,7 +108,9 @@ export default function ChatViewer({ lead, open, onOpenChange }: ChatViewerProps
          });
          if (error) throw error;
          return data.answer as string;
-      } catch (e) { return null; }
+      } catch (e) { 
+         return null; 
+      }
   };
 
   const updateMemoryForm = (data: any) => {
@@ -263,7 +273,6 @@ export default function ChatViewer({ lead, open, onOpenChange }: ChatViewerProps
 
           {/* MESSAGES */}
           <div className="flex-1 min-h-0 flex flex-col relative bg-[#0a0a0c]">
-             {/* El overlay gradient da profundidad visual */}
              <div className="absolute inset-x-0 top-0 h-4 bg-gradient-to-b from-[#050505] to-transparent z-10 pointer-events-none" />
              <MessageList messages={Array.isArray(messages) ? messages : []} loading={loading} />
           </div>
@@ -346,7 +355,7 @@ export default function ChatViewer({ lead, open, onOpenChange }: ChatViewerProps
             saving={sending} 
             onReset={() => {}} 
             onToggleFollowup={() => handleSendMessage(liveLead.ai_paused ? '#START' : '#STOP')} 
-            onAnalysisComplete={() => {}} 
+            onAnalysisComplete={() => { refreshLeadData(); refetch(); }} 
             onDeleteLead={handleDeleteLead}
           />
         </div>

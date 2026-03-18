@@ -40,7 +40,8 @@ serve(async (req) => {
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
     for (const lead of leadsToProcess) {
-        // No analizar leads que ya estén ganados o perdidos a menos que se fuerce
+        
+        // REGLA ABSOLUTA: Si el webhook no forzó, ignorar estados terminales
         if (!force && (lead.buying_intent === 'COMPRADO' || lead.buying_intent === 'PERDIDO')) {
            continue;
         }
@@ -89,8 +90,13 @@ RESPONDE SOLO JSON: {"nombre": "...", "email": "...", "ciudad": "...", "intent":
         if (result.email && result.email !== 'null') updates.email = result.email;
         if (result.ciudad && result.ciudad !== 'null') updates.ciudad = result.ciudad;
         
-        // Bloqueo de seguridad: Evitar falso COMPRADO
-        if (result.intent && result.intent !== 'COMPRADO') {
+        // =========================================================================
+        // BLINDAJE CRÍTICO: Si el lead YA estaba comprado, NUNCA se degrada a BAJO
+        // Aunque el usuario "Fuerce el análisis", no podemos quitar el pago.
+        // =========================================================================
+        if (lead.buying_intent === 'COMPRADO' || lead.buying_intent === 'PERDIDO') {
+            // No hacemos NADA con el result.intent. Lo protegemos.
+        } else if (result.intent && result.intent !== 'COMPRADO') {
             updates.buying_intent = result.intent;
         }
 
