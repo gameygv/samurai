@@ -39,6 +39,9 @@ serve(async (req) => {
     const results = [];
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
+    // Jerarquía estricta para evitar que la IA degrade leads
+    const intentLevels = { 'BAJO': 1, 'MEDIO': 2, 'ALTO': 3, 'COMPRADO': 4, 'PERDIDO': 5 };
+
     for (const lead of leadsToProcess) {
         
         // REGLA ABSOLUTA: Si el webhook no forzó, ignorar estados terminales
@@ -58,7 +61,7 @@ serve(async (req) => {
         const systemPrompt = `
 Eres el Auditor de Identidad del CRM. Tu misión es extraer datos reales de la conversación.
 REGLA DE ORO: Si el usuario dice "Soy X" o "Mi nombre es X", ese es su NOMBRE REAL.
-IMPORTANTE SOBRE INTENCIÓN DE COMPRA: NUNCA ASIGNES 'COMPRADO'. Solo elige entre BAJO, MEDIO, ALTO o PERDIDO.
+IMPORTANTE SOBRE INTENCIÓN DE COMPRA: Evalúa la temperatura del prospecto. NUNCA uses 'COMPRADO' ni 'PERDIDO'. Solo elige entre BAJO, MEDIO o ALTO.
 
 DATOS A EXTRAER:
 1. NOMBRE: Nombre real.
@@ -69,7 +72,7 @@ DATOS A EXTRAER:
 ROUTING: Elige EXACTAMENTE el ID del agente según la ciudad:
 ${agentsContext}
 
-RESPONDE SOLO JSON: {"nombre": "...", "email": "...", "ciudad": "...", "intent": "BAJO|MEDIO|ALTO|PERDIDO", "perfil": "...", "summary": "...", "suggested_agent_id": "UUID"}`;
+RESPONDE SOLO JSON: {"nombre": "...", "email": "...", "ciudad": "...", "intent": "BAJO|MEDIO|ALTO", "perfil": "...", "summary": "...", "suggested_agent_id": "UUID"}`;
 
         const aiRes = await fetch(OPENAI_URL, {
             method: 'POST',
@@ -91,12 +94,15 @@ RESPONDE SOLO JSON: {"nombre": "...", "email": "...", "ciudad": "...", "intent":
         if (result.ciudad && result.ciudad !== 'null') updates.ciudad = result.ciudad;
         
         // =========================================================================
-        // BLINDAJE CRÍTICO: Si el lead YA estaba comprado, NUNCA se degrada a BAJO
-        // Aunque el usuario "Fuerce el análisis", no podemos quitar el pago.
+        // BLINDAJE CRÍTICO ANTI-DEGRADACIÓN
         // =========================================================================
+        const currentLevel = intentLevels[lead.buying_intent] || 1;
+        const suggestedLevel = intentLevels[result.intent] || 1;
+
         if (lead.buying_intent === 'COMPRADO' || lead.buying_intent === 'PERDIDO') {
-            // No hacemos NADA con el result.intent. Lo protegemos.
-        } else if (result.intent && result.intent !== 'COMPRADO') {
+            // Protección total: Nadie saca a un lead de aquí automáticamente
+        } else if (suggestedLevel > currentLevel && result.intent !== 'COMPRADO' && result.intent !== 'PERDIDO') {
+            // Solo permitimos avanzar en el embudo de ventas, nunca retroceder
             updates.buying_intent = result.intent;
         }
 
