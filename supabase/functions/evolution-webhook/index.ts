@@ -125,13 +125,26 @@ serve(async (req) => {
         metadata: { msgId: messageId, mediaUrl: finalMediaUrl, mediaType }
     });
 
+    // === ENRUTAMIENTO AUTOMÁTICO DE COMPROBANTES DE PAGO ===
+    // Si el cliente está en etapa de Cierre (ALTO) y manda una foto, asumimos que es el comprobante y lo mandamos al Centro Financiero.
+    if (mediaType === 'image' && finalMediaUrl && lead.buying_intent === 'ALTO') {
+       await supabaseClient.from('media_assets').insert({
+           title: `Comprobante de ${lead.nombre} (${new Date().toLocaleDateString()})`,
+           url: finalMediaUrl,
+           type: 'IMAGE',
+           category: 'PAYMENT',
+           ai_instructions: `Lead ID: ${lead.id}` // Guardamos el ID para referencia interna
+       });
+       await logTrace(`Comprobante interceptado de ${lead.nombre}. Enviado al Centro Financiero.`, false);
+    }
+
     // 1. ESPERAR A QUE EL ANALISTA TERMINE DE EXTRAER DATOS (Email, Ciudad, Intent)
     await supabaseClient.functions.invoke('analyze-leads', { body: { lead_id: lead.id, force: false } });
 
     // 2. RECARGAR EL LEAD FRESCO DESDE LA BASE DE DATOS
     const { data: updatedLead } = await supabaseClient.from('leads').select('*').eq('id', lead.id).single();
     if (updatedLead) {
-        lead = updatedLead; // Ahora el lead tiene el email que acaba de guardar el analista
+        lead = updatedLead;
     }
 
     // 3. RESPONDER SI LA IA ESTÁ ACTIVA
@@ -141,7 +154,6 @@ serve(async (req) => {
        const openaiKey = configMap['openai_api_key'];
 
        if (openaiKey) {
-          // El contexto ahora se genera con el lead actualizado (memoria fresca)
           const { data: context } = await supabaseClient.functions.invoke('get-samurai-context', { body: { lead, platform: 'WHATSAPP' } });
           const { data: historyData } = await supabaseClient.from('conversaciones').select('emisor, mensaje').eq('lead_id', lead.id).order('created_at', { ascending: false }).limit(12);
           const history = (historyData || []).reverse();
