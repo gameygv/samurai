@@ -12,7 +12,10 @@ interface LeadRowProps {
 }
 
 export const LeadRow = ({ lead, allTags, onClick }: LeadRowProps) => {
+  if (!lead) return null;
   const intent = (lead.buying_intent || 'BAJO').toUpperCase();
+  const tags = Array.isArray(lead.tags) ? lead.tags : [];
+  const tagsConfig = Array.isArray(allTags) ? allTags : [];
   
   return (
     <TableRow className="border-b border-[#161618] hover:bg-[#1a1a1d] transition-all group">
@@ -38,10 +41,10 @@ export const LeadRow = ({ lead, allTags, onClick }: LeadRowProps) => {
              </div>
           </div>
           
-          {lead.tags && lead.tags.length > 0 && (
+          {tags.length > 0 && (
              <div className="flex gap-1.5 flex-wrap mt-1">
-                 {lead.tags.map((t: string) => {
-                     const tagConf = allTags.find(lt => lt.text === t);
+                 {tags.map((t: string) => {
+                     const tagConf = tagsConfig.find(lt => lt.text === t);
                      const bgColor = tagConf ? tagConf.color + '15' : '#1e293b';
                      const textColor = tagConf ? tagConf.color : '#94a3b8';
                      const borderColor = tagConf ? tagConf.color + '40' : '#334155';
