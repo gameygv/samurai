@@ -19,7 +19,7 @@ export const MessageList = ({ messages, loading }: MessageListProps) => {
     if (!dateStr) return '';
     try {
       const date = new Date(dateStr);
-      if (isNaN(date.getTime())) return ''; // Protege contra fechas corruptas en DB (RangeError)
+      if (isNaN(date.getTime())) return ''; 
       
       const today = new Date();
       const isToday = date.getDate() === today.getDate() && 
@@ -41,7 +41,6 @@ export const MessageList = ({ messages, loading }: MessageListProps) => {
     let audioUrl = null;
     let docName = null;
 
-    // Limpieza de etiquetas multimedia
     text = text.replace(/\[(Imagen|Video|Audio|Documento|Sticker)\]/gi, '').trim();
 
     if (msg.metadata?.mediaUrl) {
@@ -103,7 +102,7 @@ export const MessageList = ({ messages, loading }: MessageListProps) => {
   };
 
   return (
-    <ScrollArea className="flex-1 p-6 bg-[#0a0a0c]">
+    <ScrollArea className="flex-1 w-full h-full p-6 bg-[#0a0a0c]">
       {loading ? (
         <div className="flex h-full items-center justify-center text-slate-500 text-xs gap-2">
            <Loader2 className="w-4 h-4 animate-spin text-indigo-500" /> Sincronizando...
@@ -134,9 +133,9 @@ export const MessageList = ({ messages, loading }: MessageListProps) => {
                 <div className={cn("max-w-[85%] flex flex-col", isClient ? "items-start" : "items-end")}>
                    <div className={cn(
                       "p-4 rounded-3xl border shadow-lg",
-                      isClient ? "bg-slate-900 border-slate-700 text-slate-100 rounded-bl-sm" : 
-                      isAI ? "bg-indigo-950/50 border-indigo-500/40 text-indigo-50 rounded-br-sm" : 
-                      "bg-emerald-950/40 border-emerald-500/40 text-emerald-50 rounded-br-sm"
+                      isClient ? "bg-[#161618] border-[#222225] text-slate-100 rounded-bl-sm" : 
+                      isAI ? "bg-indigo-900/30 border-indigo-500/30 text-indigo-100 rounded-br-sm" : 
+                      "bg-emerald-900/30 border-emerald-500/30 text-emerald-100 rounded-br-sm"
                    )}>
                       {renderMessageContent(msg)}
                    </div>
