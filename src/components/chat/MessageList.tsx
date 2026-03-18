@@ -118,10 +118,17 @@ export const MessageList = ({ messages, loading }: MessageListProps) => {
              const isAI = !isClient && !isNote && !isHuman;
 
              if (isNote) {
+               const author = msg.metadata?.author || 'Sistema';
                return (
                  <div key={msg.id} className="flex justify-center my-4 animate-in fade-in">
-                   <div className="flex items-center gap-2 bg-amber-900/20 border border-amber-900/50 text-amber-400 text-[11px] px-4 py-2 rounded-xl italic">
-                     <StickyNote className="w-3.5 h-3.5" /> {msg.mensaje}
+                   <div className="flex flex-col items-center gap-1.5 max-w-[85%]">
+                     <div className="flex items-center gap-2 bg-amber-900/20 border border-amber-900/50 text-amber-400 text-[11px] px-4 py-2.5 rounded-2xl italic shadow-md">
+                       <StickyNote className="w-4 h-4 shrink-0" /> 
+                       <span className="leading-relaxed">{msg.mensaje}</span>
+                     </div>
+                     <span className="text-[9px] font-bold uppercase tracking-widest text-slate-600">
+                        {author} • {formatMessageTime(msg.created_at)}
+                     </span>
                    </div>
                  </div>
                );

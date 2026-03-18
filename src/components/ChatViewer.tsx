@@ -26,7 +26,7 @@ interface ChatViewerProps {
 }
 
 export default function ChatViewer({ lead, open, onOpenChange }: ChatViewerProps) {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   
   const [liveLead, setLiveLead] = useState<any>(lead || {});
   const leadId = liveLead?.id || null;
@@ -173,6 +173,7 @@ export default function ChatViewer({ lead, open, onOpenChange }: ChatViewerProps
           mensaje: text,
           emisor: 'NOTA',
           platform: 'PANEL_INTERNO',
+          metadata: { author: profile?.full_name || 'Agente' }
         });
         toast.success('Nota guardada');
         setDraftMessage('');

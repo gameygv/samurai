@@ -26,7 +26,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 const Inbox = () => {
-  const { user, isManager } = useAuth();
+  const { user, isManager, profile } = useAuth();
   const [leads, setLeads] = useState<any[]>([]);
   const [filteredLeads, setFilteredLeads] = useState<any[]>([]);
   const [activeLead, setActiveLead] = useState<any>(null);
@@ -149,8 +149,15 @@ const Inbox = () => {
          return;
       }
       if (isInternalNote) {
-         await supabase.from('conversaciones').insert({ lead_id: activeLead.id, mensaje: text, emisor: 'NOTA', platform: 'PANEL_INTERNO' });
+         await supabase.from('conversaciones').insert({ 
+             lead_id: activeLead.id, 
+             mensaje: text, 
+             emisor: 'NOTA', 
+             platform: 'PANEL_INTERNO',
+             metadata: { author: profile?.full_name || 'Agente' }
+         });
          toast.success("Nota guardada.");
+         setDraftMessage('');
          return; 
       }
 
@@ -327,6 +334,16 @@ const Inbox = () => {
                                     {globalReplies.map((qr) => (
                                        <DropdownMenuItem key={qr.id || qr.title} onClick={() => setDraftMessage(qr.text)} className="cursor-pointer text-xs focus:bg-[#161618] focus:text-white">
                                           <MessageSquarePlus className="w-3 h-3 mr-2 text-indigo-400 shrink-0" /><span className="truncate">{String(qr.title)}</span>
+                                       </DropdownMenuItem>
+                                    ))}
+                                 </>}
+
+                                 {Array.isArray(localReplies) && localReplies.length > 0 && <>
+                                    <DropdownMenuSeparator className="bg-[#222225] my-2"/>
+                                    <DropdownMenuLabel className="text-[10px] uppercase text-slate-500 font-bold">Mis Plantillas Privadas</DropdownMenuLabel>
+                                    {localReplies.map((qr) => (
+                                       <DropdownMenuItem key={qr.id || qr.title} onClick={() => setDraftMessage(qr.text)} className="cursor-pointer text-xs focus:bg-[#161618] focus:text-white">
+                                          <MessageSquarePlus className="w-3 h-3 mr-2 text-amber-500 shrink-0" /><span className="truncate">{String(qr.title)}</span>
                                        </DropdownMenuItem>
                                     ))}
                                  </>}
