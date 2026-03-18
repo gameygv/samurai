@@ -7,7 +7,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Send, Megaphone, ShieldAlert, Save, Clock, Users, Play, Pause, AlertTriangle, BookTemplate, Image as ImageIcon, X, UploadCloud, Info, Eye } from 'lucide-react';
+import { Loader2, Send, Megaphone, ShieldAlert, Save, Clock, Users, Play, Pause, AlertTriangle, BookTemplate, Image as ImageIcon, X, UploadCloud, Info, Eye, Lock } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { sendEvolutionMessage } from '@/utils/messagingService';
@@ -15,6 +15,7 @@ import { logActivity } from '@/utils/logger';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/context/AuthContext';
 
 interface MassMessageDialogProps {
   open: boolean;
@@ -23,6 +24,7 @@ interface MassMessageDialogProps {
 }
 
 export const MassMessageDialog = ({ open, onOpenChange, targetContacts }: MassMessageDialogProps) => {
+  const { isDev } = useAuth();
   const [message, setMessage] = useState('');
   const [templates, setTemplates] = useState<{id: string, name: string, text: string}[]>([]);
   const [templateName, setTemplateName] = useState('');
@@ -47,12 +49,13 @@ export const MassMessageDialog = ({ open, onOpenChange, targetContacts }: MassMe
       setSending(false);
       setPaused(false);
       abortRef.current = false;
-      calculateEta(targetContacts.length, speed);
+      setSpeed('SAFE'); // Siempre seguro por defecto
+      calculateEta(targetContacts.length, 'SAFE');
       
       setMediaFile(null);
       setMediaPreview(null);
     }
-  }, [open, targetContacts.length, speed]);
+  }, [open, targetContacts.length]);
 
   const fetchTemplates = async () => {
     const { data } = await supabase.from('app_config').select('value').eq('key', 'campaign_templates').maybeSingle();
@@ -100,7 +103,6 @@ export const MassMessageDialog = ({ open, onOpenChange, targetContacts }: MassMe
      
      let uploadedMediaData = undefined;
 
-     // 1. Subir imagen si existe
      if (mediaFile) {
          const tid = toast.loading("Subiendo archivo multimedia a la nube...");
          const fileExt = mediaFile.name.split('.').pop();
@@ -126,7 +128,6 @@ export const MassMessageDialog = ({ open, onOpenChange, targetContacts }: MassMe
      let failCount = progress.failed;
      let startIndex = progress.current;
 
-     // 2. Ciclo de envíos
      for (let i = startIndex; i < targetContacts.length; i++) {
          if (abortRef.current) break;
          
@@ -156,7 +157,6 @@ export const MassMessageDialog = ({ open, onOpenChange, targetContacts }: MassMe
          setProgress({ current: i + 1, total: targetContacts.length, success: successCount, failed: failCount });
          calculateEta(targetContacts.length - (i + 1), speed);
          
-         // LÓGICA ANTI-BAN
          if (i < targetContacts.length - 1) {
              let minDelay = 8000, maxDelay = 15000;
              if (speed === 'SAFE') { minDelay = 15000; maxDelay = 35000; }
@@ -170,7 +170,6 @@ export const MassMessageDialog = ({ open, onOpenChange, targetContacts }: MassMe
      if (!abortRef.current) {
         toast.success(`Campaña finalizada: ${successCount} entregados, ${failCount} fallidos.`);
         
-        // Registrar en la bitácora de actividad
         await logActivity({
            action: 'UPDATE',
            resource: 'LEADS',
@@ -189,7 +188,11 @@ export const MassMessageDialog = ({ open, onOpenChange, targetContacts }: MassMe
      toast.info("Campaña abortada.");
   };
 
-  // Lógica de Vista Previa
+  const handleSpeedChange = (val: string) => {
+     setSpeed(val);
+     calculateEta(targetContacts.length, val);
+  };
+
   const previewContact = targetContacts.length > 0 ? targetContacts[0] : { nombre: 'Juan Pérez', ciudad: 'Monterrey' };
   const previewMessage = message
      .replace(/{nombre}/g, previewContact.nombre?.split(' ')[0] || 'amigo')
@@ -212,14 +215,14 @@ export const MassMessageDialog = ({ open, onOpenChange, targetContacts }: MassMe
              Campaign Manager (Anti-Ban)
           </DialogTitle>
           <DialogDescription className="text-slate-400 text-xs mt-1">
-             Motor de difusión inteligente. Envía mensajes personalizados y flyers simulando comportamiento humano.
+             Motor de difusión inteligente. Envía mensajes personalizados simulando comportamiento humano para proteger tu número.
           </DialogDescription>
         </DialogHeader>
         
         <div className="flex-1 flex flex-col lg:flex-row min-h-0">
            
            {/* COLUMNA 1: AUDIENCIA Y AJUSTES */}
-           <div className="w-full lg:w-80 bg-[#121214] border-r border-[#222225] flex flex-col shrink-0 overflow-y-auto custom-scrollbar">
+           <div className="w-full lg:w-[340px] bg-[#121214] border-r border-[#222225] flex flex-col shrink-0 overflow-y-auto custom-scrollbar">
               <div className="p-6 space-y-6">
                  <div className="space-y-4">
                     <div className="flex justify-between items-center bg-[#0a0a0c] p-4 rounded-2xl border border-[#222225] shadow-inner">
@@ -232,7 +235,7 @@ export const MassMessageDialog = ({ open, onOpenChange, targetContacts }: MassMe
                           <Info className="w-3.5 h-3.5"/> ¿Cómo Segmentar?
                        </p>
                        <p className="text-[10px] text-slate-400 leading-relaxed">
-                          Estás enviando a los contactos seleccionados en la tabla previa. Si deseas armar un segmento específico (Ej: <strong>Grupo: Mayo + Ciudad: CDMX + Etiqueta: VIP</strong>), cierra esta ventana, utiliza los filtros superiores del directorio y selecciona las casillas correspondientes.
+                          Estás enviando a los contactos seleccionados en la tabla previa. Utiliza los filtros superiores del directorio (Grupo y Múltiples Etiquetas) y selecciona las casillas correspondientes.
                        </p>
                     </div>
                  </div>
@@ -240,17 +243,21 @@ export const MassMessageDialog = ({ open, onOpenChange, targetContacts }: MassMe
                  <div className="space-y-4 pt-4 border-t border-[#222225]">
                     <div className="space-y-2">
                        <Label className="text-[10px] uppercase font-bold text-slate-500">Modo de Envío (Riesgo de Ban)</Label>
-                       <Select value={speed} onValueChange={setSpeed} disabled={sending}>
-                          <SelectTrigger className="bg-[#0a0a0c] border-[#222225] h-12 text-xs rounded-xl">
+                       <Select value={speed} onValueChange={handleSpeedChange} disabled={sending || !isDev}>
+                          <SelectTrigger className={cn("bg-[#0a0a0c] border-[#222225] h-12 text-xs rounded-xl", !isDev && "opacity-80")}>
                              <SelectValue />
                           </SelectTrigger>
                           <SelectContent className="bg-[#161618] border-[#222225] text-white rounded-xl">
                              <SelectItem value="SAFE"><span className="text-emerald-400 font-bold">Seguro (Recomendado)</span> - Lento</SelectItem>
-                             <SelectItem value="NORMAL"><span className="text-amber-400 font-bold">Normal</span> - Moderado</SelectItem>
-                             <SelectItem value="FAST"><span className="text-red-400 font-bold">Agresivo (Riesgo Alto)</span> - Rápido</SelectItem>
+                             {isDev && (
+                                <>
+                                   <SelectItem value="NORMAL"><span className="text-amber-400 font-bold">Normal</span> - Moderado</SelectItem>
+                                   <SelectItem value="FAST"><span className="text-red-400 font-bold">Agresivo (Riesgo Alto)</span> - Rápido</SelectItem>
+                                </>
+                             )}
                           </SelectContent>
                        </Select>
-                       <p className="text-[9px] text-slate-500 italic mt-1 pl-1">A mayor velocidad, más riesgo de que WhatsApp bloquee tu número.</p>
+                       {!isDev && <p className="text-[9px] text-amber-500 italic mt-1 pl-1 flex items-center gap-1"><Lock className="w-3 h-3"/> Solo Developers pueden cambiar la velocidad.</p>}
                     </div>
 
                     <div className="flex items-center gap-2 text-[11px] text-slate-400 font-mono bg-[#0a0a0c] p-3 rounded-xl border border-[#222225]">
@@ -348,7 +355,7 @@ export const MassMessageDialog = ({ open, onOpenChange, targetContacts }: MassMe
                           </Label>
                           <div className="flex justify-end w-full">
                              <div className="max-w-[85%] flex flex-col items-end">
-                                <div className="p-4 bg-emerald-950/40 border border-emerald-500/40 text-emerald-50 rounded-2xl rounded-br-sm shadow-lg">
+                                <div className="p-4 bg-[#161618] border border-[#222225] text-slate-100 rounded-2xl rounded-br-sm shadow-lg">
                                    {mediaPreview && (
                                       <div className="mb-3">
                                          <img src={mediaPreview} alt="Preview Adjunto" className="w-full max-w-[280px] rounded-lg border border-white/10" />

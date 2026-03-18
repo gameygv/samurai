@@ -11,10 +11,12 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { 
   Search, Loader2, MapPin, Phone, Trash2, 
   Users, FileSpreadsheet, Megaphone, X, Mail, Edit3, FolderInput,
-  UserPlus, ExternalLink, Filter, Wallet, DollarSign, CheckSquare, Download, GraduationCap
+  UserPlus, ExternalLink, Filter, Wallet, DollarSign, CheckSquare, Download, GraduationCap, Tags
 } from 'lucide-react';
 import { toast } from 'sonner';
 import Papa from 'papaparse';
@@ -25,6 +27,7 @@ import { MassMessageDialog } from '@/components/contacts/MassMessageDialog';
 import { FinancialStatusBadge, financialStatuses } from '@/components/contacts/FinancialStatusBadge';
 import { EditContactDialog } from '@/components/contacts/EditContactDialog';
 import { CreateCreditSaleDialog } from '@/components/contacts/CreateCreditSaleDialog';
+import { ManageCreditDialog } from '@/components/payments/ManageCreditDialog';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/context/AuthContext';
 import { extractTagText, parseTagsSafe } from '@/lib/tag-parser';
@@ -40,12 +43,15 @@ const Contacts = () => {
   const [cities, setCities] = useState<string[]>([]); 
   const [globalTags, setGlobalTags] = useState<{id: string, text: string, color: string}[]>([]);
   const [localTags, setLocalTags] = useState<{id: string, text: string, color: string}[]>([]);
+  
+  // FILTROS
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedGroup, setSelectedGroup] = useState<string>('ALL');
-  const [selectedTagFilter, setSelectedTagFilter] = useState<string>('ALL');
   const [selectedCity, setSelectedCity] = useState<string>('ALL'); 
   const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>('ALL');
   const [debtFilter, setDebtFilter] = useState<string>('ALL'); 
+  const [selectedTags, setSelectedTags] = useState<string[]>([]); // MULTI-SELECT
+  
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [selectedLead, setSelectedLead] = useState<any>(null);
   const [isChatOpen, setIsChatOpen] = useState(false);
@@ -54,8 +60,12 @@ const Contacts = () => {
   const [isMassMessageOpen, setIsMassMessageOpen] = useState(false);
   const [contactToEdit, setContactToEdit] = useState<any>(null);
   const [isEditOpen, setIsEditOpen] = useState(false);
+  
   const [contactForCredit, setContactForCredit] = useState<any>(null);
   const [isCreditOpen, setIsCreditOpen] = useState(false);
+  const [selectedActiveSale, setSelectedActiveSale] = useState<any>(null);
+  const [isManageCreditOpen, setIsManageCreditOpen] = useState(false);
+
   const [isMassGroupOpen, setIsMassGroupOpen] = useState(false);
   const [massGroupName, setMassGroupName] = useState("");
   const [isUpdatingGroup, setIsUpdatingGroup] = useState(false);
@@ -87,7 +97,7 @@ const Contacts = () => {
     setLoading(true);
     const { data, error } = await supabase
       .from('contacts')
-      .select('*, leads(id, buying_intent, payment_status, lead_score, ai_paused, summary), credit_sales(total_amount, status)')
+      .select('*, leads(id, buying_intent, payment_status, lead_score, ai_paused, summary), credit_sales(*, installments:credit_installments(*))')
       .order('updated_at', { ascending: false });
 
     if (!error && data) {
@@ -98,7 +108,7 @@ const Contacts = () => {
         let academicArray = [];
         try { academicArray = Array.isArray(c.academic_record) ? c.academic_record : JSON.parse(c.academic_record || '[]'); } catch(e){}
 
-        return { ...c, total_debt: totalDebt, academic_count: academicArray.length };
+        return { ...c, total_debt: totalDebt, active_sales: activeSales, academic_count: academicArray.length };
       });
       setContacts(mappedData);
       setGroups(Array.from(new Set(mappedData.map(d => d.grupo).filter(Boolean))) as string[]);
@@ -110,8 +120,25 @@ const Contacts = () => {
 
   const allTags = [...globalTags, ...localTags];
 
+  const toggleTagSelection = (tagText: string) => {
+      setSelectedTags(prev => prev.includes(tagText) ? prev.filter(t => t !== tagText) : [...prev, tagText]);
+  };
+
   const handleToggleSelectAll = () => setSelectedIds(selectedIds.length === filteredContacts.length ? [] : filteredContacts.map(c => c.id));
   const handleToggleSelect = (id: string) => setSelectedIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
+
+  const openManageCredit = (contact: any) => {
+      if (contact.active_sales && contact.active_sales.length > 0) {
+          const saleToPass = {
+             ...contact.active_sales[0],
+             contact: {
+                id: contact.id, nombre: contact.nombre, apellido: contact.apellido, telefono: contact.telefono, lead_id: contact.lead_id
+             }
+          };
+          setSelectedActiveSale(saleToPass);
+          setIsManageCreditOpen(true);
+      }
+  };
 
   const handleMassDelete = async () => {
     if (!confirm(`¿ESTÁS SEGURO? Eliminarás ${selectedIds.length} contactos permanentemente.`)) return;
@@ -249,6 +276,7 @@ const Contacts = () => {
     }
   };
 
+  // FILTRO INTELIGENTE (AND LOGIC PARA TAGS)
   const filteredContacts = contacts.filter(c => {
     const term = searchTerm.toLowerCase();
     const contactTags = Array.isArray(c.tags) ? c.tags.map((t:any) => extractTagText(t)) : [];
@@ -257,12 +285,15 @@ const Contacts = () => {
     const matchesGroup = selectedGroup === 'ALL' || c.grupo === selectedGroup;
     const matchesCity = selectedCity === 'ALL' || c.ciudad === selectedCity;
     const matchesStatus = selectedStatusFilter === 'ALL' || (c.financial_status || 'Sin transacción') === selectedStatusFilter;
-    const matchesTag = selectedTagFilter === 'ALL' || contactTags.includes(selectedTagFilter);
     const matchesDebt = debtFilter === 'ALL' || (debtFilter === 'CON_DEUDA' ? c.total_debt > 0 : c.total_debt === 0);
+    
+    // Logica AND para Etiquetas (debe tener TODAS las etiquetas seleccionadas)
+    const matchesTag = selectedTags.length === 0 || selectedTags.every(t => contactTags.includes(t));
+
     return matchesSearch && matchesGroup && matchesCity && matchesStatus && matchesTag && matchesDebt;
   });
 
-  const hasActiveFilters = searchTerm !== '' || selectedGroup !== 'ALL' || selectedCity !== 'ALL' || selectedTagFilter !== 'ALL' || selectedStatusFilter !== 'ALL' || debtFilter !== 'ALL';
+  const hasActiveFilters = searchTerm !== '' || selectedGroup !== 'ALL' || selectedCity !== 'ALL' || selectedTags.length > 0 || selectedStatusFilter !== 'ALL' || debtFilter !== 'ALL';
 
   return (
     <Layout>
@@ -296,8 +327,8 @@ const Contacts = () => {
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3 bg-[#0f0f11] p-3 rounded-2xl border border-slate-800/50 shadow-md">
-          <div className="flex items-center gap-2 pl-2 border-r border-slate-800/50 pr-4">
+        <div className="flex flex-wrap items-center gap-3 bg-[#0f0f11] p-3 rounded-2xl border border-[#222225] shadow-md">
+          <div className="flex items-center gap-2 pl-2 border-r border-[#222225] pr-4">
             <Filter className="w-4 h-4 text-slate-500" />
             <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Segmentación</span>
           </div>
@@ -323,17 +354,38 @@ const Contacts = () => {
             </SelectContent>
           </Select>
 
-          <Select value={selectedTagFilter} onValueChange={setSelectedTagFilter}>
-            <SelectTrigger className="w-[150px] h-10 bg-[#161618] border-[#222225] rounded-xl text-xs text-slate-300"><SelectValue placeholder="Etiqueta" /></SelectTrigger>
-            <SelectContent className="bg-[#121214] border-[#222225] text-white rounded-xl max-h-[300px]">
-              <SelectItem value="ALL">Todas las Etiquetas</SelectItem>
-              {allTags.map(t => (
-                <SelectItem key={t.id || t.text} value={t.text} className="focus:bg-[#161618]">
-                  <div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full" style={{ backgroundColor: t.color }}></div>{t.text}</div>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          {/* MULTI-SELECT ETIQUETAS */}
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" className={cn("w-[160px] h-10 bg-[#161618] border-[#222225] justify-start text-xs rounded-xl", selectedTags.length > 0 ? "text-indigo-400" : "text-slate-300")}>
+                {selectedTags.length > 0 ? `${selectedTags.length} Seleccionadas` : 'Etiquetas...'}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-[200px] p-0 bg-[#121214] border-[#222225] text-white rounded-xl shadow-2xl">
+              <Command className="bg-transparent">
+                <CommandInput placeholder="Buscar etiqueta..." className="text-xs h-10" />
+                <CommandList className="max-h-[250px] overflow-y-auto custom-scrollbar">
+                   <CommandEmpty className="py-6 text-center text-xs text-slate-500">No encontrada.</CommandEmpty>
+                   <CommandGroup>
+                     {selectedTags.length > 0 && (
+                        <CommandItem onSelect={() => setSelectedTags([])} className="text-xs focus:bg-[#161618] focus:text-white cursor-pointer border-b border-[#222225] pb-2 mb-2">
+                           <X className="w-3 h-3 mr-2 text-red-400" /> Borrar selección
+                        </CommandItem>
+                     )}
+                     {allTags.map(t => (
+                        <CommandItem key={t.id || t.text} onSelect={() => toggleTagSelection(t.text)} className="text-xs focus:bg-[#161618] focus:text-white cursor-pointer py-2">
+                           <div className="flex items-center gap-3">
+                             <Checkbox checked={selectedTags.includes(t.text)} className="border-slate-600 rounded" />
+                             <div className="w-2.5 h-2.5 rounded-full shadow-inner" style={{ backgroundColor: t.color }}></div>
+                             <span className="truncate">{t.text}</span>
+                           </div>
+                        </CommandItem>
+                     ))}
+                   </CommandGroup>
+                </CommandList>
+              </Command>
+            </PopoverContent>
+          </Popover>
 
           {isManager && (
             <>
@@ -390,7 +442,7 @@ const Contacts = () => {
                           <span className="font-bold text-slate-100 text-sm flex items-center gap-2">
                              {contact.nombre} {contact.apellido}
                              {contact.academic_count > 0 && (
-                                <span className="flex items-center gap-1 bg-indigo-950/40 text-indigo-400 border border-indigo-500/30 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-widest">
+                                <span className="flex items-center gap-1 bg-indigo-950/40 text-indigo-400 border border-indigo-500/30 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-widest" title={`${contact.academic_count} cursos`}>
                                    <GraduationCap className="w-3 h-3" /> Alumno
                                 </span>
                              )}
@@ -419,14 +471,21 @@ const Contacts = () => {
                       <TableCell>
                         <div className="flex flex-col gap-2">
                           <FinancialStatusBadge contactId={contact.id} currentStatus={contact.financial_status || 'Sin transacción'} isManager={isManager} onUpdate={fetchContacts} />
-                          {contact.total_debt > 0 && <span className="text-[11px] font-mono font-bold text-amber-500 flex items-center gap-1"><DollarSign className="w-3 h-3"/> {contact.total_debt.toLocaleString()}</span>}
+                          {contact.total_debt > 0 ? (
+                             <div className="flex items-center gap-2">
+                               <span className="text-[11px] font-mono font-bold text-amber-500 flex items-center gap-1"><DollarSign className="w-3 h-3"/> {contact.total_debt.toLocaleString()}</span>
+                               <Button size="sm" onClick={() => openManageCredit(contact)} className="h-6 px-2 text-[9px] bg-emerald-600/20 text-emerald-500 border border-emerald-500/30 hover:bg-emerald-600 hover:text-white rounded uppercase font-bold tracking-widest transition-colors">ABONAR</Button>
+                             </div>
+                          ) : (
+                             <span className="text-[10px] text-slate-500 italic uppercase">Sin deuda</span>
+                          )}
                         </div>
                       </TableCell>
                     )}
                     <TableCell className="text-right pr-6">
                       <div className="flex justify-end items-center gap-3">
                         {isManager && (
-                          <button className="text-amber-500 hover:text-amber-400 text-[9px] font-bold uppercase tracking-widest flex items-center gap-1.5 transition-colors border border-amber-500/30 bg-amber-500/10 px-3 py-2 rounded-xl" onClick={() => { setContactForCredit(contact); setIsCreditOpen(true); }}><Wallet className="w-3.5 h-3.5" /> CRÉDITO</button>
+                          <button className="text-amber-500 hover:text-amber-400 text-[9px] font-bold uppercase tracking-widest flex items-center gap-1.5 transition-colors border border-amber-500/30 bg-amber-500/10 px-3 py-2 rounded-xl" onClick={() => { setContactForCredit(contact); setIsCreditOpen(true); }}><Wallet className="w-3.5 h-3.5" /> NUEVO CRÉDITO</button>
                         )}
                         <button className="text-indigo-400 hover:text-indigo-300 text-[10px] font-bold uppercase tracking-widest flex items-center gap-1.5 transition-colors" onClick={() => handleOpenChat(contact)}><ExternalLink className="w-3.5 h-3.5" /> CHAT</button>
                         <button className="text-slate-500 hover:text-white transition-colors bg-[#161618] p-2 rounded-xl border border-[#222225]" onClick={() => { setContactToEdit(contact); setIsEditOpen(true); }}><Edit3 className="w-3.5 h-3.5" /></button>
@@ -481,6 +540,7 @@ const Contacts = () => {
       <MassMessageDialog open={isMassMessageOpen} onOpenChange={setIsMassMessageOpen} targetContacts={contacts.filter(c => selectedIds.includes(c.id))} />
       {isCreateOpen && <CreateLeadDialog open={isCreateOpen} onOpenChange={setIsCreateOpen} onSuccess={fetchContacts} />}
       {isCreditOpen && <CreateCreditSaleDialog open={isCreditOpen} onOpenChange={setIsCreditOpen} contact={contactForCredit} onSuccess={() => { toast.info('Actualizando saldos...'); fetchContacts(); }} />}
+      {isManageCreditOpen && <ManageCreditDialog open={isManageCreditOpen} onOpenChange={setIsManageCreditOpen} sale={selectedActiveSale} onSuccess={() => { fetchContacts(); }} />}
       {selectedLead && <ChatViewer lead={selectedLead} open={isChatOpen} onOpenChange={setIsChatOpen} />}
     </Layout>
   );
