@@ -73,17 +73,17 @@ const Inbox = () => {
   useEffect(() => {
     if (activeLead) {
        updateMemoryForm(activeLead);
-       if (messages.length > 0) fetchAiSuggestions(activeLead.id, messages);
+       if (messages && messages.length > 0) fetchAiSuggestions(activeLead.id, messages);
     }
   }, [activeLead?.id]);
 
   useEffect(() => {
     const term = searchTerm.toLowerCase();
     setFilteredLeads(leads.filter(l => 
-      l.nombre?.toLowerCase().includes(term) || 
-      l.telefono?.includes(term) || 
-      l.ciudad?.toLowerCase().includes(term) ||
-      (l.tags && l.tags.some((t: string) => t.toLowerCase().includes(term)))
+      (l.nombre || '').toLowerCase().includes(term) || 
+      (l.telefono || '').includes(term) || 
+      (l.ciudad || '').toLowerCase().includes(term) ||
+      (Array.isArray(l.tags) && l.tags.some((t: string) => t.toLowerCase().includes(term)))
     ));
   }, [searchTerm, leads]);
 
@@ -109,8 +109,18 @@ const Inbox = () => {
      if (data) {
         const local = data.find(d => d.key === `agent_tags_${user.id}`)?.value;
         const global = data.find(d => d.key === 'global_tags')?.value;
-        if (local) try { setLocalTags(JSON.parse(local)); } catch(e) {}
-        if (global) try { setGlobalTags(JSON.parse(global)); } catch(e) {}
+        if (local) {
+           try { 
+              const parsed = JSON.parse(local);
+              if (Array.isArray(parsed)) setLocalTags(parsed);
+           } catch(e) {}
+        }
+        if (global) {
+           try { 
+              const parsed = JSON.parse(global);
+              if (Array.isArray(parsed)) setGlobalTags(parsed);
+           } catch(e) {}
+        }
      }
   };
 
@@ -120,49 +130,40 @@ const Inbox = () => {
     if (data) {
        const config: any = data.reduce((acc, item) => ({...acc, [item.key]: item.value}), {});
        setQuickActions({ wcBaseUrl: config.wc_url || '', bankInfo: `Banco: ${config.bank_name}\nCuenta: ${config.bank_account}\nCLABE: ${config.bank_clabe}\nTitular: ${config.bank_holder}` });
-       try { if (config.quick_replies) setGlobalReplies(JSON.parse(config.quick_replies)); } catch (e) {}
-       try { if (config[`agent_templates_${user.id}`]) setLocalReplies(JSON.parse(config[`agent_templates_${user.id}`])); } catch (e) {}
-       try { if (config.wc_products) setProducts(JSON.parse(config.wc_products)); } catch (e) {}
+       
+       try { 
+          if (config.quick_replies) {
+             const parsed = JSON.parse(config.quick_replies);
+             if (Array.isArray(parsed)) setGlobalReplies(parsed);
+          }
+       } catch (e) {}
+       
+       try { 
+          if (config[`agent_templates_${user.id}`]) {
+             const parsed = JSON.parse(config[`agent_templates_${user.id}`]);
+             if (Array.isArray(parsed)) setLocalReplies(parsed);
+          }
+       } catch (e) {}
+       
+       try { 
+          if (config.wc_products) {
+             const parsed = JSON.parse(config.wc_products);
+             if (Array.isArray(parsed)) setProducts(parsed);
+          }
+       } catch (e) {}
     }
   };
 
   const fetchAiSuggestions = async (leadId: string, msgs: any[]) => {
-    if (msgs.length === 0) return;
+    if (!msgs || msgs.length === 0) return;
     setLoadingSuggestions(true);
     try {
       const transcript = msgs.slice(-8).map(m => `${m.emisor}: ${m.mensaje}`).join('\n');
       const { data, error } = await supabase.functions.invoke('get-ai-suggestions', { body: { lead_id: leadId, transcript } });
-      if (!error && data?.suggestions) setSuggestions(data.suggestions);
+      if (!error && data?.suggestions && Array.isArray(data.suggestions)) {
+         setSuggestions(data.suggestions);
+      }
     } catch (e) { console.error("AI Suggestion failed:", e); } finally { setLoadingSuggestions(false); }
-  };
-
-  const handleManualClientInput = async () => {
-     if (!manualClientText.trim() || !activeLead) return;
-     setProcessingManual(true);
-     const tid = toast.loading("Procesando entrada de cliente...");
-     
-     try {
-        const { error: msgErr } = await supabase.from('conversaciones').insert({
-           lead_id: activeLead.id,
-           emisor: 'CLIENTE',
-           mensaje: manualClientText,
-           platform: 'MANUAL_EMERGENCY'
-        });
-        if (msgErr) throw msgErr;
-
-        await supabase.functions.invoke(`process-samurai-response?phone=${activeLead.telefono}&client_message=${encodeURIComponent(manualClientText)}`, {
-            body: {}
-        });
-
-        toast.success("Mensaje procesado. Sam responderá en unos segundos.", { id: tid });
-        setManualClientText("");
-        setIsEmergencyOpen(false);
-        refetchMessages();
-     } catch (err: any) {
-        toast.error("Error: " + err.message, { id: tid });
-     } finally {
-        setProcessingManual(false);
-     }
   };
 
   const handleSendMessage = async (text: string, file?: File, isInternalNote: boolean = false) => {
@@ -221,12 +222,14 @@ const Inbox = () => {
        nombre: data.nombre || '', email: data.email || '', summary: data.summary || '',
        mood: data.estado_emocional_actual || 'NEUTRO', buying_intent: data.buying_intent || 'BAJO',
        ciudad: data.ciudad || '', perfil_psicologico: data.perfil_psicologico || '', assigned_to: data.assigned_to || '',
-       tags: data.tags || [], reminders: data.reminders || []
+       tags: Array.isArray(data.tags) ? data.tags : [], 
+       reminders: Array.isArray(data.reminders) ? data.reminders : []
     });
   };
 
   const handleAutoGenerate = async () => {
       try {
+         if (!messages) return null;
          const history = messages.slice(-15).map(m => ({ 
              role: (m.emisor === 'IA' || m.emisor === 'SAMURAI' ? 'bot' : 'user'), 
              text: m.mensaje 
@@ -296,7 +299,7 @@ const Inbox = () => {
                                 {lead.ciudad && <span className="flex items-center gap-1 font-bold text-indigo-300"><MapPin className="w-2.5 h-2.5"/>{lead.ciudad}</span>}
                                 {lead.email && <span className="flex items-center gap-1 text-emerald-400"><Mail className="w-2.5 h-2.5"/>OK</span>}
                              </div>
-                             {lead.tags && lead.tags.length > 0 && (
+                             {Array.isArray(lead.tags) && lead.tags.length > 0 && (
                                 <div className="flex gap-1 mt-1.5 flex-wrap">
                                    {lead.tags.map((t: string) => {
                                       const tagConf = allTags.find(lt => lt.text === t);
@@ -326,11 +329,6 @@ const Inbox = () => {
                        </div>
                     </div>
                     <div className="flex items-center gap-2">
-                       {isDev && (
-                         <Button variant="outline" size="sm" className="h-8 text-[10px] bg-red-900/10 border-red-500/30 text-red-400 font-bold uppercase tracking-widest hover:bg-red-900/20" onClick={() => setIsEmergencyOpen(true)}>
-                            <AlertTriangle className="w-3 h-3 mr-1.5"/> Fallo Webhook: Entrada Manual
-                         </Button>
-                       )}
                        <Button variant="ghost" size="icon" className="xl:hidden text-slate-400" onClick={() => setShowMemoryMobile(!showMemoryMobile)}><Menu className="w-5 h-5" /></Button>
                     </div>
                  </div>
@@ -418,32 +416,6 @@ const Inbox = () => {
            </div>
         )}
       </div>
-
-      {/* DIALOGO DE EMERGENCIA */}
-      <Dialog open={isEmergencyOpen} onOpenChange={setIsEmergencyOpen}>
-         <DialogContent className="bg-slate-900 border-slate-800 text-white max-w-lg">
-            <DialogHeader>
-               <DialogTitle className="text-red-400 flex items-center gap-2"><AlertTriangle className="w-5 h-5"/> Modo Emergencia</DialogTitle>
-               <DialogDescription className="text-slate-400">
-                  Usa esto si la API de WhatsApp no está enviando los mensajes a Samurai. Escribe lo que el cliente te puso y Sam responderá aquí.
-               </DialogDescription>
-            </DialogHeader>
-            <div className="py-4">
-               <textarea 
-                  value={manualClientText}
-                  onChange={e => setManualClientText(e.target.value)}
-                  placeholder="Pega aquí lo que el cliente escribió..."
-                  className="w-full h-32 bg-slate-950 border border-slate-800 rounded-xl p-4 text-sm text-slate-200 focus:border-indigo-500 focus:ring-0 outline-none resize-none"
-               />
-            </div>
-            <DialogFooter>
-               <Button variant="ghost" onClick={() => setIsEmergencyOpen(false)}>Cancelar</Button>
-               <Button onClick={handleManualClientInput} disabled={processingManual || !manualClientText.trim()} className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-6">
-                  {processingManual ? <Loader2 className="w-4 h-4 animate-spin mr-2"/> : <User className="w-4 h-4 mr-2"/>} Procesar
-               </Button>
-            </DialogFooter>
-         </DialogContent>
-      </Dialog>
     </Layout>
   );
 };
