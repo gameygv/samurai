@@ -9,7 +9,9 @@ interface AcademicRecordProps {
 }
 
 export const AcademicRecord = ({ academicArray }: AcademicRecordProps) => {
-  if (academicArray.length === 0) return null;
+  const safeArray = Array.isArray(academicArray) ? academicArray : [];
+  
+  if (safeArray.length === 0) return null;
 
   return (
     <div className="pt-2 border-t border-[#1a1a1a]">
@@ -17,18 +19,18 @@ export const AcademicRecord = ({ academicArray }: AcademicRecordProps) => {
           <span className="text-[10px] font-bold text-white uppercase tracking-widest flex items-center gap-2">
              <GraduationCap className="w-3.5 h-3.5 text-indigo-400" /> Historial Academia
           </span>
-          <Badge className="bg-indigo-900/50 text-indigo-300 border-indigo-500/30 text-[9px]">{academicArray.length}</Badge>
+          <Badge className="bg-indigo-900/50 text-indigo-300 border-indigo-500/30 text-[9px]">{safeArray.length}</Badge>
        </div>
        <div className="space-y-2 mt-1">
-          {academicArray.slice(0, 2).map((ar: any, idx: number) => (
+          {safeArray.slice(0, 2).map((ar: any, idx: number) => (
              <div key={idx} className="p-2 bg-[#121214] border border-[#222225] rounded-lg">
                 <p className="text-[10px] font-bold text-slate-200 truncate">{ar.course}</p>
                 <p className="text-[8px] text-slate-500 mt-0.5">{ar.date} • {ar.location || 'Online'}</p>
              </div>
           ))}
-          {academicArray.length > 2 && (
+          {safeArray.length > 2 && (
              <p className="text-[8px] text-slate-600 text-center italic">
-                + {academicArray.length - 2} cursos más en expediente
+                + {safeArray.length - 2} cursos más en expediente
              </p>
           )}
        </div>
