@@ -6,13 +6,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { 
-  Database, Loader2, Fingerprint, Trash2, Edit2, ChevronDown, User, Smartphone, Tag, Plus, ShieldAlert, Zap, X, Wallet, FileEdit, Globe, Bell, Mail, MapPin, Target, Send, StickyNote, CalendarClock, Clock, ArrowRight, CheckCircle2, XCircle
+  Database, Loader2, Fingerprint, Trash2, Edit2, ChevronDown, User, Smartphone, Tag, Plus, ShieldAlert, Zap, X, Wallet, FileEdit, Globe, Bell, Mail, MapPin, Target, Send, StickyNote, CalendarClock, Clock, ArrowRight, CheckCircle2, XCircle, GraduationCap, BarChart3
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useAuth } from '@/context/AuthContext';
 import { cn } from '@/lib/utils';
-import { Textarea } from '@/components/ui/textarea';
 import { CreateCreditSaleDialog } from '@/components/contacts/CreateCreditSaleDialog';
 import { EditContactDialog } from '@/components/contacts/EditContactDialog';
 import { ReminderItem } from '@/components/chat/memory/ReminderItem';
@@ -64,7 +63,7 @@ export const MemoryPanel = ({
   const [newNote, setNewNote] = useState('');
   const [sendingNote, setSendingNote] = useState(false);
 
-  // Lógica defensiva
+  // Lógica defensiva para campos de texto
   const emailVal = String(currentAnalysis?.email || '');
   const nombreVal = String(currentAnalysis?.nombre || '');
   const ciudadVal = String(currentAnalysis?.ciudad || '');
@@ -240,12 +239,20 @@ export const MemoryPanel = ({
   const validGlobalTags = globalTags.filter(t => t.text && String(t.text).trim() !== '');
   const validLocalTags = localTags.filter(t => t.text && String(t.text).trim() !== '');
 
+  // Parseo seguro de récord académico
+  let academicArray = [];
+  try {
+      academicArray = contactData?.academic_record 
+        ? (Array.isArray(contactData.academic_record) ? contactData.academic_record : JSON.parse(contactData.academic_record)) 
+        : [];
+  } catch(e) { academicArray = []; }
+
   return (
     <div className="w-full flex-shrink-0 bg-[#0a0a0c] flex flex-col h-full text-slate-300">
       {/* HEADER EMQ */}
       <div className="p-5 border-b border-[#1a1a1a]">
         <div className="flex justify-between items-center mb-3">
-           <span className="text-[9px] font-bold text-[#7A8A9E] uppercase tracking-widest">Event Match Quality</span>
+           <span className="text-[9px] font-bold text-[#7A8A9E] uppercase tracking-widest flex items-center gap-1.5"><BarChart3 className="w-3 h-3"/> Estatus de Inteligencia Meta</span>
            <button onClick={handleRunAnalysis} disabled={analyzing} className="p-1.5 rounded-md bg-[#161618] border border-[#222225] hover:bg-[#222225] transition-colors">
               {analyzing ? <Loader2 className="w-3 h-3 text-[#7A8A9E] animate-spin" /> : <Database className="w-3 h-3 text-[#7A8A9E]" />}
            </button>
@@ -254,7 +261,14 @@ export const MemoryPanel = ({
           <div className="flex-1 h-1.5 bg-[#161618] rounded-full overflow-hidden">
             <div className={cn("h-full transition-all duration-1000", healthPercent > 70 ? 'bg-emerald-500' : healthPercent > 40 ? 'bg-amber-500' : 'bg-red-500')} style={{ width: `${healthPercent}%` }} />
           </div>
-          <span className="text-[10px] font-mono font-bold text-amber-500">{healthScore}/5</span>
+          <div className="flex items-center gap-2">
+             <span className="text-[10px] font-mono font-bold text-amber-500">{healthScore}/5</span>
+             {currentAnalysis?.capi_lead_event_sent_at ? (
+                <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)]" title="Evento Lead ya enviado a Meta" />
+             ) : (
+                <div className="w-2 h-2 rounded-full bg-slate-700" title="Pendiente de CAPI (Faltan datos)" />
+             )}
+          </div>
         </div>
       </div>
 
@@ -319,23 +333,6 @@ export const MemoryPanel = ({
                     </div>
                  </>
               )}
-           </div>
-        </div>
-
-        {/* AUDITORÍA DE PAGO */}
-        <div className="p-5 border-b border-[#1a1a1a] space-y-4">
-           <h4 className="text-[10px] font-bold text-[#7A8A9E] uppercase tracking-widest flex items-center gap-2"><Wallet className="w-3.5 h-3.5 text-[#7A8A9E]" /> Auditoría de Pago</h4>
-           <div className="bg-[#121214] border border-[#222225] rounded-xl p-4 space-y-4">
-              <div className="flex justify-between items-center">
-                 <span className="text-[10px] text-[#7A8A9E]">Dictamen IA:</span>
-                 <Badge variant="outline" className={cn("text-[9px] border-[#222225] h-5 px-2", currentAnalysis?.payment_status === 'VALID' ? 'bg-emerald-900/20 text-emerald-500 border-emerald-500/30' : 'bg-[#0a0a0c] text-[#7A8A9E]')}>
-                    {currentAnalysis?.payment_status === 'VALID' ? 'APROBADO' : 'SIN COMPROBANTE'}
-                 </Badge>
-              </div>
-              <div className="flex gap-3">
-                 <Button onClick={() => handleUpdatePaymentStatus('VALID')} variant="outline" size="sm" className="flex-1 h-8 bg-transparent border-emerald-900/50 text-emerald-500 hover:bg-emerald-950/30 text-[10px] uppercase font-bold tracking-widest">Validar</Button>
-                 <Button onClick={() => handleUpdatePaymentStatus('INVALID')} variant="outline" size="sm" className="flex-1 h-8 bg-transparent border-red-900/50 text-red-500 hover:bg-red-950/30 text-[10px] uppercase font-bold tracking-widest">Denegar</Button>
-              </div>
            </div>
         </div>
 
@@ -425,6 +422,25 @@ export const MemoryPanel = ({
                        </div>
                     )}
                  </div>
+
+                 {/* BLOQUE RÉCORD ACADÉMICO (DINÁMICO) */}
+                 {academicArray.length > 0 && (
+                    <div className="pt-2 border-t border-[#1a1a1a]">
+                       <div className="flex justify-between items-center py-2">
+                          <span className="text-[10px] font-bold text-white uppercase tracking-widest flex items-center gap-2"><GraduationCap className="w-3.5 h-3.5 text-indigo-400" /> Historial Academia</span>
+                          <Badge className="bg-indigo-900/50 text-indigo-300 border-indigo-500/30 text-[9px]">{academicArray.length}</Badge>
+                       </div>
+                       <div className="space-y-2 mt-1">
+                          {academicArray.slice(0, 2).map((ar: any, idx: number) => (
+                             <div key={idx} className="p-2 bg-[#121214] border border-[#222225] rounded-lg">
+                                <p className="text-[10px] font-bold text-slate-200 truncate">{ar.course}</p>
+                                <p className="text-[8px] text-slate-500 mt-0.5">{ar.date} • {ar.location || 'Online'}</p>
+                             </div>
+                          ))}
+                          {academicArray.length > 2 && <p className="text-[8px] text-slate-600 text-center italic">+ {academicArray.length - 2} cursos más en expediente</p>}
+                       </div>
+                    </div>
+                 )}
 
                  {/* BLOQUE NOTAS COLABORATIVAS */}
                  <div className="pt-2 border-t border-[#1a1a1a]">

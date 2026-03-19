@@ -1,10 +1,11 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { SheetHeader } from '@/components/ui/sheet';
-import { Play, Pause, Target, ShieldCheck } from 'lucide-react';
+import { Play, Pause, Target, ShieldCheck, Smartphone } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
 
 interface ChatHeaderProps {
   lead: any;
@@ -15,8 +16,20 @@ interface ChatHeaderProps {
 
 export const ChatHeader = ({ lead, isAiPaused, sending, onSendCommand }: ChatHeaderProps) => {
   const { isManager } = useAuth();
+  const [channelName, setChannelName] = useState<string>('Buscando...');
+  
   const safeName = String(lead?.nombre || 'Cliente');
   const initials = safeName.substring(0, 2).toUpperCase() || 'CL';
+
+  useEffect(() => {
+     if (lead?.channel_id) {
+        supabase.from('whatsapp_channels').select('name').eq('id', lead.channel_id).maybeSingle().then(({data}) => {
+           if (data?.name) setChannelName(data.name);
+        });
+     } else {
+        setChannelName('Sin Canal');
+     }
+  }, [lead?.channel_id]);
 
   const getIntentBadge = (intent: string) => {
      const i = (intent || 'BAJO').toUpperCase();
@@ -35,11 +48,11 @@ export const ChatHeader = ({ lead, isAiPaused, sending, onSendCommand }: ChatHea
             {initials}
           </AvatarFallback>
         </Avatar>
-        <div className="flex flex-col">
-          <div className="text-sm font-bold truncate max-w-[250px] flex items-center gap-2">
+        <div className="flex flex-col min-w-0">
+          <div className="text-sm font-bold truncate max-w-[250px] flex items-center gap-2 text-white">
             {safeName}
-            <Badge variant="outline" className="text-[9px] border-slate-700 text-slate-500 h-4 px-1 uppercase hidden sm:inline-flex">
-              {lead?.platform || 'WhatsApp'}
+            <Badge variant="outline" className="hidden sm:inline-flex border-indigo-500/30 text-[8px] uppercase text-indigo-400 bg-indigo-950/20 h-4 px-1.5 font-bold tracking-tighter">
+              <Smartphone className="w-2 h-2 mr-1" /> {channelName}
             </Badge>
           </div>
           <div className="flex items-center gap-2 mt-0.5">
