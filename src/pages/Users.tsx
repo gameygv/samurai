@@ -27,7 +27,9 @@ const UsersPage = () => {
   const [evaluations, setEvaluations] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   
-  const [createForm, setCreateForm] = useState({ email: '', password: '', fullName: '', phone: '', territories: '' });
+  const [createForm, setCreateForm] = useState({ 
+    email: '', password: '', fullName: '', phone: '', territories: '', role: 'agent' 
+  });
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [creating, setCreating] = useState(false);
 
@@ -45,7 +47,7 @@ const UsersPage = () => {
     const { data: eData } = await supabase.from('agent_evaluations')
        .select('*, profiles!agent_evaluations_agent_id_fkey(full_name, role)')
        .order('created_at', { ascending: false })
-       .limit(200); // Traemos las últimas 200 evaluaciones
+       .limit(200);
     
     if (eData) setEvaluations(eData);
     setLoading(false);
@@ -56,18 +58,23 @@ const UsersPage = () => {
     setCreating(true);
     try {
       const { data, error } = await supabase.functions.invoke('admin-create-user', {
-        body: { email: createForm.email, password: createForm.password, fullName: createForm.fullName }
+        body: { 
+          email: createForm.email, 
+          password: createForm.password, 
+          fullName: createForm.fullName,
+          role: createForm.role
+        }
       });
       if (error || !data.success) throw new Error(data?.error || "Error al crear");
       
       const territoriesArray = createForm.territories.split(',').map(s => s.trim()).filter(Boolean);
       await supabase.from('profiles').update({ phone: createForm.phone, territories: territoriesArray }).eq('id', data.user.id);
 
-      await logActivity({ action: 'CREATE', resource: 'USERS', description: `Nuevo usuario creado: ${createForm.email}`, status: 'OK' });
+      await logActivity({ action: 'CREATE', resource: 'USERS', description: `Nuevo usuario creado: ${createForm.email} con rol ${createForm.role}`, status: 'OK' });
       toast.success("Usuario activado instantáneamente.");
       fetchAll();
       setIsCreateOpen(false);
-      setCreateForm({ email: '', password: '', fullName: '', phone: '', territories: '' });
+      setCreateForm({ email: '', password: '', fullName: '', phone: '', territories: '', role: 'agent' });
     } catch (error: any) {
       toast.error(error.message);
     } finally {
@@ -84,8 +91,10 @@ const UsersPage = () => {
             : selectedUser.territories;
 
         const { error } = await supabase.from('profiles').update({ 
-           role: selectedUser.role, full_name: selectedUser.full_name,
-           phone: selectedUser.phone, territories: territoriesArray
+           role: selectedUser.role, 
+           full_name: selectedUser.full_name,
+           phone: selectedUser.phone, 
+           territories: territoriesArray
         }).eq('id', selectedUser.id);
         
         if (error) throw error;
@@ -217,12 +226,7 @@ const UsersPage = () => {
               </Card>
            </TabsContent>
 
-           {/* ======================================================== */}
-           {/* TABLA DE AUDITORÍA QA (IA) */}
-           {/* ======================================================== */}
            <TabsContent value="qa" className="mt-6 space-y-6 animate-in fade-in duration-500">
-              
-              {/* KPIs Superiores */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                  <Card className="bg-[#0f0f11] border-[#222225] p-6 rounded-2xl shadow-xl border-l-4 border-l-indigo-500">
                     <div className="flex justify-between items-start">
@@ -233,7 +237,6 @@ const UsersPage = () => {
                        <div className="p-3 rounded-xl bg-indigo-900/30 border border-indigo-500/20 text-indigo-400"><Brain className="w-6 h-6" /></div>
                     </div>
                  </Card>
-                 
                  <Card className="bg-[#0f0f11] border-[#222225] p-6 rounded-2xl shadow-xl border-l-4 border-l-emerald-500">
                     <div className="flex justify-between items-start">
                        <div>
@@ -242,10 +245,9 @@ const UsersPage = () => {
                              {evaluations.length > 0 ? Math.round(evaluations.reduce((acc, e) => acc + (e.score || 0), 0) / evaluations.length) : 0}/100
                           </h3>
                        </div>
-                       <div className="p-3 rounded-xl bg-emerald-900/30 border border-emerald-500/20 text-emerald-400"><TrendingUp className="w-6 h-6" /></div>
+                       <div className="p-3 rounded-xl bg-emerald-900/30 border border-indigo-500/20 text-emerald-400"><TrendingUp className="w-6 h-6" /></div>
                     </div>
                  </Card>
-
                  <Card className="bg-[#0f0f11] border-[#222225] p-6 rounded-2xl shadow-xl border-l-4 border-l-red-500">
                     <div className="flex justify-between items-start">
                        <div>
@@ -258,8 +260,6 @@ const UsersPage = () => {
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-                 
-                 {/* LEADERBOARD (Agentes Destacados) */}
                  <div className="lg:col-span-5 space-y-6">
                     <Card className="bg-[#0f0f11] border-[#222225] shadow-2xl rounded-2xl overflow-hidden">
                        <CardHeader className="bg-[#161618] border-b border-[#222225] py-5">
@@ -303,7 +303,6 @@ const UsersPage = () => {
                        </CardContent>
                     </Card>
 
-                    {/* ALERTS SECTION */}
                     {criticalAnomalies.length > 0 && (
                        <Card className="bg-[#1f0f0f] border-red-900/50 shadow-2xl rounded-2xl overflow-hidden border-l-4 border-l-red-500">
                           <CardHeader className="bg-red-950/30 border-b border-red-900/50 py-4">
@@ -332,7 +331,6 @@ const UsersPage = () => {
                     )}
                  </div>
 
-                 {/* RECENT AUDITS FEED */}
                  <div className="lg:col-span-7">
                     <Card className="bg-[#0f0f11] border-[#222225] shadow-2xl rounded-2xl overflow-hidden h-full flex flex-col">
                        <CardHeader className="bg-[#161618] border-b border-[#222225] py-5 shrink-0">
@@ -354,7 +352,7 @@ const UsersPage = () => {
                                       </div>
                                       <div className="flex items-center gap-2">
                                          <span className="text-[9px] text-slate-500 font-mono">{new Date(ev.created_at).toLocaleTimeString()}</span>
-                                         <div className={cn("w-7 h-7 rounded-lg flex items-center justify-center text-[10px] font-bold font-mono border", ev.score >= 80 ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30" : ev.score >= 60 ? "bg-amber-500/10 text-amber-400 border-amber-500/30" : "bg-red-500/10 text-red-400 border-red-500/30")}>
+                                         <div className={cn("w-7 h-7 rounded-lg flex items-center justify-center text-[10px] font-bold font-mono border", ev.score >= 80 ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30" : ev.score >= 60 ? "bg-amber-500/10 text-amber-400 border-amber-500/30" : ev.score >= 60 ? "bg-red-500/10 text-red-400 border-red-500/30" : "bg-red-500/10 text-red-400 border-red-500/30")}>
                                             {ev.score}
                                          </div>
                                       </div>
@@ -382,18 +380,25 @@ const UsersPage = () => {
                 <div className="space-y-2"><Label className="text-[10px] text-slate-400 uppercase font-bold tracking-widest ml-1">Email de Acceso *</Label><Input type="email" value={createForm.email} onChange={e => setCreateForm({...createForm, email: e.target.value})} className="bg-[#161618] border-[#222225] h-11 rounded-xl text-slate-200 font-mono focus-visible:ring-indigo-500" placeholder="email@empresa.com" required /></div>
                 <div className="space-y-2"><Label className="text-[10px] text-slate-400 uppercase font-bold tracking-widest ml-1">Contraseña (Mín. 6 chars) *</Label><Input type="password" value={createForm.password} onChange={e => setCreateForm({...createForm, password: e.target.value})} className="bg-[#161618] border-[#222225] h-11 rounded-xl text-slate-200 font-mono focus-visible:ring-indigo-500" required /></div>
                 
-                <div className="space-y-2 pt-4 border-t border-[#222225]">
-                   <Label className="flex items-center gap-2 text-indigo-400 text-[10px] uppercase font-bold tracking-widest ml-1"><MapPin className="w-3.5 h-3.5"/> Territorios de Venta (Routing IA)</Label>
-                   <Input 
-                      value={createForm.territories} 
-                      onChange={e => setCreateForm({...createForm, territories: e.target.value})} 
-                      className="bg-[#161618] border-[#222225] h-11 rounded-xl text-slate-200 focus-visible:ring-indigo-500" 
-                      placeholder="Ej: Guadalajara, Jalisco, Colima" 
-                   />
-                   <p className="text-[9px] text-slate-500 italic pl-1">Separa por comas. La IA usará esto para asignar clientes geográficamente.</p>
+                <div className="space-y-2"><Label className="text-[10px] text-slate-400 uppercase font-bold tracking-widest ml-1">Rol Inicial</Label>
+                    <Select value={createForm.role} onValueChange={v => setCreateForm({...createForm, role: v})}>
+                      <SelectTrigger className="bg-[#161618] border-[#222225] h-11 rounded-xl text-slate-200"><SelectValue /></SelectTrigger>
+                      <SelectContent className="bg-[#121214] border-[#222225] text-white rounded-xl">
+                         <SelectItem value="admin">Administrador</SelectItem>
+                         <SelectItem value="dev">Developer</SelectItem>
+                         <SelectItem value="gerente">Gerente</SelectItem>
+                         <SelectItem value="sales">Ventas</SelectItem>
+                         <SelectItem value="agent">Agente de Soporte</SelectItem>
+                      </SelectContent>
+                    </Select>
                 </div>
 
-                <Button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-500 text-white h-12 rounded-xl shadow-lg font-bold text-[10px] uppercase tracking-widest mt-4" disabled={creating}>{creating ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <UserPlus className="w-4 h-4 mr-2" />} Activar Ahora</Button>
+                <div className="space-y-2 pt-2">
+                   <Label className="flex items-center gap-2 text-indigo-400 text-[10px] uppercase font-bold tracking-widest ml-1"><MapPin className="w-3.5 h-3.5"/> Territorios (Routing IA)</Label>
+                   <Input value={createForm.territories} onChange={e => setCreateForm({...createForm, territories: e.target.value})} className="bg-[#161618] border-[#222225] h-11 rounded-xl text-slate-200 focus-visible:ring-indigo-500" placeholder="Ej: Guadalajara, Jalisco" />
+                </div>
+
+                <Button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white h-12 rounded-xl shadow-lg font-bold text-[10px] uppercase tracking-widest mt-4" disabled={creating}>{creating ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <UserPlus className="w-4 h-4 mr-2" />} Activar Ahora</Button>
               </form>
            </DialogContent>
         </Dialog>
@@ -415,7 +420,7 @@ const UsersPage = () => {
                         value={Array.isArray(selectedUser.territories) ? selectedUser.territories.join(', ') : (selectedUser.territories || '')} 
                         onChange={e => setSelectedUser({...selectedUser, territories: e.target.value})} 
                         className="bg-[#161618] border-[#222225] h-11 rounded-xl text-slate-200 focus-visible:ring-amber-500" 
-                        placeholder="Ej: Monterrey, Nuevo Leon, Saltillo"
+                        placeholder="Ej: Monterrey, Nuevo Leon"
                      />
                   </div>
 
@@ -423,10 +428,11 @@ const UsersPage = () => {
                     <Select value={selectedUser.role} onValueChange={v => setSelectedUser({...selectedUser, role: v})} disabled={selectedUser.id === currentUser?.id}>
                       <SelectTrigger className="bg-[#161618] border-[#222225] h-11 rounded-xl text-slate-200"><SelectValue /></SelectTrigger>
                       <SelectContent className="bg-[#121214] border-[#222225] text-white rounded-xl">
-                         <SelectItem value="admin">Administrador (Full Access)</SelectItem>
-                         <SelectItem value="dev">Developer (Full Access)</SelectItem>
-                         <SelectItem value="gerente">Gerente (Gestión de Ventas y Equipo)</SelectItem>
-                         <SelectItem value="sales">Ventas (Limitado a su cartera)</SelectItem>
+                         <SelectItem value="admin">admin</SelectItem>
+                         <SelectItem value="dev">dev</SelectItem>
+                         <SelectItem value="gerente">gerente</SelectItem>
+                         <SelectItem value="sales">sales</SelectItem>
+                         <SelectItem value="agent">agent</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
