@@ -12,8 +12,7 @@ interface AuthContextType {
   isDev: boolean;
   isManager: boolean;
   isGerente: boolean;
-  isSales: boolean;
-  isAgent: boolean;
+  isSalesAgent: boolean;
   role: string | null;
   signOut: () => Promise<void>;
   fetchProfile: (userId: string) => Promise<void>;
@@ -28,8 +27,7 @@ const AuthContext = createContext<AuthContextType>({
   isDev: false,
   isManager: false,
   isGerente: false,
-  isSales: false,
-  isAgent: false,
+  isSalesAgent: false,
   role: null,
   signOut: async () => {},
   fetchProfile: async () => {},
@@ -93,7 +91,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     await supabase.auth.signOut();
   };
 
-  const userRole = (user?.email === 'gameygv@gmail.com') ? 'dev' : (profile?.role?.toLowerCase() || 'agent');
+  const userRole = (user?.email === 'gameygv@gmail.com') ? 'dev' : (profile?.role?.toLowerCase() || 'sales_agent');
 
   const value = {
     session,
@@ -105,8 +103,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     isDev: userRole === 'dev',
     isManager: userRole === 'admin' || userRole === 'dev' || userRole === 'gerente',
     isGerente: userRole === 'gerente',
-    isSales: userRole === 'sales',
-    isAgent: userRole === 'agent',
+    isSalesAgent: userRole === 'sales_agent' || userRole === 'agent' || userRole === 'sales',
     signOut,
     fetchProfile,
   };

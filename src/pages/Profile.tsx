@@ -53,7 +53,7 @@ const Profile = () => {
            { key: `agent_templates_${user.id}`, value: JSON.stringify(localTemplates), category: 'USER_SETTINGS' },
            { key: `agent_tags_${user.id}`, value: JSON.stringify(localTags), category: 'USER_SETTINGS' }
         ], { onConflict: 'key' });
-        toast.success("Configuraciones personales guardadas. Actualiza la página si estás en el chat.");
+        toast.success("Configuraciones personales guardadas.");
      } catch (err: any) {
         toast.error("Error al guardar: " + err.message);
      } finally {
@@ -88,19 +88,13 @@ const Profile = () => {
     } catch (error: any) { toast.error(error.message); } finally { setLoadingProfile(false); }
   };
 
-  const handlePasswordChange = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (password !== confirmPassword) return toast.error('Las contraseñas no coinciden');
-    if (password.length < 6) return toast.error('La contraseña debe tener al menos 6 caracteres');
-
-    setLoadingPassword(true);
-    try {
-      const { error } = await supabase.auth.updateUser({ password });
-      if (error) throw error;
-      await logActivity({ action: 'UPDATE', resource: 'AUTH', description: 'Usuario cambió su contraseña', status: 'OK' });
-      toast.success('Contraseña actualizada correctamente');
-      setPassword(''); setConfirmPassword('');
-    } catch (error: any) { toast.error(error.message); } finally { setLoadingPassword(false); }
+  const getRoleLabel = (role: string) => {
+      const r = role?.toLowerCase();
+      if (r === 'sales_agent' || r === 'agent' || r === 'sales') return 'Agente de Ventas';
+      if (r === 'admin') return 'Administrador';
+      if (r === 'dev') return 'Developer';
+      if (r === 'gerente') return 'Gerente';
+      return role;
   };
 
   return (
@@ -111,7 +105,6 @@ const Profile = () => {
           <p className="text-slate-400 text-sm">Gestiona tus datos de acceso, etiquetas personalizadas y respuestas rápidas.</p>
         </div>
 
-        {/* SECCIÓN 1: PERFIL Y CONTRASEÑA */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
            <Card className="bg-[#0f0f11] border-[#222225] shadow-xl">
              <CardHeader className="flex flex-row items-center justify-between border-b border-[#161618] bg-[#161618] px-6 py-5">
@@ -130,116 +123,24 @@ const Profile = () => {
                  </div>
                  <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2"><Label className="text-[10px] uppercase font-bold text-slate-500 tracking-widest ml-1">WhatsApp</Label><Input value={form.phone} onChange={(e) => setForm({...form, phone: e.target.value})} disabled={!isEditing} className="bg-[#121214] border-[#222225] text-white disabled:opacity-70 font-mono h-11 rounded-xl" /></div>
-                    <div className="space-y-2"><Label className="text-[10px] uppercase font-bold text-slate-500 tracking-widest ml-1">Rol del Sistema</Label><div className="p-2 h-11 flex items-center bg-[#161618] rounded-xl border border-[#222225] text-indigo-400 uppercase font-bold tracking-widest text-xs">{profile?.role || 'User'}</div></div>
+                    <div className="space-y-2"><Label className="text-[10px] uppercase font-bold text-slate-500 tracking-widest ml-1">Rol del Sistema</Label><div className="p-2 h-11 flex items-center bg-[#161618] rounded-xl border border-[#222225] text-indigo-400 uppercase font-bold tracking-widest text-xs">{getRoleLabel(profile?.role)}</div></div>
                  </div>
                  <div className="space-y-2 pt-4 border-t border-[#161618]">
-                   <Label className="text-[10px] uppercase font-bold text-indigo-400 tracking-widest ml-1 flex items-center gap-2"><MapPin className="w-3 h-3"/> Zonas Asignadas (Routing IA)</Label>
+                   <Label className="text-[10px] uppercase font-bold text-indigo-400 tracking-widest ml-1 flex items-center gap-1.5"><MapPin className="w-3 h-3"/> Zonas Asignadas (Routing IA)</Label>
                    <div className="flex flex-wrap gap-1.5 p-3 bg-[#121214] border border-[#222225] rounded-xl min-h-[40px]">
                       {profile?.territories && profile.territories.length > 0 ? (
                          profile.territories.map((t: string, i: number) => <Badge key={i} variant="outline" className="bg-[#161618] border-[#333336] text-slate-300">{t}</Badge>)
-                      ) : (<span className="text-xs text-slate-500 italic mt-1">Recibes todo el tráfico (Global) o no tienes zonas asignadas.</span>)}
+                      ) : (<span className="text-xs text-slate-500 italic mt-1">Global / Sin zonas asignadas.</span>)}
                    </div>
                  </div>
                  <div className="space-y-2 pt-4 border-t border-[#161618]">
                    <Label className="text-[10px] uppercase font-bold text-slate-500 tracking-widest ml-1">Email (ID de Acceso)</Label>
                    <Input type="email" value={form.email} onChange={(e) => setForm({...form, email: e.target.value})} disabled={!isEditing} className="bg-[#121214] border-[#222225] text-white disabled:opacity-70 font-mono h-11 rounded-xl" />
-                   {isEditing && <p className="text-[10px] text-amber-500 flex items-center gap-1 mt-1"><AlertTriangle size={12} /> Al cambiar el email, se cerrará tu sesión actual.</p>}
                  </div>
                </CardContent>
-               {isEditing && (
-                 <CardFooter className="bg-[#161618] border-t border-[#222225] p-5"><Button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-500 h-11 rounded-xl font-bold uppercase tracking-widest text-xs" disabled={loadingProfile}>{loadingProfile ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />} Guardar Cambios</Button></CardFooter>
-               )}
-             </form>
-           </Card>
-
-           <Card className="bg-[#0f0f11] border-[#222225] h-fit shadow-xl">
-             <CardHeader className="border-b border-[#161618] bg-[#161618] px-6 py-5">
-               <CardTitle className="text-white flex items-center gap-2 text-base"><Key className="w-5 h-5 text-red-500" /> Cambiar Contraseña</CardTitle>
-             </CardHeader>
-             <form onSubmit={handlePasswordChange}>
-               <CardContent className="space-y-4 p-6 bg-[#0a0a0c]">
-                 <div className="space-y-2"><Label className="text-[10px] uppercase font-bold text-slate-500 tracking-widest ml-1">Nueva Contraseña</Label><Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="bg-[#121214] border-[#222225] h-11 rounded-xl" /></div>
-                 <div className="space-y-2"><Label className="text-[10px] uppercase font-bold text-slate-500 tracking-widest ml-1">Confirmar Contraseña</Label><Input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} className="bg-[#121214] border-[#222225] h-11 rounded-xl" /></div>
-               </CardContent>
-               <CardFooter className="bg-[#161618] border-t border-[#222225] p-5"><Button type="submit" className="w-full bg-red-900/40 hover:bg-red-600 text-red-400 hover:text-white h-11 rounded-xl font-bold uppercase tracking-widest text-xs border border-red-900" disabled={loadingPassword || !password}>{loadingPassword ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : 'Actualizar Contraseña'}</Button></CardFooter>
              </form>
            </Card>
         </div>
-
-        {/* SECCIÓN 2: PLANTILLAS PRIVADAS */}
-        <Card className="bg-[#0f0f11] border-[#222225] border-l-4 border-l-indigo-500 shadow-2xl overflow-hidden rounded-2xl">
-           <CardHeader className="flex flex-row items-center justify-between border-b border-[#161618] bg-[#161618] px-6 py-5">
-              <div className="space-y-1">
-                 <CardTitle className="text-white flex items-center gap-2 text-base font-bold tracking-wide"><MessageSquarePlus className="w-5 h-5 text-indigo-400" /> Mis Plantillas Privadas</CardTitle>
-                 <CardDescription className="text-xs text-slate-400">Mensajes rápidos y preconfigurados que solo aparecerán en tu panel de chat.</CardDescription>
-              </div>
-              <div className="flex gap-2 shrink-0">
-                 <Button onClick={() => setLocalTemplates([...localTemplates, { id: Date.now().toString(), title: '', text: '' }])} variant="outline" className="border-[#333336] bg-[#0a0a0c] text-slate-300 hover:text-white h-10 px-5 text-xs rounded-xl uppercase tracking-widest font-bold"><Plus className="w-4 h-4 md:mr-2"/> <span className="hidden md:inline">Añadir</span></Button>
-                 <Button onClick={handleSaveLocalSettings} disabled={savingSettings} className="bg-indigo-600 hover:bg-indigo-500 text-white h-10 px-5 text-xs rounded-xl shadow-lg uppercase tracking-widest font-bold">{savingSettings ? <Loader2 className="w-4 h-4 animate-spin md:mr-2"/> : <Save className="w-4 h-4 md:mr-2"/>} <span className="hidden md:inline">Guardar</span></Button>
-              </div>
-           </CardHeader>
-           <CardContent className="space-y-4 p-6 bg-[#0a0a0c]">
-              {localTemplates.length === 0 ? (
-                 <div className="text-center py-10 text-slate-600 italic uppercase text-[10px] font-bold tracking-widest">No tienes plantillas personales creadas. Haz clic en "Añadir".</div>
-              ) : localTemplates.map(qr => (
-                 <div key={qr.id} className="p-5 bg-[#161618] border border-[#222225] rounded-xl flex gap-6 items-start group transition-colors hover:border-[#333336]">
-                    <div className="flex-1 space-y-4">
-                       <div className="space-y-2">
-                          <Label className="text-[10px] uppercase font-bold text-slate-500 tracking-widest ml-1">Título de la Plantilla</Label>
-                          <Input value={qr.title} onChange={e => setLocalTemplates(localTemplates.map(t => t.id === qr.id ? {...t, title: e.target.value} : t))} placeholder="Título corto (Ej: Mi Saludo)" className="bg-[#0a0a0c] border-[#222225] h-11 text-sm font-bold text-slate-200 focus-visible:ring-indigo-500/50 rounded-xl" />
-                       </div>
-                       <div className="space-y-2">
-                          <Label className="text-[10px] uppercase font-bold text-slate-500 tracking-widest ml-1">Cuerpo del Mensaje</Label>
-                          <Textarea value={qr.text} onChange={e => setLocalTemplates(localTemplates.map(t => t.id === qr.id ? {...t, text: e.target.value} : t))} placeholder="Escribe el texto de tu mensaje rápido aquí..." className="bg-[#0a0a0c] border-[#222225] text-sm min-h-[100px] text-slate-300 focus-visible:ring-indigo-500/50 rounded-xl leading-relaxed resize-none" />
-                       </div>
-                    </div>
-                    <Button variant="ghost" size="icon" onClick={() => setLocalTemplates(localTemplates.filter(t => t.id !== qr.id))} className="text-slate-600 hover:bg-red-500/10 hover:text-red-500 h-11 w-11 mt-7 rounded-xl shrink-0"><Trash2 className="w-5 h-5" /></Button>
-                 </div>
-              ))}
-           </CardContent>
-        </Card>
-
-        {/* SECCIÓN 3: ETIQUETAS PRIVADAS */}
-        <Card className="bg-[#0f0f11] border-[#222225] border-l-4 border-l-amber-500 shadow-2xl overflow-hidden rounded-2xl">
-           <CardHeader className="flex flex-row items-center justify-between border-b border-[#161618] bg-[#161618] px-6 py-5">
-              <div className="space-y-1">
-                 <CardTitle className="text-white flex items-center gap-2 text-base font-bold tracking-wide"><Tag className="w-5 h-5 text-amber-500" /> Mis Etiquetas de Segmentación</CardTitle>
-                 <CardDescription className="text-xs text-slate-400">Personaliza colores para organizar visualmente tus leads. Solo tú podrás usarlas.</CardDescription>
-              </div>
-              <div className="flex gap-2 shrink-0">
-                 <Button onClick={() => setLocalTags([...localTags, { id: Date.now().toString(), text: '', color: '#3b82f6' }])} variant="outline" className="border-[#333336] bg-[#0a0a0c] text-slate-300 hover:text-white h-10 px-5 text-xs rounded-xl uppercase tracking-widest font-bold"><Plus className="w-4 h-4 md:mr-2"/> <span className="hidden md:inline">Añadir Etiqueta</span></Button>
-                 <Button onClick={handleSaveLocalSettings} disabled={savingSettings} className="bg-amber-600 hover:bg-amber-500 text-slate-950 h-10 px-5 text-xs rounded-xl shadow-lg uppercase tracking-widest font-bold">{savingSettings ? <Loader2 className="w-4 h-4 animate-spin md:mr-2"/> : <Save className="w-4 h-4 md:mr-2"/>} <span className="hidden md:inline">Guardar</span></Button>
-              </div>
-           </CardHeader>
-           <CardContent className="space-y-4 p-6 bg-[#0a0a0c]">
-              {localTags.length === 0 ? (
-                 <div className="text-center py-10 text-slate-600 italic uppercase text-[10px] font-bold tracking-widest">No tienes etiquetas personales creadas. Haz clic en "Añadir Etiqueta".</div>
-              ) : localTags.map(tag => (
-                 <div key={tag.id} className="p-5 bg-[#161618] border border-[#222225] rounded-xl flex gap-6 items-center group transition-colors hover:border-[#333336]">
-                    <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-6">
-                       <div className="space-y-2">
-                          <Label className="text-[10px] uppercase font-bold text-slate-500 tracking-widest ml-1">Texto de la Etiqueta</Label>
-                          <Input value={tag.text} onChange={e => setLocalTags(localTags.map(t => t.id === tag.id ? {...t, text: e.target.value.toUpperCase()} : t))} placeholder="Ej: SEGUIMIENTO VIP" className="bg-[#0a0a0c] border-[#222225] h-11 text-sm font-bold text-slate-200 uppercase focus-visible:ring-amber-500/50 rounded-xl" />
-                       </div>
-                       <div className="space-y-2">
-                          <Label className="text-[10px] uppercase font-bold text-slate-500 tracking-widest ml-1">Color de la Etiqueta</Label>
-                          <div className="flex items-center gap-3">
-                             <div className="relative shrink-0">
-                                <input type="color" value={tag.color} onChange={e => setLocalTags(localTags.map(t => t.id === tag.id ? {...t, color: e.target.value} : t))} className="absolute inset-0 opacity-0 w-full h-full cursor-pointer" />
-                                <div className="w-11 h-11 rounded-xl border-2 border-[#222225] shadow-inner" style={{ backgroundColor: tag.color }}></div>
-                             </div>
-                             <Input value={tag.color} onChange={e => setLocalTags(localTags.map(t => t.id === tag.id ? {...t, color: e.target.value} : t))} className="bg-[#0a0a0c] border-[#222225] h-11 text-xs font-mono w-28 text-slate-300 focus-visible:ring-amber-500/50 rounded-xl" />
-                             <div className="flex-1 flex justify-end">
-                                <Badge style={{ backgroundColor: tag.color + '15', color: tag.color, borderColor: tag.color + '40' }} className="px-4 py-1.5 border shadow-sm text-xs font-bold truncate max-w-[120px] block">{tag.text || 'VISTA PREVIA'}</Badge>
-                             </div>
-                          </div>
-                       </div>
-                    </div>
-                    <Button variant="ghost" size="icon" onClick={() => setLocalTags(localTags.filter(t => t.id !== tag.id))} className="text-slate-600 hover:bg-red-500/10 hover:text-red-500 h-11 w-11 rounded-xl shrink-0"><Trash2 className="w-5 h-5" /></Button>
-                 </div>
-              ))}
-           </CardContent>
-        </Card>
       </div>
     </Layout>
   );

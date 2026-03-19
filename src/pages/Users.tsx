@@ -28,7 +28,7 @@ const UsersPage = () => {
   const [loading, setLoading] = useState(true);
   
   const [createForm, setCreateForm] = useState({ 
-    email: '', password: '', fullName: '', phone: '', territories: '', role: 'agent' 
+    email: '', password: '', fullName: '', phone: '', territories: '', role: 'sales_agent' 
   });
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -74,7 +74,7 @@ const UsersPage = () => {
       toast.success("Usuario activado instantáneamente.");
       fetchAll();
       setIsCreateOpen(false);
-      setCreateForm({ email: '', password: '', fullName: '', phone: '', territories: '', role: 'agent' });
+      setCreateForm({ email: '', password: '', fullName: '', phone: '', territories: '', role: 'sales_agent' });
     } catch (error: any) {
       toast.error(error.message);
     } finally {
@@ -86,10 +86,12 @@ const UsersPage = () => {
      if (!selectedUser) return;
      setUpdating(true);
      try {
-        // Asegurar que el rol sea uno de los valores permitidos por el Check Constraint de la BD
-        const validRoles = ['admin', 'dev', 'gerente', 'sales', 'agent'];
-        if (!validRoles.includes(selectedUser.role)) {
-            throw new Error(`El rol "${selectedUser.role}" no es válido en el sistema.`);
+        const validRoles = ['admin', 'dev', 'gerente', 'sales_agent'];
+        let roleToSave = selectedUser.role;
+        if (roleToSave === 'agent' || roleToSave === 'sales') roleToSave = 'sales_agent';
+
+        if (!validRoles.includes(roleToSave)) {
+            throw new Error(`El rol "${roleToSave}" no es válido en el sistema.`);
         }
 
         const territoriesArray = Array.isArray(selectedUser.territories) 
@@ -99,7 +101,7 @@ const UsersPage = () => {
                 : [];
 
         const { error } = await supabase.from('profiles').update({ 
-           role: selectedUser.role, 
+           role: roleToSave, 
            full_name: selectedUser.full_name,
            phone: selectedUser.phone, 
            territories: territoriesArray
@@ -117,6 +119,15 @@ const UsersPage = () => {
      }
   };
 
+  const getRoleLabel = (role: string) => {
+      const r = role?.toLowerCase();
+      if (r === 'sales_agent' || r === 'agent' || r === 'sales') return 'Agente de Ventas';
+      if (r === 'admin') return 'Administrador';
+      if (r === 'dev') return 'Developer';
+      if (r === 'gerente') return 'Gerente';
+      return role;
+  };
+
   const handleDeleteUser = async (id: string, name: string) => {
      if (id === currentUser?.id) { toast.error("No puedes eliminarte a ti mismo."); return; }
      if (!confirm(`¿Eliminar a ${name} permanentemente?`)) return;
@@ -131,22 +142,6 @@ const UsersPage = () => {
         toast.error(err.message, { id: tid });
      }
   };
-
-  const getAgentStats = () => {
-     const stats: any = {};
-     evaluations.forEach(ev => {
-         const agentId = ev.agent_id;
-         const name = ev.profiles?.full_name || 'Desconocido';
-         if (!stats[agentId]) stats[agentId] = { id: agentId, name, role: ev.profiles?.role, messages: 0, totalScore: 0, anomalies: 0 };
-         stats[agentId].messages += 1;
-         stats[agentId].totalScore += ev.score || 0;
-         if (ev.anomaly_detected) stats[agentId].anomalies += 1;
-     });
-     return Object.values(stats).map((s: any) => ({ ...s, avgScore: Math.round(s.totalScore / s.messages) })).sort((a: any, b: any) => b.avgScore - a.avgScore);
-  };
-
-  const agentLeaderboard = getAgentStats();
-  const criticalAnomalies = evaluations.filter(e => e.anomaly_detected);
 
   return (
     <Layout>
@@ -166,7 +161,7 @@ const UsersPage = () => {
                <RefreshCw className={cn("w-4 h-4 mr-2", loading && "animate-spin")} /> Refrescar
             </Button>
             <Button onClick={() => setIsCreateOpen(true)} className="bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg h-11 px-6 rounded-xl text-[10px] uppercase font-bold tracking-widest transition-all">
-               <UserPlus className="w-4 h-4 mr-2" /> Nuevo Agente
+               <UserPlus className="w-4 h-4 mr-2" /> Nuevo Miembro
             </Button>
           </div>
         </div>
@@ -174,7 +169,6 @@ const UsersPage = () => {
         <Tabs defaultValue="directorio" className="w-full">
            <TabsList className="bg-[#121214] border border-[#222225] p-1 rounded-xl h-auto flex-wrap">
               <TabsTrigger value="directorio" className="gap-2 px-6 py-2.5 text-xs data-[state=active]:bg-indigo-600 data-[state=active]:text-white font-bold uppercase tracking-widest"><Shield className="w-4 h-4" /> Accesos</TabsTrigger>
-              <TabsTrigger value="qa" className="gap-2 px-6 py-2.5 text-xs data-[state=active]:bg-emerald-600 data-[state=active]:text-white font-bold uppercase tracking-widest"><Activity className="w-4 h-4" /> Auditoría QA</TabsTrigger>
            </TabsList>
 
            <TabsContent value="directorio" className="mt-6">
@@ -198,7 +192,7 @@ const UsersPage = () => {
                                 <span className="text-[10px] text-slate-500 font-mono mt-1">{u.phone || 'Sin tel'}</span>
                              </div>
                           </TableCell>
-                          <TableCell><Badge variant="outline" className="text-[9px] font-bold uppercase tracking-widest px-2 py-0.5 border-[#333336] text-slate-400 bg-[#121214]">{u.role}</Badge></TableCell>
+                          <TableCell><Badge variant="outline" className="text-[9px] font-bold uppercase tracking-widest px-2 py-0.5 border-[#333336] text-slate-400 bg-[#121214]">{getRoleLabel(u.role)}</Badge></TableCell>
                           <TableCell>
                              <div className="flex gap-1.5 flex-wrap max-w-[250px]">
                                 {u.territories && u.territories.length > 0 ? u.territories.map((t: string, i: number) => <Badge key={i} variant="outline" className="text-[9px] border-[#333336] text-slate-400 bg-[#121214] px-2 uppercase">{t}</Badge>) : <span className="text-[10px] text-slate-500 italic">Global</span>}
@@ -217,10 +211,6 @@ const UsersPage = () => {
                 </CardContent>
               </Card>
            </TabsContent>
-           
-           <TabsContent value="qa" className="mt-6">
-              <div className="text-center py-20 text-slate-500 italic">Módulo de rendimiento activo.</div>
-           </TabsContent>
         </Tabs>
 
         {/* DIALOGO DE CREACIÓN */}
@@ -238,11 +228,10 @@ const UsersPage = () => {
                     <Select value={createForm.role} onValueChange={v => setCreateForm({...createForm, role: v})}>
                       <SelectTrigger className="bg-[#161618] border-[#222225] h-11 rounded-xl text-slate-200"><SelectValue /></SelectTrigger>
                       <SelectContent className="bg-[#121214] border-[#222225] text-white">
+                         <SelectItem value="sales_agent">Agente de Ventas</SelectItem>
+                         <SelectItem value="gerente">Gerente</SelectItem>
                          <SelectItem value="admin">Administrador</SelectItem>
                          <SelectItem value="dev">Developer</SelectItem>
-                         <SelectItem value="gerente">Gerente</SelectItem>
-                         <SelectItem value="sales">Ventas</SelectItem>
-                         <SelectItem value="agent">Agente</SelectItem>
                       </SelectContent>
                     </Select>
                 </div>
@@ -254,7 +243,7 @@ const UsersPage = () => {
         {/* DIALOGO DE EDICIÓN */}
         <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
            <DialogContent className="bg-[#0f0f11] border-[#222225] text-white max-w-lg rounded-3xl">
-              <DialogHeader><DialogTitle className="flex items-center gap-2 text-amber-500 text-sm uppercase font-bold"><Shield className="w-5 h-5" /> Gestionar Agente</DialogTitle></DialogHeader>
+              <DialogHeader><DialogTitle className="flex items-center gap-2 text-amber-500 text-sm uppercase font-bold"><Shield className="w-5 h-5" /> Gestionar Miembro</DialogTitle></DialogHeader>
               {selectedUser && (
                 <div className="space-y-6 py-4">
                   <div className="grid grid-cols-2 gap-4">
@@ -263,14 +252,13 @@ const UsersPage = () => {
                   </div>
                   <div className="space-y-2">
                      <Label className="text-[10px] text-slate-400 uppercase font-bold ml-1">Rol</Label>
-                     <Select value={selectedUser.role} onValueChange={v => setSelectedUser({...selectedUser, role: v})} disabled={selectedUser.id === currentUser?.id}>
+                     <Select value={['sales_agent', 'agent', 'sales'].includes(selectedUser.role) ? 'sales_agent' : selectedUser.role} onValueChange={v => setSelectedUser({...selectedUser, role: v})} disabled={selectedUser.id === currentUser?.id}>
                        <SelectTrigger className="bg-[#161618] border-[#222225] h-11 rounded-xl text-slate-200"><SelectValue /></SelectTrigger>
                        <SelectContent className="bg-[#121214] border-[#222225] text-white">
+                          <SelectItem value="sales_agent">Agente de Ventas</SelectItem>
+                          <SelectItem value="gerente">Gerente</SelectItem>
                           <SelectItem value="admin">Administrador</SelectItem>
                           <SelectItem value="dev">Developer</SelectItem>
-                          <SelectItem value="gerente">Gerente</SelectItem>
-                          <SelectItem value="sales">Ventas</SelectItem>
-                          <SelectItem value="agent">Agente</SelectItem>
                        </SelectContent>
                      </Select>
                   </div>
