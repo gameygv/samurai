@@ -113,10 +113,11 @@ export const MessageList = ({ messages, loading }: MessageListProps) => {
           {messages.map((msg) => {
              const emisor = (msg.emisor || '').toUpperCase();
              const platform = (msg.platform || '').toUpperCase();
-             const isClient = emisor === 'CLIENTE';
-             // Detección corregida de notas de sistema (amarillas)
-             const isNote = (emisor === 'SISTEMA' && platform === 'PANEL_INTERNO') || emisor === 'NOTA';
-             const isHuman = emisor === 'HUMANO';
+             
+             // Redefinimos los booleanos para evitar colisiones
+             const isNote = platform === 'PANEL_INTERNO' || emisor === 'NOTA' || emisor === 'SISTEMA';
+             const isClient = emisor === 'CLIENTE' && !isNote;
+             const isHuman = emisor === 'HUMANO' && !isNote;
              const isAI = !isClient && !isNote && !isHuman;
 
              if (isNote) {

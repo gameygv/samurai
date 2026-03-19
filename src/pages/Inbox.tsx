@@ -144,7 +144,7 @@ const Inbox = () => {
       if (text.trim() === '#STOP' || text.trim() === '#START') {
          const isPaused = text.trim() === '#STOP';
          await supabase.from('leads').update({ ai_paused: isPaused }).eq('id', activeLead.id);
-         await supabase.from('conversaciones').insert({ lead_id: activeLead.id, mensaje: `IA ${isPaused ? 'Pausada' : 'Activada'} manualmente.`, emisor: 'SISTEMA', platform: 'PANEL_INTERNO' });
+         await supabase.from('conversaciones').insert({ lead_id: activeLead.id, mensaje: `IA ${isPaused ? 'Pausada' : 'Activada'} manualmente.`, emisor: 'HUMANO', platform: 'PANEL_INTERNO' });
          toast.success(`Samurai ${isPaused ? 'Pausado' : 'Activado'}`);
          return;
       }
@@ -152,7 +152,7 @@ const Inbox = () => {
          await supabase.from('conversaciones').insert({ 
              lead_id: activeLead.id, 
              mensaje: text, 
-             emisor: 'SISTEMA', 
+             emisor: 'HUMANO', 
              platform: 'PANEL_INTERNO',
              metadata: { author: profile?.full_name || 'Agente' }
          });
@@ -209,7 +209,6 @@ const Inbox = () => {
          });
          if (error) throw error;
          
-         // Limpiamos etiquetas crudas de Media de la respuesta sugerida
          let text = data.answer as string;
          return text.replace(/<<MEDIA:[^>]+>>/gi, '').trim();
       } catch (e) { return null; }
@@ -311,7 +310,7 @@ const Inbox = () => {
                  <MessageList messages={messages} loading={loadingMessages} />
 
                  <div className="p-3 bg-[#0a0a0c] border-t border-[#1a1a1a] shrink-0">
-                    <AiSuggestions suggestions={suggestions} loading={loadingSuggestions} onSelect={setDraftMessage} onRefresh={() => fetchAiSuggestions(activeLead.id, messages)} />
+                    <AiSuggestions suggestions={suggestions} loading={loadingSuggestions} onSelect={(t) => setDraftMessage(t.replace(/<<MEDIA:[^>]+>>/gi, '').trim())} onRefresh={() => fetchAiSuggestions(activeLead.id, messages)} />
                     <MessageInput 
                         onSendMessage={handleSendMessage} 
                         sending={sending} 

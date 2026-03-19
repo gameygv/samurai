@@ -161,7 +161,7 @@ export default function ChatViewer({ lead, open, onOpenChange }: ChatViewerProps
         await supabase.from('conversaciones').insert({
           lead_id: leadId,
           mensaje: `IA ${isPaused ? 'Pausada' : 'Activada'} manualmente.`,
-          emisor: 'SISTEMA',
+          emisor: 'HUMANO',
           platform: 'PANEL_INTERNO',
         });
         toast.success(`Samurai ${isPaused ? 'pausado' : 'activado'}`);
@@ -173,7 +173,7 @@ export default function ChatViewer({ lead, open, onOpenChange }: ChatViewerProps
         await supabase.from('conversaciones').insert({
           lead_id: leadId,
           mensaje: text,
-          emisor: 'SISTEMA',
+          emisor: 'HUMANO',
           platform: 'PANEL_INTERNO',
           metadata: { author: profile?.full_name || 'Agente' }
         });
@@ -282,7 +282,7 @@ export default function ChatViewer({ lead, open, onOpenChange }: ChatViewerProps
 
           {/* INPUT AREA */}
           <div className="bg-[#0a0a0c] border-t border-[#1a1a1a] p-4 shrink-0 shadow-[0_-10px_40px_rgba(0,0,0,0.5)] z-20">
-            <AiSuggestions suggestions={suggestions} loading={loadingSuggestions} onSelect={setDraftMessage} onRefresh={() => fetchAiSuggestions(leadId, messages)} />
+            <AiSuggestions suggestions={suggestions} loading={loadingSuggestions} onSelect={(t) => setDraftMessage(t.replace(/<<MEDIA:[^>]+>>/gi, '').trim())} onRefresh={() => fetchAiSuggestions(leadId, messages)} />
             
             <MessageInput
               onSendMessage={handleSendMessage}

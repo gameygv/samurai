@@ -95,8 +95,7 @@ export const MemoryPanel = ({
      const { data } = await supabase.from('conversaciones')
         .select('*')
         .eq('lead_id', currentAnalysis.id)
-        .eq('emisor', 'SISTEMA')
-        .eq('platform', 'PANEL_INTERNO')
+        .eq('platform', 'PANEL_INTERNO') // Eliminamos el eq('emisor') para que traiga todas las notas
         .order('created_at', { ascending: true });
      if (data) setInternalNotes(data);
   };
@@ -107,8 +106,8 @@ export const MemoryPanel = ({
      try {
         const payload = {
            lead_id: currentAnalysis.id,
-           emisor: 'SISTEMA',
-           platform: 'PANEL_INTERNO',
+           emisor: 'HUMANO', // Usamos HUMANO para evitar error de BD Constraint
+           platform: 'PANEL_INTERNO', // Con platform definimos que es una nota interna
            mensaje: text.trim(),
            metadata: { author: profile?.full_name || 'Miembro del Equipo' }
         };
