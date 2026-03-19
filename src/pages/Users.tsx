@@ -190,7 +190,7 @@ const UsersPage = () => {
                      </TableCell>
                      <TableCell>{u.is_active ? (<span className="text-emerald-500 text-[10px] flex items-center gap-1.5 font-bold uppercase"><div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]"></div> ACTIVO</span>) : (<Badge variant="destructive" className="text-[9px]">INACTIVO</Badge>)}</TableCell>
                      <TableCell className="text-right pr-6">
-                        <Button variant="outline" size="sm" className="bg-[#121214] border-[#333336] text-amber-500 hover:bg-amber-500 hover:text-slate-950 h-9 px-4 text-[10px] font-bold uppercase rounded-xl" onClick={() => { setSelectedUser(u); setIsEditOpen(true); }}>
+                        <Button variant="outline" size="sm" className="bg-[#121214] border-[#333336] text-amber-500 hover:bg-amber-500 hover:text-slate-950 h-9 px-4 text-[10px] font-bold uppercase tracking-widest transition-colors rounded-xl" onClick={() => { setSelectedUser(u); setIsEditOpen(true); }}>
                            <Edit3 className="w-3.5 h-3.5 mr-1.5" /> Gestionar
                         </Button>
                      </TableCell>
@@ -204,7 +204,7 @@ const UsersPage = () => {
         {/* DIALOGO DE CREACIÓN */}
         <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
            <DialogContent className="bg-[#0f0f11] border-[#222225] text-white max-w-lg rounded-3xl">
-              <DialogHeader><DialogTitle className="text-sm uppercase text-indigo-400 font-bold flex items-center gap-2"><UserPlus className="w-5 h-5"/> Nuevo Miembro</DialogTitle></DialogHeader>
+              <DialogHeader><DialogTitle className="text-sm uppercase tracking-widest text-indigo-400 font-bold flex items-center gap-2"><UserPlus className="w-5 h-5"/> Nuevo Miembro</DialogTitle></DialogHeader>
               <form onSubmit={handleCreateUser} className="space-y-4 pt-4">
                 <div className="grid grid-cols-2 gap-4">
                    <div className="space-y-2"><Label className="text-[10px] text-slate-400 uppercase font-bold">Nombre *</Label><Input value={createForm.fullName} onChange={e => setCreateForm({...createForm, fullName: e.target.value})} className="bg-[#161618] border-[#222225] h-11 rounded-xl text-slate-200" required /></div>
@@ -258,7 +258,7 @@ const UsersPage = () => {
                         className="bg-[#161618] border-[#222225] h-11 rounded-xl text-slate-200" 
                      />
                   </div>
-                  <Button variant="ghost" className="w-full text-red-500 hover:bg-red-950/50 hover:text-red-400 h-11 uppercase text-[10px] font-bold rounded-xl border border-red-900/30" onClick={() => { setIsDeleteOpen(true); }} disabled={selectedUser.id === currentUser?.id}><Trash2 className="w-4 h-4 mr-2" /> Dar de Baja</Button>
+                  <Button variant="ghost" className="w-full text-red-500 hover:bg-red-950/50 hover:text-red-400 h-11 uppercase text-[10px] font-bold rounded-xl border border-red-900/30" onClick={() => { setTransferToId(''); setIsDeleteOpen(true); }} disabled={selectedUser.id === currentUser?.id}><Trash2 className="w-4 h-4 mr-2" /> Dar de Baja</Button>
                 </div>
               )}
               <DialogFooter>

@@ -32,14 +32,18 @@ serve(async (req) => {
             // Transferir Documentos de Conocimiento
             await supabaseAdmin.from('knowledge_documents').update({ created_by: transferToId }).eq('created_by', userId);
             
-            console.log(`[manage-auth-users] Transferencia completada.`);
+            // Transferir Snapshots y Reportes #CIA (Evita bloqueos de Foreign Keys)
+            await supabaseAdmin.from('prompt_versions').update({ created_by: transferToId }).eq('created_by', userId);
+            await supabaseAdmin.from('errores_ia').update({ usuario_id: transferToId }).eq('usuario_id', userId);
+            
+            console.log(`[manage-auth-users] Transferencia completa de activos empresariales.`);
         }
 
-        // 2. ELIMINACIÓN DEL USUARIO
+        // 2. ELIMINACIÓN DEL USUARIO EN AUTH
         const { error } = await supabaseAdmin.auth.admin.deleteUser(userId);
         if (error) throw error;
         
-        return new Response(JSON.stringify({ success: true, message: "Usuario eliminado y activos transferidos correctamente." }), {
+        return new Response(JSON.stringify({ success: true, message: "Usuario eliminado y activos transferidos de forma segura." }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         })
     }

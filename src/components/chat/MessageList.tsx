@@ -10,8 +10,7 @@ interface MessageListProps {
 export const MessageList = ({ messages, loading }: MessageListProps) => {
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Lógica de scroll mejorada: solo afecta al contenedor local
-  useEffect(() => {
+  const scrollToBottom = () => {
     if (containerRef.current) {
       const container = containerRef.current;
       container.scrollTo({
@@ -19,6 +18,10 @@ export const MessageList = ({ messages, loading }: MessageListProps) => {
         behavior: 'smooth'
       });
     }
+  };
+
+  useEffect(() => {
+    scrollToBottom();
   }, [messages]);
 
   const formatMessageTime = (dateStr: string) => {
@@ -74,7 +77,13 @@ export const MessageList = ({ messages, loading }: MessageListProps) => {
       <div className="flex flex-col gap-2">
         {imageUrl && (
           <a href={imageUrl} target="_blank" rel="noopener noreferrer" className="block overflow-hidden rounded-lg">
-            <img src={imageUrl} alt="Adjunto" className="w-full max-w-[280px] h-auto max-h-80 object-contain rounded-lg border border-white/10" loading="lazy" />
+            <img 
+              src={imageUrl} 
+              alt="Adjunto" 
+              className="w-full max-w-[280px] h-auto max-h-80 object-contain rounded-lg border border-white/10" 
+              loading="lazy" 
+              onLoad={scrollToBottom} 
+            />
           </a>
         )}
         
