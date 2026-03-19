@@ -9,7 +9,7 @@ serve(async (req) => {
   }
 
   try {
-    const { action, userId } = await req.json();
+    const { action, userId, transferToId } = await req.json();
 
     const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
@@ -17,10 +17,29 @@ serve(async (req) => {
     )
 
     if (action === 'DELETE') {
+        if (!userId) throw new Error("ID de usuario a eliminar requerido.");
+        
+        // 1. TRANSFERENCIA DE ACTIVOS (Si se proporcionó un destino)
+        if (transferToId) {
+            console.log(`[manage-auth-users] Transfiriendo activos de ${userId} a ${transferToId}...`);
+            
+            // Transferir Leads asignados
+            await supabaseAdmin.from('leads').update({ assigned_to: transferToId }).eq('assigned_to', userId);
+            
+            // Transferir Ventas a Crédito (Responsable)
+            await supabaseAdmin.from('credit_sales').update({ responsible_id: transferToId }).eq('responsible_id', userId);
+            
+            // Transferir Documentos de Conocimiento
+            await supabaseAdmin.from('knowledge_documents').update({ created_by: transferToId }).eq('created_by', userId);
+            
+            console.log(`[manage-auth-users] Transferencia completada.`);
+        }
+
+        // 2. ELIMINACIÓN DEL USUARIO
         const { error } = await supabaseAdmin.auth.admin.deleteUser(userId);
         if (error) throw error;
         
-        return new Response(JSON.stringify({ success: true, message: "Usuario eliminado del kernel" }), {
+        return new Response(JSON.stringify({ success: true, message: "Usuario eliminado y activos transferidos correctamente." }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         })
     }
