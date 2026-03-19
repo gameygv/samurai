@@ -7,7 +7,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Send, Megaphone, ShieldAlert, Save, Clock, Users, Play, Pause, AlertTriangle, BookTemplate, Image as ImageIcon, X, UploadCloud, Info, Eye, Lock } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Loader2, Send, Megaphone, ShieldAlert, Save, Clock, Users, Play, Pause, AlertTriangle, BookTemplate, Image as ImageIcon, X, UploadCloud, Info, Eye, Lock, CalendarClock } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { sendEvolutionMessage } from '@/utils/messagingService';
@@ -21,9 +22,10 @@ interface MassMessageDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   targetContacts: any[];
+  onScheduled?: () => void;
 }
 
-export const MassMessageDialog = ({ open, onOpenChange, targetContacts }: MassMessageDialogProps) => {
+export const MassMessageDialog = ({ open, onOpenChange, targetContacts, onScheduled }: MassMessageDialogProps) => {
   const { isDev } = useAuth();
   const [message, setMessage] = useState('');
   const [templates, setTemplates] = useState<{id: string, name: string, text: string}[]>([]);
@@ -38,6 +40,11 @@ export const MassMessageDialog = ({ open, onOpenChange, targetContacts }: MassMe
   const [progress, setProgress] = useState({ current: 0, total: 0, success: 0, failed: 0 });
   const [eta, setEta] = useState(0);
 
+  // Scheduling State
+  const [sendMode, setSendMode] = useState<'NOW' | 'SCHEDULE'>('NOW');
+  const [campaignTitle, setCampaignTitle] = useState('');
+  const [scheduledDate, setScheduledDate] = useState('');
+
   const pauseRef = React.useRef(paused);
   const abortRef = React.useRef(false);
 
@@ -49,11 +56,18 @@ export const MassMessageDialog = ({ open, onOpenChange, targetContacts }: MassMe
       setSending(false);
       setPaused(false);
       abortRef.current = false;
-      setSpeed('SAFE'); // Siempre seguro por defecto
+      setSpeed('SAFE');
       calculateEta(targetContacts.length, 'SAFE');
       
       setMediaFile(null);
       setMediaPreview(null);
+      setCampaignTitle('');
+      
+      // Auto-set schedule date to 10 mins from now
+      const d = new Date();
+      d.setMinutes(d.getMinutes() + 10);
+      d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+      setScheduledDate(d.toISOString().slice(0, 16));
     }
   }, [open, targetContacts.length]);
 
@@ -75,9 +89,11 @@ export const MassMessageDialog = ({ open, onOpenChange, targetContacts }: MassMe
   };
 
   const calculateEta = (count: number, spd: string) => {
-     let avgSeconds = 12; 
-     if (spd === 'SAFE') avgSeconds = 25;
-     if (spd === 'FAST') avgSeconds = 6;
+     let avgSeconds = 15; // Scheduled avg
+     if (sendMode === 'NOW') {
+         if (spd === 'SAFE') avgSeconds = 25;
+         if (spd === 'FAST') avgSeconds = 6;
+     }
      setEta(Math.ceil((count * avgSeconds) / 60));
   };
 
@@ -93,7 +109,74 @@ export const MassMessageDialog = ({ open, onOpenChange, targetContacts }: MassMe
      }
   };
 
-  const handleStart = async () => {
+  const uploadMediaAsset = async () => {
+      if (!mediaFile) return undefined;
+      const fileExt = mediaFile.name.split('.').pop();
+      const fileName = `campaign_uploads/${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+      const { error: uploadError } = await supabase.storage.from('media').upload(fileName, mediaFile);
+      if (uploadError) throw uploadError;
+      
+      const { data: { publicUrl } } = supabase.storage.from('media').getPublicUrl(fileName);
+      let type = 'document';
+      if (mediaFile.type.startsWith('image/')) type = 'image';
+      else if (mediaFile.type.startsWith('video/')) type = 'video';
+      
+      return { url: publicUrl, type, mimetype: mediaFile.type, name: mediaFile.name };
+  };
+
+  const handleScheduleCampaign = async () => {
+      if (!campaignTitle.trim()) return toast.error("Asigna un nombre a la campaña.");
+      if (!scheduledDate) return toast.error("Selecciona la fecha y hora de inicio.");
+      if (!message.trim() && !mediaFile) return toast.error("Añade un mensaje o imagen.");
+
+      setSending(true);
+      const tid = toast.loading("Programando campaña en la nube...");
+
+      try {
+          let uploadedMediaData = undefined;
+          if (mediaFile) {
+              uploadedMediaData = await uploadMediaAsset();
+          }
+
+          const newCampaign = {
+              id: `camp-${Date.now()}`,
+              name: campaignTitle,
+              message,
+              mediaData: uploadedMediaData,
+              scheduledAt: new Date(scheduledDate).toISOString(),
+              status: 'pending', // pending, processing, completed
+              contacts: targetContacts.map(c => ({
+                  id: c.id, lead_id: c.lead_id, telefono: c.telefono, nombre: c.nombre, ciudad: c.ciudad, status: 'pending'
+              }))
+          };
+
+          const { data: existingData } = await supabase.from('app_config').select('value').eq('key', 'scheduled_campaigns').maybeSingle();
+          let existingCampaigns = [];
+          if (existingData?.value) {
+              try { existingCampaigns = JSON.parse(existingData.value); } catch(e){}
+          }
+
+          existingCampaigns.push(newCampaign);
+
+          const { error } = await supabase.from('app_config').upsert({
+              key: 'scheduled_campaigns', value: JSON.stringify(existingCampaigns), category: 'SYSTEM'
+          }, { onConflict: 'key' });
+
+          if (error) throw error;
+
+          await logActivity({ action: 'CREATE', resource: 'SYSTEM', description: `Campaña programada: ${campaignTitle} (${targetContacts.length} leads)`, status: 'OK' });
+
+          toast.success("Campaña programada exitosamente. Puedes cerrar esta ventana.", { id: tid });
+          setSending(false);
+          if (onScheduled) onScheduled();
+          onOpenChange(false);
+      } catch (err: any) {
+          toast.error("Error al programar: " + err.message, { id: tid });
+          setSending(false);
+      }
+  };
+
+  const handleStartNow = async () => {
      if (!message.trim() && !mediaFile) return toast.error("Añade un mensaje o una imagen.");
      if (targetContacts.length === 0) return toast.error("No hay contactos seleccionados.");
 
@@ -105,23 +188,14 @@ export const MassMessageDialog = ({ open, onOpenChange, targetContacts }: MassMe
 
      if (mediaFile) {
          const tid = toast.loading("Subiendo archivo multimedia a la nube...");
-         const fileExt = mediaFile.name.split('.').pop();
-         const fileName = `campaign_uploads/${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
-         const { error: uploadError } = await supabase.storage.from('media').upload(fileName, mediaFile);
-         
-         if (uploadError) {
-             toast.error("Error subiendo la imagen de campaña.", { id: tid });
+         try {
+             uploadedMediaData = await uploadMediaAsset();
+             toast.success("Multimedia lista. Iniciando envíos...", { id: tid });
+         } catch (e) {
+             toast.error("Error subiendo la imagen.", { id: tid });
              setSending(false);
              return;
          }
-         
-         const { data: { publicUrl } } = supabase.storage.from('media').getPublicUrl(fileName);
-         let type = 'document';
-         if (mediaFile.type.startsWith('image/')) type = 'image';
-         else if (mediaFile.type.startsWith('video/')) type = 'video';
-         
-         uploadedMediaData = { url: publicUrl, type, mimetype: mediaFile.type, name: mediaFile.name };
-         toast.success("Multimedia lista. Iniciando envíos...", { id: tid });
      }
 
      let successCount = progress.success;
@@ -146,13 +220,17 @@ export const MassMessageDialog = ({ open, onOpenChange, targetContacts }: MassMe
                     .replace(/{ciudad}/g, contact.ciudad || '');
                  
                  await sendEvolutionMessage(contact.telefono, personalizedMsg, contact.lead_id, uploadedMediaData);
+                 
+                 if (contact.lead_id) {
+                     await supabase.from('conversaciones').insert({ 
+                        lead_id: contact.lead_id, mensaje: personalizedMsg || (uploadedMediaData ? `[ARCHIVO ENVIADO]` : ''), 
+                        emisor: 'HUMANO', platform: 'PANEL'
+                     });
+                 }
+
                  successCount++;
-             } catch(e) {
-                 failCount++;
-             }
-         } else {
-             failCount++;
-         }
+             } catch(e) { failCount++; }
+         } else { failCount++; }
 
          setProgress({ current: i + 1, total: targetContacts.length, success: successCount, failed: failCount });
          calculateEta(targetContacts.length - (i + 1), speed);
@@ -161,7 +239,6 @@ export const MassMessageDialog = ({ open, onOpenChange, targetContacts }: MassMe
              let minDelay = 8000, maxDelay = 15000;
              if (speed === 'SAFE') { minDelay = 15000; maxDelay = 35000; }
              if (speed === 'FAST') { minDelay = 3000; maxDelay = 8000; }
-             
              const delay = Math.floor(Math.random() * (maxDelay - minDelay)) + minDelay;
              await sleep(delay);
          }
@@ -169,14 +246,7 @@ export const MassMessageDialog = ({ open, onOpenChange, targetContacts }: MassMe
      
      if (!abortRef.current) {
         toast.success(`Campaña finalizada: ${successCount} entregados, ${failCount} fallidos.`);
-        
-        await logActivity({
-           action: 'UPDATE',
-           resource: 'LEADS',
-           description: `📣 Campaña enviada a ${targetContacts.length} contactos. Éxitos: ${successCount} | Errores: ${failCount}.`,
-           status: failCount > 0 ? 'ERROR' : 'OK'
-        });
-
+        await logActivity({ action: 'UPDATE', resource: 'LEADS', description: `📣 Campaña Manual enviada a ${targetContacts.length} contactos.`, status: failCount > 0 ? 'ERROR' : 'OK' });
         setSending(false);
      }
   };
@@ -188,21 +258,15 @@ export const MassMessageDialog = ({ open, onOpenChange, targetContacts }: MassMe
      toast.info("Campaña abortada.");
   };
 
-  const handleSpeedChange = (val: string) => {
-     setSpeed(val);
-     calculateEta(targetContacts.length, val);
-  };
+  const handleSpeedChange = (val: string) => { setSpeed(val); calculateEta(targetContacts.length, val); };
 
   const previewContact = targetContacts.length > 0 ? targetContacts[0] : { nombre: 'Juan Pérez', ciudad: 'Monterrey' };
-  const previewMessage = message
-     .replace(/{nombre}/g, previewContact.nombre?.split(' ')[0] || 'amigo')
-     .replace(/{ciudad}/g, previewContact.ciudad || 'tu ciudad');
-
+  const previewMessage = message.replace(/{nombre}/g, previewContact.nombre?.split(' ')[0] || 'amigo').replace(/{ciudad}/g, previewContact.ciudad || 'tu ciudad');
   const progressPercent = progress.total > 0 ? Math.round((progress.current / progress.total) * 100) : 0;
 
   return (
     <Dialog open={open} onOpenChange={(val) => {
-       if (sending && !val) {
+       if (sending && sendMode === 'NOW' && !val) {
           toast.error("No puedes cerrar la ventana mientras la campaña está activa. Páusala o detenla primero.");
           return;
        }
@@ -210,13 +274,26 @@ export const MassMessageDialog = ({ open, onOpenChange, targetContacts }: MassMe
     }}>
       <DialogContent className="bg-[#0f0f11] border-[#222225] text-white max-w-6xl rounded-3xl shadow-[0_0_50px_-12px_rgba(0,0,0,0.8)] p-0 overflow-hidden flex flex-col h-[85vh]">
         <DialogHeader className="p-6 bg-[#161618] border-b border-[#222225] shrink-0">
-          <DialogTitle className="flex items-center gap-3 text-indigo-400 text-xl">
-             <div className="p-2 bg-indigo-500/10 rounded-xl border border-indigo-500/20"><Megaphone className="w-6 h-6" /></div>
-             Campaign Manager (Anti-Ban)
-          </DialogTitle>
-          <DialogDescription className="text-slate-400 text-xs mt-1">
-             Motor de difusión inteligente. Envía mensajes personalizados simulando comportamiento humano para proteger tu número.
-          </DialogDescription>
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+             <div>
+                <DialogTitle className="flex items-center gap-3 text-indigo-400 text-xl">
+                  <div className="p-2 bg-indigo-500/10 rounded-xl border border-indigo-500/20"><Megaphone className="w-6 h-6" /></div>
+                  Campaign Manager (Anti-Ban)
+                </DialogTitle>
+                <DialogDescription className="text-slate-400 text-xs mt-1">
+                  Motor de difusión inteligente. Envía mensajes de forma segura simulando el comportamiento humano.
+                </DialogDescription>
+             </div>
+             
+             {!sending && (
+                <Tabs value={sendMode} onValueChange={(v: any) => { setSendMode(v); calculateEta(targetContacts.length, speed); }} className="w-[280px]">
+                  <TabsList className="grid grid-cols-2 bg-[#0a0a0c] border border-[#222225] h-11 p-1 rounded-xl">
+                    <TabsTrigger value="NOW" className="rounded-lg text-[10px] font-bold uppercase tracking-widest data-[state=active]:bg-indigo-600 data-[state=active]:text-white">En Vivo</TabsTrigger>
+                    <TabsTrigger value="SCHEDULE" className="rounded-lg text-[10px] font-bold uppercase tracking-widest data-[state=active]:bg-amber-600 data-[state=active]:text-slate-900"><CalendarClock className="w-3.5 h-3.5 mr-1"/> Programar</TabsTrigger>
+                  </TabsList>
+                </Tabs>
+             )}
+          </div>
         </DialogHeader>
         
         <div className="flex-1 flex flex-col lg:flex-row min-h-0">
@@ -230,47 +307,51 @@ export const MassMessageDialog = ({ open, onOpenChange, targetContacts }: MassMe
                        <span className="text-2xl font-mono font-bold text-white">{targetContacts.length}</span>
                     </div>
 
-                    <div className="bg-indigo-900/10 border border-indigo-500/20 p-4 rounded-xl space-y-2">
-                       <p className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest flex items-center gap-1.5">
-                          <Info className="w-3.5 h-3.5"/> ¿Cómo Segmentar?
-                       </p>
-                       <p className="text-[10px] text-slate-400 leading-relaxed">
-                          Estás enviando a los contactos seleccionados en la tabla previa. Utiliza los filtros superiores del directorio (Grupo y Múltiples Etiquetas) y selecciona las casillas correspondientes.
-                       </p>
-                    </div>
+                    {sendMode === 'SCHEDULE' && (
+                       <div className="bg-amber-900/10 border border-amber-500/20 p-4 rounded-xl space-y-4 animate-in slide-in-from-left-4">
+                          <div className="space-y-2">
+                             <Label className="text-[10px] text-amber-500 uppercase font-bold tracking-widest">Nombre de la Campaña *</Label>
+                             <Input value={campaignTitle} onChange={e => setCampaignTitle(e.target.value)} placeholder="Promo Primavera..." className="bg-[#0a0a0c] border-[#222225] h-10 text-xs focus-visible:ring-amber-500" />
+                          </div>
+                          <div className="space-y-2">
+                             <Label className="text-[10px] text-amber-500 uppercase font-bold tracking-widest">Fecha y Hora de Inicio *</Label>
+                             <Input type="datetime-local" value={scheduledDate} onChange={e => setScheduledDate(e.target.value)} className="bg-[#0a0a0c] border-[#222225] h-10 text-xs focus-visible:ring-amber-500" />
+                          </div>
+                       </div>
+                    )}
+
+                    {sendMode === 'NOW' && (
+                       <div className="space-y-2 pt-2">
+                          <Label className="text-[10px] uppercase font-bold text-slate-500">Modo de Envío (Riesgo Ban)</Label>
+                          <Select value={speed} onValueChange={handleSpeedChange} disabled={sending || !isDev}>
+                             <SelectTrigger className={cn("bg-[#0a0a0c] border-[#222225] h-12 text-xs rounded-xl", !isDev && "opacity-80")}>
+                                <SelectValue />
+                             </SelectTrigger>
+                             <SelectContent className="bg-[#161618] border-[#222225] text-white rounded-xl">
+                                <SelectItem value="SAFE"><span className="text-emerald-400 font-bold">Seguro (Recomendado)</span> - Lento</SelectItem>
+                                {isDev && (
+                                   <>
+                                      <SelectItem value="NORMAL"><span className="text-amber-400 font-bold">Normal</span> - Moderado</SelectItem>
+                                      <SelectItem value="FAST"><span className="text-red-400 font-bold">Agresivo (Riesgo Alto)</span> - Rápido</SelectItem>
+                                   </>
+                                )}
+                             </SelectContent>
+                          </Select>
+                          {!isDev && <p className="text-[9px] text-amber-500 italic mt-1 pl-1 flex items-center gap-1"><Lock className="w-3 h-3"/> Solo Developers pueden cambiar la velocidad.</p>}
+                       </div>
+                    )}
                  </div>
 
-                 <div className="space-y-4 pt-4 border-t border-[#222225]">
-                    <div className="space-y-2">
-                       <Label className="text-[10px] uppercase font-bold text-slate-500">Modo de Envío (Riesgo de Ban)</Label>
-                       <Select value={speed} onValueChange={handleSpeedChange} disabled={sending || !isDev}>
-                          <SelectTrigger className={cn("bg-[#0a0a0c] border-[#222225] h-12 text-xs rounded-xl", !isDev && "opacity-80")}>
-                             <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent className="bg-[#161618] border-[#222225] text-white rounded-xl">
-                             <SelectItem value="SAFE"><span className="text-emerald-400 font-bold">Seguro (Recomendado)</span> - Lento</SelectItem>
-                             {isDev && (
-                                <>
-                                   <SelectItem value="NORMAL"><span className="text-amber-400 font-bold">Normal</span> - Moderado</SelectItem>
-                                   <SelectItem value="FAST"><span className="text-red-400 font-bold">Agresivo (Riesgo Alto)</span> - Rápido</SelectItem>
-                                </>
-                             )}
-                          </SelectContent>
-                       </Select>
-                       {!isDev && <p className="text-[9px] text-amber-500 italic mt-1 pl-1 flex items-center gap-1"><Lock className="w-3 h-3"/> Solo Developers pueden cambiar la velocidad.</p>}
-                    </div>
-
-                    <div className="flex items-center gap-2 text-[11px] text-slate-400 font-mono bg-[#0a0a0c] p-3 rounded-xl border border-[#222225]">
-                       <Clock className="w-4 h-4 text-amber-500" />
-                       Tiempo estimado: <span className="text-white font-bold">{eta} minutos</span>
-                    </div>
+                 <div className="flex items-center gap-2 text-[11px] text-slate-400 font-mono bg-[#0a0a0c] p-3 rounded-xl border border-[#222225]">
+                    <Clock className={cn("w-4 h-4", sendMode === 'SCHEDULE' ? 'text-indigo-400' : 'text-amber-500')} />
+                    Tiempo estimado: <span className="text-white font-bold">~{eta} minutos</span>
                  </div>
               </div>
            </div>
 
            {/* COLUMNA 2: EDITOR PRINCIPAL */}
            <div className="flex-1 bg-[#0a0a0c] flex flex-col shrink-0 min-w-0 relative">
-              {sending && (
+              {sending && sendMode === 'NOW' && (
                  <div className="absolute inset-0 bg-[#0a0a0c]/90 backdrop-blur-sm z-10 flex flex-col items-center justify-center p-8 text-center animate-in fade-in">
                     <div className="space-y-4 max-w-md w-full">
                        <h3 className="text-3xl font-bold text-white uppercase tracking-widest">{progressPercent}%</h3>
@@ -404,11 +485,18 @@ export const MassMessageDialog = ({ open, onOpenChange, targetContacts }: MassMe
 
         {/* FOOTER GENERAL */}
         <DialogFooter className="p-6 bg-[#161618] border-t border-[#222225] flex justify-between shrink-0">
-           {!sending ? (
+           {sendMode === 'SCHEDULE' ? (
+               <div className="w-full flex justify-between">
+                  <Button variant="ghost" onClick={() => onOpenChange(false)} className="rounded-xl h-12 px-6 text-xs uppercase font-bold tracking-widest text-slate-400 hover:text-white hover:bg-[#222225]">Cancelar</Button>
+                  <Button onClick={handleScheduleCampaign} disabled={sending || !campaignTitle || (!message.trim() && !mediaFile) || targetContacts.length === 0} className="bg-amber-600 hover:bg-amber-500 text-slate-950 font-bold px-10 h-12 rounded-xl shadow-lg shadow-amber-900/20 uppercase tracking-widest text-[11px] transition-all active:scale-95">
+                     {sending ? <Loader2 className="w-4 h-4 mr-2 animate-spin"/> : <CalendarClock className="w-4 h-4 mr-2" />} Programar Campaña
+                  </Button>
+               </div>
+           ) : !sending ? (
               <>
                  <Button variant="ghost" onClick={() => onOpenChange(false)} className="rounded-xl h-12 px-6 text-xs uppercase font-bold tracking-widest text-slate-400 hover:text-white hover:bg-[#222225]">Cancelar</Button>
-                 <Button onClick={handleStart} disabled={(!message.trim() && !mediaFile) || targetContacts.length === 0} className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-10 h-12 rounded-xl shadow-lg shadow-indigo-900/20 uppercase tracking-widest text-[11px] transition-all active:scale-95">
-                    <Play className="w-4 h-4 mr-2" /> Iniciar Transmisión
+                 <Button onClick={handleStartNow} disabled={(!message.trim() && !mediaFile) || targetContacts.length === 0} className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-10 h-12 rounded-xl shadow-lg shadow-indigo-900/20 uppercase tracking-widest text-[11px] transition-all active:scale-95">
+                    <Play className="w-4 h-4 mr-2" /> Iniciar Ahora
                  </Button>
               </>
            ) : (

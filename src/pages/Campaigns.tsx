@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import Layout from '@/components/Layout';
 import { supabase } from '@/integrations/supabase/client';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,8 +13,9 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { 
   Search, Loader2, MapPin, Phone, 
-  Filter, Megaphone, X, CheckSquare, Globe, User as UserIcon, Mail
+  Filter, Megaphone, X, CheckSquare, Globe, User as UserIcon, Mail, CalendarClock, Trash2, RefreshCw
 } from 'lucide-react';
+import { toast } from 'sonner';
 import { MassMessageDialog } from '@/components/contacts/MassMessageDialog';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/context/AuthContext';
@@ -28,6 +29,8 @@ const Campaigns = () => {
   const [globalTags, setGlobalTags] = useState<{id: string, text: string, color: string}[]>([]);
   const [localTags, setLocalTags] = useState<{id: string, text: string, color: string}[]>([]);
   
+  const [scheduledCampaigns, setScheduledCampaigns] = useState<any[]>([]);
+
   // FILTROS
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedGroup, setSelectedGroup] = useState<string>('ALL');
@@ -40,6 +43,7 @@ const Campaigns = () => {
 
   useEffect(() => {
     fetchContacts();
+    fetchScheduledCampaigns();
     if (user) fetchTags();
   }, [user]);
 
@@ -68,6 +72,21 @@ const Campaigns = () => {
     }
     setLoading(false);
     setSelectedIds([]);
+  };
+
+  const fetchScheduledCampaigns = async () => {
+    const { data } = await supabase.from('app_config').select('value').eq('key', 'scheduled_campaigns').maybeSingle();
+    if (data?.value) {
+        try { setScheduledCampaigns(JSON.parse(data.value).reverse()); } catch(e){}
+    }
+  };
+
+  const handleDeleteCampaign = async (id: string) => {
+      if (!confirm("¿Cancelar y eliminar esta campaña programada?")) return;
+      const updated = scheduledCampaigns.filter(c => c.id !== id);
+      setScheduledCampaigns(updated);
+      await supabase.from('app_config').upsert({ key: 'scheduled_campaigns', value: JSON.stringify(updated.reverse()), category: 'SYSTEM' }, { onConflict: 'key' });
+      toast.success("Campaña cancelada.");
   };
 
   const allTags = [...globalTags, ...localTags];
@@ -100,7 +119,7 @@ const Campaigns = () => {
 
   return (
     <Layout>
-      <div className="max-w-[1800px] mx-auto space-y-6 pb-24 animate-in fade-in duration-500">
+      <div className="max-w-[1800px] mx-auto space-y-8 pb-24 animate-in fade-in duration-500">
         <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
           <div>
             <h1 className="text-3xl font-bold text-white flex items-center gap-3">
@@ -113,10 +132,70 @@ const Campaigns = () => {
           </div>
           {selectedIds.length > 0 && (
              <Button onClick={() => setIsMassMessageOpen(true)} className="bg-amber-600 hover:bg-amber-500 text-slate-950 h-11 px-8 rounded-xl shadow-lg shadow-amber-900/20 font-bold uppercase tracking-widest text-[10px] animate-in slide-in-from-right-4">
-                <Megaphone className="w-4 h-4 mr-2" /> Lanzar a {selectedIds.length} Contactos
+                <Megaphone className="w-4 h-4 mr-2" /> Difusión a {selectedIds.length} Contactos
              </Button>
           )}
         </div>
+
+        {/* SECCIÓN: CAMPAÑAS PROGRAMADAS */}
+        {scheduledCampaigns.length > 0 && (
+            <Card className="bg-[#0f0f11] border-[#222225] shadow-2xl rounded-2xl border-l-4 border-l-amber-500">
+               <CardHeader className="bg-[#161618] border-b border-[#222225] py-4 flex flex-row items-center justify-between">
+                  <CardTitle className="text-white text-sm uppercase tracking-widest font-bold flex items-center gap-2">
+                     <CalendarClock className="w-4 h-4 text-amber-500"/> Cola de Campañas Activas ({scheduledCampaigns.length})
+                  </CardTitle>
+                  <Button variant="ghost" size="sm" onClick={fetchScheduledCampaigns} className="h-8 text-slate-400 hover:text-white uppercase text-[10px] font-bold tracking-widest"><RefreshCw className="w-3.5 h-3.5 mr-1.5"/> Refrescar Cola</Button>
+               </CardHeader>
+               <CardContent className="p-0">
+                  <Table>
+                     <TableHeader>
+                        <TableRow className="border-[#222225] bg-[#121214] hover:bg-[#121214]">
+                           <TableHead className="text-slate-500 text-[10px] uppercase font-bold tracking-widest pl-6">Campaña</TableHead>
+                           <TableHead className="text-slate-500 text-[10px] uppercase font-bold tracking-widest">Lanzamiento</TableHead>
+                           <TableHead className="text-slate-500 text-[10px] uppercase font-bold tracking-widest">Progreso</TableHead>
+                           <TableHead className="text-slate-500 text-[10px] uppercase font-bold tracking-widest">Estatus</TableHead>
+                           <TableHead className="text-right pr-6"></TableHead>
+                        </TableRow>
+                     </TableHeader>
+                     <TableBody>
+                        {scheduledCampaigns.map(camp => {
+                           const total = camp.contacts?.length || 0;
+                           const sent = camp.contacts?.filter((c:any) => c.status === 'sent' || c.status === 'error').length || 0;
+                           const pct = total > 0 ? Math.round((sent / total) * 100) : 0;
+                           return (
+                           <TableRow key={camp.id} className="border-[#222225] hover:bg-[#1a1a1d] transition-colors">
+                              <TableCell className="pl-6 font-bold text-white text-sm">{camp.name}</TableCell>
+                              <TableCell className="text-slate-300 text-xs font-mono">{new Date(camp.scheduledAt).toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' })}</TableCell>
+                              <TableCell>
+                                 <div className="flex items-center gap-3">
+                                    <div className="w-24 h-1.5 bg-[#222225] rounded-full overflow-hidden">
+                                       <div className="h-full bg-amber-500 transition-all duration-500" style={{ width: `${pct}%` }}></div>
+                                    </div>
+                                    <span className="text-[10px] font-mono text-slate-400">{sent} / {total}</span>
+                                 </div>
+                              </TableCell>
+                              <TableCell>
+                                 <Badge variant="outline" className={cn(
+                                    "text-[9px] uppercase font-bold tracking-widest border h-5 px-2",
+                                    camp.status === 'completed' ? 'border-emerald-500/30 text-emerald-400 bg-emerald-900/10' :
+                                    camp.status === 'processing' ? 'border-indigo-500/30 text-indigo-400 bg-indigo-900/10 animate-pulse' :
+                                    'border-amber-500/30 text-amber-400 bg-amber-900/10'
+                                 )}>
+                                    {camp.status === 'completed' ? 'FINALIZADA' : camp.status === 'processing' ? 'PROCESANDO...' : 'PROGRAMADA'}
+                                 </Badge>
+                              </TableCell>
+                              <TableCell className="text-right pr-6">
+                                 {camp.status !== 'processing' && (
+                                    <Button variant="ghost" size="icon" onClick={() => handleDeleteCampaign(camp.id)} className="h-8 w-8 text-slate-500 hover:bg-red-900/20 hover:text-red-500 rounded-lg"><Trash2 className="w-4 h-4"/></Button>
+                                 )}
+                              </TableCell>
+                           </TableRow>
+                        )})}
+                     </TableBody>
+                  </Table>
+               </CardContent>
+            </Card>
+        )}
 
         <div className="flex flex-wrap items-center gap-3 bg-[#0f0f11] p-3 rounded-2xl border border-[#222225] shadow-md">
           <div className="flex items-center gap-2 pl-2 border-r border-[#222225] pr-4">
@@ -246,7 +325,7 @@ const Campaigns = () => {
         </Card>
       </div>
 
-      <MassMessageDialog open={isMassMessageOpen} onOpenChange={setIsMassMessageOpen} targetContacts={contacts.filter(c => selectedIds.includes(c.id))} />
+      <MassMessageDialog open={isMassMessageOpen} onOpenChange={setIsMassMessageOpen} targetContacts={contacts.filter(c => selectedIds.includes(c.id))} onScheduled={fetchScheduledCampaigns} />
     </Layout>
   );
 };
