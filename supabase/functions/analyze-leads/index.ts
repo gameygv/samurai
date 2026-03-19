@@ -38,16 +38,10 @@ serve(async (req) => {
 
     const results = [];
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
-    // Jerarquía estricta para evitar que la IA degrade leads
     const intentLevels = { 'BAJO': 1, 'MEDIO': 2, 'ALTO': 3, 'COMPRADO': 4, 'PERDIDO': 5 };
 
     for (const lead of leadsToProcess) {
-        
-        // REGLA ABSOLUTA: Si el webhook no forzó, ignorar estados terminales
-        if (!force && (lead.buying_intent === 'COMPRADO' || lead.buying_intent === 'PERDIDO')) {
-           continue;
-        }
+        if (!force && (lead.buying_intent === 'COMPRADO' || lead.buying_intent === 'PERDIDO')) continue;
 
         const { data: messagesData } = await supabaseClient
             .from('conversaciones')
@@ -59,20 +53,23 @@ serve(async (req) => {
         const transcript = (messagesData || []).reverse().map(m => `[${m.emisor}]: ${m.mensaje}`).join('\n');
 
         const systemPrompt = `
-Eres el Auditor de Identidad del CRM. Tu misión es extraer datos reales de la conversación.
-REGLA DE ORO: Si el usuario dice "Soy X" o "Mi nombre es X", ese es su NOMBRE REAL.
-IMPORTANTE SOBRE INTENCIÓN DE COMPRA: Evalúa la temperatura del prospecto. NUNCA uses 'COMPRADO'. Solo elige entre BAJO, MEDIO, ALTO o PERDIDO (si el cliente dice claramente que ya no le interesa o pide que dejen de escribirle).
+Eres el Auditor de Identidad del CRM. Tu misión es extraer datos reales de la conversación para Meta CAPI.
+DATOS GEOGRÁFICOS (CRÍTICO):
+1. Si el cliente menciona una ciudad (ej: Monterrey), DEBES identificar el ESTADO (ej: Nuevo Leon) y el CÓDIGO POSTAL (CP) más representativo de esa zona.
+2. Si el cliente da su CP exacto, úsalo. Si no, calcúlalo tú basándote en la ciudad.
+3. El CP es vital para la calidad del match en Facebook Ads.
 
-DATOS A EXTRAER:
-1. NOMBRE: Nombre real.
-2. CIUDAD: Ciudad/Estado en México.
-3. EMAIL: Correos.
-4. PERFIL: Perfil psicológico o dolores principales.
-5. SUMMARY: Un resumen MUY CORTO de la situación actual (Máximo 15 palabras).
-ROUTING: Elige EXACTAMENTE el ID del agente según la ciudad:
-${agentsContext}
-
-RESPONDE SOLO JSON: {"nombre": "...", "email": "...", "ciudad": "...", "intent": "BAJO|MEDIO|ALTO|PERDIDO", "perfil": "...", "summary": "...", "suggested_agent_id": "UUID"}`;
+RESPONDE SOLO JSON: {
+  "nombre": "...", 
+  "email": "...", 
+  "ciudad": "...", 
+  "estado": "...", 
+  "cp": "...", 
+  "intent": "BAJO|MEDIO|ALTO|PERDIDO", 
+  "perfil": "...", 
+  "summary": "...", 
+  "suggested_agent_id": "UUID"
+}`;
 
         const aiRes = await fetch(OPENAI_URL, {
             method: 'POST',
@@ -92,21 +89,14 @@ RESPONDE SOLO JSON: {"nombre": "...", "email": "...", "ciudad": "...", "intent":
         if (result.nombre && result.nombre !== 'null') updates.nombre = result.nombre;
         if (result.email && result.email !== 'null') updates.email = result.email;
         if (result.ciudad && result.ciudad !== 'null') updates.ciudad = result.ciudad;
+        if (result.estado && result.estado !== 'null') updates.estado = result.estado;
+        if (result.cp && result.cp !== 'null') updates.cp = String(result.cp);
         
-        // =========================================================================
-        // BLINDAJE CRÍTICO: Si el lead YA estaba comprado, NUNCA se degrada.
-        // Si no está comprado, permitimos que suba de nivel o que se marque como PERDIDO.
-        // =========================================================================
         const currentLevel = intentLevels[lead.buying_intent] || 1;
         const suggestedLevel = intentLevels[result.intent] || 1;
-
-        if (lead.buying_intent === 'COMPRADO' || lead.buying_intent === 'PERDIDO') {
-            // Protección total
-        } else if (result.intent === 'PERDIDO') {
-            updates.buying_intent = 'PERDIDO'; // Permitimos descarte
-        } else if (suggestedLevel > currentLevel && result.intent !== 'COMPRADO') {
-            // Solo permitimos avanzar en el embudo
-            updates.buying_intent = result.intent;
+        if (lead.buying_intent !== 'COMPRADO' && lead.buying_intent !== 'PERDIDO') {
+            if (result.intent === 'PERDIDO') updates.buying_intent = 'PERDIDO';
+            else if (suggestedLevel > currentLevel && result.intent !== 'COMPRADO') updates.buying_intent = result.intent;
         }
 
         if (result.perfil) updates.perfil_psicologico = result.perfil;
@@ -114,44 +104,39 @@ RESPONDE SOLO JSON: {"nombre": "...", "email": "...", "ciudad": "...", "intent":
         
         if (!lead.assigned_to) {
             let finalAgentId = result.suggested_agent_id;
-            if (!uuidRegex.test(finalAgentId) && updates.ciudad) {
-                const cityNorm = updates.ciudad.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-                const match = agents.find(a => a.territories?.some(t => cityNorm.includes(t.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, ""))));
-                if (match) finalAgentId = match.id;
-            }
-            if (uuidRegex.test(finalAgentId)) {
-                updates.assigned_to = finalAgentId;
-            }
+            if (uuidRegex.test(finalAgentId)) updates.assigned_to = finalAgentId;
         }
 
         await supabaseClient.from('leads').update(updates).eq('id', lead.id);
         
-        if ((updates.email || updates.ciudad) && !lead.capi_lead_event_sent_at) {
+        // DISPARO CAPI ENRIQUECIDO
+        if ((updates.email || updates.ciudad || updates.cp) && !lead.capi_lead_event_sent_at) {
              try {
                  await supabaseClient.functions.invoke('meta-capi-sender', {
                     body: {
                         eventData: { 
                            event_name: 'Lead', 
                            lead_id: lead.id, 
-                           user_data: { em: updates.email || lead.email, ph: lead.telefono, fn: updates.nombre || lead.nombre, ct: updates.ciudad || lead.ciudad },
-                           custom_data: { 
-                              perfil_psicologico: updates.perfil_psicologico || lead.perfil_psicologico || 'Perfil en evaluación por IA',
-                              intencion_compra: updates.buying_intent || lead.buying_intent || 'BAJO'
-                           }
+                           user_data: { 
+                               em: updates.email || lead.email, 
+                               ph: lead.telefono, 
+                               fn: updates.nombre || lead.nombre, 
+                               ct: updates.ciudad || lead.ciudad,
+                               st: updates.estado || lead.estado,
+                               zp: updates.cp || lead.cp
+                           },
+                           custom_data: { intent: updates.buying_intent || lead.buying_intent }
                         },
                         config: { pixel_id: configMap['meta_pixel_id'], access_token: configMap['meta_access_token'] }
                     }
                  });
                  await supabaseClient.from('leads').update({ capi_lead_event_sent_at: new Date().toISOString() }).eq('id', lead.id);
-             } catch (capiError) {
-                 console.error("Fallo silencioso CAPI:", capiError);
-             }
+             } catch (e) { console.error("CAPI error:", e); }
         }
         results.push({ id: lead.id, updates });
     }
 
     return new Response(JSON.stringify({ success: true, results }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-
   } catch (error) {
     return new Response(JSON.stringify({ error: error.message }), { status: 200, headers: corsHeaders });
   }

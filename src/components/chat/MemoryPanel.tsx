@@ -64,12 +64,14 @@ export const MemoryPanel = ({
   const emailVal = String(currentAnalysis?.email || '');
   const nombreVal = String(currentAnalysis?.nombre || '');
   const ciudadVal = String(currentAnalysis?.ciudad || '');
+  const estadoVal = String(currentAnalysis?.estado || '');
+  const cpVal = String(currentAnalysis?.cp || '');
   const summaryVal = String(currentAnalysis?.summary || 'Generando resumen...');
   const perfilVal = String(currentAnalysis?.perfil_psicologico || 'Analizando conversaciones para perfilar...');
 
-  const capiFields = [ true, !!(emailVal && emailVal.includes('@')), !!(nombreVal && !nombreVal.toLowerCase().includes('nuevo')), !!(ciudadVal && ciudadVal.length > 2) ];
+  const capiFields = [ true, !!(emailVal && emailVal.includes('@')), !!(nombreVal && !nombreVal.toLowerCase().includes('nuevo')), !!(ciudadVal && ciudadVal.length > 2), !!cpVal ];
   const healthScore = capiFields.filter(Boolean).length;
-  const healthPercent = Math.round((healthScore / 4) * 100);
+  const healthPercent = Math.round((healthScore / 5) * 100);
 
   const safeAgents = Array.isArray(agents) ? agents : [];
   const safeChannels = Array.isArray(channels) ? channels : [];
@@ -248,7 +250,7 @@ export const MemoryPanel = ({
           <div className="flex-1 h-1.5 bg-[#161618] rounded-full overflow-hidden">
             <div className={cn("h-full transition-all duration-1000", healthPercent > 70 ? 'bg-emerald-500' : healthPercent > 40 ? 'bg-amber-500' : 'bg-red-500')} style={{ width: `${healthPercent}%` }} />
           </div>
-          <span className="text-[10px] font-mono font-bold text-amber-500">{healthScore}/4</span>
+          <span className="text-[10px] font-mono font-bold text-amber-500">{healthScore}/5</span>
         </div>
       </div>
 
@@ -366,6 +368,14 @@ export const MemoryPanel = ({
                                 <span className="text-[9px] text-[#7A8A9E] uppercase font-bold tracking-widest flex items-center gap-1"><MapPin className="w-3 h-3"/> Ciudad</span>
                                 <p className="text-[11px] text-slate-300 mt-1 truncate" title={ciudadVal || 'No capturada'}>{ciudadVal || 'N/A'}</p>
                              </div>
+                             <div className="overflow-hidden">
+                                <span className="text-[9px] text-[#7A8A9E] uppercase font-bold tracking-widest flex items-center gap-1"><Globe className="w-3 h-3"/> Estado</span>
+                                <p className="text-[11px] text-slate-300 mt-1 truncate" title={estadoVal || 'N/A'}>{estadoVal || 'N/A'}</p>
+                             </div>
+                             <div className="overflow-hidden">
+                                <span className="text-[9px] text-[#7A8A9E] uppercase font-bold tracking-widest flex items-center gap-1"><Target className="w-3 h-3"/> C.P.</span>
+                                <p className="text-[11px] text-slate-300 mt-1 truncate font-mono" title={cpVal || 'N/A'}>{cpVal || 'N/A'}</p>
+                             </div>
                           </div>
                           <div className="col-span-2">
                              <span className="text-[9px] text-[#7A8A9E] uppercase font-bold tracking-widest">Resumen IA</span>
@@ -455,13 +465,13 @@ export const MemoryPanel = ({
                               <SelectContent className="bg-[#121214] border-[#222225] max-h-[300px]">
                                   {validGlobalTags.length > 0 && <div className="text-[9px] font-bold text-slate-500 uppercase px-2 py-1.5 flex items-center gap-1.5"><Globe className="w-3 h-3"/> Equipo (Globales)</div>}
                                   {validGlobalTags.map(tag => (
-                                      <SelectItem key={`g-${tag.id}`} value={tag.text} className="text-xs text-white focus:bg-[#161618] cursor-pointer py-2">
+                                      <SelectItem key={`g-${tag.id}`} value={tag.text} className="text-xs text-white focus:bg-[#161618] cursor-pointer">
                                           <div className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-full shadow-inner" style={{backgroundColor: tag.color}}></div>{tag.text}</div>
                                       </SelectItem>
                                   ))}
-                                  {validLocalTags.length > 0 && <div className="text-[9px] font-bold text-slate-500 uppercase px-2 py-1.5 mt-2 flex items-center gap-1.5 border-t border-[#222225] pt-2"><User className="w-3 h-3"/> Mis Etiquetas (Personal)</div>}
-                                  {validLocalTags.map(tag => (
-                                      <SelectItem key={`l-${tag.id}`} value={tag.text} className="text-xs text-white focus:bg-[#161618] cursor-pointer py-2">
+                                  {localTags.length > 0 && <div className="text-[9px] font-bold text-slate-500 uppercase px-2 py-1.5 mt-2 flex items-center gap-1.5 border-t border-[#222225] pt-2"><User className="w-3 h-3"/> Mis Etiquetas (Personal)</div>}
+                                  {localTags.map(tag => (
+                                      <SelectItem key={`l-${tag.id}`} value={tag.text} className="text-xs text-white focus:bg-[#161618] cursor-pointer">
                                           <div className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-full shadow-inner" style={{backgroundColor: tag.color}}></div>{tag.text}</div>
                                       </SelectItem>
                                   ))}
