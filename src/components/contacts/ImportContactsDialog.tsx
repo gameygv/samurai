@@ -6,7 +6,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Upload, Loader2, FileSpreadsheet, CheckCircle2, Users } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -21,19 +21,17 @@ export const ImportContactsDialog = ({ open, onOpenChange, onSuccess }: ImportCo
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState<{ total: number, processed: number }>({ total: 0, processed: 0 });
   
-  const [groupName, setGroupName] = useState("");
+  const [groupName, setGroupName] = useState("none");
   const [existingGroups, setExistingGroups] = useState<string[]>([]);
 
   useEffect(() => {
     if (open) {
       setFile(null);
-      setGroupName("");
+      setGroupName("none");
       setProgress({ total: 0, processed: 0 });
-      // Cargar grupos existentes para autocompletar
-      supabase.from('contacts').select('grupo').not('grupo', 'is', null).then(({data}) => {
-        if (data) {
-          const unique = Array.from(new Set(data.map(d => d.grupo)));
-          setExistingGroups(unique as string[]);
+      supabase.from('app_config').select('value').eq('key', 'contact_groups').maybeSingle().then(({data}) => {
+        if (data?.value) {
+            try { setExistingGroups(JSON.parse(data.value)); } catch(e){}
         }
       });
     }
@@ -54,14 +52,12 @@ export const ImportContactsDialog = ({ open, onOpenChange, onSuccess }: ImportCo
       skipEmptyLines: true,
       complete: async (results) => {
         const rows = results.data as any[];
+        const finalGroup = groupName === 'none' ? null : groupName;
         
         const formattedContacts = rows.map(row => {
             let cleanPhone = row.phone ? String(row.phone).replace(/\D/g, '') : null;
             if (!cleanPhone || cleanPhone.length < 10) return null;
-            
-            if (cleanPhone.length === 10) {
-               cleanPhone = '52' + cleanPhone;
-            }
+            if (cleanPhone.length === 10) cleanPhone = '52' + cleanPhone;
 
             let tags: string[] = [];
             const stdKeys = ['phone', 'email', 'fn', 'ln', 'ct', 'st', 'zip', 'country', 'add_to_messaging_customer_base_for_whatsapp', 'value', 'dob', 'gen', 'age', 'madid', 'uid'];
@@ -86,7 +82,7 @@ export const ImportContactsDialog = ({ open, onOpenChange, onSuccess }: ImportCo
                 cp: row.zip ? String(row.zip).trim() : null,
                 pais: row.country ? String(row.country).trim() : 'mx',
                 tags: tags.filter(Boolean),
-                grupo: groupName.trim() || null // Asignamos el grupo seleccionado
+                grupo: finalGroup
             };
         }).filter(Boolean);
 
@@ -108,7 +104,7 @@ export const ImportContactsDialog = ({ open, onOpenChange, onSuccess }: ImportCo
                successCount += batch.length;
                setProgress(prev => ({ ...prev, processed: successCount }));
             }
-            toast.success(`Importación finalizada. ${successCount} contactos en el grupo ${groupName || 'General'}.`);
+            toast.success(`Importación finalizada. ${successCount} contactos importados.`);
             onSuccess();
             onOpenChange(false);
         } catch (err: any) {
@@ -128,28 +124,22 @@ export const ImportContactsDialog = ({ open, onOpenChange, onSuccess }: ImportCo
              <FileSpreadsheet className="w-5 h-5" /> Importación Masiva (CSV)
           </DialogTitle>
           <DialogDescription className="text-slate-400 text-xs">
-             Sube tu archivo .csv y asígnales un grupo de campaña.
+             Sube tu archivo .csv y asígnales un grupo del catálogo.
           </DialogDescription>
         </DialogHeader>
         
         <div className="py-4 space-y-5">
-           
            <div className="space-y-2 bg-indigo-950/20 p-4 border border-indigo-500/20 rounded-xl">
               <Label className="text-xs uppercase font-bold text-indigo-400 flex items-center gap-2">
-                 <Users className="w-4 h-4"/> Grupo de Usuarios (Opcional)
+                 <Users className="w-4 h-4"/> Grupo de Usuarios (Catálogo)
               </Label>
-              <Input
-                list="existing-groups"
-                value={groupName}
-                onChange={e => setGroupName(e.target.value)}
-                placeholder="Ej: Campaña Noviembre, Nivel 1..."
-                className="bg-slate-950 border-slate-800 h-10 text-slate-200"
-                disabled={uploading}
-              />
-              <datalist id="existing-groups">
-                {existingGroups.map(g => <option key={g} value={g} />)}
-              </datalist>
-              <p className="text-[10px] text-slate-500 italic">Escribe un nombre nuevo o selecciona uno existente de la lista para agrupar estos contactos.</p>
+              <Select value={groupName} onValueChange={setGroupName}>
+                 <SelectTrigger className="bg-slate-950 border-slate-800 h-11 rounded-xl text-slate-200"><SelectValue placeholder="Seleccionar..."/></SelectTrigger>
+                 <SelectContent className="bg-slate-900 border-slate-800 text-white rounded-xl">
+                    <SelectItem value="none">Ninguno (Sin asignar)</SelectItem>
+                    {existingGroups.map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}
+                 </SelectContent>
+              </Select>
            </div>
 
            <div className="border-2 border-dashed border-slate-700 rounded-xl p-8 text-center hover:border-indigo-500 transition-colors bg-slate-950/50">
@@ -184,8 +174,8 @@ export const ImportContactsDialog = ({ open, onOpenChange, onSuccess }: ImportCo
         </div>
 
         <DialogFooter>
-           <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={uploading}>Cancelar</Button>
-           <Button onClick={handleImport} disabled={!file || uploading} className="bg-indigo-600 hover:bg-indigo-700 font-bold px-6 shadow-lg">
+           <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={uploading} className="rounded-xl uppercase font-bold text-[10px] tracking-widest">Cancelar</Button>
+           <Button onClick={handleImport} disabled={!file || uploading} className="bg-indigo-600 hover:bg-indigo-700 font-bold px-6 shadow-lg rounded-xl uppercase font-bold text-[10px] tracking-widest">
               {uploading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Upload className="w-4 h-4 mr-2" />} 
               Iniciar Importación
            </Button>

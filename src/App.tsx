@@ -17,6 +17,7 @@ import Profile from "./pages/Profile";
 import Settings from "./pages/Settings";
 import Leads from "./pages/Leads";
 import Contacts from "./pages/Contacts";
+import Campaigns from "./pages/Campaigns";
 import Archive from "./pages/Archive";
 import MediaManager from "./pages/MediaManager";
 import WebsiteContent from "./pages/WebsiteContent";
@@ -80,6 +81,7 @@ const App = () => (
             
             <Route path="/leads" element={<PrivateRoute><Leads /></PrivateRoute>} />
             <Route path="/contacts" element={<PrivateRoute><Contacts /></PrivateRoute>} />
+            <Route path="/campaigns" element={<PrivateRoute><Campaigns /></PrivateRoute>} />
             <Route path="/tools" element={<PrivateRoute><AgentTools /></PrivateRoute>} />
             <Route path="/pipeline" element={<PrivateRoute><Pipeline /></PrivateRoute>} />
             <Route path="/archive" element={<PrivateRoute><Archive /></PrivateRoute>} />

@@ -29,7 +29,7 @@ export const EditContactDialog = ({ open, onOpenChange, contact, existingGroups,
   const [analyzingChat, setAnalyzingChat] = useState(false);
   
   const [formData, setFormData] = useState({
-    nombre: '', apellido: '', telefono: '', email: '', ciudad: '', estado: '', cp: '', grupo: '', tags: [] as string[],
+    nombre: '', apellido: '', telefono: '', email: '', ciudad: '', estado: '', cp: '', grupo: 'none', tags: [] as string[],
     academicRecord: [] as any[], internalNotes: [] as any[]
   });
 
@@ -38,7 +38,9 @@ export const EditContactDialog = ({ open, onOpenChange, contact, existingGroups,
   const [newNote, setNewNote] = useState('');
 
   useEffect(() => {
-    if (open) fetchCatalog();
+    if (open) {
+       fetchCatalog();
+    }
   }, [open]);
 
   useEffect(() => {
@@ -51,7 +53,7 @@ export const EditContactDialog = ({ open, onOpenChange, contact, existingGroups,
       setFormData({
         nombre: contact.nombre || '', apellido: contact.apellido || '', telefono: contact.telefono || '',
         email: contact.email || '', ciudad: contact.ciudad || '', estado: contact.estado || '',
-        cp: contact.cp || '', grupo: contact.grupo || '', tags: contact.tags || [],
+        cp: contact.cp || '', grupo: contact.grupo || 'none', tags: contact.tags || [],
         academicRecord: ar, internalNotes: inn
       });
       setNewCourse({ course: '', location: '', teacher: '', date: new Date().toISOString().split('T')[0] });
@@ -65,20 +67,11 @@ export const EditContactDialog = ({ open, onOpenChange, contact, existingGroups,
         const c = data.find(d => d.key === 'academic_courses')?.value;
         const l = data.find(d => d.key === 'academic_locations')?.value;
         const t = data.find(d => d.key === 'academic_teachers')?.value;
-        
         const parseSafe = (val: string | undefined) => {
             if (!val) return [];
-            try {
-                const parsed = JSON.parse(val);
-                return Array.isArray(parsed) ? parsed : [];
-            } catch { return []; }
+            try { const parsed = JSON.parse(val); return Array.isArray(parsed) ? parsed : []; } catch { return []; }
         };
-
-        setCatalog({
-            courses: parseSafe(c),
-            locations: parseSafe(l),
-            teachers: parseSafe(t)
-        });
+        setCatalog({ courses: parseSafe(c), locations: parseSafe(l), teachers: parseSafe(t) });
     }
   };
 
@@ -89,7 +82,6 @@ export const EditContactDialog = ({ open, onOpenChange, contact, existingGroups,
     try {
       const { error } = await supabase.functions.invoke('analyze-leads', { body: { lead_id: contact.lead_id, force: true } });
       if (error) throw error;
-      
       const { data: updatedLead } = await supabase.from('leads').select('ciudad, estado, cp').eq('id', contact.lead_id).single();
       if (updatedLead) {
          setFormData(prev => ({
@@ -100,22 +92,11 @@ export const EditContactDialog = ({ open, onOpenChange, contact, existingGroups,
          }));
          toast.success("Datos extraídos. Verifica y guarda.", { id: tid });
       }
-    } catch (err: any) {
-      toast.error("Error en análisis: " + err.message, { id: tid });
-    } finally {
-      setAnalyzingChat(false);
-    }
+    } catch (err: any) { toast.error("Error en análisis: " + err.message, { id: tid }); } finally { setAnalyzingChat(false); }
   };
 
-  const handleAddTag = (tagText: string) => {
-      if (!formData.tags.includes(tagText)) {
-          setFormData({ ...formData, tags: [...formData.tags, tagText] });
-      }
-  };
-
-  const handleRemoveTag = (tagText: string) => {
-      setFormData({ ...formData, tags: formData.tags.filter(t => t !== tagText) });
-  };
+  const handleAddTag = (tagText: string) => { if (!formData.tags.includes(tagText)) setFormData({ ...formData, tags: [...formData.tags, tagText] }); };
+  const handleRemoveTag = (tagText: string) => { setFormData({ ...formData, tags: formData.tags.filter(t => t !== tagText) }); };
 
   const handleAddCourse = () => {
      if (!newCourse.course || !newCourse.date) return toast.error("El curso y la fecha son obligatorios.");
@@ -126,12 +107,7 @@ export const EditContactDialog = ({ open, onOpenChange, contact, existingGroups,
 
   const handleAddNote = () => {
      if (!newNote.trim()) return;
-     const noteObj = {
-         id: Date.now().toString(),
-         text: newNote.trim(),
-         author: profile?.full_name || 'Agente',
-         date: new Date().toISOString()
-     };
+     const noteObj = { id: Date.now().toString(), text: newNote.trim(), author: profile?.full_name || 'Agente', date: new Date().toISOString() };
      setFormData({ ...formData, internalNotes: [...formData.internalNotes, noteObj] });
      setNewNote('');
   };
@@ -140,30 +116,21 @@ export const EditContactDialog = ({ open, onOpenChange, contact, existingGroups,
     e.preventDefault();
     setLoading(true);
     try {
+      const finalGroup = formData.grupo === 'none' ? null : formData.grupo;
       const { error: contactError } = await supabase.from('contacts').update({
           nombre: formData.nombre, apellido: formData.apellido, telefono: formData.telefono,
           email: formData.email, ciudad: formData.ciudad, estado: formData.estado, cp: formData.cp,
-          grupo: formData.grupo || null, tags: formData.tags,
-          academic_record: formData.academicRecord,
-          internal_notes: formData.internalNotes
+          grupo: finalGroup, tags: formData.tags, academic_record: formData.academicRecord, internal_notes: formData.internalNotes
       }).eq('id', contact.id);
 
       if (contactError) throw contactError;
-
       if (contact.lead_id) {
-         await supabase.from('leads').update({
-            nombre: formData.nombre, apellido: formData.apellido, email: formData.email, ciudad: formData.ciudad, tags: formData.tags, estado: formData.estado, cp: formData.cp
-         }).eq('id', contact.lead_id);
+         await supabase.from('leads').update({ nombre: formData.nombre, apellido: formData.apellido, email: formData.email, ciudad: formData.ciudad, tags: formData.tags, estado: formData.estado, cp: formData.cp }).eq('id', contact.lead_id);
       }
-
       toast.success('Perfil del contacto actualizado.');
       onSuccess();
       onOpenChange(false);
-    } catch (err: any) {
-      toast.error('Error al actualizar: ' + err.message);
-    } finally {
-      setLoading(false);
-    }
+    } catch (err: any) { toast.error('Error al actualizar: ' + err.message); } finally { setLoading(false); }
   };
 
   const validAllTags = allTags.filter(t => t.text && String(t.text).trim() !== '');
@@ -176,9 +143,7 @@ export const EditContactDialog = ({ open, onOpenChange, contact, existingGroups,
             <div className="p-2 bg-indigo-500/10 rounded-xl border border-indigo-500/20"><User className="w-5 h-5" /></div>
             Expediente Maestro del Cliente
           </DialogTitle>
-          <DialogDescription className="text-slate-400 text-xs mt-1">
-             Gestiona la identidad, historial académico y notas administrativas.
-          </DialogDescription>
+          <DialogDescription className="text-slate-400 text-xs mt-1">Gestiona la identidad, historial académico y notas administrativas.</DialogDescription>
         </DialogHeader>
         
         <Tabs defaultValue="perfil" className="flex-1 flex flex-col min-h-0">
@@ -209,8 +174,7 @@ export const EditContactDialog = ({ open, onOpenChange, contact, existingGroups,
                            <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5"/> Ubicación</h4>
                            {contact.lead_id && (
                                <Button type="button" variant="outline" size="sm" onClick={handleForceAnalysis} disabled={analyzingChat} className="h-7 text-[9px] bg-indigo-950/20 text-indigo-400 border-indigo-500/30 hover:bg-indigo-900/40 uppercase font-bold tracking-widest">
-                                   {analyzingChat ? <Loader2 className="w-3 h-3 animate-spin mr-1"/> : <Sparkles className="w-3 h-3 mr-1"/>}
-                                   Extraer del Chat
+                                   {analyzingChat ? <Loader2 className="w-3 h-3 animate-spin mr-1"/> : <Sparkles className="w-3 h-3 mr-1"/>} Extraer del Chat
                                </Button>
                            )}
                         </div>
@@ -224,9 +188,14 @@ export const EditContactDialog = ({ open, onOpenChange, contact, existingGroups,
                     <div className="space-y-4 bg-[#161618] p-5 rounded-2xl border border-[#222225]">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <div className="space-y-2">
-                                <Label className="text-[10px] uppercase font-bold text-indigo-400 flex items-center gap-1.5 ml-1"><Users className="w-3.5 h-3.5"/> Grupo de Campaña</Label>
-                                <Input list="existing-groups-edit" value={formData.grupo} onChange={e => setFormData({...formData, grupo: e.target.value})} placeholder="Ej: Oferta Noviembre..." className="bg-[#0a0a0c] border-[#222225] h-11 rounded-xl text-slate-200 focus-visible:ring-indigo-500" />
-                                <datalist id="existing-groups-edit">{existingGroups.map(g => <option key={g} value={g} />)}</datalist>
+                                <Label className="text-[10px] uppercase font-bold text-indigo-400 flex items-center gap-1.5 ml-1"><Users className="w-3.5 h-3.5"/> Grupo (Catálogo)</Label>
+                                <Select value={formData.grupo} onValueChange={v => setFormData({...formData, grupo: v})}>
+                                    <SelectTrigger className="bg-[#0a0a0c] border-[#222225] h-11 rounded-xl text-slate-200 focus-visible:ring-indigo-500"><SelectValue placeholder="Seleccionar..."/></SelectTrigger>
+                                    <SelectContent className="bg-[#121214] border-[#222225] text-white rounded-xl max-h-[200px]">
+                                        <SelectItem value="none">Ninguno (Sin Grupo)</SelectItem>
+                                        {existingGroups.map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}
+                                    </SelectContent>
+                                </Select>
                             </div>
                             <div className="space-y-3">
                                 <Label className="text-[10px] uppercase font-bold text-amber-500 flex items-center gap-1.5 ml-1"><Tag className="w-3.5 h-3.5"/> Etiquetas</Label>
@@ -276,9 +245,7 @@ export const EditContactDialog = ({ open, onOpenChange, contact, existingGroups,
                             <Select value={newCourse.course || undefined} onValueChange={v => setNewCourse({...newCourse, course: v})}>
                                <SelectTrigger className="h-10 text-xs bg-[#0a0a0c] border-[#222225]"><SelectValue placeholder="Seleccionar..."/></SelectTrigger>
                                <SelectContent className="bg-[#121214] border-[#222225] text-white max-h-[200px]">
-                                 {catalog.courses.filter(c => c.name && c.name.trim() !== '').map(c => (
-                                     <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>
-                                 ))}
+                                 {catalog.courses.filter(c => c.name && c.name.trim() !== '').map(c => <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>)}
                                </SelectContent>
                             </Select>
                          </div>
@@ -286,9 +253,7 @@ export const EditContactDialog = ({ open, onOpenChange, contact, existingGroups,
                             <Select value={newCourse.location || undefined} onValueChange={v => setNewCourse({...newCourse, location: v})}>
                                <SelectTrigger className="h-10 text-xs bg-[#0a0a0c] border-[#222225]"><SelectValue placeholder="Opcional..."/></SelectTrigger>
                                <SelectContent className="bg-[#121214] border-[#222225] text-white max-h-[200px]">
-                                 {catalog.locations.filter(c => c.name && c.name.trim() !== '').map(c => (
-                                     <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>
-                                 ))}
+                                 {catalog.locations.filter(c => c.name && c.name.trim() !== '').map(c => <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>)}
                                </SelectContent>
                             </Select>
                          </div>
@@ -296,9 +261,7 @@ export const EditContactDialog = ({ open, onOpenChange, contact, existingGroups,
                             <Select value={newCourse.teacher || undefined} onValueChange={v => setNewCourse({...newCourse, teacher: v})}>
                                <SelectTrigger className="h-10 text-xs bg-[#0a0a0c] border-[#222225]"><SelectValue placeholder="Opcional..."/></SelectTrigger>
                                <SelectContent className="bg-[#121214] border-[#222225] text-white max-h-[200px]">
-                                 {catalog.teachers.filter(c => c.name && c.name.trim() !== '').map(c => (
-                                     <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>
-                                 ))}
+                                 {catalog.teachers.filter(c => c.name && c.name.trim() !== '').map(c => <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>)}
                                </SelectContent>
                             </Select>
                          </div>
