@@ -4,7 +4,6 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useAuth } from '@/context/AuthContext';
 import { cn } from '@/lib/utils';
-import { CreateCreditSaleDialog } from '@/components/contacts/CreateCreditSaleDialog';
 import { EditContactDialog } from '@/components/contacts/EditContactDialog';
 import { CiaReportDialog } from '@/components/chat/CiaReportDialog';
 import { extractTagText } from '@/lib/tag-parser';
@@ -52,7 +51,6 @@ export const MemoryPanel = ({
   
   const [contactData, setContactData] = useState<any>(null);
   const [groups, setGroups] = useState<string[]>([]);
-  const [isCreditOpen, setIsCreditOpen] = useState(false);
   const [isFullEditOpen, setIsFullEditOpen] = useState(false);
   const [isCiaDialogOpen, setIsCiaDialogOpen] = useState(false);
 
@@ -60,7 +58,6 @@ export const MemoryPanel = ({
   const [sendingNote, setSendingNote] = useState(false);
   const [savingReminders, setSavingReminders] = useState(false);
 
-  // Lógica defensiva para campos de texto
   const emailVal = String(currentAnalysis?.email || '');
   const nombreVal = String(currentAnalysis?.nombre || '');
   const ciudadVal = String(currentAnalysis?.ciudad || '');
@@ -271,7 +268,6 @@ export const MemoryPanel = ({
             contactData={contactData} 
             isManager={isManager} 
             onEdit={() => setIsFullEditOpen(true)} 
-            onCredit={() => setIsCreditOpen(true)} 
             onCia={() => setIsCiaDialogOpen(true)} 
          />
 
@@ -346,7 +342,6 @@ export const MemoryPanel = ({
       </div>
 
       {isCiaDialogOpen && <CiaReportDialog open={isCiaDialogOpen} onOpenChange={setIsCiaDialogOpen} lead={currentAnalysis} messages={messages} />}
-      {isCreditOpen && contactData && <CreateCreditSaleDialog open={isCreditOpen} onOpenChange={setIsCreditOpen} contact={contactData} onSuccess={() => { fetchContactData(); toast.success("Venta a crédito programada."); }} />}
       {isFullEditOpen && contactData && <EditContactDialog open={isFullEditOpen} onOpenChange={setIsFullEditOpen} contact={contactData} existingGroups={groups} allTags={allAvailableTags} globalTags={globalTags} onSuccess={() => { fetchContactData(); if (onAnalysisComplete) onAnalysisComplete(); }} />}
     </div>
   );

@@ -13,8 +13,8 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { 
   Search, Loader2, MapPin, Phone, Trash2, 
-  Users, FileSpreadsheet, X, Mail, Edit3,
-  UserPlus, ExternalLink, Filter, DollarSign, CheckSquare, Download, GraduationCap, Globe, User as UserIcon, Sparkles, FolderInput, Settings
+  Users, FileSpreadsheet, X, Mail, Edit3, MessageCircle, Wallet,
+  UserPlus, Filter, DollarSign, CheckSquare, Download, GraduationCap, Globe, User as UserIcon, Sparkles, Settings
 } from 'lucide-react';
 import { toast } from 'sonner';
 import Papa from 'papaparse';
@@ -24,6 +24,7 @@ import { ImportContactsDialog } from '@/components/contacts/ImportContactsDialog
 import { FinancialStatusBadge, financialStatuses } from '@/components/contacts/FinancialStatusBadge';
 import { EditContactDialog } from '@/components/contacts/EditContactDialog';
 import { ManageGroupsDialog } from '@/components/contacts/ManageGroupsDialog';
+import { CreateCreditSaleDialog } from '@/components/contacts/CreateCreditSaleDialog';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/context/AuthContext';
 import { extractTagText, parseTagsSafe } from '@/lib/tag-parser';
@@ -56,6 +57,9 @@ const Contacts = () => {
   const [contactToEdit, setContactToEdit] = useState<any>(null);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isManageGroupsOpen, setIsManageGroupsOpen] = useState(false);
+
+  const [contactForCredit, setContactForCredit] = useState<any>(null);
+  const [isCreditOpen, setIsCreditOpen] = useState(false);
 
   const [contactToDelete, setContactToDelete] = useState<any>(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -106,7 +110,7 @@ const Contacts = () => {
         const totalDebt = activeSales.reduce((acc: number, sale: any) => acc + Number(sale.total_amount || 0), 0);
         let academicArray = [];
         try { academicArray = Array.isArray(c.academic_record) ? c.academic_record : JSON.parse(c.academic_record || '[]'); } catch(e){}
-        return { ...c, total_debt: totalDebt, academic_count: academicArray.length };
+        return { ...c, total_debt: totalDebt, active_sales: activeSales, academic_count: academicArray.length };
       });
       setContacts(mappedData);
       setCities(Array.from(new Set(mappedData.map(d => String(d.ciudad || '')).filter(Boolean))) as string[]);
@@ -130,7 +134,7 @@ const Contacts = () => {
     }
   };
 
-  const allTags = [...(globalTags || []), ...(localTags || [])];
+  const allTags = [...globalTags, ...localTags];
 
   const toggleTagSelection = (tagText: string) => {
       setSelectedTags(prev => prev.includes(tagText) ? prev.filter(t => t !== tagText) : [...prev, tagText]);
@@ -302,7 +306,7 @@ const Contacts = () => {
             <SelectTrigger className="w-[150px] h-10 bg-[#161618] border-[#222225] rounded-xl text-xs text-slate-300"><SelectValue placeholder="Grupo" /></SelectTrigger>
             <SelectContent className="bg-slate-900 border-slate-800 text-white rounded-xl max-h-[300px]">
               <SelectItem value="ALL">Cualquier Grupo</SelectItem>
-              {(groups || []).map(g => <SelectItem key={String(g)} value={String(g)}>{String(g)}</SelectItem>)}
+              {groups.map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}
             </SelectContent>
           </Select>
 
@@ -310,7 +314,7 @@ const Contacts = () => {
             <SelectTrigger className="w-[150px] h-10 bg-[#161618] border-[#222225] rounded-xl text-xs text-slate-300"><SelectValue placeholder="Ciudad" /></SelectTrigger>
             <SelectContent className="bg-slate-900 border-slate-800 text-white rounded-xl max-h-[300px]">
               <SelectItem value="ALL">Cualquier Ciudad</SelectItem>
-              {(cities || []).map(c => <SelectItem key={String(c)} value={String(c)}>{String(c)}</SelectItem>)}
+              {cities.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
             </SelectContent>
           </Select>
 
@@ -331,15 +335,14 @@ const Contacts = () => {
                            <X className="w-3 h-3 mr-2 text-red-400" /> Borrar selección
                         </CommandItem>
                      )}
-                     {(allTags || []).map(t => {
-                        if (!t?.text) return null;
-                        const isGlobal = (globalTags || []).some(gt => gt.text === t.text);
+                     {allTags.map(t => {
+                        const isGlobal = globalTags.some(gt => gt.text === t.text);
                         return (
-                          <CommandItem key={String(t.id || t.text || Math.random())} onSelect={() => toggleTagSelection(t.text)} className="text-xs focus:bg-[#161618] focus:text-white cursor-pointer py-2">
+                          <CommandItem key={t.id || t.text} onSelect={() => toggleTagSelection(t.text)} className="text-xs focus:bg-[#161618] focus:text-white cursor-pointer py-2">
                              <div className="flex items-center gap-3">
                                <Checkbox checked={selectedTags.includes(t.text)} className="border-slate-600 rounded" />
                                {isGlobal ? <Globe className="w-3 h-3 opacity-50 shrink-0"/> : <UserIcon className="w-3 h-3 opacity-50 shrink-0"/>}
-                               <div className="w-2.5 h-2.5 rounded-full shadow-inner shrink-0" style={{ backgroundColor: t.color || '#475569' }}></div>
+                               <div className="w-2.5 h-2.5 rounded-full shadow-inner shrink-0" style={{ backgroundColor: t.color }}></div>
                                <span className="truncate">{t.text}</span>
                              </div>
                           </CommandItem>
@@ -357,7 +360,7 @@ const Contacts = () => {
                 <SelectTrigger className="w-[150px] h-10 bg-[#161618] border-[#222225] rounded-xl text-xs text-slate-300"><SelectValue placeholder="Finanzas" /></SelectTrigger>
                 <SelectContent className="bg-[#121214] border-[#222225] text-white rounded-xl">
                   <SelectItem value="ALL">Cualquier Estado</SelectItem>
-                  {financialStatuses.map(s => <SelectItem key={String(s.id)} value={String(s.id)}>{s.id}</SelectItem>)}
+                  {financialStatuses.map(s => <SelectItem key={s.id} value={s.id}>{s.id}</SelectItem>)}
                 </SelectContent>
               </Select>
               <Select value={debtFilter} onValueChange={setDebtFilter}>
@@ -424,8 +427,8 @@ const Contacts = () => {
                             {contact.tags.map((rawTag: any, idx: number) => {
                               const t = extractTagText(rawTag);
                               if (!t) return null;
-                              const tagConf = (allTags || []).find(lt => lt?.text === t);
-                              const isGlobal = (globalTags || []).some(gt => gt?.text === t);
+                              const tagConf = allTags.find(lt => lt.text === t);
+                              const isGlobal = globalTags.some(gt => gt.text === t);
                               return (
                                 <Badge key={`${t}-${idx}`} style={{ backgroundColor: (tagConf?.color || '#475569') + '15', color: tagConf?.color || '#94a3b8', borderColor: (tagConf?.color || '#475569') + '40' }} className="text-[9px] h-5 px-1.5 font-bold uppercase tracking-widest border flex items-center gap-1">
                                   {isGlobal ? <Globe className="w-2.5 h-2.5 opacity-70 shrink-0"/> : <UserIcon className="w-2.5 h-2.5 opacity-70 shrink-0"/>}
@@ -452,10 +455,23 @@ const Contacts = () => {
                       </TableCell>
                     )}
                     <TableCell className="text-right pr-6">
-                      <div className="flex justify-end items-center gap-3">
-                        <button className="text-indigo-400 hover:text-indigo-300 text-[10px] font-bold uppercase tracking-widest flex items-center gap-1.5 transition-colors" onClick={() => handleOpenChat(contact)}><ExternalLink className="w-3.5 h-3.5" /> CHAT</button>
-                        <button className="text-slate-500 hover:text-white transition-colors bg-[#161618] p-2 rounded-xl border border-[#222225]" onClick={() => { setContactToEdit(contact); setIsEditOpen(true); }}><Edit3 className="w-3.5 h-3.5" /></button>
-                        {isManager && <button className="text-slate-500 hover:text-red-500 transition-colors bg-[#161618] p-2 rounded-xl border border-[#222225]" onClick={() => setContactToDelete(contact)}><X className="w-3.5 h-3.5" /></button>}
+                      <div className="flex justify-end items-center gap-2">
+                        {isManager && (
+                           <Button variant="outline" size="sm" className="h-8 bg-amber-500/10 border-amber-500/30 text-amber-500 hover:bg-amber-500 hover:text-slate-900 text-[10px] font-bold uppercase tracking-widest px-3" onClick={() => { setContactForCredit(contact); setIsCreditOpen(true); }}>
+                              <Wallet className="w-3.5 h-3.5 mr-1.5" /> Venta
+                           </Button>
+                        )}
+                        <Button variant="outline" size="sm" className="h-8 bg-[#161618] border-[#333336] text-indigo-400 hover:bg-indigo-600 hover:border-indigo-500 hover:text-white text-[10px] font-bold uppercase tracking-widest px-3" onClick={() => handleOpenChat(contact)}>
+                           <MessageCircle className="w-3.5 h-3.5 mr-1.5" /> Chat
+                        </Button>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-white bg-[#161618] border border-[#333336] rounded-lg" onClick={() => { setContactToEdit(contact); setIsEditOpen(true); }}>
+                           <Edit3 className="w-3.5 h-3.5" />
+                        </Button>
+                        {isManager && (
+                           <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-red-500 bg-[#161618] border border-[#333336] rounded-lg" onClick={() => setContactToDelete(contact)}>
+                              <Trash2 className="w-3.5 h-3.5" />
+                           </Button>
+                        )}
                       </div>
                     </TableCell>
                   </TableRow>
@@ -493,6 +509,7 @@ const Contacts = () => {
       <EditContactDialog open={isEditOpen} onOpenChange={setIsEditOpen} contact={contactToEdit} existingGroups={groups} allTags={allTags} globalTags={globalTags} onSuccess={fetchContacts} />
       <ImportContactsDialog open={isImportOpen} onOpenChange={setIsImportOpen} onSuccess={fetchContacts} />
       {isCreateOpen && <CreateLeadDialog open={isCreateOpen} onOpenChange={setIsCreateOpen} onSuccess={fetchContacts} />}
+      {isCreditOpen && <CreateCreditSaleDialog open={isCreditOpen} onOpenChange={setIsCreditOpen} contact={contactForCredit} onSuccess={() => { toast.info('Actualizando saldos...'); fetchContacts(); }} />}
       {selectedLead && <ChatViewer lead={selectedLead} open={isChatOpen} onOpenChange={setIsChatOpen} />}
     </Layout>
   );
