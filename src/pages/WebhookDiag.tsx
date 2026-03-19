@@ -69,7 +69,7 @@ const WebhookDiag = () => {
       case 'IA': case 'SAMURAI': return 'bg-indigo-900/30 text-indigo-400 border-indigo-500/30';
       case 'CLIENTE': return 'bg-slate-800 text-slate-300 border-slate-700';
       case 'HUMANO': return 'bg-emerald-900/30 text-emerald-400 border-emerald-500/30';
-      case 'NOTA': return 'bg-amber-900/30 text-amber-400 border-amber-500/30';
+      case 'NOTA': case 'SISTEMA': return 'bg-amber-900/30 text-amber-400 border-amber-500/30';
       default: return 'bg-slate-800 text-slate-400 border-slate-700';
     }
   };

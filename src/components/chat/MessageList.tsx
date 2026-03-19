@@ -112,8 +112,10 @@ export const MessageList = ({ messages, loading }: MessageListProps) => {
         <div className="space-y-6 pb-4">
           {messages.map((msg) => {
              const emisor = (msg.emisor || '').toUpperCase();
+             const platform = (msg.platform || '').toUpperCase();
              const isClient = emisor === 'CLIENTE';
-             const isNote = emisor === 'NOTA';
+             // Detección corregida de notas de sistema (amarillas)
+             const isNote = (emisor === 'SISTEMA' && platform === 'PANEL_INTERNO') || emisor === 'NOTA';
              const isHuman = emisor === 'HUMANO';
              const isAI = !isClient && !isNote && !isHuman;
 

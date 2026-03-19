@@ -21,10 +21,12 @@ export const PaymentAudit = ({ paymentStatus, onUpdateStatus }: PaymentAuditProp
           <div className="flex justify-between items-center">
              <span className="text-[10px] text-[#7A8A9E]">Dictamen IA:</span>
              <Badge variant="outline" className={cn(
-                "text-[9px] border-[#222225] h-5 px-2", 
-                paymentStatus === 'VALID' ? 'bg-emerald-900/20 text-emerald-500 border-emerald-500/30' : 'bg-[#0a0a0c] text-[#7A8A9E]'
+                "text-[9px] border-[#222225] h-5 px-2 font-bold tracking-widest uppercase", 
+                paymentStatus === 'VALID' ? 'bg-emerald-900/20 text-emerald-500 border-emerald-500/30' : 
+                paymentStatus === 'INVALID' ? 'bg-red-900/20 text-red-500 border-red-500/30' :
+                'bg-[#0a0a0c] text-[#7A8A9E]'
              )}>
-                {paymentStatus === 'VALID' ? 'APROBADO' : 'SIN COMPROBANTE'}
+                {paymentStatus === 'VALID' ? 'APROBADO' : paymentStatus === 'INVALID' ? 'RECHAZADO' : 'SIN COMPROBANTE'}
              </Badge>
           </div>
           <div className="flex gap-3">

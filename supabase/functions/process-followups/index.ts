@@ -92,7 +92,9 @@ serve(async (req) => {
             for (const pl of pausedLeads) {
                 await supabaseClient.from('leads').update({ ai_paused: false }).eq('id', pl.id);
                 await supabaseClient.from('conversaciones').insert({
-                    lead_id: pl.id, emisor: 'NOTA', platform: 'PANEL_INTERNO',
+                    lead_id: pl.id, 
+                    emisor: 'SISTEMA', 
+                    platform: 'PANEL_INTERNO',
                     mensaje: `IA reactivada automáticamente tras ${autoRestartMinutes} min de inactividad humana.`,
                     metadata: { author: 'Sistema Auto-Restart' }
                 });
