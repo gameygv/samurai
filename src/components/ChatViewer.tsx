@@ -107,7 +107,9 @@ export default function ChatViewer({ lead, open, onOpenChange }: ChatViewerProps
             body: { question: "Por favor genera la mejor respuesta corta y persuasiva para continuar esta conversación como un experto humano.", history, customPrompts: null }
          });
          if (error) throw error;
-         return data.answer as string;
+         
+         let text = data.answer as string;
+         return text.replace(/<<MEDIA:[^>]+>>/gi, '').trim();
       } catch (e) { 
          return null; 
       }
@@ -159,7 +161,7 @@ export default function ChatViewer({ lead, open, onOpenChange }: ChatViewerProps
         await supabase.from('conversaciones').insert({
           lead_id: leadId,
           mensaje: `IA ${isPaused ? 'Pausada' : 'Activada'} manualmente.`,
-          emisor: 'NOTA',
+          emisor: 'SISTEMA',
           platform: 'PANEL_INTERNO',
         });
         toast.success(`Samurai ${isPaused ? 'pausado' : 'activado'}`);
@@ -171,7 +173,7 @@ export default function ChatViewer({ lead, open, onOpenChange }: ChatViewerProps
         await supabase.from('conversaciones').insert({
           lead_id: leadId,
           mensaje: text,
-          emisor: 'NOTA',
+          emisor: 'SISTEMA',
           platform: 'PANEL_INTERNO',
           metadata: { author: profile?.full_name || 'Agente' }
         });

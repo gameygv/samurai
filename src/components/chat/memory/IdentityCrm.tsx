@@ -27,12 +27,13 @@ interface IdentityCrmProps {
   analyzing: boolean;
   agents: any[];
   isManager: boolean;
+  onAgentChange: (agentId: string) => void;
 }
 
 export const IdentityCrm = ({
   isEditing, setIsEditing, memoryForm, setMemoryForm, onSave, saving,
   agentName, channelName, email, ciudad, estado, cp, summary, perfil,
-  onRunAnalysis, analyzing, agents, isManager
+  onRunAnalysis, analyzing, agents, isManager, onAgentChange
 }: IdentityCrmProps) => {
   const [tacticalOpen, setTacticalOpen] = useState(true);
 
@@ -61,19 +62,6 @@ export const IdentityCrm = ({
              </div>
              <Input value={String(memoryForm.email)} onChange={e => setMemoryForm({...memoryForm, email: e.target.value})} placeholder="Email" className="h-8 text-xs bg-[#0a0a0c] border-[#222225]" />
              
-             {isManager && (
-                <div className="space-y-1.5 border-t border-[#222225] pt-2 mt-2">
-                   <Label className="text-[9px] uppercase font-bold text-slate-500 tracking-widest ml-1 flex items-center gap-1.5"><User className="w-3 h-3"/> Reasignar Agente</Label>
-                   <Select value={memoryForm.assigned_to || 'unassigned'} onValueChange={v => setMemoryForm({...memoryForm, assigned_to: v === 'unassigned' ? null : v})}>
-                      <SelectTrigger className="h-8 text-xs bg-[#0a0a0c] border-[#222225]"><SelectValue placeholder="Seleccionar agente..."/></SelectTrigger>
-                      <SelectContent className="bg-[#121214] border-[#222225] text-white">
-                         <SelectItem value="unassigned">Sin asignar (Bot Global)</SelectItem>
-                         {agents.map(a => <SelectItem key={a.id} value={a.id}>{a.full_name}</SelectItem>)}
-                      </SelectContent>
-                   </Select>
-                </div>
-             )}
-
              <div className="flex gap-2 mt-2 pt-2 border-t border-[#222225]">
                 <Button onClick={onRunAnalysis} disabled={analyzing || saving} variant="outline" className="flex-1 h-9 text-xs bg-indigo-950/20 text-indigo-400 border-indigo-500/30 hover:bg-indigo-900/40 uppercase font-bold tracking-widest">
                    {analyzing ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> : <Sparkles className="w-3.5 h-3.5 mr-1.5" />} IA
@@ -84,17 +72,30 @@ export const IdentityCrm = ({
              </div>
           </div>
        ) : (
-          <div>
+          <div className="space-y-3">
              <button onClick={() => setTacticalOpen(!tacticalOpen)} className="w-full flex justify-between items-center py-2 text-[10px] font-bold text-white uppercase tracking-widest hover:text-indigo-400 transition-colors">
                 Resumen Táctico
                 <ChevronDown className={cn("w-3.5 h-3.5 transition-transform", tacticalOpen ? "rotate-180" : "")} />
              </button>
              {tacticalOpen && (
                 <div className="grid grid-cols-2 gap-y-5 gap-x-4 pt-2 pb-4 animate-in slide-in-from-top-2">
-                   <div>
-                      <span className="text-[9px] text-[#7A8A9E] uppercase font-bold tracking-widest">Agente</span>
-                      <p className="text-[11px] text-slate-300 mt-1 flex items-center gap-1.5"><User className="w-3 h-3 text-[#7A8A9E]"/> {agentName}</p>
+                   
+                   {/* ASIGNACIÓN DE AGENTE DIRECTA */}
+                   <div className={cn("col-span-2", isManager ? "mb-2" : "mb-0")}>
+                      <span className="text-[9px] text-[#7A8A9E] uppercase font-bold tracking-widest mb-1.5 flex items-center gap-1.5"><User className="w-3 h-3 text-[#7A8A9E]"/> Agente Asignado</span>
+                      {isManager ? (
+                         <Select value={memoryForm.assigned_to || 'unassigned'} onValueChange={onAgentChange}>
+                            <SelectTrigger className="h-8 text-xs bg-[#121214] border-[#222225] font-bold text-slate-300 w-full"><SelectValue placeholder="Bot Global"/></SelectTrigger>
+                            <SelectContent className="bg-[#161618] border-[#222225] text-white">
+                               <SelectItem value="unassigned">Sin asignar (Bot Global)</SelectItem>
+                               {agents.map(a => <SelectItem key={a.id} value={a.id}>{a.full_name}</SelectItem>)}
+                            </SelectContent>
+                         </Select>
+                      ) : (
+                         <p className="text-[11px] text-slate-300 font-bold">{agentName}</p>
+                      )}
                    </div>
+
                    <div>
                       <span className="text-[9px] text-[#7A8A9E] uppercase font-bold tracking-widest">Canal</span>
                       <p className="text-[11px] text-indigo-400 mt-1 flex items-center gap-1.5 font-bold"><Smartphone className="w-3 h-3 text-indigo-400"/> {channelName}</p>

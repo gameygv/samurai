@@ -95,7 +95,7 @@ export const MemoryPanel = ({
      const { data } = await supabase.from('conversaciones')
         .select('*')
         .eq('lead_id', currentAnalysis.id)
-        .eq('emisor', 'NOTA')
+        .eq('emisor', 'SISTEMA')
         .eq('platform', 'PANEL_INTERNO')
         .order('created_at', { ascending: true });
      if (data) setInternalNotes(data);
@@ -107,7 +107,7 @@ export const MemoryPanel = ({
      try {
         const payload = {
            lead_id: currentAnalysis.id,
-           emisor: 'NOTA',
+           emisor: 'SISTEMA',
            platform: 'PANEL_INTERNO',
            mensaje: text.trim(),
            metadata: { author: profile?.full_name || 'Miembro del Equipo' }
@@ -153,6 +153,19 @@ export const MemoryPanel = ({
      }
   };
 
+  const handleAgentChange = async (agentId: string) => {
+      const newAgent = agentId === 'unassigned' ? null : agentId;
+      try {
+          await supabase.from('leads').update({ assigned_to: newAgent }).eq('id', currentAnalysis.id);
+          setMemoryForm({ ...memoryForm, assigned_to: newAgent });
+          if (currentAnalysis) currentAnalysis.assigned_to = newAgent;
+          toast.success("Agente reasignado exitosamente.");
+          if (onAnalysisComplete) onAnalysisComplete();
+      } catch (err: any) {
+          toast.error("Error al reasignar agente.");
+      }
+  };
+
   const handleRunAnalysis = async () => {
      setAnalyzing(true);
      try {
@@ -165,10 +178,20 @@ export const MemoryPanel = ({
      try {
          const updates: any = { payment_status: status };
          if (status === 'VALID') { updates.buying_intent = 'COMPRADO'; updates.followup_stage = 100; }
+         
          await supabase.from('leads').update(updates).eq('id', currentAnalysis.id);
-         toast.success("Auditoría actualizada.");
+         
+         // Actualización instantánea de estado local
+         if (currentAnalysis) {
+             currentAnalysis.payment_status = status;
+             if (status === 'VALID') currentAnalysis.buying_intent = 'COMPRADO';
+         }
+         
+         toast.success(status === 'VALID' ? "Comprobante aprobado." : "Comprobante denegado.");
          if (onAnalysisComplete) onAnalysisComplete();
-     } catch (err: any) { toast.error("Error al actualizar pago."); }
+     } catch (err: any) { 
+         toast.error("Error al actualizar estado del pago."); 
+     }
   };
 
   const handleAddTag = async (tagText: string) => {
@@ -206,7 +229,7 @@ export const MemoryPanel = ({
           title: '',
           datetime: new Date(new Date().getTime() + 24 * 60 * 60 * 1000).toISOString().slice(0, 16),
           notify_minutes: 15,
-          notify_wa: true // Por defecto se notifica al agente
+          notify_wa: true
       };
       const currentRems = Array.isArray(memoryForm.reminders) ? memoryForm.reminders : [];
       setMemoryForm({ ...memoryForm, reminders: [...currentRems, newReminder] });
@@ -308,6 +331,7 @@ export const MemoryPanel = ({
             analyzing={analyzing}
             agents={safeAgents}
             isManager={isManager}
+            onAgentChange={handleAgentChange}
          />
 
          <RemindersBlock 

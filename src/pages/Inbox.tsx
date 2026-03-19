@@ -144,7 +144,7 @@ const Inbox = () => {
       if (text.trim() === '#STOP' || text.trim() === '#START') {
          const isPaused = text.trim() === '#STOP';
          await supabase.from('leads').update({ ai_paused: isPaused }).eq('id', activeLead.id);
-         await supabase.from('conversaciones').insert({ lead_id: activeLead.id, mensaje: `IA ${isPaused ? 'Pausada' : 'Activada'} manualmente.`, emisor: 'NOTA', platform: 'PANEL_INTERNO' });
+         await supabase.from('conversaciones').insert({ lead_id: activeLead.id, mensaje: `IA ${isPaused ? 'Pausada' : 'Activada'} manualmente.`, emisor: 'SISTEMA', platform: 'PANEL_INTERNO' });
          toast.success(`Samurai ${isPaused ? 'Pausado' : 'Activado'}`);
          return;
       }
@@ -152,7 +152,7 @@ const Inbox = () => {
          await supabase.from('conversaciones').insert({ 
              lead_id: activeLead.id, 
              mensaje: text, 
-             emisor: 'NOTA', 
+             emisor: 'SISTEMA', 
              platform: 'PANEL_INTERNO',
              metadata: { author: profile?.full_name || 'Agente' }
          });
@@ -208,7 +208,10 @@ const Inbox = () => {
             body: { question: "Por favor genera la mejor respuesta corta y persuasiva para continuar esta conversación como un experto humano.", history, customPrompts: null }
          });
          if (error) throw error;
-         return data.answer as string;
+         
+         // Limpiamos etiquetas crudas de Media de la respuesta sugerida
+         let text = data.answer as string;
+         return text.replace(/<<MEDIA:[^>]+>>/gi, '').trim();
       } catch (e) { return null; }
   };
 
@@ -384,7 +387,7 @@ const Inbox = () => {
                 saving={sending} 
                 onReset={() => {}} 
                 onToggleFollowup={() => handleSendMessage(activeLead.ai_paused ? '#START' : '#STOP')} 
-                onAnalysisComplete={() => refetchMessages()} 
+                onAnalysisComplete={() => { fetchLeads(false); refetchMessages(); }} 
                 onDeleteLead={handleDeleteLead}
               />
            </div>
