@@ -95,7 +95,7 @@ export const MemoryPanel = ({
      const { data } = await supabase.from('conversaciones')
         .select('*')
         .eq('lead_id', currentAnalysis.id)
-        .eq('platform', 'PANEL_INTERNO') // Eliminamos el eq('emisor') para que traiga todas las notas
+        .eq('platform', 'PANEL_INTERNO')
         .order('created_at', { ascending: true });
      if (data) setInternalNotes(data);
   };
@@ -106,8 +106,8 @@ export const MemoryPanel = ({
      try {
         const payload = {
            lead_id: currentAnalysis.id,
-           emisor: 'HUMANO', // Usamos HUMANO para evitar error de BD Constraint
-           platform: 'PANEL_INTERNO', // Con platform definimos que es una nota interna
+           emisor: 'HUMANO',
+           platform: 'PANEL_INTERNO',
            mensaje: text.trim(),
            metadata: { author: profile?.full_name || 'Miembro del Equipo' }
         };
@@ -118,6 +118,18 @@ export const MemoryPanel = ({
         toast.error("Error al guardar nota: " + err.message);
      } finally {
         setSendingNote(false);
+     }
+  };
+
+  const handleDeleteInternalNote = async (id: string) => {
+     if (!confirm("¿Seguro que quieres borrar esta nota?")) return;
+     try {
+        const { error } = await supabase.from('conversaciones').delete().eq('id', id);
+        if (error) throw error;
+        setInternalNotes(prev => prev.filter(n => n.id !== id));
+        toast.success("Nota eliminada.");
+     } catch (err: any) {
+        toast.error("Fallo al eliminar: " + err.message);
      }
   };
 
@@ -180,7 +192,6 @@ export const MemoryPanel = ({
          
          await supabase.from('leads').update(updates).eq('id', currentAnalysis.id);
          
-         // Actualización instantánea de estado local
          if (currentAnalysis) {
              currentAnalysis.payment_status = status;
              if (status === 'VALID') currentAnalysis.buying_intent = 'COMPRADO';
@@ -347,6 +358,7 @@ export const MemoryPanel = ({
          <InternalNotes 
             internalNotes={internalNotes} 
             onAddNote={handleAddInternalNote} 
+            onDeleteNote={handleDeleteInternalNote}
             sendingNote={sendingNote} 
          />
 
