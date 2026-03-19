@@ -114,7 +114,7 @@ export const MessageList = ({ messages, loading }: MessageListProps) => {
              const emisor = (msg.emisor || '').toUpperCase();
              const platform = (msg.platform || '').toUpperCase();
              
-             // Redefinimos los booleanos para evitar colisiones
+             // Identificador fuerte: si viene del "PANEL_INTERNO" o es emisor "NOTA/SISTEMA", es una nota.
              const isNote = platform === 'PANEL_INTERNO' || emisor === 'NOTA' || emisor === 'SISTEMA';
              const isClient = emisor === 'CLIENTE' && !isNote;
              const isHuman = emisor === 'HUMANO' && !isNote;

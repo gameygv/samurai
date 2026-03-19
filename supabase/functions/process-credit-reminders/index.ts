@@ -76,7 +76,16 @@ serve(async (req) => {
        if (msgClient) msgClient = msgClient.replace(/{nombre}/g, clientName).replace(/{monto}/g, amountStr).replace(/{fecha}/g, dateStr);
        if (msgAgent) msgAgent = msgAgent.replace(/{nombre}/g, clientName).replace(/{monto}/g, amountStr).replace(/{fecha}/g, dateStr);
 
-       // 2. Envíos
+       // 2. ACTUALIZAMOS BASE DE DATOS PRIMERO (Bloqueo)
+       if (newStatus && newStatus !== inst.status) {
+           await supabaseClient.from('credit_installments').update({ status: newStatus }).eq('id', inst.id);
+       }
+       if (newFinancialStatus && sale.contact.financial_status !== 'Abandonado') {
+           await supabaseClient.from('contacts').update({ financial_status: newFinancialStatus }).eq('id', sale.contact.id);
+       }
+       await supabaseClient.from('credit_installments').update({ reminder_sent_at: new Date().toISOString() }).eq('id', inst.id);
+
+       // 3. LUEGO ENVIAMOS LOS MENSAJES
        if (msgClient && sale.contact.telefono) {
            await supabaseClient.functions.invoke('send-message-v3', {
                body: { phone: sale.contact.telefono, message: msgClient }
@@ -93,17 +102,6 @@ serve(async (req) => {
                messagesSent++;
            }
        }
-
-       // 3. Actualizaciones de BD
-       if (newStatus && newStatus !== inst.status) {
-           await supabaseClient.from('credit_installments').update({ status: newStatus }).eq('id', inst.id);
-       }
-       if (newFinancialStatus && sale.contact.financial_status !== 'Abandonado') {
-           // Si ya está abandonado no lo bajamos de nivel. 
-           await supabaseClient.from('contacts').update({ financial_status: newFinancialStatus }).eq('id', sale.contact.id);
-       }
-
-       await supabaseClient.from('credit_installments').update({ reminder_sent_at: new Date().toISOString() }).eq('id', inst.id);
     }
 
     return new Response(JSON.stringify({ success: true, messagesSent }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });

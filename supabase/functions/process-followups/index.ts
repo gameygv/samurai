@@ -60,6 +60,10 @@ serve(async (req) => {
                     const clientName = lead.nombre?.split(' ')[0] || 'amigo';
                     const finalMsg = messageToSend.replace(/{nombre}/g, clientName);
                     
+                    // IMPORTANTE: Actualizar BD PRIMERO para evitar que un cron solapado lo vuelva a agarrar
+                    await supabaseClient.from('leads').update({ followup_stage: nextStage }).eq('id', lead.id);
+
+                    // LUEGO enviamos
                     await supabaseClient.functions.invoke('send-message-v3', {
                         body: { channel_id: lead.channel_id, phone: lead.telefono, message: finalMsg }
                     });
@@ -67,8 +71,6 @@ serve(async (req) => {
                     await supabaseClient.from('conversaciones').insert({
                         lead_id: lead.id, emisor: 'SAMURAI', mensaje: finalMsg, platform: 'WHATSAPP_FOLLOWUP'
                     });
-
-                    await supabaseClient.from('leads').update({ followup_stage: nextStage }).eq('id', lead.id);
                 }
             }
         }
@@ -114,7 +116,7 @@ serve(async (req) => {
             const cityNorm = ol.ciudad.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
             for (const agent of activeAgents) {
                 if (!agent.territories) continue;
-                const match = agent.territories.some(t => {
+                const match = agent.territories.some((t: string) => {
                     const tNorm = t.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
                     return cityNorm.includes(tNorm) || tNorm.includes(cityNorm);
                 });
@@ -149,7 +151,7 @@ serve(async (req) => {
             .lt('last_message_at', lostDateThreshold.toISOString());
 
         if (leadsToLose && leadsToLose.length > 0) {
-            const ids = leadsToLose.map(l => l.id);
+            const ids = leadsToLose.map((l: any) => l.id);
             await supabaseClient.from('leads').update({ buying_intent: 'PERDIDO' }).in('id', ids);
             console.log(`[process-followups] ${ids.length} leads movidos a PERDIDO por inactividad.`);
         }
@@ -166,13 +168,15 @@ serve(async (req) => {
 
     if (leadsWithReminders && leadsWithReminders.length > 0 && activeAgents) {
         const now = new Date();
-        const agentMap = activeAgents.reduce((acc, a) => ({...acc, [a.id]: a}), {});
+        const agentMap = activeAgents.reduce((acc: any, a: any) => ({...acc, [a.id]: a}), {});
 
         for (const lead of leadsWithReminders) {
             let remindersModified = false;
             let currentReminders = typeof lead.reminders === 'string' ? JSON.parse(lead.reminders) : lead.reminders;
             
             if (!Array.isArray(currentReminders)) continue;
+
+            let messagesToSend = [];
 
             for (let i = 0; i < currentReminders.length; i++) {
                 const rem = currentReminders[i];
@@ -183,25 +187,30 @@ serve(async (req) => {
                 const triggerTime = new Date(remTime.getTime() - (notifyMinutes * 60000));
 
                 if (now >= triggerTime) {
-                    if (rem.notify_wa !== false && lead.assigned_to) {
-                        const agent = agentMap[lead.assigned_to];
-                        if (agent && agent.phone) {
-                            const msg = `⏰ *RECORDATORIO CRM*\n\nHola ${agent.full_name?.split(' ')[0] || 'Asesor'},\nTienes una tarea con el lead *${lead.nombre}*:\n\n📌 *${rem.title || 'Tarea programada'}*\n🕒 Hora: ${remTime.toLocaleString('es-MX', {timeStyle: 'short', dateStyle: 'short'})}`;
-                            
-                            if (defaultCh) {
-                                await supabaseClient.functions.invoke('send-message-v3', {
-                                    body: { channel_id: defaultCh, phone: agent.phone, message: msg }
-                                });
-                            }
-                        }
-                    }
                     currentReminders[i].notified = true;
                     remindersModified = true;
+
+                    if (rem.notify_wa !== false && lead.assigned_to) {
+                        const agent = agentMap[lead.assigned_to];
+                        if (agent && agent.phone && defaultCh) {
+                            messagesToSend.push({
+                                channel_id: defaultCh, 
+                                phone: agent.phone, 
+                                message: `⏰ *RECORDATORIO CRM*\n\nHola ${agent.full_name?.split(' ')[0] || 'Asesor'},\nTienes una tarea con el lead *${lead.nombre}*:\n\n📌 *${rem.title || 'Tarea programada'}*\n🕒 Hora: ${remTime.toLocaleString('es-MX', {timeStyle: 'short', dateStyle: 'short'})}`
+                            });
+                        }
+                    }
                 }
             }
 
             if (remindersModified) {
+                // ACTUALIZAMOS BD PRIMERO
                 await supabaseClient.from('leads').update({ reminders: currentReminders }).eq('id', lead.id);
+                
+                // ENVIAMOS DESPUÉS
+                for (const payload of messagesToSend) {
+                     await supabaseClient.functions.invoke('send-message-v3', { body: payload });
+                }
             }
         }
     }
@@ -225,7 +234,7 @@ serve(async (req) => {
 
              if (wcRes.ok) {
                 const orders = await wcRes.json();
-                const paidOrder = orders.find(o => o.status === 'processing' || o.status === 'completed');
+                const paidOrder = orders.find((o: any) => o.status === 'processing' || o.status === 'completed');
 
                 if (paidOrder) {
                    await supabaseClient.from('leads').update({
@@ -243,7 +252,7 @@ serve(async (req) => {
                    });
                 }
              }
-          } catch (e) { console.error(`[WC-Watcher] Error:`, e.message); }
+          } catch (e: any) { console.error(`[WC-Watcher] Error:`, e.message); }
        }
     }
 

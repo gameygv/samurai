@@ -146,6 +146,7 @@ const Inbox = () => {
          await supabase.from('leads').update({ ai_paused: isPaused }).eq('id', activeLead.id);
          await supabase.from('conversaciones').insert({ lead_id: activeLead.id, mensaje: `IA ${isPaused ? 'Pausada' : 'Activada'} manualmente.`, emisor: 'HUMANO', platform: 'PANEL_INTERNO' });
          toast.success(`Samurai ${isPaused ? 'Pausado' : 'Activado'}`);
+         refetchMessages();
          return;
       }
       if (isInternalNote) {
@@ -158,6 +159,7 @@ const Inbox = () => {
          });
          toast.success("Nota guardada.");
          setDraftMessage('');
+         refetchMessages();
          return; 
       }
 
@@ -185,6 +187,7 @@ const Inbox = () => {
           supabase.functions.invoke('evaluate-agent', { body: { agent_id: user.id, lead_id: activeLead.id, message_text: text } }).catch(() => {});
       }
       setDraftMessage('');
+      refetchMessages();
     } catch (err: any) { toast.error('Error: ' + err.message); } finally { setSending(false); }
   };
 
