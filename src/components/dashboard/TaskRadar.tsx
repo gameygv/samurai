@@ -1,7 +1,7 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Clock, Send, CalendarClock, MessageSquare, ChevronRight } from 'lucide-react';
+import { Clock, Send, CalendarClock, MessageSquare, ChevronRight, Megaphone } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface Task {
@@ -25,6 +25,8 @@ export const TaskRadar = ({ tasks }: TaskRadarProps) => {
          navigate(`/leads?id=${task.rawLead.id}`);
      } else if (task.id.startsWith('cobro-')) {
          navigate(`/payments`);
+     } else if (task.id.startsWith('camp-')) {
+         navigate(`/campaigns`);
      }
   };
 
@@ -51,25 +53,29 @@ export const TaskRadar = ({ tasks }: TaskRadarProps) => {
               >
                 <div className="flex items-center gap-3">
                   <div className={cn(
-                    "p-2 rounded-xl border",
+                    "p-2 rounded-xl border shrink-0",
                     task.type === 'ATRASADO' ? "bg-red-950/30 text-red-500 border-red-900/50" : 
                     task.type === 'COBRO HOY' ? "bg-amber-950/30 text-amber-500 border-amber-900/50" : 
+                    task.type === 'CAMPAÑA' ? "bg-purple-950/30 text-purple-400 border-purple-900/50" :
                     "bg-blue-950/30 text-blue-400 border-blue-900/50"
                   )}>
-                    {task.type === 'ATRASADO' ? <MessageSquare className="w-4 h-4" /> : <Send className="w-4 h-4" />}
+                    {task.type === 'ATRASADO' ? <MessageSquare className="w-4 h-4" /> : 
+                     task.type === 'CAMPAÑA' ? <Megaphone className="w-4 h-4" /> : 
+                     <Send className="w-4 h-4" />}
                   </div>
-                  <div className="flex flex-col">
-                    <span className="text-sm font-bold text-slate-200 group-hover:text-white transition-colors">{task.target}</span>
+                  <div className="flex flex-col min-w-0">
+                    <span className="text-sm font-bold text-slate-200 group-hover:text-white transition-colors truncate pr-2">{task.target}</span>
                     <span className={cn("text-[9px] uppercase font-bold tracking-widest mt-0.5", 
                         task.type === 'ATRASADO' ? 'text-red-500' : 
                         task.type === 'COBRO HOY' ? 'text-amber-500' : 
+                        task.type === 'CAMPAÑA' ? 'text-purple-400' :
                         'text-blue-500'
                     )}>
-                        {task.type}
+                        {task.type} {task.status === 'processing' && '(En progreso)'}
                     </span>
                   </div>
                 </div>
-                <div className="text-right flex items-center gap-3">
+                <div className="text-right flex items-center gap-3 shrink-0 pl-2">
                   <span className="text-[10px] font-bold text-slate-500 font-mono">{task.time}</span>
                   <ChevronRight className="w-4 h-4 text-slate-600 opacity-0 group-hover:opacity-100 transition-opacity" />
                 </div>

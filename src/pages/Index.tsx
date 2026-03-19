@@ -39,6 +39,9 @@ const Index = () => {
       .in('status', ['LATE', 'PENDING'])
       .lte('due_date', new Date().toISOString().split('T')[0]);
 
+    // Buscar Campañas Programadas para el Radar
+    const { data: campaignsConfig } = await supabase.from('app_config').select('value').eq('key', 'scheduled_campaigns').maybeSingle();
+
     // Data Financiera (Solo si es manager)
     let financialData = { totalCreditSales: 0, totalCollected: 0, totalPending: 0, lateInstallments: 0, activeCredits: 0 };
     if (isManager) {
@@ -110,11 +113,33 @@ const Index = () => {
         });
       }
 
+      // Inyectar Campañas Programadas en el radar de tareas
+      if (campaignsConfig?.value) {
+         try {
+             const campaigns = JSON.parse(campaignsConfig.value);
+             campaigns.forEach((camp: any) => {
+                 if (camp.status === 'pending' || camp.status === 'processing') {
+                     const remDate = new Date(camp.scheduledAt);
+                     allTasks.push({
+                         id: camp.id,
+                         target: `${camp.name}`,
+                         time: remDate.toLocaleString([], { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }),
+                         type: 'CAMPAÑA',
+                         status: camp.status,
+                         rawDate: remDate,
+                         rawLead: null
+                     });
+                 }
+             });
+         } catch(e) {}
+      }
+
       const formattedChartData = Object.keys(dailyCounts).map(date => ({
          name: new Date(date).toLocaleDateString('es-ES', { weekday: 'short' }),
          Leads: dailyCounts[date]
       }));
 
+      // Ordenar tareas por fecha
       allTasks.sort((a, b) => a.rawDate.getTime() - b.rawDate.getTime());
 
       setChartData(formattedChartData);
