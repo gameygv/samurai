@@ -230,6 +230,10 @@ export const MemoryPanel = ({
       ? Math.floor((new Date().getTime() - new Date(currentAnalysis.last_message_at).getTime()) / 60000) 
       : 0;
 
+  // Filtrado de seguridad contra strings vacíos
+  const validGlobalTags = globalTags.filter(t => t.text && String(t.text).trim() !== '');
+  const validLocalTags = localTags.filter(t => t.text && String(t.text).trim() !== '');
+
   return (
     <div className="w-full flex-shrink-0 bg-[#0a0a0c] flex flex-col h-full text-slate-300">
       {/* HEADER EMQ */}
@@ -436,7 +440,7 @@ export const MemoryPanel = ({
                              const t = extractTagText(rawTag);
                              if (!t) return null;
                              const tagConf = allAvailableTags.find(lt => lt.text === t);
-                             const isGlobal = globalTags.some(gt => gt.text === t);
+                             const isGlobal = validGlobalTags.some(gt => gt.text === t);
                              return (
                                 <Badge key={t} style={{ backgroundColor: (tagConf?.color || '#161618') + '15', color: tagConf?.color || '#94a3b8', borderColor: (tagConf?.color || '#222225') + '40' }} className="text-[9px] h-6 border pr-1 pl-1.5 font-bold flex items-center gap-1.5 shadow-sm">
                                    {isGlobal ? <Globe className="w-2.5 h-2.5 opacity-70 shrink-0"/> : <User className="w-2.5 h-2.5 opacity-70 shrink-0"/>}
@@ -449,15 +453,15 @@ export const MemoryPanel = ({
                           <Select onValueChange={(v) => { if(v) handleAddTag(v); }}>
                               <SelectTrigger className="h-6 text-[10px] bg-transparent border border-dashed border-[#333336] hover:bg-[#161618] text-slate-400 w-auto px-3 shadow-none focus:ring-0 rounded-full transition-colors"><Plus className="w-3 h-3 mr-1" /> Añadir</SelectTrigger>
                               <SelectContent className="bg-[#121214] border-[#222225] max-h-[300px]">
-                                  {globalTags.length > 0 && <div className="text-[9px] font-bold text-slate-500 uppercase px-2 py-1.5 flex items-center gap-1.5"><Globe className="w-3 h-3"/> Equipo (Globales)</div>}
-                                  {globalTags.map(tag => (
-                                      <SelectItem key={`g-${tag.id}`} value={tag.text} className="text-xs text-white focus:bg-[#161618] cursor-pointer">
+                                  {validGlobalTags.length > 0 && <div className="text-[9px] font-bold text-slate-500 uppercase px-2 py-1.5 flex items-center gap-1.5"><Globe className="w-3 h-3"/> Equipo (Globales)</div>}
+                                  {validGlobalTags.map(tag => (
+                                      <SelectItem key={`g-${tag.id}`} value={tag.text} className="text-xs text-white focus:bg-[#161618] cursor-pointer py-2">
                                           <div className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-full shadow-inner" style={{backgroundColor: tag.color}}></div>{tag.text}</div>
                                       </SelectItem>
                                   ))}
-                                  {localTags.length > 0 && <div className="text-[9px] font-bold text-slate-500 uppercase px-2 py-1.5 mt-2 flex items-center gap-1.5 border-t border-[#222225] pt-2"><User className="w-3 h-3"/> Mis Etiquetas (Personal)</div>}
-                                  {localTags.map(tag => (
-                                      <SelectItem key={`l-${tag.id}`} value={tag.text} className="text-xs text-white focus:bg-[#161618] cursor-pointer">
+                                  {validLocalTags.length > 0 && <div className="text-[9px] font-bold text-slate-500 uppercase px-2 py-1.5 mt-2 flex items-center gap-1.5 border-t border-[#222225] pt-2"><User className="w-3 h-3"/> Mis Etiquetas (Personal)</div>}
+                                  {validLocalTags.map(tag => (
+                                      <SelectItem key={`l-${tag.id}`} value={tag.text} className="text-xs text-white focus:bg-[#161618] cursor-pointer py-2">
                                           <div className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-full shadow-inner" style={{backgroundColor: tag.color}}></div>{tag.text}</div>
                                       </SelectItem>
                                   ))}

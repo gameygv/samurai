@@ -139,6 +139,8 @@ export const EditContactDialog = ({ open, onOpenChange, contact, existingGroups,
     }
   };
 
+  const validAllTags = allTags.filter(t => t.text && String(t.text).trim() !== '');
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="bg-[#0f0f11] border-[#222225] text-white max-w-4xl rounded-3xl shadow-[0_0_50px_-12px_rgba(0,0,0,0.8)] p-0 overflow-hidden flex flex-col max-h-[90vh]">
@@ -195,7 +197,7 @@ export const EditContactDialog = ({ open, onOpenChange, contact, existingGroups,
                                 <Label className="text-[10px] uppercase font-bold text-amber-500 flex items-center gap-1.5 ml-1"><Tag className="w-3.5 h-3.5"/> Etiquetas</Label>
                                 <div className="flex flex-wrap gap-2 items-center bg-[#0a0a0c] p-2 min-h-[44px] rounded-xl border border-[#222225]">
                                     {formData.tags.map((t: string) => {
-                                        const tagConf = allTags.find(lt => lt.text === t);
+                                        const tagConf = validAllTags.find(lt => lt.text === t);
                                         const isGlobal = globalTags.some(gt => gt.text === t);
                                         const bgColor = tagConf ? tagConf.color + '15' : '#1e293b';
                                         const textColor = tagConf ? tagConf.color : '#94a3b8';
@@ -211,7 +213,7 @@ export const EditContactDialog = ({ open, onOpenChange, contact, existingGroups,
                                     <Select onValueChange={(v) => { if(v) handleAddTag(v); }}>
                                         <SelectTrigger className="h-6 text-[10px] bg-transparent border border-dashed border-[#333336] hover:bg-[#161618] text-slate-400 w-auto px-3 shadow-none focus:ring-0 rounded-full transition-colors"><Plus className="w-3 h-3 mr-1" /> Añadir</SelectTrigger>
                                         <SelectContent className="bg-[#121214] border-[#222225] max-h-[300px]">
-                                            {allTags.map(tag => {
+                                            {validAllTags.map(tag => {
                                                 const isGlobal = globalTags.some(gt => gt.text === tag.text);
                                                 return (
                                                     <SelectItem key={tag.id} value={tag.text} className="text-xs text-white focus:bg-[#161618] cursor-pointer py-2">
@@ -236,7 +238,6 @@ export const EditContactDialog = ({ open, onOpenChange, contact, existingGroups,
                       <h4 className="text-[10px] uppercase tracking-widest font-bold text-indigo-400 flex items-center gap-2"><Plus className="w-3.5 h-3.5"/> Registrar Nuevo Curso</h4>
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                          <div className="space-y-1.5"><Label className="text-[9px] text-slate-500 uppercase tracking-widest">Curso / Taller</Label>
-                            {/* Protección contra strings vacíos para evitar crash de Radix UI */}
                             <Select value={newCourse.course || undefined} onValueChange={v => setNewCourse({...newCourse, course: v})}>
                                <SelectTrigger className="h-10 text-xs bg-[#0a0a0c] border-[#222225]"><SelectValue placeholder="Seleccionar..."/></SelectTrigger>
                                <SelectContent className="bg-[#121214] border-[#222225] text-white max-h-[200px]">
