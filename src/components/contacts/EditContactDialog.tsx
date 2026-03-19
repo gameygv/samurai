@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Textarea } from '@/components/ui/textarea';
-import { Loader2, User, Users, Save, Mail, MapPin, Phone, Tag, X, Plus, GraduationCap, FileText, Calendar, Send, UserCheck, Trash2, Globe } from 'lucide-react';
+import { Loader2, User, Users, Save, Mail, MapPin, Phone, Tag, X, Plus, GraduationCap, FileText, Calendar, Send, UserCheck, Trash2, Globe, Sparkles } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useAuth } from '@/context/AuthContext';
@@ -26,6 +26,8 @@ interface EditContactDialogProps {
 export const EditContactDialog = ({ open, onOpenChange, contact, existingGroups, allTags, globalTags, onSuccess }: EditContactDialogProps) => {
   const { profile } = useAuth();
   const [loading, setLoading] = useState(false);
+  const [analyzingChat, setAnalyzingChat] = useState(false);
+  
   const [formData, setFormData] = useState({
     nombre: '', apellido: '', telefono: '', email: '', ciudad: '', estado: '', cp: '', grupo: '', tags: [] as string[],
     academicRecord: [] as any[], internalNotes: [] as any[]
@@ -80,6 +82,31 @@ export const EditContactDialog = ({ open, onOpenChange, contact, existingGroups,
     }
   };
 
+  const handleForceAnalysis = async () => {
+    if (!contact.lead_id) return toast.error("Este contacto no tiene un chat asociado.");
+    setAnalyzingChat(true);
+    const tid = toast.loading("Analizando historial con IA...");
+    try {
+      const { error } = await supabase.functions.invoke('analyze-leads', { body: { lead_id: contact.lead_id, force: true } });
+      if (error) throw error;
+      
+      const { data: updatedLead } = await supabase.from('leads').select('ciudad, estado, cp').eq('id', contact.lead_id).single();
+      if (updatedLead) {
+         setFormData(prev => ({
+            ...prev,
+            ciudad: updatedLead.ciudad || prev.ciudad,
+            estado: updatedLead.estado || prev.estado,
+            cp: updatedLead.cp || prev.cp
+         }));
+         toast.success("Datos extraídos. Verifica y guarda.", { id: tid });
+      }
+    } catch (err: any) {
+      toast.error("Error en análisis: " + err.message, { id: tid });
+    } finally {
+      setAnalyzingChat(false);
+    }
+  };
+
   const handleAddTag = (tagText: string) => {
       if (!formData.tags.includes(tagText)) {
           setFormData({ ...formData, tags: [...formData.tags, tagText] });
@@ -125,7 +152,7 @@ export const EditContactDialog = ({ open, onOpenChange, contact, existingGroups,
 
       if (contact.lead_id) {
          await supabase.from('leads').update({
-            nombre: formData.nombre, apellido: formData.apellido, email: formData.email, ciudad: formData.ciudad, tags: formData.tags
+            nombre: formData.nombre, apellido: formData.apellido, email: formData.email, ciudad: formData.ciudad, tags: formData.tags, estado: formData.estado, cp: formData.cp
          }).eq('id', contact.lead_id);
       }
 
@@ -178,7 +205,15 @@ export const EditContactDialog = ({ open, onOpenChange, contact, existingGroups,
                     </div>
 
                     <div className="space-y-4">
-                        <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest border-b border-[#222225] pb-2 flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5"/> Ubicación</h4>
+                        <div className="flex items-center justify-between border-b border-[#222225] pb-2">
+                           <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5"/> Ubicación</h4>
+                           {contact.lead_id && (
+                               <Button type="button" variant="outline" size="sm" onClick={handleForceAnalysis} disabled={analyzingChat} className="h-7 text-[9px] bg-indigo-950/20 text-indigo-400 border-indigo-500/30 hover:bg-indigo-900/40 uppercase font-bold tracking-widest">
+                                   {analyzingChat ? <Loader2 className="w-3 h-3 animate-spin mr-1"/> : <Sparkles className="w-3 h-3 mr-1"/>}
+                                   Extraer del Chat
+                               </Button>
+                           )}
+                        </div>
                         <div className="grid grid-cols-3 gap-4">
                             <div className="space-y-2"><Label className="text-[10px] uppercase font-bold text-slate-400 ml-1">Ciudad</Label><Input value={formData.ciudad} onChange={e => setFormData({...formData, ciudad: e.target.value})} className="bg-[#161618] border-[#222225] h-11 rounded-xl text-slate-200 focus-visible:ring-indigo-500" /></div>
                             <div className="space-y-2"><Label className="text-[10px] uppercase font-bold text-slate-400 ml-1">Estado</Label><Input value={formData.estado} onChange={e => setFormData({...formData, estado: e.target.value})} className="bg-[#161618] border-[#222225] h-11 rounded-xl text-slate-200 focus-visible:ring-indigo-500" /></div>

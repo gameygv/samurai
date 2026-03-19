@@ -40,7 +40,6 @@ export const CreateLeadDialog = ({ open, onOpenChange, onSuccess }: { open: bool
 
     setLoading(true);
     try {
-      // Normalización de Teléfono: Siempre 12 dígitos para México si se ingresan 10
       let cleanPhone = formData.telefono.replace(/\D/g, '');
       if (cleanPhone.length === 10) cleanPhone = '52' + cleanPhone;
 
@@ -57,14 +56,15 @@ export const CreateLeadDialog = ({ open, onOpenChange, onSuccess }: { open: bool
 
       if (!isAdmin && user?.id) insertData.assigned_to = user.id;
 
-      // 1. Crear el Lead
       const { data: newLead, error: leadError } = await supabase.from('leads').insert(insertData).select().single();
       if (leadError) throw leadError;
 
-      // 2. Si se asignó un grupo, lo actualizamos en la tabla contacts que se creó automáticamente por trigger
       if (formData.grupo) {
          await supabase.from('contacts').update({ grupo: formData.grupo }).eq('lead_id', newLead.id);
       }
+      
+      // ✅ Disparo automático del análisis IA en segundo plano
+      supabase.functions.invoke('analyze-leads', { body: { lead_id: newLead.id, force: true } }).catch(() => {});
 
       toast.success('Prospecto registrado y segmentado correctamente.');
       onSuccess();

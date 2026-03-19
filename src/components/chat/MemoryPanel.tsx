@@ -104,21 +104,23 @@ export const MemoryPanel = ({
      if (data) setInternalNotes(data);
   };
 
+  // ✅ CORREGIDO: Recibe string directo en lugar de Event de Formulario
   const handleAddInternalNote = async (text: string) => {
+     if (!text.trim()) return;
      setSendingNote(true);
      try {
         const payload = {
            lead_id: currentAnalysis.id,
            emisor: 'NOTA',
            platform: 'PANEL_INTERNO',
-           mensaje: text,
+           mensaje: text.trim(),
            metadata: { author: profile?.full_name || 'Miembro del Equipo' }
         };
         const { data, error } = await supabase.from('conversaciones').insert(payload).select().single();
         if (error) throw error;
         setInternalNotes(prev => [...prev, data]);
      } catch (err: any) {
-        toast.error("Error al guardar nota");
+        toast.error("Error al guardar nota: " + err.message);
      } finally {
         setSendingNote(false);
      }
@@ -202,23 +204,27 @@ export const MemoryPanel = ({
       }
   };
 
+  // ✅ CORREGIDO: Manejo de arreglo seguro y generación de ID única
   const handleAddReminder = () => {
       const newReminder = {
-          id: Date.now().toString(),
+          id: `rem-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
           title: '',
           datetime: new Date(new Date().getTime() + 24 * 60 * 60 * 1000).toISOString().slice(0, 16),
           notify_minutes: 15
       };
-      setMemoryForm({ ...memoryForm, reminders: [...(memoryForm.reminders || []), newReminder] });
+      const currentRems = Array.isArray(memoryForm.reminders) ? memoryForm.reminders : [];
+      setMemoryForm({ ...memoryForm, reminders: [...currentRems, newReminder] });
   };
 
   const handleUpdateReminder = (id: string, field: string, val: any) => {
-      const updated = memoryForm.reminders.map((r: any) => r.id === id ? { ...r, [field]: val } : r);
+      const currentRems = Array.isArray(memoryForm.reminders) ? memoryForm.reminders : [];
+      const updated = currentRems.map((r: any) => r.id === id ? { ...r, [field]: val } : r);
       setMemoryForm({ ...memoryForm, reminders: updated });
   };
 
   const handleRemoveReminder = async (id: string) => {
-      const updated = memoryForm.reminders.filter((r: any) => r.id !== id);
+      const currentRems = Array.isArray(memoryForm.reminders) ? memoryForm.reminders : [];
+      const updated = currentRems.filter((r: any) => r.id !== id);
       setMemoryForm({ ...memoryForm, reminders: updated });
       try { await supabase.from('leads').update({ reminders: updated }).eq('id', currentAnalysis.id); } catch(e){}
   };
@@ -226,7 +232,8 @@ export const MemoryPanel = ({
   const handleSaveReminders = async () => {
       setSavingReminders(true);
       try {
-         await supabase.from('leads').update({ reminders: memoryForm.reminders }).eq('id', currentAnalysis.id);
+         const currentRems = Array.isArray(memoryForm.reminders) ? memoryForm.reminders : [];
+         await supabase.from('leads').update({ reminders: currentRems }).eq('id', currentAnalysis.id);
          toast.success("Tareas programadas correctamente.");
       } catch(e) {
          toast.error("Error al guardar tareas.");
