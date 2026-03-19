@@ -89,7 +89,7 @@ const Contacts = () => {
         try { setGroups(JSON.parse(data.value)); } catch(e){}
     } else {
         const { data: gData } = await supabase.from('contacts').select('grupo').not('grupo', 'is', null);
-        if (gData) setGroups(Array.from(new Set(gData.map(d => d.grupo).filter(Boolean))) as string[]);
+        if (gData) setGroups(Array.from(new Set(gData.map(d => String(d.grupo)).filter(Boolean))) as string[]);
     }
   };
 
@@ -103,7 +103,7 @@ const Contacts = () => {
     if (!error && data) {
       const mappedData = data.map(c => {
         const activeSales = c.credit_sales?.filter((s: any) => s.status === 'ACTIVE') || [];
-        const totalDebt = activeSales.reduce((acc: number, sale: any) => acc + Number(sale.total_amount), 0);
+        const totalDebt = activeSales.reduce((acc: number, sale: any) => acc + Number(sale.total_amount || 0), 0);
         let academicArray = [];
         try { academicArray = Array.isArray(c.academic_record) ? c.academic_record : JSON.parse(c.academic_record || '[]'); } catch(e){}
         return { ...c, total_debt: totalDebt, academic_count: academicArray.length };
@@ -130,7 +130,7 @@ const Contacts = () => {
     }
   };
 
-  const allTags = [...globalTags, ...localTags];
+  const allTags = [...(globalTags || []), ...(localTags || [])];
 
   const toggleTagSelection = (tagText: string) => {
       setSelectedTags(prev => prev.includes(tagText) ? prev.filter(t => t !== tagText) : [...prev, tagText]);
@@ -239,10 +239,10 @@ const Contacts = () => {
     const email = String(c.email || '').toLowerCase();
 
     const matchesSearch = term === '' || nombre.includes(term) || apellido.includes(term) || telefono.includes(term) || email.includes(term);
-    const matchesGroup = selectedGroup === 'ALL' || c.grupo === selectedGroup;
-    const matchesCity = selectedCity === 'ALL' || c.ciudad === selectedCity;
-    const matchesStatus = selectedStatusFilter === 'ALL' || (c.financial_status || 'Sin transacción') === selectedStatusFilter;
-    const matchesDebt = debtFilter === 'ALL' || (debtFilter === 'CON_DEUDA' ? c.total_debt > 0 : c.total_debt === 0);
+    const matchesGroup = selectedGroup === 'ALL' || String(c.grupo || '') === selectedGroup;
+    const matchesCity = selectedCity === 'ALL' || String(c.ciudad || '') === selectedCity;
+    const matchesStatus = selectedStatusFilter === 'ALL' || String(c.financial_status || 'Sin transacción') === selectedStatusFilter;
+    const matchesDebt = debtFilter === 'ALL' || (debtFilter === 'CON_DEUDA' ? (c.total_debt || 0) > 0 : (c.total_debt || 0) === 0);
     
     const matchesTag = selectedTags.length === 0 || selectedTags.every(t => contactTags.includes(t));
 
@@ -302,7 +302,7 @@ const Contacts = () => {
             <SelectTrigger className="w-[150px] h-10 bg-[#161618] border-[#222225] rounded-xl text-xs text-slate-300"><SelectValue placeholder="Grupo" /></SelectTrigger>
             <SelectContent className="bg-slate-900 border-slate-800 text-white rounded-xl max-h-[300px]">
               <SelectItem value="ALL">Cualquier Grupo</SelectItem>
-              {groups.map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}
+              {(groups || []).map(g => <SelectItem key={String(g)} value={String(g)}>{String(g)}</SelectItem>)}
             </SelectContent>
           </Select>
 
@@ -310,7 +310,7 @@ const Contacts = () => {
             <SelectTrigger className="w-[150px] h-10 bg-[#161618] border-[#222225] rounded-xl text-xs text-slate-300"><SelectValue placeholder="Ciudad" /></SelectTrigger>
             <SelectContent className="bg-slate-900 border-slate-800 text-white rounded-xl max-h-[300px]">
               <SelectItem value="ALL">Cualquier Ciudad</SelectItem>
-              {cities.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+              {(cities || []).map(c => <SelectItem key={String(c)} value={String(c)}>{String(c)}</SelectItem>)}
             </SelectContent>
           </Select>
 
@@ -331,14 +331,15 @@ const Contacts = () => {
                            <X className="w-3 h-3 mr-2 text-red-400" /> Borrar selección
                         </CommandItem>
                      )}
-                     {allTags.map(t => {
-                        const isGlobal = globalTags.some(gt => gt.text === t.text);
+                     {(allTags || []).map(t => {
+                        if (!t?.text) return null;
+                        const isGlobal = (globalTags || []).some(gt => gt.text === t.text);
                         return (
-                          <CommandItem key={t.id || t.text} onSelect={() => toggleTagSelection(t.text)} className="text-xs focus:bg-[#161618] focus:text-white cursor-pointer py-2">
+                          <CommandItem key={String(t.id || t.text || Math.random())} onSelect={() => toggleTagSelection(t.text)} className="text-xs focus:bg-[#161618] focus:text-white cursor-pointer py-2">
                              <div className="flex items-center gap-3">
                                <Checkbox checked={selectedTags.includes(t.text)} className="border-slate-600 rounded" />
                                {isGlobal ? <Globe className="w-3 h-3 opacity-50 shrink-0"/> : <UserIcon className="w-3 h-3 opacity-50 shrink-0"/>}
-                               <div className="w-2.5 h-2.5 rounded-full shadow-inner shrink-0" style={{ backgroundColor: t.color }}></div>
+                               <div className="w-2.5 h-2.5 rounded-full shadow-inner shrink-0" style={{ backgroundColor: t.color || '#475569' }}></div>
                                <span className="truncate">{t.text}</span>
                              </div>
                           </CommandItem>
@@ -356,7 +357,7 @@ const Contacts = () => {
                 <SelectTrigger className="w-[150px] h-10 bg-[#161618] border-[#222225] rounded-xl text-xs text-slate-300"><SelectValue placeholder="Finanzas" /></SelectTrigger>
                 <SelectContent className="bg-[#121214] border-[#222225] text-white rounded-xl">
                   <SelectItem value="ALL">Cualquier Estado</SelectItem>
-                  {financialStatuses.map(s => <SelectItem key={s.id} value={s.id}>{s.id}</SelectItem>)}
+                  {financialStatuses.map(s => <SelectItem key={String(s.id)} value={String(s.id)}>{s.id}</SelectItem>)}
                 </SelectContent>
               </Select>
               <Select value={debtFilter} onValueChange={setDebtFilter}>
@@ -400,11 +401,11 @@ const Contacts = () => {
                     <TableCell className="pl-6"><Checkbox checked={selectedIds.includes(contact.id)} onCheckedChange={() => handleToggleSelect(contact.id)} className="border-slate-600 data-[state=checked]:bg-indigo-500"/></TableCell>
                     <TableCell className="py-4">
                       <div className="flex items-center gap-4">
-                        <Avatar className="h-10 w-10 border border-[#222225] bg-[#121214]"><AvatarFallback className="bg-transparent text-indigo-300 font-bold text-sm">{contact.nombre?.substring(0, 2).toUpperCase() || 'NA'}</AvatarFallback></Avatar>
+                        <Avatar className="h-10 w-10 border border-[#222225] bg-[#121214]"><AvatarFallback className="bg-transparent text-indigo-300 font-bold text-sm">{String(contact.nombre || 'NA').substring(0, 2).toUpperCase()}</AvatarFallback></Avatar>
                         <div className="flex flex-col">
                           <span className="font-bold text-slate-100 text-sm flex items-center gap-2">
                              {contact.nombre} {contact.apellido}
-                             {contact.academic_count > 0 && (
+                             {Number(contact.academic_count || 0) > 0 && (
                                 <span className="flex items-center gap-1 bg-indigo-950/40 text-indigo-400 border border-indigo-500/30 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-widest" title={`${contact.academic_count} cursos`}>
                                    <GraduationCap className="w-3 h-3" /> Alumno
                                 </span>
@@ -423,8 +424,8 @@ const Contacts = () => {
                             {contact.tags.map((rawTag: any, idx: number) => {
                               const t = extractTagText(rawTag);
                               if (!t) return null;
-                              const tagConf = allTags.find(lt => lt.text === t);
-                              const isGlobal = globalTags.some(gt => gt.text === t);
+                              const tagConf = (allTags || []).find(lt => lt?.text === t);
+                              const isGlobal = (globalTags || []).some(gt => gt?.text === t);
                               return (
                                 <Badge key={`${t}-${idx}`} style={{ backgroundColor: (tagConf?.color || '#475569') + '15', color: tagConf?.color || '#94a3b8', borderColor: (tagConf?.color || '#475569') + '40' }} className="text-[9px] h-5 px-1.5 font-bold uppercase tracking-widest border flex items-center gap-1">
                                   {isGlobal ? <Globe className="w-2.5 h-2.5 opacity-70 shrink-0"/> : <UserIcon className="w-2.5 h-2.5 opacity-70 shrink-0"/>}
@@ -440,9 +441,9 @@ const Contacts = () => {
                       <TableCell>
                         <div className="flex flex-col gap-2">
                           <FinancialStatusBadge contactId={contact.id} currentStatus={contact.financial_status || 'Sin transacción'} isManager={isManager} onUpdate={fetchContacts} />
-                          {contact.total_debt > 0 ? (
+                          {Number(contact.total_debt || 0) > 0 ? (
                              <div className="flex items-center gap-2">
-                               <span className="text-[11px] font-mono font-bold text-amber-500 flex items-center gap-1"><DollarSign className="w-3 h-3"/> {contact.total_debt.toLocaleString()}</span>
+                               <span className="text-[11px] font-mono font-bold text-amber-500 flex items-center gap-1"><DollarSign className="w-3 h-3"/> {Number(contact.total_debt).toLocaleString()}</span>
                              </div>
                           ) : (
                              <span className="text-[10px] text-slate-500 italic uppercase">Sin deuda</span>

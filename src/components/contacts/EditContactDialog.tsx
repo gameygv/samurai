@@ -76,7 +76,7 @@ export const EditContactDialog = ({ open, onOpenChange, contact, existingGroups,
   };
 
   const handleForceAnalysis = async () => {
-    if (!contact.lead_id) return toast.error("Este contacto no tiene un chat asociado.");
+    if (!contact?.lead_id) return toast.error("Este contacto no tiene un chat asociado.");
     setAnalyzingChat(true);
     const tid = toast.loading("Analizando historial con IA...");
     try {
@@ -133,7 +133,8 @@ export const EditContactDialog = ({ open, onOpenChange, contact, existingGroups,
     } catch (err: any) { toast.error('Error al actualizar: ' + err.message); } finally { setLoading(false); }
   };
 
-  const validAllTags = allTags.filter(t => t.text && String(t.text).trim() !== '');
+  const validAllTags = (allTags || []).filter(t => t?.text && String(t.text).trim() !== '');
+  const safeGroups = Array.isArray(existingGroups) ? existingGroups : [];
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -172,7 +173,7 @@ export const EditContactDialog = ({ open, onOpenChange, contact, existingGroups,
                     <div className="space-y-4">
                         <div className="flex items-center justify-between border-b border-[#222225] pb-2">
                            <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5"/> Ubicación</h4>
-                           {contact.lead_id && (
+                           {contact?.lead_id && (
                                <Button type="button" variant="outline" size="sm" onClick={handleForceAnalysis} disabled={analyzingChat} className="h-7 text-[9px] bg-indigo-950/20 text-indigo-400 border-indigo-500/30 hover:bg-indigo-900/40 uppercase font-bold tracking-widest">
                                    {analyzingChat ? <Loader2 className="w-3 h-3 animate-spin mr-1"/> : <Sparkles className="w-3 h-3 mr-1"/>} Extraer del Chat
                                </Button>
@@ -193,7 +194,7 @@ export const EditContactDialog = ({ open, onOpenChange, contact, existingGroups,
                                     <SelectTrigger className="bg-[#0a0a0c] border-[#222225] h-11 rounded-xl text-slate-200 focus-visible:ring-indigo-500"><SelectValue placeholder="Seleccionar..."/></SelectTrigger>
                                     <SelectContent className="bg-[#121214] border-[#222225] text-white rounded-xl max-h-[200px]">
                                         <SelectItem value="none">Ninguno (Sin Grupo)</SelectItem>
-                                        {existingGroups.map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}
+                                        {safeGroups.map(g => <SelectItem key={String(g)} value={String(g)}>{String(g)}</SelectItem>)}
                                     </SelectContent>
                                 </Select>
                             </div>
@@ -202,7 +203,7 @@ export const EditContactDialog = ({ open, onOpenChange, contact, existingGroups,
                                 <div className="flex flex-wrap gap-2 items-center bg-[#0a0a0c] p-2 min-h-[44px] rounded-xl border border-[#222225]">
                                     {formData.tags.map((t: string) => {
                                         const tagConf = validAllTags.find(lt => lt.text === t);
-                                        const isGlobal = globalTags.some(gt => gt.text === t);
+                                        const isGlobal = (globalTags || []).some(gt => gt.text === t);
                                         const bgColor = tagConf ? tagConf.color + '15' : '#1e293b';
                                         const textColor = tagConf ? tagConf.color : '#94a3b8';
                                         const borderColor = tagConf ? tagConf.color + '40' : '#334155';
@@ -218,12 +219,12 @@ export const EditContactDialog = ({ open, onOpenChange, contact, existingGroups,
                                         <SelectTrigger className="h-6 text-[10px] bg-transparent border border-dashed border-[#333336] hover:bg-[#161618] text-slate-400 w-auto px-3 shadow-none focus:ring-0 rounded-full transition-colors"><Plus className="w-3 h-3 mr-1" /> Añadir</SelectTrigger>
                                         <SelectContent className="bg-[#121214] border-[#222225] max-h-[300px]">
                                             {validAllTags.map(tag => {
-                                                const isGlobal = globalTags.some(gt => gt.text === tag.text);
+                                                const isGlobal = (globalTags || []).some(gt => gt.text === tag.text);
                                                 return (
-                                                    <SelectItem key={tag.id} value={tag.text} className="text-xs text-white focus:bg-[#161618] cursor-pointer py-2">
+                                                    <SelectItem key={String(tag.id || tag.text)} value={String(tag.text)} className="text-xs text-white focus:bg-[#161618] cursor-pointer py-2">
                                                         <div className="flex items-center gap-2">
                                                             {isGlobal ? <Globe className="w-3 h-3 opacity-50"/> : <User className="w-3 h-3 opacity-50"/>}
-                                                            <div className="w-2.5 h-2.5 rounded-full shadow-inner" style={{backgroundColor: tag.color}}></div>
+                                                            <div className="w-2.5 h-2.5 rounded-full shadow-inner" style={{backgroundColor: tag.color || '#475569'}}></div>
                                                             {tag.text}
                                                         </div>
                                                     </SelectItem>
