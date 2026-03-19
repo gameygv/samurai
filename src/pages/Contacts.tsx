@@ -41,16 +41,15 @@ const Contacts = () => {
   const [contacts, setContacts] = useState<any[]>([]);
   const [groups, setGroups] = useState<string[]>([]);
   const [cities, setCities] = useState<string[]>([]); 
-  const [globalTags, setGlobalTags] = useState<{id: string, text: string, color: string}[]>([]);
-  const [localTags, setLocalTags] = useState<{id: string, text: string, color: string}[]>([]);
+  const [globalTags, setGlobalTags] = useState<any[]>([]);
+  const [localTags, setLocalTags] = useState<any[]>([]);
   
-  // FILTROS
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedGroup, setSelectedGroup] = useState<string>('ALL');
   const [selectedCity, setSelectedCity] = useState<string>('ALL'); 
   const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>('ALL');
   const [debtFilter, setDebtFilter] = useState<string>('ALL'); 
-  const [selectedTags, setSelectedTags] = useState<string[]>([]); // MULTI-SELECT
+  const [selectedTags, setSelectedTags] = useState<string[]>([]); 
   
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [selectedLead, setSelectedLead] = useState<any>(null);
@@ -77,10 +76,6 @@ const Contacts = () => {
   useEffect(() => {
     fetchContacts();
     if (user) fetchTags();
-    const channel = supabase.channel('contacts-live')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'contacts' }, () => fetchContacts())
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
   }, [user]);
 
   const fetchTags = async () => {
@@ -104,16 +99,14 @@ const Contacts = () => {
     if (!error && data) {
       const mappedData = data.map(c => {
         const activeSales = c.credit_sales?.filter((s: any) => s.status === 'ACTIVE') || [];
-        const totalDebt = activeSales.reduce((acc: number, sale: any) => acc + Number(sale.total_amount), 0);
-        
+        const totalDebt = activeSales.reduce((acc: number, sale: any) => acc + Number(sale.total_amount || 0), 0);
         let academicArray = [];
         try { academicArray = Array.isArray(c.academic_record) ? c.academic_record : JSON.parse(c.academic_record || '[]'); } catch(e){}
-
         return { ...c, total_debt: totalDebt, active_sales: activeSales, academic_count: academicArray.length };
       });
       setContacts(mappedData);
-      setGroups(Array.from(new Set(mappedData.map(d => d.grupo).filter(Boolean))) as string[]);
-      setCities(Array.from(new Set(mappedData.map(d => d.ciudad).filter(Boolean))) as string[]);
+      setGroups(Array.from(new Set(mappedData.map(d => String(d.grupo || '')).filter(Boolean))));
+      setCities(Array.from(new Set(mappedData.map(d => String(d.ciudad || '')).filter(Boolean))));
     }
     setLoading(false);
     setSelectedIds([]);
@@ -121,14 +114,14 @@ const Contacts = () => {
 
   const handleRunMassAnalysis = async () => {
     setAnalyzing(true);
-    toast.info("Iniciando escaneo de chats para completar CP y Estados...");
+    toast.info("Iniciando escaneo de chats...");
     try {
       const { error } = await supabase.functions.invoke('analyze-leads', { body: { force: true } });
       if (error) throw error;
-      toast.success("Lote analizado con éxito. Los datos se actualizarán en segundos.");
+      toast.success("Análisis completado.");
       fetchContacts();
     } catch (err: any) {
-      toast.error("Error en el motor de IA: " + err.message);
+      toast.error("Error en el motor de IA");
     } finally {
       setAnalyzing(false);
     }
@@ -140,159 +133,6 @@ const Contacts = () => {
       setSelectedTags(prev => prev.includes(tagText) ? prev.filter(t => t !== tagText) : [...prev, tagText]);
   };
 
-  const handleToggleSelectAll = () => setSelectedIds(selectedIds.length === filteredContacts.length ? [] : filteredContacts.map(c => c.id));
-  const handleToggleSelect = (id: string) => setSelectedIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
-
-  const openManageCredit = (contact: any) => {
-      if (contact.active_sales && contact.active_sales.length > 0) {
-          const saleToPass = {
-             ...contact.active_sales[0],
-             contact: {
-                id: contact.id, nombre: contact.nombre, apellido: contact.apellido, telefono: contact.telefono, lead_id: contact.lead_id
-             }
-          };
-          setSelectedActiveSale(saleToPass);
-          setIsManageCreditOpen(true);
-      }
-  };
-
-  const handleMassDelete = async () => {
-    if (!confirm(`¿ESTÁS SEGURO? Eliminarás ${selectedIds.length} contactos permanentemente.`)) return;
-    setIsDeleting(true);
-    const tid = toast.loading(`Eliminando ${selectedIds.length} registros...`);
-    try {
-      const selectedContacts = contacts.filter(c => selectedIds.includes(c.id));
-      const leadIds = selectedContacts.map(c => c.lead_id).filter(Boolean);
-      if (leadIds.length > 0) {
-        await supabase.from('conversaciones').delete().in('lead_id', leadIds);
-        await supabase.from('leads').delete().in('id', leadIds);
-      }
-      await supabase.from('contacts').delete().in('id', selectedIds);
-      toast.success("Limpieza masiva completada.", { id: tid });
-      fetchContacts();
-    } catch (err: any) {
-      toast.error("Error: " + err.message, { id: tid });
-    } finally {
-      setIsDeleting(false);
-    }
-  };
-
-  const handleMassGroupUpdate = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!massGroupName.trim()) return toast.error("Ingresa un nombre de grupo.");
-    setIsUpdatingGroup(true);
-    const tid = toast.loading("Actualizando grupo masivamente...");
-    try {
-      const { error } = await supabase.from('contacts').update({ grupo: massGroupName.trim() }).in('id', selectedIds);
-      if (error) throw error;
-      toast.success(`${selectedIds.length} contactos movidos.`, { id: tid });
-      setIsMassGroupOpen(false);
-      setMassGroupName("");
-      fetchContacts();
-    } catch (err: any) {
-      toast.error(err.message, { id: tid });
-    } finally {
-      setIsUpdatingGroup(false);
-    }
-  };
-
-  const handleDeleteContact = async (contact: any) => {
-    setIsDeleting(true);
-    const tid = toast.loading(`Eliminando a ${contact.nombre}...`);
-    try {
-      if (contact.lead_id) {
-        await supabase.from('conversaciones').delete().eq('lead_id', contact.lead_id);
-        await supabase.from('leads').delete().eq('id', contact.lead_id);
-      }
-      await supabase.from('contacts').delete().eq('id', contact.id);
-      toast.success("Registro eliminado permanentemente.", { id: tid });
-      setContactToDelete(null);
-      fetchContacts();
-    } catch (err: any) {
-      toast.error(err.message, { id: tid });
-    } finally {
-      setIsDeleting(false);
-    }
-  };
-
-  const handleOpenChat = async (contact: any) => {
-    if (contact.lead_id) {
-      const { data: lead } = await supabase.from('leads').select('*').eq('id', contact.lead_id).maybeSingle();
-      if (lead) {
-        setSelectedLead(lead);
-        setIsChatOpen(true);
-        return;
-      }
-    }
-
-    const tid = toast.loading("Iniciando chat...");
-    try {
-      const { data: newLead, error } = await supabase.from('leads').insert({
-        nombre: contact.nombre || 'Contacto',
-        telefono: contact.telefono,
-        email: contact.email || null,
-        ciudad: contact.ciudad || null,
-        estado: contact.estado || null,
-        cp: contact.cp || null,
-        pais: contact.pais || 'mx',
-        tags: Array.isArray(contact.tags) ? contact.tags : [],
-        buying_intent: 'BAJO',
-        ai_paused: true,
-        summary: 'Importado desde Contactos.',
-      }).select().single();
-
-      if (error) throw error;
-
-      await supabase.from('contacts').update({ lead_id: newLead.id }).eq('id', contact.id);
-
-      toast.success("Chat listo.", { id: tid });
-      setSelectedLead(newLead);
-      setIsChatOpen(true);
-      fetchContacts();
-    } catch (err: any) {
-      toast.error(err.message, { id: tid });
-    }
-  };
-
-  const handleExportCSV = (dataToExport: any[]) => {
-    if (dataToExport.length === 0) return toast.error("No hay datos para exportar.");
-    const tid = toast.loading("Generando archivo CSV...");
-    try {
-      const exportFormat = dataToExport.map(c => {
-        const safeTags = Array.isArray(c.tags) ? c.tags.map((t: any) => extractTagText(t)).filter(Boolean).join(', ') : '';
-        return {
-          Nombre: c.nombre || '',
-          Apellido: c.apellido || '',
-          Telefono: c.telefono || '',
-          Email: c.email || '',
-          Ciudad: c.ciudad || '',
-          Estado: c.estado || '',
-          CP: c.cp || '',
-          Grupo: c.grupo || '',
-          Etiquetas: safeTags,
-          Cursos_Tomados: c.academic_count || 0,
-          Estatus_Financiero: c.financial_status || 'Sin transacción',
-          Deuda_Total: c.total_debt || 0,
-          Intencion_Compra: c.leads?.buying_intent || 'N/A'
-        };
-      });
-
-      const csv = Papa.unparse(exportFormat);
-      const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', `audiencia_samurai_${new Date().toISOString().split('T')[0]}.csv`);
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      toast.success("Audiencia exportada con éxito.", { id: tid });
-    } catch (err: any) {
-      toast.error("Error al exportar: " + err.message, { id: tid });
-    }
-  };
-
-  // ✅ CORREGIDO: Casting explícito a String para evitar errores "Cannot read properties of undefined"
   const filteredContacts = contacts.filter(c => {
     const term = searchTerm.toLowerCase().trim();
     const contactTags = Array.isArray(c.tags) ? c.tags.map((t:any) => extractTagText(t)) : [];
@@ -303,21 +143,30 @@ const Contacts = () => {
     const email = String(c.email || '').toLowerCase();
 
     const matchesSearch = term === '' || nombre.includes(term) || apellido.includes(term) || telefono.includes(term) || email.includes(term);
-    const matchesGroup = selectedGroup === 'ALL' || c.grupo === selectedGroup;
-    const matchesCity = selectedCity === 'ALL' || c.ciudad === selectedCity;
+    const matchesGroup = selectedGroup === 'ALL' || String(c.grupo) === selectedGroup;
+    const matchesCity = selectedCity === 'ALL' || String(c.ciudad) === selectedCity;
     const matchesStatus = selectedStatusFilter === 'ALL' || (c.financial_status || 'Sin transacción') === selectedStatusFilter;
-    const matchesDebt = debtFilter === 'ALL' || (debtFilter === 'CON_DEUDA' ? c.total_debt > 0 : c.total_debt === 0);
-    
+    const matchesDebt = debtFilter === 'ALL' || (debtFilter === 'CON_DEUDA' ? (c.total_debt || 0) > 0 : (c.total_debt || 0) === 0);
     const matchesTag = selectedTags.length === 0 || selectedTags.every(t => contactTags.includes(t));
 
     return matchesSearch && matchesGroup && matchesCity && matchesStatus && matchesTag && matchesDebt;
   });
 
-  const hasActiveFilters = searchTerm !== '' || selectedGroup !== 'ALL' || selectedCity !== 'ALL' || selectedTags.length > 0 || selectedStatusFilter !== 'ALL' || debtFilter !== 'ALL';
+  const handleOpenChat = async (contact: any) => {
+    if (contact.lead_id) {
+      const { data: lead } = await supabase.from('leads').select('*').eq('id', contact.lead_id).maybeSingle();
+      if (lead) {
+        setSelectedLead(lead);
+        setIsChatOpen(true);
+        return;
+      }
+    }
+    toast.error("Este contacto no tiene un chat activo.");
+  };
 
   return (
     <Layout>
-      <div className="max-w-[1800px] mx-auto space-y-6 pb-24 animate-in fade-in duration-500">
+      <div className="max-w-[1800px] mx-auto space-y-6 pb-24 animate-in fade-in">
         <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
           <div>
             <h1 className="text-3xl font-bold text-white flex items-center gap-3">
@@ -326,260 +175,87 @@ const Contacts = () => {
               </div>
               Directorio de Contactos
             </h1>
-            <p className="text-slate-400 text-sm mt-1">Gestión avanzada, segmentaciones y creación de audiencias para campañas.</p>
+            <p className="text-slate-400 text-sm mt-1">Gestión avanzada y segmentación de clientes.</p>
           </div>
-
-          <div className="flex gap-2 items-center flex-wrap">
-            <Button 
-               onClick={handleRunMassAnalysis} 
-               disabled={analyzing} 
-               variant="outline" 
-               className="border-indigo-500/30 text-indigo-400 hover:bg-indigo-900/40 h-11 rounded-xl font-bold uppercase tracking-widest text-[10px]"
-            >
-               {analyzing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Sparkles className="w-4 h-4 mr-2" />} 
-               Forzar Análisis IA
+          <div className="flex gap-2">
+            <Button onClick={handleRunMassAnalysis} disabled={analyzing} variant="outline" className="border-indigo-500/30 text-indigo-400 h-11 px-4 rounded-xl font-bold text-[10px] uppercase tracking-widest">
+               {analyzing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Sparkles className="w-4 h-4 mr-2" />} Forzar Análisis IA
             </Button>
-            <Button onClick={() => setIsMassMessageOpen(true)} variant="outline" className="bg-amber-900/20 border-amber-500/30 text-amber-500 hover:bg-amber-900/40 h-11 rounded-xl font-bold uppercase tracking-widest text-[10px]">
-              <Megaphone className="w-4 h-4 mr-2" /> Campañas ({filteredContacts.length})
-            </Button>
-            <div className="flex bg-[#0a0a0c] border border-[#333336] rounded-xl overflow-hidden h-11">
-              <Button onClick={() => setIsImportOpen(true)} variant="ghost" className="h-full rounded-none hover:bg-[#161618] text-slate-300 font-bold uppercase tracking-widest text-[10px] border-r border-[#333336]">
-                <FileSpreadsheet className="w-4 h-4 mr-2" /> Importar
-              </Button>
-              <Button onClick={() => handleExportCSV(filteredContacts)} variant="ghost" className="h-full rounded-none hover:bg-[#161618] text-slate-300 font-bold uppercase tracking-widest text-[10px]">
-                <Download className="w-4 h-4 mr-2" /> Exportar CSV
-              </Button>
-            </div>
-            <Button onClick={() => setIsCreateOpen(true)} className="bg-indigo-600 hover:bg-indigo-500 text-white h-11 px-6 font-bold rounded-xl shadow-lg uppercase tracking-widest text-[10px]">
+            <Button onClick={() => setIsCreateOpen(true)} className="bg-indigo-600 hover:bg-indigo-700 text-white h-11 px-6 rounded-xl shadow-lg uppercase tracking-widest text-[10px]">
               <UserPlus className="w-4 h-4 mr-2" /> NUEVO
             </Button>
           </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-3 bg-[#0f0f11] p-3 rounded-2xl border border-[#222225] shadow-md">
-          <div className="flex items-center gap-2 pl-2 border-r border-[#222225] pr-4">
-            <Filter className="w-4 h-4 text-slate-500" />
-            <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Segmentación</span>
-          </div>
-          
           <div className="relative flex-1 min-w-[200px]">
             <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-500" />
-            <Input placeholder="Buscar por nombre, email o tel..." className="pl-10 h-10 bg-[#161618] border-[#222225] rounded-xl text-xs focus-visible:ring-indigo-500/50 text-white" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+            <Input placeholder="Buscar por nombre, email o tel..." className="pl-10 h-10 bg-[#161618] border-[#222225] rounded-xl text-xs text-white" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
           </div>
-
           <Select value={selectedGroup} onValueChange={setSelectedGroup}>
             <SelectTrigger className="w-[150px] h-10 bg-[#161618] border-[#222225] rounded-xl text-xs text-slate-300"><SelectValue placeholder="Grupo" /></SelectTrigger>
-            <SelectContent className="bg-slate-900 border-slate-800 text-white rounded-xl max-h-[300px]">
+            <SelectContent className="bg-slate-900 border-slate-800 text-white rounded-xl">
               <SelectItem value="ALL">Cualquier Grupo</SelectItem>
               {groups.map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}
             </SelectContent>
           </Select>
-
-          <Select value={selectedCity} onValueChange={setSelectedCity}>
-            <SelectTrigger className="w-[150px] h-10 bg-[#161618] border-[#222225] rounded-xl text-xs text-slate-300"><SelectValue placeholder="Ciudad" /></SelectTrigger>
-            <SelectContent className="bg-slate-900 border-slate-800 text-white rounded-xl max-h-[300px]">
-              <SelectItem value="ALL">Cualquier Ciudad</SelectItem>
-              {cities.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-            </SelectContent>
-          </Select>
-
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button variant="outline" className={cn("w-[160px] h-10 bg-[#161618] border-[#222225] justify-start text-xs rounded-xl", selectedTags.length > 0 ? "text-indigo-400" : "text-slate-300")}>
-                {selectedTags.length > 0 ? `${selectedTags.length} Seleccionadas` : 'Etiquetas...'}
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-[240px] p-0 bg-[#121214] border-[#222225] text-white rounded-xl shadow-2xl">
-              <Command className="bg-transparent">
-                <CommandInput placeholder="Buscar etiqueta..." className="text-xs h-10" />
-                <CommandList className="max-h-[300px] overflow-y-auto custom-scrollbar">
-                   <CommandEmpty className="py-6 text-center text-xs text-slate-500">No encontrada.</CommandEmpty>
-                   <CommandGroup>
-                     {selectedTags.length > 0 && (
-                        <CommandItem onSelect={() => setSelectedTags([])} className="text-xs focus:bg-[#161618] focus:text-white cursor-pointer border-b border-[#222225] pb-2 mb-2">
-                           <X className="w-3 h-3 mr-2 text-red-400" /> Borrar selección
-                        </CommandItem>
-                     )}
-                     {allTags.map(t => {
-                        const isGlobal = globalTags.some(gt => gt.text === t.text);
-                        return (
-                          <CommandItem key={t.id || t.text} onSelect={() => toggleTagSelection(t.text)} className="text-xs focus:bg-[#161618] focus:text-white cursor-pointer py-2">
-                             <div className="flex items-center gap-3">
-                               <Checkbox checked={selectedTags.includes(t.text)} className="border-slate-600 rounded" />
-                               {isGlobal ? <Globe className="w-3 h-3 opacity-50 shrink-0"/> : <UserIcon className="w-3 h-3 opacity-50 shrink-0"/>}
-                               <div className="w-2.5 h-2.5 rounded-full shadow-inner shrink-0" style={{ backgroundColor: t.color }}></div>
-                               <span className="truncate">{t.text}</span>
-                             </div>
-                          </CommandItem>
-                        )
-                     })}
-                   </CommandGroup>
-                </CommandList>
-              </Command>
-            </PopoverContent>
-          </Popover>
-
-          {isManager && (
-            <>
-              <Select value={selectedStatusFilter} onValueChange={setSelectedStatusFilter}>
-                <SelectTrigger className="w-[150px] h-10 bg-[#161618] border-[#222225] rounded-xl text-xs text-slate-300"><SelectValue placeholder="Finanzas" /></SelectTrigger>
-                <SelectContent className="bg-[#121214] border-[#222225] text-white rounded-xl">
-                  <SelectItem value="ALL">Cualquier Estado</SelectItem>
-                  {financialStatuses.map(s => <SelectItem key={s.id} value={s.id}>{s.id}</SelectItem>)}
-                </SelectContent>
-              </Select>
-              <Select value={debtFilter} onValueChange={setDebtFilter}>
-                <SelectTrigger className="w-[140px] h-10 bg-[#161618] border-[#222225] rounded-xl text-xs text-slate-300"><SelectValue placeholder="Deuda" /></SelectTrigger>
-                <SelectContent className="bg-[#121214] border-[#222225] text-white rounded-xl">
-                  <SelectItem value="ALL">Cualquier Saldo</SelectItem>
-                  <SelectItem value="CON_DEUDA">Con Deuda Activa</SelectItem>
-                  <SelectItem value="SIN_DEUDA">Sin Deuda</SelectItem>
-                </SelectContent>
-              </Select>
-            </>
-          )}
-
-          {hasActiveFilters && filteredContacts.length > 0 && (
-            <Button onClick={handleToggleSelectAll} variant="secondary" className={cn("h-10 px-4 ml-auto rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all", selectedIds.length === filteredContacts.length ? "bg-indigo-600/20 text-indigo-400 border border-indigo-500/30" : "bg-[#161618] text-slate-300 hover:bg-[#222225] border border-[#333336]")}>
-              <CheckSquare className="w-3.5 h-3.5 mr-2" />
-              {selectedIds.length === filteredContacts.length ? "Deseleccionar" : `Seleccionar Segmento (${filteredContacts.length})`}
-            </Button>
-          )}
         </div>
 
         <Card className="bg-[#0f0f11] border-[#222225] shadow-2xl rounded-2xl overflow-hidden min-h-[400px]">
-          <CardContent className="p-0">
-            <Table>
-              <TableHeader>
-                <TableRow className="border-b border-[#222225] bg-[#161618] hover:bg-[#161618]">
-                  <TableHead className="w-12 pl-6"><Checkbox checked={selectedIds.length > 0 && selectedIds.length === filteredContacts.length} onCheckedChange={handleToggleSelectAll} className="border-slate-600 data-[state=checked]:bg-indigo-500"/></TableHead>
-                  <TableHead className="text-slate-500 text-[10px] uppercase font-bold tracking-widest py-4">Nombre y Contacto</TableHead>
-                  <TableHead className="text-slate-500 text-[10px] uppercase font-bold tracking-widest">Ubicación & Etiquetas</TableHead>
-                  {isManager && <TableHead className="text-slate-500 text-[10px] uppercase font-bold tracking-widest w-48">Finanzas & Deuda</TableHead>}
-                  <TableHead className="text-slate-500 text-[10px] uppercase font-bold tracking-widest text-right pr-6">Acciones</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {loading ? (
-                  <TableRow><TableCell colSpan={isManager ? 5 : 4} className="h-60 text-center"><Loader2 className="animate-spin mx-auto text-indigo-500" /></TableCell></TableRow>
-                ) : filteredContacts.length === 0 ? (
-                  <TableRow><TableCell colSpan={isManager ? 5 : 4} className="h-60 text-center text-slate-600 italic uppercase text-[10px] tracking-widest font-bold">No hay resultados con estos filtros.</TableCell></TableRow>
-                ) : filteredContacts.map((contact) => (
-                  <TableRow key={contact.id} className={cn("border-b border-[#161618] transition-colors", selectedIds.includes(contact.id) ? "bg-indigo-900/10" : "hover:bg-[#1a1a1d]")}>
-                    <TableCell className="pl-6"><Checkbox checked={selectedIds.includes(contact.id)} onCheckedChange={() => handleToggleSelect(contact.id)} className="border-slate-600 data-[state=checked]:bg-indigo-500"/></TableCell>
-                    <TableCell className="py-4">
-                      <div className="flex items-center gap-4">
-                        <Avatar className="h-10 w-10 border border-[#222225] bg-[#121214]"><AvatarFallback className="bg-transparent text-indigo-300 font-bold text-sm">{contact.nombre?.substring(0, 2).toUpperCase() || 'NA'}</AvatarFallback></Avatar>
-                        <div className="flex flex-col">
-                          <span className="font-bold text-slate-100 text-sm flex items-center gap-2">
-                             {contact.nombre} {contact.apellido}
-                             {contact.academic_count > 0 && (
-                                <span className="flex items-center gap-1 bg-indigo-950/40 text-indigo-400 border border-indigo-500/30 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-widest" title={`${contact.academic_count} cursos`}>
-                                   <GraduationCap className="w-3 h-3" /> Alumno
-                                </span>
-                             )}
-                          </span>
-                          <span className="text-[11px] text-slate-500 font-mono mt-0.5 flex items-center gap-1.5"><Phone className="w-3 h-3"/> {contact.telefono}</span>
-                        </div>
+          <Table>
+            <TableHeader className="bg-[#161618]">
+              <TableRow className="border-b border-[#222225]">
+                <TableHead className="w-12 pl-6"><Checkbox checked={selectedIds.length > 0 && selectedIds.length === filteredContacts.length} onCheckedChange={() => {}} /></TableHead>
+                <TableHead className="text-slate-500 text-[10px] uppercase font-bold tracking-widest py-4">Nombre y Contacto</TableHead>
+                <TableHead className="text-slate-500 text-[10px] uppercase font-bold tracking-widest">Ubicación & Etiquetas</TableHead>
+                {isManager && <TableHead className="text-slate-500 text-[10px] uppercase font-bold tracking-widest w-48">Finanzas</TableHead>}
+                <TableHead className="text-slate-500 text-[10px] uppercase font-bold tracking-widest text-right pr-6">Acciones</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {loading ? (
+                <TableRow><TableCell colSpan={isManager ? 5 : 4} className="h-60 text-center"><Loader2 className="animate-spin mx-auto text-indigo-500" /></TableCell></TableRow>
+              ) : filteredContacts.length === 0 ? (
+                <TableRow><TableCell colSpan={isManager ? 5 : 4} className="h-60 text-center text-slate-600 italic uppercase text-[10px] tracking-widest font-bold">No hay resultados.</TableCell></TableRow>
+              ) : filteredContacts.map((contact) => (
+                <TableRow key={contact.id} className="border-b border-[#161618] hover:bg-[#1a1a1d]">
+                  <TableCell className="pl-6"><Checkbox checked={selectedIds.includes(contact.id)} onCheckedChange={() => {}} /></TableCell>
+                  <TableCell className="py-4">
+                    <div className="flex items-center gap-4">
+                      <Avatar className="h-10 w-10 border border-[#222225] bg-[#121214]"><AvatarFallback className="bg-transparent text-indigo-300 font-bold text-sm">{String(contact.nombre || 'NA').substring(0, 2).toUpperCase()}</AvatarFallback></Avatar>
+                      <div className="flex flex-col">
+                        <span className="font-bold text-slate-100 text-sm">{contact.nombre} {contact.apellido}</span>
+                        <span className="text-[11px] text-slate-500 font-mono mt-0.5">{contact.telefono}</span>
                       </div>
-                    </TableCell>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex flex-col gap-1">
+                      <span className="text-[10px] text-slate-300">{contact.email || 'Sin email'}</span>
+                      <span className="text-[10px] text-indigo-400 font-bold">{contact.ciudad || 'Sin ciudad'}</span>
+                    </div>
+                  </TableCell>
+                  {isManager && (
                     <TableCell>
-                      <div className="flex flex-col gap-2">
-                        <span className={cn("text-[10px] flex items-center gap-1.5", contact.email ? "text-slate-300" : "text-slate-600 italic")}><Mail className="w-3 h-3" /> {contact.email || 'Sin email'}</span>
-                        <span className={cn("text-[10px] flex items-center gap-1.5", contact.ciudad ? "text-slate-300" : "text-slate-600 italic")}><MapPin className="w-3 h-3" /> {contact.ciudad || 'Sin ciudad'}{contact.grupo && <span className="ml-2 text-indigo-400 font-bold">• {contact.grupo}</span>}</span>
-                        {Array.isArray(contact.tags) && contact.tags.length > 0 && (
-                          <div className="flex gap-1.5 flex-wrap mt-1">
-                            {contact.tags.map((rawTag: any, idx: number) => {
-                              const t = extractTagText(rawTag);
-                              if (!t) return null;
-                              const tagConf = allTags.find(lt => lt.text === t);
-                              const isGlobal = globalTags.some(gt => gt.text === t);
-                              return (
-                                <Badge key={`${t}-${idx}`} style={{ backgroundColor: (tagConf?.color || '#475569') + '15', color: tagConf?.color || '#94a3b8', borderColor: (tagConf?.color || '#475569') + '40' }} className="text-[9px] h-5 px-1.5 font-bold uppercase tracking-widest border flex items-center gap-1">
-                                  {isGlobal ? <Globe className="w-2.5 h-2.5 opacity-70 shrink-0"/> : <UserIcon className="w-2.5 h-2.5 opacity-70 shrink-0"/>}
-                                  <span className="truncate max-w-[120px]">{t}</span>
-                                </Badge>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </div>
+                      <FinancialStatusBadge contactId={contact.id} currentStatus={contact.financial_status || 'Sin transacción'} isManager={isManager} onUpdate={fetchContacts} />
                     </TableCell>
-                    {isManager && (
-                      <TableCell>
-                        <div className="flex flex-col gap-2">
-                          <FinancialStatusBadge contactId={contact.id} currentStatus={contact.financial_status || 'Sin transacción'} isManager={isManager} onUpdate={fetchContacts} />
-                          {contact.total_debt > 0 ? (
-                             <div className="flex items-center gap-2">
-                               <span className="text-[11px] font-mono font-bold text-amber-500 flex items-center gap-1"><DollarSign className="w-3 h-3"/> {contact.total_debt.toLocaleString()}</span>
-                               <Button size="sm" onClick={() => openManageCredit(contact)} className="h-6 px-2 text-[9px] bg-emerald-600/20 text-emerald-500 border border-emerald-500/30 hover:bg-emerald-600 hover:text-white rounded uppercase font-bold tracking-widest transition-colors">ABONAR</Button>
-                             </div>
-                          ) : (
-                             <span className="text-[10px] text-slate-500 italic uppercase">Sin deuda</span>
-                          )}
-                        </div>
-                      </TableCell>
-                    )}
-                    <TableCell className="text-right pr-6">
-                      <div className="flex justify-end items-center gap-3">
-                        {isManager && (
-                          <button className="text-amber-500 hover:text-amber-400 text-[9px] font-bold uppercase tracking-widest flex items-center gap-1.5 transition-colors border border-amber-500/30 bg-amber-500/10 px-3 py-2 rounded-xl" onClick={() => { setContactForCredit(contact); setIsCreditOpen(true); }}><Wallet className="w-3.5 h-3.5" /> NUEVO CRÉDITO</button>
-                        )}
-                        <button className="text-indigo-400 hover:text-indigo-300 text-[10px] font-bold uppercase tracking-widest flex items-center gap-1.5 transition-colors" onClick={() => handleOpenChat(contact)}><ExternalLink className="w-3.5 h-3.5" /> CHAT</button>
-                        <button className="text-slate-500 hover:text-white transition-colors bg-[#161618] p-2 rounded-xl border border-[#222225]" onClick={() => { setContactToEdit(contact); setIsEditOpen(true); }}><Edit3 className="w-3.5 h-3.5" /></button>
-                        {isManager && <button className="text-slate-500 hover:text-red-500 transition-colors bg-[#161618] p-2 rounded-xl border border-[#222225]" onClick={() => setContactToDelete(contact)}><X className="w-3.5 h-3.5" /></button>}
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
+                  )}
+                  <TableCell className="text-right pr-6">
+                    <div className="flex justify-end items-center gap-3">
+                      <button className="text-indigo-400 hover:text-indigo-300 text-[10px] font-bold uppercase tracking-widest" onClick={() => handleOpenChat(contact)}>CHAT</button>
+                      <button className="text-slate-500 hover:text-white" onClick={() => { setContactToEdit(contact); setIsEditOpen(true); }}><Edit3 className="w-4 h-4" /></button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
         </Card>
-
-        {selectedIds.length > 0 && (
-          <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 animate-in slide-in-from-bottom-4 duration-300">
-            <div className="bg-[#0f0f11] border border-indigo-500/30 shadow-[0_20px_50px_rgba(0,0,0,0.8)] rounded-2xl px-6 py-4 flex items-center gap-6 backdrop-blur-xl">
-              <div className="flex items-center gap-3 border-r border-[#222225] pr-6">
-                <div className="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center text-xs font-bold text-white shadow-lg">{selectedIds.length}</div>
-                <span className="text-[10px] font-bold text-slate-200 uppercase tracking-widest">Seleccionados</span>
-              </div>
-              <div className="flex items-center gap-3">
-                <Button variant="outline" onClick={() => handleExportCSV(contacts.filter(c => selectedIds.includes(c.id)))} className="bg-emerald-900/20 border-emerald-500/30 text-emerald-500 hover:bg-emerald-600 hover:text-slate-900 h-10 px-4 rounded-xl font-bold uppercase tracking-widest text-[10px]"><Download className="w-4 h-4 mr-2" /> Exportar</Button>
-                <Button variant="outline" onClick={() => setIsMassMessageOpen(true)} className="bg-amber-900/20 border-amber-500/30 text-amber-500 hover:bg-amber-600 hover:text-slate-900 h-10 px-4 rounded-xl font-bold uppercase tracking-widest text-[10px]"><Megaphone className="w-4 h-4 mr-2" /> Lanzar Campaña</Button>
-                <Button variant="outline" onClick={() => setIsMassGroupOpen(true)} className="bg-[#161618] border-[#222225] text-slate-300 hover:bg-indigo-600 hover:text-white h-10 px-4 rounded-xl font-bold uppercase tracking-widest text-[10px]"><FolderInput className="w-4 h-4 mr-2" /> Mover Grupo</Button>
-                {isManager && <Button variant="destructive" onClick={handleMassDelete} disabled={isDeleting} className="bg-red-950 border-red-900 text-red-500 hover:bg-red-600 hover:text-white h-10 px-4 rounded-xl font-bold uppercase tracking-widest text-[10px]">{isDeleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <X className="w-4 h-4 mr-2" />} Borrar</Button>}
-                <Button variant="ghost" onClick={() => setSelectedIds([])} className="text-slate-500 hover:text-white"><X className="w-4 h-4" /></Button>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
 
-      <Dialog open={isMassGroupOpen} onOpenChange={setIsMassGroupOpen}>
-        <DialogContent className="bg-[#0f0f11] border-[#222225] text-white max-w-sm rounded-3xl">
-          <DialogHeader><DialogTitle className="text-indigo-400 flex items-center gap-2"><FolderInput className="w-5 h-5"/> Asignar Grupo</DialogTitle><DialogDescription className="text-slate-400 text-xs">Mueve los {selectedIds.length} contactos a un nuevo grupo.</DialogDescription></DialogHeader>
-          <form onSubmit={handleMassGroupUpdate} className="space-y-4 pt-4">
-            <div className="space-y-2"><Label className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Nombre del Grupo</Label><Input list="existing-groups-mass" value={massGroupName} onChange={e => setMassGroupName(e.target.value)} placeholder="Ej: Oferta Noviembre..." className="bg-[#161618] border-[#222225] h-11 rounded-xl text-white focus-visible:ring-indigo-500" required /><datalist id="existing-groups-mass">{groups.map(g => <option key={g} value={g} />)}</datalist></div>
-            <DialogFooter><Button type="button" variant="ghost" onClick={() => setIsMassGroupOpen(false)}>Cancelar</Button><Button type="submit" disabled={isUpdatingGroup} className="bg-indigo-600 hover:bg-indigo-500 font-bold px-6 rounded-xl uppercase tracking-widest text-[10px]">{isUpdatingGroup ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : 'Confirmar'}</Button></DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
-
-      <AlertDialog open={!!contactToDelete} onOpenChange={() => !isDeleting && setContactToDelete(null)}>
-        <AlertDialogContent className="bg-[#0f0f11] border-[#222225] text-white rounded-3xl">
-          <AlertDialogHeader><AlertDialogTitle className="text-red-400">¿Eliminar permanentemente?</AlertDialogTitle></AlertDialogHeader>
-          <AlertDialogFooter><AlertDialogCancel className="bg-transparent border-[#222225] text-slate-400 hover:text-white rounded-xl h-11" disabled={isDeleting}>Cancelar</AlertDialogCancel><AlertDialogAction className="bg-red-600 hover:bg-red-500 rounded-xl h-11 font-bold" onClick={() => handleDeleteContact(contactToDelete)} disabled={isDeleting}>Borrar Definitivo</AlertDialogAction></AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      <EditContactDialog open={isEditOpen} onOpenChange={setIsEditOpen} contact={contactToEdit} existingGroups={groups} allTags={allTags} globalTags={globalTags} onSuccess={fetchContacts} />
-      <ImportContactsDialog open={isImportOpen} onOpenChange={setIsImportOpen} onSuccess={fetchContacts} />
-      <MassMessageDialog open={isMassMessageOpen} onOpenChange={setIsMassMessageOpen} targetContacts={contacts.filter(c => selectedIds.includes(c.id))} />
-      {isCreateOpen && <CreateLeadDialog open={isCreateOpen} onOpenChange={setIsCreateOpen} onSuccess={fetchContacts} />}
-      {isCreditOpen && <CreateCreditSaleDialog open={isCreditOpen} onOpenChange={setIsCreditOpen} contact={contactForCredit} onSuccess={() => { toast.info('Actualizando saldos...'); fetchContacts(); }} />}
-      {isManageCreditOpen && <ManageCreditDialog open={isManageCreditOpen} onOpenChange={setIsManageCreditOpen} sale={selectedActiveSale} onSuccess={() => { fetchContacts(); }} />}
+      {isEditOpen && contactToEdit && <EditContactDialog open={isEditOpen} onOpenChange={setIsEditOpen} contact={contactToEdit} existingGroups={groups} allTags={allTags} globalTags={globalTags} onSuccess={fetchContacts} />}
       {selectedLead && <ChatViewer lead={selectedLead} open={isChatOpen} onOpenChange={setIsChatOpen} />}
+      {isCreateOpen && <CreateLeadDialog open={isCreateOpen} onOpenChange={setIsCreateOpen} onSuccess={fetchContacts} />}
     </Layout>
   );
 };
