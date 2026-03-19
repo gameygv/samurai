@@ -104,7 +104,6 @@ export const MemoryPanel = ({
      if (data) setInternalNotes(data);
   };
 
-  // ✅ CORREGIDO: Recibe string directo en lugar de Event de Formulario
   const handleAddInternalNote = async (text: string) => {
      if (!text.trim()) return;
      setSendingNote(true);
@@ -204,7 +203,6 @@ export const MemoryPanel = ({
       }
   };
 
-  // ✅ CORREGIDO: Manejo de arreglo seguro y generación de ID única
   const handleAddReminder = () => {
       const newReminder = {
           id: `rem-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
@@ -309,6 +307,8 @@ export const MemoryPanel = ({
             cp={cpVal} 
             summary={summaryVal} 
             perfil={perfilVal} 
+            onRunAnalysis={handleRunAnalysis}
+            analyzing={analyzing}
          />
 
          <RemindersBlock 

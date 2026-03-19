@@ -292,11 +292,17 @@ const Contacts = () => {
     }
   };
 
+  // ✅ CORREGIDO: Casting explícito a String para evitar errores "Cannot read properties of undefined"
   const filteredContacts = contacts.filter(c => {
-    const term = searchTerm.toLowerCase();
+    const term = searchTerm.toLowerCase().trim();
     const contactTags = Array.isArray(c.tags) ? c.tags.map((t:any) => extractTagText(t)) : [];
     
-    const matchesSearch = c.nombre?.toLowerCase().includes(term) || c.apellido?.toLowerCase().includes(term) || c.telefono?.includes(term) || c.email?.toLowerCase().includes(term);
+    const nombre = String(c.nombre || '').toLowerCase();
+    const apellido = String(c.apellido || '').toLowerCase();
+    const telefono = String(c.telefono || '').toLowerCase();
+    const email = String(c.email || '').toLowerCase();
+
+    const matchesSearch = term === '' || nombre.includes(term) || apellido.includes(term) || telefono.includes(term) || email.includes(term);
     const matchesGroup = selectedGroup === 'ALL' || c.grupo === selectedGroup;
     const matchesCity = selectedCity === 'ALL' || c.ciudad === selectedCity;
     const matchesStatus = selectedStatusFilter === 'ALL' || (c.financial_status || 'Sin transacción') === selectedStatusFilter;

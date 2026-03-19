@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Edit2, ChevronDown, User, Smartphone, Mail, MapPin, Globe, Target, Fingerprint, Loader2 } from 'lucide-react';
+import { Edit2, ChevronDown, User, Smartphone, Mail, MapPin, Globe, Target, Fingerprint, Loader2, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface IdentityCrmProps {
@@ -21,11 +21,14 @@ interface IdentityCrmProps {
   cp: string;
   summary: string;
   perfil: string;
+  onRunAnalysis: () => void;
+  analyzing: boolean;
 }
 
 export const IdentityCrm = ({
   isEditing, setIsEditing, memoryForm, setMemoryForm, onSave, saving,
-  agentName, channelName, email, ciudad, estado, cp, summary, perfil
+  agentName, channelName, email, ciudad, estado, cp, summary, perfil,
+  onRunAnalysis, analyzing
 }: IdentityCrmProps) => {
   const [tacticalOpen, setTacticalOpen] = useState(true);
 
@@ -53,9 +56,15 @@ export const IdentityCrm = ({
                 <Input value={String(memoryForm.cp || '')} onChange={e => setMemoryForm({...memoryForm, cp: e.target.value})} placeholder="C.P." className="h-8 text-xs bg-[#0a0a0c] border-[#222225]" />
              </div>
              <Input value={String(memoryForm.email)} onChange={e => setMemoryForm({...memoryForm, email: e.target.value})} placeholder="Email" className="h-8 text-xs bg-[#0a0a0c] border-[#222225]" />
-             <Button onClick={onSave} disabled={saving} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white h-9 text-xs font-bold rounded-lg uppercase tracking-widest mt-2 shadow-lg">
-                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : "Guardar Ficha"}
-             </Button>
+             
+             <div className="flex gap-2 mt-2">
+                <Button onClick={onRunAnalysis} disabled={analyzing || saving} variant="outline" className="flex-1 h-9 text-xs bg-indigo-950/20 text-indigo-400 border-indigo-500/30 hover:bg-indigo-900/40 uppercase font-bold tracking-widest">
+                   {analyzing ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> : <Sparkles className="w-3.5 h-3.5 mr-1.5" />} IA
+                </Button>
+                <Button onClick={onSave} disabled={saving || analyzing} className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white h-9 text-xs font-bold rounded-lg uppercase tracking-widest shadow-lg">
+                   {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Guardar"}
+                </Button>
+             </div>
           </div>
        ) : (
           <div>
