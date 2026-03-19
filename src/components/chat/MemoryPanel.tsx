@@ -133,7 +133,7 @@ export const MemoryPanel = ({
   };
 
   const fetchAgents = async () => {
-      const { data } = await supabase.from('profiles').select('id, full_name, role');
+      const { data } = await supabase.from('profiles').select('id, full_name, role').eq('is_active', true);
       if (data) setAgents(data);
   };
 
@@ -205,7 +205,8 @@ export const MemoryPanel = ({
           id: `rem-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
           title: '',
           datetime: new Date(new Date().getTime() + 24 * 60 * 60 * 1000).toISOString().slice(0, 16),
-          notify_minutes: 15
+          notify_minutes: 15,
+          notify_wa: true // Por defecto se notifica al agente
       };
       const currentRems = Array.isArray(memoryForm.reminders) ? memoryForm.reminders : [];
       setMemoryForm({ ...memoryForm, reminders: [...currentRems, newReminder] });
@@ -305,6 +306,8 @@ export const MemoryPanel = ({
             perfil={perfilVal} 
             onRunAnalysis={handleRunAnalysis}
             analyzing={analyzing}
+            agents={safeAgents}
+            isManager={isManager}
          />
 
          <RemindersBlock 

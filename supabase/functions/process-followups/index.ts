@@ -6,7 +6,7 @@ import { corsHeaders } from '../_shared/cors.ts'
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders })
 
-  console.log("[process-followups] Iniciando ciclo AI-Driven + Retargeting + Routing + Limpieza...");
+  console.log("[process-followups] Iniciando ciclo AI-Driven + Retargeting + Routing + Limpieza + Recordatorios...");
 
   try {
     const supabaseClient = createClient(
@@ -154,6 +154,59 @@ serve(async (req) => {
         const ids = leadsToLose.map(l => l.id);
         await supabaseClient.from('leads').update({ buying_intent: 'PERDIDO' }).in('id', ids);
         console.log(`[process-followups] ${ids.length} leads movidos a PERDIDO por inactividad.`);
+    }
+
+    // ========================================================
+    // 5. ALERTAS Y RECORDATORIOS PARA AGENTES (NUEVO)
+    // ========================================================
+    const { data: leadsWithReminders } = await supabaseClient
+        .from('leads')
+        .select('id, nombre, assigned_to, reminders')
+        .not('reminders', 'is', null)
+        .neq('reminders', '[]');
+
+    if (leadsWithReminders && leadsWithReminders.length > 0) {
+        const now = new Date();
+        const { data: allAgentsProfiles } = await supabaseClient.from('profiles').select('id, phone, full_name').eq('is_active', true);
+        const agentMap = (allAgentsProfiles || []).reduce((acc, a) => ({...acc, [a.id]: a}), {});
+
+        for (const lead of leadsWithReminders) {
+            let remindersModified = false;
+            let currentReminders = typeof lead.reminders === 'string' ? JSON.parse(lead.reminders) : lead.reminders;
+            
+            if (!Array.isArray(currentReminders)) continue;
+
+            for (let i = 0; i < currentReminders.length; i++) {
+                const rem = currentReminders[i];
+                if (rem.notified || !rem.datetime) continue;
+
+                const remTime = new Date(rem.datetime);
+                const notifyMinutes = parseInt(rem.notify_minutes) || 0;
+                const triggerTime = new Date(remTime.getTime() - (notifyMinutes * 60000));
+
+                if (now >= triggerTime) {
+                    if (rem.notify_wa !== false && lead.assigned_to) {
+                        const agent = agentMap[lead.assigned_to];
+                        if (agent && agent.phone) {
+                            const msg = `⏰ *RECORDATORIO CRM*\n\nHola ${agent.full_name?.split(' ')[0] || 'Asesor'},\nTienes una tarea con el lead *${lead.nombre}*:\n\n📌 *${rem.title || 'Tarea programada'}*\n🕒 Hora: ${remTime.toLocaleString('es-MX', {timeStyle: 'short', dateStyle: 'short'})}`;
+                            
+                            const defaultCh = getConfig('default_notification_channel');
+                            if (defaultCh) {
+                                await supabaseClient.functions.invoke('send-message-v3', {
+                                    body: { channel_id: defaultCh, phone: agent.phone, message: msg }
+                                });
+                            }
+                        }
+                    }
+                    currentReminders[i].notified = true;
+                    remindersModified = true;
+                }
+            }
+
+            if (remindersModified) {
+                await supabaseClient.from('leads').update({ reminders: currentReminders }).eq('id', lead.id);
+            }
+        }
     }
 
     return new Response(JSON.stringify({ success: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });

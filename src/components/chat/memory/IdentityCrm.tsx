@@ -3,6 +3,8 @@
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Edit2, ChevronDown, User, Smartphone, Mail, MapPin, Globe, Target, Fingerprint, Loader2, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -23,12 +25,14 @@ interface IdentityCrmProps {
   perfil: string;
   onRunAnalysis: () => void;
   analyzing: boolean;
+  agents: any[];
+  isManager: boolean;
 }
 
 export const IdentityCrm = ({
   isEditing, setIsEditing, memoryForm, setMemoryForm, onSave, saving,
   agentName, channelName, email, ciudad, estado, cp, summary, perfil,
-  onRunAnalysis, analyzing
+  onRunAnalysis, analyzing, agents, isManager
 }: IdentityCrmProps) => {
   const [tacticalOpen, setTacticalOpen] = useState(true);
 
@@ -57,7 +61,20 @@ export const IdentityCrm = ({
              </div>
              <Input value={String(memoryForm.email)} onChange={e => setMemoryForm({...memoryForm, email: e.target.value})} placeholder="Email" className="h-8 text-xs bg-[#0a0a0c] border-[#222225]" />
              
-             <div className="flex gap-2 mt-2">
+             {isManager && (
+                <div className="space-y-1.5 border-t border-[#222225] pt-2 mt-2">
+                   <Label className="text-[9px] uppercase font-bold text-slate-500 tracking-widest ml-1 flex items-center gap-1.5"><User className="w-3 h-3"/> Reasignar Agente</Label>
+                   <Select value={memoryForm.assigned_to || 'unassigned'} onValueChange={v => setMemoryForm({...memoryForm, assigned_to: v === 'unassigned' ? null : v})}>
+                      <SelectTrigger className="h-8 text-xs bg-[#0a0a0c] border-[#222225]"><SelectValue placeholder="Seleccionar agente..."/></SelectTrigger>
+                      <SelectContent className="bg-[#121214] border-[#222225] text-white">
+                         <SelectItem value="unassigned">Sin asignar (Bot Global)</SelectItem>
+                         {agents.map(a => <SelectItem key={a.id} value={a.id}>{a.full_name}</SelectItem>)}
+                      </SelectContent>
+                   </Select>
+                </div>
+             )}
+
+             <div className="flex gap-2 mt-2 pt-2 border-t border-[#222225]">
                 <Button onClick={onRunAnalysis} disabled={analyzing || saving} variant="outline" className="flex-1 h-9 text-xs bg-indigo-950/20 text-indigo-400 border-indigo-500/30 hover:bg-indigo-900/40 uppercase font-bold tracking-widest">
                    {analyzing ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> : <Sparkles className="w-3.5 h-3.5 mr-1.5" />} IA
                 </Button>

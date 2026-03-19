@@ -1,7 +1,8 @@
 import React from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Bell, Trash2 } from 'lucide-react';
+import { Bell, Trash2, Smartphone } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 interface ReminderItemProps {
   reminder: any;
@@ -20,12 +21,23 @@ export const ReminderItem = ({ reminder, onUpdate, onRemove }: ReminderItemProps
       <Trash2 className="w-3.5 h-3.5"/>
     </Button>
     
-    <Input 
-      value={reminder.title} 
-      onChange={e => onUpdate(reminder.id, 'title', e.target.value)} 
-      placeholder="Ej: Llamar para cierre..." 
-      className="h-8 text-xs bg-[#0a0a0c] border-[#222225] text-slate-200 focus-visible:ring-blue-500 pr-8 rounded-lg" 
-    />
+    <div className="flex gap-2 pr-8">
+      <Input 
+        value={reminder.title} 
+        onChange={e => onUpdate(reminder.id, 'title', e.target.value)} 
+        placeholder="Ej: Llamar para cierre..." 
+        className="h-8 text-xs bg-[#0a0a0c] border-[#222225] text-slate-200 focus-visible:ring-blue-500 flex-1 rounded-lg" 
+      />
+      <Button
+         variant="outline"
+         size="icon"
+         className={cn("h-8 w-8 shrink-0 rounded-lg border", reminder.notify_wa !== false ? "bg-emerald-900/20 border-emerald-500/30 text-emerald-400" : "bg-[#0a0a0c] border-[#222225] text-slate-500")}
+         onClick={() => onUpdate(reminder.id, 'notify_wa', reminder.notify_wa === false ? true : false)}
+         title={reminder.notify_wa !== false ? "WhatsApp Activado" : "WhatsApp Desactivado"}
+      >
+         <Smartphone className="w-3.5 h-3.5" />
+      </Button>
+    </div>
     
     <div className="flex gap-2">
       <Input 
