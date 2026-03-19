@@ -22,7 +22,6 @@ export const ManageCreditDialog = ({ open, onOpenChange, sale, onSuccess }: Mana
   const [paymentAmount, setPaymentAmount] = useState('');
   const [processing, setProcessing] = useState(false);
   
-  // Estados para el Modo Reestructuración
   const [editMode, setEditMode] = useState(false);
   const [editableInstallments, setEditableInstallments] = useState<any[]>([]);
 
@@ -40,13 +39,11 @@ export const ManageCreditDialog = ({ open, onOpenChange, sale, onSuccess }: Mana
   const totalAmount = parseFloat(sale.total_amount) || 0;
   const downPayment = parseFloat(sale.down_payment) || 0;
   
-  // Usamos editableInstallments para calcular saldos dinámicos incluso si estamos editando
   const paidInstallments = editableInstallments.filter((i: any) => i.status === 'PAID').reduce((sum: number, i: any) => sum + parseFloat(i.amount), 0);
   const totalPaid = downPayment + paidInstallments;
   const totalRemaining = Math.max(0, totalAmount - totalPaid);
   const progressPercent = totalAmount > 0 ? Math.min(100, Math.round((totalPaid / totalAmount) * 100)) : 0;
 
-  // Suma proyectada (para que el gestor vea si al editar le cuadran los números)
   const projectedSum = downPayment + editableInstallments.reduce((sum, i) => sum + parseFloat(i.amount || 0), 0);
 
   const handleApplyPayment = async (e: React.FormEvent) => {
@@ -65,26 +62,35 @@ export const ManageCreditDialog = ({ open, onOpenChange, sale, onSuccess }: Mana
      const tid = toast.loading("Calculando y aplicando abono inteligente...");
 
      try {
-        let remainingToApply = amount;
+        let remainingToApply = Math.round(amount * 100) / 100;
         
         for (const inst of pendingInsts) {
-           if (remainingToApply <= 0.01) break; // Tolerancia flotante
-           const instAmt = parseFloat(inst.amount);
+           if (remainingToApply <= 0.01) break; 
+           const instAmt = Math.round(parseFloat(inst.amount) * 100) / 100;
 
            if (remainingToApply >= instAmt) {
               await supabase.from('credit_installments').update({ status: 'PAID', paid_at: new Date().toISOString() }).eq('id', inst.id);
-              remainingToApply -= instAmt;
+              remainingToApply = Math.round((remainingToApply - instAmt) * 100) / 100;
            } else {
-              // Pago Parcial: Actualiza la actual y crea la diferencia
+              const diff = Math.round((instAmt - remainingToApply) * 100) / 100;
               await supabase.from('credit_installments').update({ amount: remainingToApply, status: 'PAID', paid_at: new Date().toISOString() }).eq('id', inst.id);
               await supabase.from('credit_installments').insert({
-                 sale_id: sale.id, installment_number: inst.installment_number, amount: instAmt - remainingToApply, due_date: inst.due_date, status: 'PENDING'
+                 sale_id: sale.id, installment_number: inst.installment_number, amount: diff, due_date: inst.due_date, status: 'PENDING'
               });
               remainingToApply = 0;
            }
         }
 
-        if (totalRemaining - amount <= 0.01) {
+        // Si el cliente adelanta todo el dinero de un golpe o borró las cuotas.
+        if (remainingToApply > 0.01) {
+            await supabase.from('credit_installments').insert({
+               sale_id: sale.id, installment_number: 999, amount: remainingToApply, due_date: new Date().toISOString().split('T')[0], status: 'PAID', paid_at: new Date().toISOString()
+            });
+        }
+
+        const newRemaining = Math.max(0, totalRemaining - amount);
+
+        if (newRemaining <= 0.01) {
             await supabase.from('credit_sales').update({ status: 'PAID' }).eq('id', sale.id);
             if (sale.contact_id) await supabase.from('contacts').update({ financial_status: 'A tiempo' }).eq('id', sale.contact_id);
         } else if (sale.contact_id) {
@@ -93,13 +99,14 @@ export const ManageCreditDialog = ({ open, onOpenChange, sale, onSuccess }: Mana
 
         await supabase.from('activity_logs').insert({
             action: 'UPDATE', resource: 'SYSTEM',
-            description: `Abono de $${amount.toLocaleString()} procesado para ${sale.contact?.nombre || 'Cliente'}. Saldo: $${Math.max(0, totalRemaining - amount).toLocaleString()}`, 
+            description: `Abono de $${amount.toLocaleString()} procesado para ${sale.contact?.nombre || 'Cliente'}. Saldo: $${newRemaining.toLocaleString()}`, 
             status: 'OK'
         });
 
         toast.success("Pago procesado exitosamente.", { id: tid });
         setPaymentAmount('');
         onSuccess();
+        onOpenChange(false); // Cierra automáticamente para forzar la actualización al reabrir.
      } catch (err: any) {
         toast.error("Error crítico: " + err.message, { id: tid });
      } finally {
@@ -144,7 +151,7 @@ export const ManageCreditDialog = ({ open, onOpenChange, sale, onSuccess }: Mana
       try {
           const toUpsert = editableInstallments.map((i, idx) => {
               const data: any = { sale_id: sale.id, installment_number: idx + 1, amount: parseFloat(i.amount) || 0, due_date: i.due_date, status: i.status };
-              if (!i.isNew) data.id = i.id; // Si no es nuevo, manda el ID para actualizar
+              if (!i.isNew) data.id = i.id; 
               return data;
           });
           
@@ -180,7 +187,6 @@ export const ManageCreditDialog = ({ open, onOpenChange, sale, onSuccess }: Mana
         </DialogHeader>
 
         <div className="flex-1 flex flex-col md:flex-row min-h-0 bg-[#0a0a0c]">
-           {/* PANEL IZQUIERDO: RESUMEN Y ABONO */}
            <div className="w-full md:w-80 bg-[#121214] border-r border-[#222225] p-6 flex flex-col gap-6 shrink-0 overflow-y-auto custom-scrollbar">
               
               <div className="space-y-4 bg-[#0a0a0c] p-5 rounded-2xl border border-[#222225] shadow-inner">
@@ -238,7 +244,6 @@ export const ManageCreditDialog = ({ open, onOpenChange, sale, onSuccess }: Mana
               )}
            </div>
 
-           {/* PANEL DERECHO: HISTORIAL Y VENCIMIENTOS */}
            <div className="flex-1 flex flex-col min-h-0 bg-[#050505]">
               <div className="p-4 border-b border-[#222225] bg-[#161618] shrink-0 flex items-center justify-between">
                  <span className="text-xs uppercase font-bold text-slate-400 tracking-widest flex items-center gap-2"><CalendarDays className="w-4 h-4"/> Historial de Pagos</span>

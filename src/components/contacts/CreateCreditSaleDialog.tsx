@@ -55,7 +55,6 @@ export const CreateCreditSaleDialog = ({ open, onOpenChange, contact, onSuccess 
     }
   }, [open]);
 
-  // FIX: Lógica estricta de fechas para evitar saltos por zonas horarias
   const updateDefaultDates = (freq: string) => {
       const now = new Date();
       if (freq === 'MENSUAL') {
@@ -67,7 +66,7 @@ export const CreateCreditSaleDialog = ({ open, onOpenChange, contact, onSuccess 
           else { now.setMonth(now.getMonth() + 1); now.setDate(1); }
       } else if (freq === 'SEMANAL') {
           const day = now.getDay();
-          const diff = (5 - day + 7) % 7 || 7; // Busca el próximo viernes (5)
+          const diff = (5 - day + 7) % 7 || 7; 
           now.setDate(now.getDate() + diff);
       }
       
@@ -93,7 +92,6 @@ export const CreateCreditSaleDialog = ({ open, onOpenChange, contact, onSuccess 
      return Math.max(0, total - abono);
   };
 
-  // FIX: Lógica de cálculo matemático estricto (Iterador de meses sin desbordamiento)
   const handleGeneratePlan = () => {
       const financed = getFinancedAmount();
       const payments = parseInt(numberOfPayments);
@@ -102,12 +100,15 @@ export const CreateCreditSaleDialog = ({ open, onOpenChange, contact, onSuccess 
       if (isNaN(payments) || payments <= 0) return toast.error("El número de pagos debe ser mayor a 0.");
       if (!startDate) return toast.error("Selecciona una fecha de inicio.");
 
-      const amountPerPayment = (financed / payments).toFixed(2);
+      // CÁLCULO EXACTO: Evita pérdida de centavos
+      const baseAmount = Math.floor((financed / payments) * 100) / 100;
+      let totalGenerated = 0;
+
       const generated = [];
 
       let parts = startDate.split('-');
       let currentYear = parseInt(parts[0], 10);
-      let currentMonth = parseInt(parts[1], 10) - 1; // 0-indexed
+      let currentMonth = parseInt(parts[1], 10) - 1; 
       let currentDay = parseInt(parts[2], 10);
 
       for (let i = 0; i < payments; i++) {
@@ -136,13 +137,19 @@ export const CreateCreditSaleDialog = ({ open, onOpenChange, contact, onSuccess 
               }
           }
 
-          // Armamos la cadena ISO manual para evitar mutaciones de Javascript
+          let currentAmount = baseAmount;
+          // La última cuota absorbe los centavos sobrantes
+          if (i === payments - 1) {
+              currentAmount = Math.round((financed - totalGenerated) * 100) / 100;
+          }
+          totalGenerated += currentAmount;
+
           const yStr = currentYear;
           const mStr = String(currentMonth + 1).padStart(2, '0');
           const dStr = String(currentDay).padStart(2, '0');
           const finalDateStr = `${yStr}-${mStr}-${dStr}`;
 
-          generated.push({ id: `temp-${i}`, amount: amountPerPayment, date: finalDateStr });
+          generated.push({ id: `temp-${i}`, amount: currentAmount.toFixed(2), date: finalDateStr });
       }
 
       setInstallments(generated);
@@ -316,7 +323,6 @@ export const CreateCreditSaleDialog = ({ open, onOpenChange, contact, onSuccess 
                      <div className="bg-[#222225]/50 p-3 border-b border-[#222225] flex justify-between items-center shrink-0">
                         <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2"><ListChecks className="w-4 h-4"/> Tabla de Amortización (Editable)</span>
                      </div>
-                     {/* FIX: ScrollArea con altura explícita para evitar recortes */}
                      <ScrollArea className="flex-1 custom-scrollbar">
                         <Table>
                            <TableHeader>
@@ -354,7 +360,6 @@ export const CreateCreditSaleDialog = ({ open, onOpenChange, contact, onSuccess 
                      <p className="text-xs text-slate-400">Define los intervalos y mensajes automáticos. Si el cliente no paga tras el último ciclo, será etiquetado como <strong className="text-red-400">Abandonado</strong>.</p>
                   </div>
 
-                  {/* FIX: ScrollArea agregada para el timeline A/B/C/D */}
                   <ScrollArea className="flex-1 custom-scrollbar pr-4">
                      <div className="relative space-y-6 pl-4 before:absolute before:inset-0 before:ml-[23px] before:-translate-x-px md:before:mx-auto md:before:translate-x-0 before:h-full before:w-0.5 before:bg-gradient-to-b before:from-emerald-500/50 before:via-amber-500/50 before:to-red-500/50 pb-8">
                         
