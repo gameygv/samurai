@@ -8,10 +8,17 @@ interface MessageListProps {
 }
 
 export const MessageList = ({ messages, loading }: MessageListProps) => {
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
+  // Lógica de scroll mejorada: solo afecta al contenedor local
   useEffect(() => {
-    if (scrollRef.current) scrollRef.current.scrollIntoView({ behavior: 'smooth' });
+    if (containerRef.current) {
+      const container = containerRef.current;
+      container.scrollTo({
+        top: container.scrollHeight,
+        behavior: 'smooth'
+      });
+    }
   }, [messages]);
 
   const formatMessageTime = (dateStr: string) => {
@@ -101,7 +108,10 @@ export const MessageList = ({ messages, loading }: MessageListProps) => {
   };
 
   return (
-    <div className="flex-1 overflow-y-auto custom-scrollbar p-6 bg-[#0a0a0c]">
+    <div 
+      ref={containerRef}
+      className="flex-1 overflow-y-auto custom-scrollbar p-6 bg-[#0a0a0c]"
+    >
       {loading ? (
         <div className="flex h-full items-center justify-center text-slate-500 text-xs gap-2">
            <Loader2 className="w-4 h-4 animate-spin text-indigo-500" /> Sincronizando...
@@ -114,7 +124,6 @@ export const MessageList = ({ messages, loading }: MessageListProps) => {
              const emisor = (msg.emisor || '').toUpperCase();
              const platform = (msg.platform || '').toUpperCase();
              
-             // Identificador fuerte: si viene del "PANEL_INTERNO" o es emisor "NOTA/SISTEMA", es una nota.
              const isNote = platform === 'PANEL_INTERNO' || emisor === 'NOTA' || emisor === 'SISTEMA';
              const isClient = emisor === 'CLIENTE' && !isNote;
              const isHuman = emisor === 'HUMANO' && !isNote;
@@ -154,7 +163,6 @@ export const MessageList = ({ messages, loading }: MessageListProps) => {
                 </div>
               </div>
           )})}
-          <div ref={scrollRef} />
         </div>
       )}
     </div>
