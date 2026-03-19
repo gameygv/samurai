@@ -4,7 +4,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
-import { Clock, DollarSign, Sparkles, Save, CheckCircle2, XCircle, Trash2 } from 'lucide-react';
+import { Clock, DollarSign, Sparkles, Save, CheckCircle2, XCircle, Trash2, Bot } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface FollowupTabProps {
@@ -26,21 +26,25 @@ export const FollowupTab = ({ followupConfig, setFollowupConfig, salesConfig, se
           <CardTitle className="text-white flex items-center gap-2 text-sm font-bold"><Clock className="w-4 h-4 text-indigo-400" /> Reglas de Retargeting y Horarios</CardTitle>
         </CardHeader>
         <CardContent className="pt-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-3xl">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             <div className="space-y-2">
               <Label className="text-[10px] text-slate-500 uppercase font-bold tracking-widest ml-1">Hora Inicio (0-23)</Label>
-              <Input type="number" min="0" max="23" value={followupConfig.start_hour || 9} onChange={e => setFollowupConfig({...followupConfig, start_hour: parseInt(e.target.value)})} className="bg-[#0a0a0c] border-[#222225] h-11 rounded-xl text-center font-bold" />
+              <Input type="number" min="0" max="23" value={followupConfig.start_hour || 9} onChange={e => setFollowupConfig({...followupConfig, start_hour: parseInt(e.target.value)})} className="bg-[#0a0a0c] border-[#222225] h-11 rounded-xl text-center font-bold text-white" />
             </div>
             <div className="space-y-2">
               <Label className="text-[10px] text-slate-500 uppercase font-bold tracking-widest ml-1">Hora Fin (0-23)</Label>
-              <Input type="number" min="0" max="23" value={followupConfig.end_hour || 21} onChange={e => setFollowupConfig({...followupConfig, end_hour: parseInt(e.target.value)})} className="bg-[#0a0a0c] border-[#222225] h-11 rounded-xl text-center font-bold" />
+              <Input type="number" min="0" max="23" value={followupConfig.end_hour || 21} onChange={e => setFollowupConfig({...followupConfig, end_hour: parseInt(e.target.value)})} className="bg-[#0a0a0c] border-[#222225] h-11 rounded-xl text-center font-bold text-white" />
             </div>
             <div className="space-y-2">
-              <Label className="text-[10px] text-slate-500 uppercase font-bold tracking-widest ml-1 flex items-center gap-1"><Trash2 className="w-3 h-3 text-red-500"/> Días Inactivos a PERDIDO</Label>
+              <Label className="text-[10px] text-emerald-500/80 uppercase font-bold tracking-widest ml-1 flex items-center gap-1"><Bot className="w-3 h-3 text-emerald-500"/> Auto-Reactivar IA (Mins)</Label>
+              <Input type="number" min="0" value={followupConfig.auto_restart_delay || 30} onChange={e => setFollowupConfig({...followupConfig, auto_restart_delay: parseInt(e.target.value)})} className="bg-[#0a0a0c] border-emerald-900/30 text-emerald-400 h-11 rounded-xl text-center font-bold" />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-[10px] text-red-500/80 uppercase font-bold tracking-widest ml-1 flex items-center gap-1"><Trash2 className="w-3 h-3 text-red-500"/> Inactivos a PERDIDO (Días)</Label>
               <Input type="number" min="1" max="90" value={daysToLost} onChange={e => setDaysToLost(e.target.value)} className="bg-[#0a0a0c] border-red-900/30 text-red-400 h-11 rounded-xl text-center font-bold" />
             </div>
           </div>
-          <p className="text-[10px] text-slate-600 mt-4 italic">Sam enviará mensajes solo en este horario. Los leads inactivos por más de {daysToLost} días se moverán a la etapa "Perdido" automáticamente.</p>
+          <p className="text-[10px] text-slate-600 mt-4 italic leading-relaxed">Sam enviará mensajes solo en este horario. Si pausas la IA y olvidas encenderla, se reactivará automáticamente tras el tiempo indicado. Los leads inactivos por más de {daysToLost} días se descartarán.</p>
         </CardContent>
       </Card>
 
@@ -71,7 +75,7 @@ export const FollowupTab = ({ followupConfig, setFollowupConfig, salesConfig, se
                     <span className="text-[9px] text-slate-500 font-bold uppercase tracking-widest">Minutos</span>
                   </div>
                 </div>
-                <Textarea value={followupConfig[`stage_${stage}_message`] || ''} onChange={e => setFollowupConfig({...followupConfig, [`stage_${stage}_message`]: e.target.value})} className="bg-[#0a0a0c] border-[#222225] text-xs h-20 resize-none rounded-xl focus-visible:ring-amber-500/50" placeholder="Escribe el mensaje de la fase..." />
+                <Textarea value={followupConfig[`stage_${stage}_message`] || ''} onChange={e => setFollowupConfig({...followupConfig, [`stage_${stage}_message`]: e.target.value})} className="bg-[#0a0a0c] border-[#222225] text-xs h-20 resize-none rounded-xl focus-visible:ring-amber-500/50 text-slate-300" placeholder="Escribe el mensaje de la fase..." />
               </div>
             ))}
           </CardContent>
@@ -103,7 +107,7 @@ export const FollowupTab = ({ followupConfig, setFollowupConfig, salesConfig, se
                     <span className="text-[9px] text-slate-500 font-bold uppercase tracking-widest">Minutos</span>
                   </div>
                 </div>
-                <Textarea value={salesConfig[`stage_${stage}_message`] || ''} onChange={e => setSalesConfig({...salesConfig, [`stage_${stage}_message`]: e.target.value})} className="bg-[#0a0a0c] border-[#222225] text-xs h-20 resize-none rounded-xl focus-visible:ring-emerald-500/50" placeholder="Escribe el mensaje de cierre..." />
+                <Textarea value={salesConfig[`stage_${stage}_message`] || ''} onChange={e => setSalesConfig({...salesConfig, [`stage_${stage}_message`]: e.target.value})} className="bg-[#0a0a0c] border-[#222225] text-xs h-20 resize-none rounded-xl focus-visible:ring-emerald-500/50 text-slate-300" placeholder="Escribe el mensaje de cierre..." />
               </div>
             ))}
           </CardContent>

@@ -16,18 +16,18 @@ serve(async (req) => {
 
     const { data: configs } = await supabaseClient.from('app_config').select('key, value');
     const getConfig = (key) => configs?.find(c => c.key === key)?.value || null;
+    const defaultCh = getConfig('default_notification_channel');
 
     // ========================================================
     // 1. LÓGICA DE RETARGETING / FOLLOW-UPS (IA)
     // ========================================================
-    const { data: followupConfigs } = await supabaseClient.from('followup_config').select('*').eq('enabled', true);
+    const { data: followupConfigs } = await supabaseClient.from('followup_config').select('*');
+    const explorationConfig = (followupConfigs || []).find(c => c.strategy_type === 'exploration');
+    const salesConfig = (followupConfigs || []).find(c => c.strategy_type === 'sales');
     
-    if (followupConfigs && followupConfigs.length > 0) {
-        const explorationConfig = followupConfigs.find(c => c.strategy_type === 'exploration');
-        const salesConfig = followupConfigs.find(c => c.strategy_type === 'sales');
-        
+    if (explorationConfig?.enabled || salesConfig?.enabled) {
         const currentHour = new Date().getUTCHours() - 6; // Ajuste aprox a CST
-        const activeConfigHour = explorationConfig || salesConfig;
+        const activeConfigHour = explorationConfig?.enabled ? explorationConfig : salesConfig;
         
         if (activeConfigHour && currentHour >= (activeConfigHour.start_hour || 9) && currentHour <= (activeConfigHour.end_hour || 20)) {
             
@@ -38,7 +38,7 @@ serve(async (req) => {
 
             for (const lead of (stagnantLeads || [])) {
                 const configToUse = lead.buying_intent === 'ALTO' ? salesConfig : explorationConfig;
-                if (!configToUse) continue;
+                if (!configToUse || !configToUse.enabled) continue;
 
                 const minutesSinceLastMsg = Math.floor((new Date().getTime() - new Date(lead.last_message_at).getTime()) / 60000);
                 const stage = lead.followup_stage || 0;
@@ -75,7 +75,137 @@ serve(async (req) => {
     }
 
     // ========================================================
-    // 2. WOOCOMMERCE WATCHER
+    // 2. AUTO-RESTART IA (Despausar por inactividad)
+    // ========================================================
+    const autoRestartMinutes = explorationConfig?.auto_restart_delay || 30;
+    if (autoRestartMinutes > 0) {
+        const restartThreshold = new Date();
+        restartThreshold.setMinutes(restartThreshold.getMinutes() - autoRestartMinutes);
+
+        const { data: pausedLeads } = await supabaseClient.from('leads')
+            .select('id, nombre')
+            .eq('ai_paused', true)
+            .not('buying_intent', 'in', '("COMPRADO","PERDIDO")')
+            .lt('last_message_at', restartThreshold.toISOString());
+
+        if (pausedLeads && pausedLeads.length > 0) {
+            for (const pl of pausedLeads) {
+                await supabaseClient.from('leads').update({ ai_paused: false }).eq('id', pl.id);
+                await supabaseClient.from('conversaciones').insert({
+                    lead_id: pl.id, emisor: 'NOTA', platform: 'PANEL_INTERNO',
+                    mensaje: `IA reactivada automáticamente tras ${autoRestartMinutes} min de inactividad humana.`,
+                    metadata: { author: 'Sistema Auto-Restart' }
+                });
+            }
+            console.log(`[process-followups] ${pausedLeads.length} leads reactivados (Auto-Restart).`);
+        }
+    }
+
+    // ========================================================
+    // 3. AUTO-ROUTING BATCH (Asignación de huérfanos) + NOTIFICACIÓN
+    // ========================================================
+    const { data: activeAgents } = await supabaseClient.from('profiles').select('id, phone, full_name, territories').eq('is_active', true);
+    const { data: orphanLeads } = await supabaseClient.from('leads').select('id, nombre, ciudad, telefono').is('assigned_to', null).not('ciudad', 'is', null);
+    
+    if (orphanLeads && orphanLeads.length > 0 && activeAgents) {
+        for (const ol of orphanLeads) {
+            const cityNorm = ol.ciudad.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+            for (const agent of activeAgents) {
+                if (!agent.territories) continue;
+                const match = agent.territories.some(t => {
+                    const tNorm = t.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+                    return cityNorm.includes(tNorm) || tNorm.includes(cityNorm);
+                });
+                
+                if (match) {
+                    await supabaseClient.from('leads').update({ assigned_to: agent.id }).eq('id', ol.id);
+                    
+                    // Notificar al Asesor si hay un canal configurado
+                    if (defaultCh && agent.phone) {
+                        const msg = `🎯 *NUEVO LEAD ASIGNADO*\n\nHola ${agent.full_name?.split(' ')[0] || 'Asesor'},\nEl sistema te ha asignado automáticamente un nuevo prospecto de tu zona.\n\n👤 *Nombre:* ${ol.nombre || 'Sin nombre'}\n📍 *Ciudad:* ${ol.ciudad}\n📞 *Teléfono:* ${ol.telefono}\n\nIngresa al CRM para atenderlo.`;
+                        await supabaseClient.functions.invoke('send-message-v3', {
+                            body: { channel_id: defaultCh, phone: agent.phone, message: msg }
+                        });
+                    }
+                    break;
+                }
+            }
+        }
+    }
+
+    // ========================================================
+    // 4. LIMPIEZA AUTOMÁTICA (DESCARTAR A PERDIDO)
+    // ========================================================
+    const daysToLost = parseInt(getConfig('days_to_lost_lead') || '14');
+    if (daysToLost > 0) {
+        const lostDateThreshold = new Date();
+        lostDateThreshold.setDate(lostDateThreshold.getDate() - daysToLost);
+
+        const { data: leadsToLose } = await supabaseClient.from('leads')
+            .select('id')
+            .not('buying_intent', 'in', '("COMPRADO","PERDIDO")')
+            .lt('last_message_at', lostDateThreshold.toISOString());
+
+        if (leadsToLose && leadsToLose.length > 0) {
+            const ids = leadsToLose.map(l => l.id);
+            await supabaseClient.from('leads').update({ buying_intent: 'PERDIDO' }).in('id', ids);
+            console.log(`[process-followups] ${ids.length} leads movidos a PERDIDO por inactividad.`);
+        }
+    }
+
+    // ========================================================
+    // 5. ALERTAS Y RECORDATORIOS PARA AGENTES
+    // ========================================================
+    const { data: leadsWithReminders } = await supabaseClient
+        .from('leads')
+        .select('id, nombre, assigned_to, reminders')
+        .not('reminders', 'is', null)
+        .neq('reminders', '[]');
+
+    if (leadsWithReminders && leadsWithReminders.length > 0 && activeAgents) {
+        const now = new Date();
+        const agentMap = activeAgents.reduce((acc, a) => ({...acc, [a.id]: a}), {});
+
+        for (const lead of leadsWithReminders) {
+            let remindersModified = false;
+            let currentReminders = typeof lead.reminders === 'string' ? JSON.parse(lead.reminders) : lead.reminders;
+            
+            if (!Array.isArray(currentReminders)) continue;
+
+            for (let i = 0; i < currentReminders.length; i++) {
+                const rem = currentReminders[i];
+                if (rem.notified || !rem.datetime) continue;
+
+                const remTime = new Date(rem.datetime);
+                const notifyMinutes = parseInt(rem.notify_minutes) || 0;
+                const triggerTime = new Date(remTime.getTime() - (notifyMinutes * 60000));
+
+                if (now >= triggerTime) {
+                    if (rem.notify_wa !== false && lead.assigned_to) {
+                        const agent = agentMap[lead.assigned_to];
+                        if (agent && agent.phone) {
+                            const msg = `⏰ *RECORDATORIO CRM*\n\nHola ${agent.full_name?.split(' ')[0] || 'Asesor'},\nTienes una tarea con el lead *${lead.nombre}*:\n\n📌 *${rem.title || 'Tarea programada'}*\n🕒 Hora: ${remTime.toLocaleString('es-MX', {timeStyle: 'short', dateStyle: 'short'})}`;
+                            
+                            if (defaultCh) {
+                                await supabaseClient.functions.invoke('send-message-v3', {
+                                    body: { channel_id: defaultCh, phone: agent.phone, message: msg }
+                                });
+                            }
+                        }
+                    }
+                    currentReminders[i].notified = true;
+                    remindersModified = true;
+                }
+            }
+
+            if (remindersModified) {
+                await supabaseClient.from('leads').update({ reminders: currentReminders }).eq('id', lead.id);
+            }
+        }
+    }
+
+    // ========================================================
+    // 6. WOOCOMMERCE WATCHER
     // ========================================================
     const wcUrl = getConfig('wc_url');
     const wcKey = getConfig('wc_consumer_key');
@@ -113,100 +243,6 @@ serve(async (req) => {
              }
           } catch (e) { console.error(`[WC-Watcher] Error:`, e.message); }
        }
-    }
-
-    // ========================================================
-    // 3. AUTO-ROUTING BATCH (Asignación de huérfanos)
-    // ========================================================
-    const { data: orphanLeads } = await supabaseClient.from('leads').select('id, ciudad').is('assigned_to', null).not('ciudad', 'is', null);
-    const { data: activeAgents } = await supabaseClient.from('profiles').select('id, territories').eq('is_active', true);
-    
-    if (orphanLeads && orphanLeads.length > 0 && activeAgents) {
-        for (const ol of orphanLeads) {
-            const cityNorm = ol.ciudad.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-            for (const agent of activeAgents) {
-                if (!agent.territories) continue;
-                const match = agent.territories.some(t => {
-                    const tNorm = t.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-                    return cityNorm.includes(tNorm) || tNorm.includes(cityNorm);
-                });
-                if (match) {
-                    await supabaseClient.from('leads').update({ assigned_to: agent.id }).eq('id', ol.id);
-                    break;
-                }
-            }
-        }
-    }
-
-    // ========================================================
-    // 4. LIMPIEZA AUTOMÁTICA (DESCARTAR A PERDIDO)
-    // ========================================================
-    const daysToLost = parseInt(getConfig('days_to_lost_lead') || '14');
-    const lostDateThreshold = new Date();
-    lostDateThreshold.setDate(lostDateThreshold.getDate() - daysToLost);
-
-    const { data: leadsToLose } = await supabaseClient.from('leads')
-        .select('id')
-        .not('buying_intent', 'in', '("COMPRADO","PERDIDO")')
-        .lt('last_message_at', lostDateThreshold.toISOString());
-
-    if (leadsToLose && leadsToLose.length > 0) {
-        const ids = leadsToLose.map(l => l.id);
-        await supabaseClient.from('leads').update({ buying_intent: 'PERDIDO' }).in('id', ids);
-        console.log(`[process-followups] ${ids.length} leads movidos a PERDIDO por inactividad.`);
-    }
-
-    // ========================================================
-    // 5. ALERTAS Y RECORDATORIOS PARA AGENTES (NUEVO)
-    // ========================================================
-    const { data: leadsWithReminders } = await supabaseClient
-        .from('leads')
-        .select('id, nombre, assigned_to, reminders')
-        .not('reminders', 'is', null)
-        .neq('reminders', '[]');
-
-    if (leadsWithReminders && leadsWithReminders.length > 0) {
-        const now = new Date();
-        const { data: allAgentsProfiles } = await supabaseClient.from('profiles').select('id, phone, full_name').eq('is_active', true);
-        const agentMap = (allAgentsProfiles || []).reduce((acc, a) => ({...acc, [a.id]: a}), {});
-
-        for (const lead of leadsWithReminders) {
-            let remindersModified = false;
-            let currentReminders = typeof lead.reminders === 'string' ? JSON.parse(lead.reminders) : lead.reminders;
-            
-            if (!Array.isArray(currentReminders)) continue;
-
-            for (let i = 0; i < currentReminders.length; i++) {
-                const rem = currentReminders[i];
-                if (rem.notified || !rem.datetime) continue;
-
-                const remTime = new Date(rem.datetime);
-                const notifyMinutes = parseInt(rem.notify_minutes) || 0;
-                const triggerTime = new Date(remTime.getTime() - (notifyMinutes * 60000));
-
-                if (now >= triggerTime) {
-                    if (rem.notify_wa !== false && lead.assigned_to) {
-                        const agent = agentMap[lead.assigned_to];
-                        if (agent && agent.phone) {
-                            const msg = `⏰ *RECORDATORIO CRM*\n\nHola ${agent.full_name?.split(' ')[0] || 'Asesor'},\nTienes una tarea con el lead *${lead.nombre}*:\n\n📌 *${rem.title || 'Tarea programada'}*\n🕒 Hora: ${remTime.toLocaleString('es-MX', {timeStyle: 'short', dateStyle: 'short'})}`;
-                            
-                            const defaultCh = getConfig('default_notification_channel');
-                            if (defaultCh) {
-                                await supabaseClient.functions.invoke('send-message-v3', {
-                                    body: { channel_id: defaultCh, phone: agent.phone, message: msg }
-                                });
-                            }
-                        }
-                    }
-                    currentReminders[i].notified = true;
-                    remindersModified = true;
-                }
-            }
-
-            if (remindersModified) {
-                await supabaseClient.from('leads').update({ reminders: currentReminders }).eq('id', lead.id);
-            }
-        }
     }
 
     return new Response(JSON.stringify({ success: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
