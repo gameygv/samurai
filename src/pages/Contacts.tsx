@@ -16,7 +16,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { 
   Search, Loader2, MapPin, Phone, Trash2, 
   Users, FileSpreadsheet, Megaphone, X, Mail, Edit3, FolderInput,
-  UserPlus, ExternalLink, Filter, Wallet, DollarSign, CheckSquare, Download, GraduationCap, Tags, Globe, User as UserIcon
+  UserPlus, ExternalLink, Filter, Wallet, DollarSign, CheckSquare, Download, GraduationCap, Tags, Globe, User as UserIcon, Sparkles
 } from 'lucide-react';
 import { toast } from 'sonner';
 import Papa from 'papaparse';
@@ -72,6 +72,7 @@ const Contacts = () => {
   const [contactToDelete, setContactToDelete] = useState<any>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [analyzing, setAnalyzing] = useState(false);
 
   useEffect(() => {
     fetchContacts();
@@ -116,6 +117,21 @@ const Contacts = () => {
     }
     setLoading(false);
     setSelectedIds([]);
+  };
+
+  const handleRunMassAnalysis = async () => {
+    setAnalyzing(true);
+    toast.info("Iniciando escaneo de chats para completar CP y Estados...");
+    try {
+      const { error } = await supabase.functions.invoke('analyze-leads', { body: { force: true } });
+      if (error) throw error;
+      toast.success("Lote analizado con éxito. Los datos se actualizarán en segundos.");
+      fetchContacts();
+    } catch (err: any) {
+      toast.error("Error en el motor de IA: " + err.message);
+    } finally {
+      setAnalyzing(false);
+    }
   };
 
   const allTags = [...globalTags, ...localTags];
@@ -308,6 +324,15 @@ const Contacts = () => {
           </div>
 
           <div className="flex gap-2 items-center flex-wrap">
+            <Button 
+               onClick={handleRunMassAnalysis} 
+               disabled={analyzing} 
+               variant="outline" 
+               className="border-indigo-500/30 text-indigo-400 hover:bg-indigo-900/40 h-11 rounded-xl font-bold uppercase tracking-widest text-[10px]"
+            >
+               {analyzing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Sparkles className="w-4 h-4 mr-2" />} 
+               Forzar Análisis IA
+            </Button>
             <Button onClick={() => setIsMassMessageOpen(true)} variant="outline" className="bg-amber-900/20 border-amber-500/30 text-amber-500 hover:bg-amber-900/40 h-11 rounded-xl font-bold uppercase tracking-widest text-[10px]">
               <Megaphone className="w-4 h-4 mr-2" /> Campañas ({filteredContacts.length})
             </Button>
