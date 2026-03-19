@@ -322,6 +322,23 @@ export const MemoryPanel = ({
            </div>
         </div>
 
+        {/* AUDITORÍA DE PAGO */}
+        <div className="p-5 border-b border-[#1a1a1a] space-y-4">
+           <h4 className="text-[10px] font-bold text-[#7A8A9E] uppercase tracking-widest flex items-center gap-2"><Wallet className="w-3.5 h-3.5 text-[#7A8A9E]" /> Auditoría de Pago</h4>
+           <div className="bg-[#121214] border border-[#222225] rounded-xl p-4 space-y-4">
+              <div className="flex justify-between items-center">
+                 <span className="text-[10px] text-[#7A8A9E]">Dictamen IA:</span>
+                 <Badge variant="outline" className={cn("text-[9px] border-[#222225] h-5 px-2", currentAnalysis?.payment_status === 'VALID' ? 'bg-emerald-900/20 text-emerald-500 border-emerald-500/30' : 'bg-[#0a0a0c] text-[#7A8A9E]')}>
+                    {currentAnalysis?.payment_status === 'VALID' ? 'APROBADO' : 'SIN COMPROBANTE'}
+                 </Badge>
+              </div>
+              <div className="flex gap-3">
+                 <Button onClick={() => handleUpdatePaymentStatus('VALID')} variant="outline" size="sm" className="flex-1 h-8 bg-transparent border-emerald-900/50 text-emerald-500 hover:bg-emerald-950/30 text-[10px] uppercase font-bold tracking-widest">Validar</Button>
+                 <Button onClick={() => handleUpdatePaymentStatus('INVALID')} variant="outline" size="sm" className="flex-1 h-8 bg-transparent border-red-900/50 text-red-500 hover:bg-red-950/30 text-[10px] uppercase font-bold tracking-widest">Denegar</Button>
+              </div>
+           </div>
+        </div>
+
         <div className="p-5 border-b border-[#1a1a1a] space-y-4">
            <div className="flex justify-between items-center mb-2">
               <h4 className="text-[10px] font-bold text-[#7A8A9E] uppercase tracking-widest flex items-center gap-2"><Fingerprint className="w-3.5 h-3.5 text-[#7A8A9E]" /> Identidad & CRM</h4>
@@ -385,6 +402,58 @@ export const MemoryPanel = ({
                     )}
                  </div>
 
+                 {/* BLOQUE RECORDATORIOS / TAREAS */}
+                 <div className="pt-2 border-t border-[#1a1a1a]">
+                    <button onClick={() => setRemindersOpen(!remindersOpen)} className="w-full flex justify-between items-center py-2 text-[10px] font-bold text-white uppercase tracking-widest hover:text-blue-400 transition-colors">
+                       <span className="flex items-center gap-2"><CalendarClock className="w-3.5 h-3.5 text-blue-500" /> Tareas y Recordatorios</span>
+                       <ChevronDown className={cn("w-3.5 h-3.5 transition-transform", remindersOpen ? "rotate-180" : "")} />
+                    </button>
+                    {remindersOpen && (
+                       <div className="pt-3 pb-2 space-y-3">
+                          {memoryForm.reminders?.length === 0 ? (
+                             <p className="text-[10px] text-slate-600 italic text-center py-2">No hay tareas programadas.</p>
+                          ) : (
+                             <div className="space-y-2 max-h-48 overflow-y-auto custom-scrollbar pr-2">
+                                {memoryForm.reminders?.map((rem: any) => (
+                                   <ReminderItem key={rem.id} reminder={rem} onUpdate={handleUpdateReminder} onRemove={handleRemoveReminder} />
+                                ))}
+                             </div>
+                          )}
+                          <Button onClick={handleAddReminder} variant="outline" className="w-full h-8 text-[10px] bg-[#121214] border-[#222225] text-blue-400 hover:text-blue-300 hover:bg-[#161618] uppercase tracking-widest font-bold">
+                             <Plus className="w-3 h-3 mr-2" /> Agendar Nueva Tarea
+                          </Button>
+                       </div>
+                    )}
+                 </div>
+
+                 {/* BLOQUE NOTAS COLABORATIVAS */}
+                 <div className="pt-2 border-t border-[#1a1a1a]">
+                    <button onClick={() => setNotesOpen(!notesOpen)} className="w-full flex justify-between items-center py-2 text-[10px] font-bold text-white uppercase tracking-widest hover:text-amber-400 transition-colors"><span className="flex items-center gap-2"><StickyNote className="w-3.5 h-3.5 text-amber-500" /> Notas Internas (Equipo)</span><ChevronDown className={cn("w-3.5 h-3.5 transition-transform", notesOpen ? "rotate-180" : "")} /></button>
+                    {notesOpen && (
+                       <div className="pt-3 pb-2 space-y-3">
+                          {internalNotes.length === 0 ? (
+                             <p className="text-[10px] text-slate-600 italic text-center py-2">No hay notas registradas.</p>
+                          ) : (
+                             <div className="space-y-2 max-h-48 overflow-y-auto custom-scrollbar pr-2">
+                                {internalNotes.map(n => (
+                                   <div key={n.id} className="bg-amber-950/20 border border-amber-900/50 p-2.5 rounded-lg">
+                                      <div className="flex justify-between items-center mb-1">
+                                         <span className="text-[9px] font-bold text-amber-500">{n.metadata?.author || 'Agente'}</span>
+                                         <span className="text-[8px] text-slate-500 font-mono">{new Date(n.created_at).toLocaleDateString()}</span>
+                                      </div>
+                                      <p className="text-[10px] text-amber-100/90 leading-relaxed">{n.mensaje}</p>
+                                   </div>
+                                ))}
+                             </div>
+                          )}
+                          <form onSubmit={handleAddInternalNote} className="flex gap-2">
+                             <Input value={newNote} onChange={e => setNewNote(e.target.value)} placeholder="Añadir nota rápida..." className="h-8 text-[10px] bg-[#121214] border-[#222225] focus-visible:ring-amber-500 text-slate-200" disabled={sendingNote}/>
+                             <Button type="submit" size="icon" className="h-8 w-8 bg-amber-600 hover:bg-amber-500 text-slate-900 shrink-0" disabled={sendingNote || !newNote.trim()}><Send className="w-3 h-3"/></Button>
+                          </form>
+                       </div>
+                    )}
+                 </div>
+
                  {/* BLOQUE ETIQUETAS */}
                  <div className="pt-2 border-t border-[#1a1a1a]">
                     <button onClick={() => setTagsOpen(!tagsOpen)} className="w-full flex justify-between items-center py-2 text-[10px] font-bold text-white uppercase tracking-widest hover:text-indigo-400 transition-colors"><span className="flex items-center gap-2"><Tag className="w-3.5 h-3.5 text-[#7A8A9E]" /> Etiquetas Asignadas</span><ChevronDown className={cn("w-3.5 h-3.5 transition-transform", tagsOpen ? "rotate-180" : "")} /></button>
@@ -413,8 +482,8 @@ export const MemoryPanel = ({
                                           <div className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-full shadow-inner" style={{backgroundColor: tag.color}}></div>{tag.text}</div>
                                       </SelectItem>
                                   ))}
-                                  {validLocalTags.length > 0 && <div className="text-[9px] font-bold text-slate-500 uppercase px-2 py-1.5 mt-2 flex items-center gap-1.5 border-t border-[#222225] pt-2"><User className="w-3 h-3"/> Mis Etiquetas (Personal)</div>}
-                                  {validLocalTags.map(tag => (
+                                  {localTags.length > 0 && <div className="text-[9px] font-bold text-slate-500 uppercase px-2 py-1.5 mt-2 flex items-center gap-1.5 border-t border-[#222225] pt-2"><User className="w-3 h-3"/> Mis Etiquetas (Personal)</div>}
+                                  {localTags.map(tag => (
                                       <SelectItem key={`l-${tag.id}`} value={tag.text} className="text-xs text-white focus:bg-[#161618] cursor-pointer">
                                           <div className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-full shadow-inner" style={{backgroundColor: tag.color}}></div>{tag.text}</div>
                                       </SelectItem>
