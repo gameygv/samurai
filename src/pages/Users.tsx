@@ -5,11 +5,10 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { 
   Users as UsersIcon, UserPlus, Loader2, RefreshCw, Shield, Trash2, 
   Edit3, Save, Phone, MapPin, Activity, AlertTriangle, TrendingUp, Target,
-  Brain, ShieldAlert, Award, MessageSquare, ArrowRight, UserCheck
+  Brain, ShieldAlert, Award, MessageSquare, ArrowRight, UserCheck, Key
 } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription as DialogDesc } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -35,6 +34,7 @@ const UsersPage = () => {
   const [selectedUser, setSelectedUser] = useState<any>(null);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [updating, setUpdating] = useState(false);
+  const [newPassword, setNewPassword] = useState('');
 
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [transferToId, setTransferToId] = useState('');
@@ -108,10 +108,18 @@ const UsersPage = () => {
             throw new Error(`El rol "${roleToSave}" no es válido en la base de datos.`);
         }
 
-        // 1. Actualizar el Email en la bóveda de Auth
-        if (selectedUser.email) {
+        if (newPassword && newPassword.length < 6) {
+            throw new Error("La nueva contraseña debe tener al menos 6 caracteres.");
+        }
+
+        // 1. Actualizar el Email y/o Contraseña en la bóveda de Auth
+        if (selectedUser.email || newPassword) {
+           const payload: any = { action: 'UPDATE', userId: selectedUser.id };
+           if (selectedUser.email) payload.email = selectedUser.email;
+           if (newPassword) payload.password = newPassword;
+
            const { error: authError } = await supabase.functions.invoke('manage-auth-users', {
-               body: { action: 'UPDATE', userId: selectedUser.id, email: selectedUser.email }
+               body: payload
            });
            if (authError) throw authError;
         }
@@ -131,8 +139,10 @@ const UsersPage = () => {
         }).eq('id', selectedUser.id);
         
         if (error) throw error;
-        toast.success("Perfil de usuario actualizado");
+        
+        toast.success(newPassword ? "Perfil y contraseña actualizados correctamente." : "Perfil de usuario actualizado.");
         setIsEditOpen(false);
+        setNewPassword('');
         fetchAll();
      } catch (err: any) {
         toast.error(err.message);
@@ -214,7 +224,7 @@ const UsersPage = () => {
                      <TableCell className="pl-6 py-4">
                         <div className="flex flex-col">
                            <span className="font-bold text-slate-100">{u.full_name || 'Sin nombre'} {u.id === currentUser?.id && <Badge variant="secondary" className="ml-2 text-[8px] bg-indigo-900/50 text-indigo-300 border-indigo-500/30">TÚ</Badge>}</span>
-                           <span className="text-[10px] text-slate-500 font-mono mt-1">{u.email}</span>
+                           <span className="text-[10px] text-slate-500 font-mono mt-1">{u.email || 'Sin email'}</span>
                         </div>
                      </TableCell>
                      <TableCell><Badge variant="outline" className="text-[9px] font-bold uppercase border-[#333336] text-slate-400 bg-[#121214]">{getRoleLabel(u.role)}</Badge></TableCell>
@@ -225,7 +235,7 @@ const UsersPage = () => {
                      </TableCell>
                      <TableCell>{u.is_active ? (<span className="text-emerald-500 text-[10px] flex items-center gap-1.5 font-bold uppercase"><div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]"></div> ACTIVO</span>) : (<Badge variant="destructive" className="text-[9px]">INACTIVO</Badge>)}</TableCell>
                      <TableCell className="text-right pr-6">
-                        <Button variant="outline" size="sm" className="bg-[#121214] border-[#333336] text-amber-500 hover:bg-amber-500 hover:text-slate-950 h-9 px-4 text-[10px] font-bold uppercase tracking-widest transition-colors rounded-xl" onClick={() => { setSelectedUser(u); setIsEditOpen(true); }}>
+                        <Button variant="outline" size="sm" className="bg-[#121214] border-[#333336] text-amber-500 hover:bg-amber-500 hover:text-slate-950 h-9 px-4 text-[10px] font-bold uppercase tracking-widest transition-colors rounded-xl" onClick={() => { setSelectedUser(u); setNewPassword(''); setIsEditOpen(true); }}>
                            <Edit3 className="w-3.5 h-3.5 mr-1.5" /> Gestionar
                         </Button>
                      </TableCell>
@@ -268,7 +278,7 @@ const UsersPage = () => {
            <DialogContent className="bg-[#0f0f11] border-[#222225] text-white max-w-lg rounded-3xl">
               <DialogHeader><DialogTitle className="flex items-center gap-2 text-amber-500 text-sm uppercase font-bold"><Shield className="w-5 h-5" /> Perfil de Miembro</DialogTitle></DialogHeader>
               {selectedUser && (
-                <div className="space-y-6 py-4">
+                <div className="space-y-5 py-4">
                   <div className="space-y-2">
                      <Label className="text-[10px] text-slate-400 uppercase font-bold ml-1">Email de Acceso</Label>
                      <Input type="email" value={selectedUser.email || ''} onChange={e => setSelectedUser({...selectedUser, email: e.target.value})} className="bg-[#161618] border-[#222225] h-11 rounded-xl text-slate-200 font-mono" />
@@ -277,31 +287,48 @@ const UsersPage = () => {
                      <div className="space-y-2"><Label className="text-[10px] text-slate-400 uppercase font-bold ml-1">Nombre</Label><Input value={selectedUser.full_name} onChange={e => setSelectedUser({...selectedUser, full_name: e.target.value})} className="bg-[#161618] border-[#222225] h-11 rounded-xl text-slate-200" /></div>
                      <div className="space-y-2"><Label className="text-[10px] text-slate-400 uppercase font-bold ml-1">WhatsApp</Label><Input value={selectedUser.phone || ''} onChange={e => setSelectedUser({...selectedUser, phone: e.target.value})} className="bg-[#161618] border-[#222225] h-11 rounded-xl text-slate-200" /></div>
                   </div>
-                  <div className="space-y-2">
-                     <Label className="text-[10px] text-slate-400 uppercase font-bold ml-1">Rol</Label>
-                     <Select value={['sales_agent', 'sales'].includes(selectedUser.role) ? 'agent' : selectedUser.role} onValueChange={v => setSelectedUser({...selectedUser, role: v})} disabled={selectedUser.id === currentUser?.id}>
-                       <SelectTrigger className="bg-[#161618] border-[#222225] h-11 rounded-xl text-slate-200"><SelectValue /></SelectTrigger>
-                       <SelectContent className="bg-[#121214] border-[#222225] text-white">
-                          <SelectItem value="agent">Agente de Ventas</SelectItem>
-                          <SelectItem value="gerente">Gerente</SelectItem>
-                          <SelectItem value="admin">Administrador</SelectItem>
-                          <SelectItem value="dev">Developer</SelectItem>
-                       </SelectContent>
-                     </Select>
+                  <div className="grid grid-cols-2 gap-4">
+                     <div className="space-y-2">
+                        <Label className="text-[10px] text-slate-400 uppercase font-bold ml-1">Rol</Label>
+                        <Select value={['sales_agent', 'sales'].includes(selectedUser.role) ? 'agent' : selectedUser.role} onValueChange={v => setSelectedUser({...selectedUser, role: v})} disabled={selectedUser.id === currentUser?.id}>
+                          <SelectTrigger className="bg-[#161618] border-[#222225] h-11 rounded-xl text-slate-200"><SelectValue /></SelectTrigger>
+                          <SelectContent className="bg-[#121214] border-[#222225] text-white">
+                             <SelectItem value="agent">Agente de Ventas</SelectItem>
+                             <SelectItem value="gerente">Gerente</SelectItem>
+                             <SelectItem value="admin">Administrador</SelectItem>
+                             <SelectItem value="dev">Developer</SelectItem>
+                          </SelectContent>
+                        </Select>
+                     </div>
+                     <div className="space-y-2">
+                        <Label className="text-[10px] text-slate-400 uppercase font-bold ml-1">Territorios</Label>
+                        <Input 
+                           value={Array.isArray(selectedUser.territories) ? selectedUser.territories.join(', ') : (selectedUser.territories || '')} 
+                           onChange={e => setSelectedUser({...selectedUser, territories: e.target.value})} 
+                           className="bg-[#161618] border-[#222225] h-11 rounded-xl text-slate-200" 
+                           placeholder="Ej: Norte, Sur..."
+                        />
+                     </div>
                   </div>
-                  <div className="space-y-2">
-                     <Label className="text-[10px] text-slate-400 uppercase font-bold ml-1">Territorios (Separados por coma)</Label>
+                  
+                  {/* SECCIÓN CAMBIAR CONTRASEÑA */}
+                  <div className="space-y-2 pt-4 border-t border-[#222225]">
+                     <Label className="text-[10px] text-amber-500 uppercase font-bold ml-1 flex items-center gap-1.5"><Key className="w-3.5 h-3.5"/> Cambiar Contraseña (Opcional)</Label>
                      <Input 
-                        value={Array.isArray(selectedUser.territories) ? selectedUser.territories.join(', ') : (selectedUser.territories || '')} 
-                        onChange={e => setSelectedUser({...selectedUser, territories: e.target.value})} 
-                        className="bg-[#161618] border-[#222225] h-11 rounded-xl text-slate-200" 
+                        type="password"
+                        placeholder="Escribe para cambiar la clave..."
+                        value={newPassword} 
+                        onChange={e => setNewPassword(e.target.value)} 
+                        className="bg-[#161618] border-[#222225] h-11 rounded-xl text-slate-200 placeholder:text-slate-600" 
                      />
+                     <p className="text-[9px] text-slate-500 ml-1">Déjalo en blanco si no deseas cambiarla.</p>
                   </div>
-                  <Button variant="ghost" className="w-full text-red-500 hover:bg-red-950/50 hover:text-red-400 h-11 uppercase text-[10px] font-bold rounded-xl border border-red-900/30" onClick={() => { setTransferToId(''); setIsDeleteOpen(true); }} disabled={selectedUser.id === currentUser?.id}><Trash2 className="w-4 h-4 mr-2" /> Dar de Baja</Button>
+
+                  <Button variant="ghost" className="w-full text-red-500 hover:bg-red-950/50 hover:text-red-400 h-11 uppercase text-[10px] font-bold rounded-xl border border-red-900/30 mt-2" onClick={() => { setTransferToId(''); setIsDeleteOpen(true); }} disabled={selectedUser.id === currentUser?.id}><Trash2 className="w-4 h-4 mr-2" /> Dar de Baja Definitiva</Button>
                 </div>
               )}
               <DialogFooter>
-                 <Button variant="ghost" onClick={() => setIsEditOpen(false)} className="uppercase text-[10px] font-bold rounded-xl">Cancelar</Button>
+                 <Button variant="ghost" onClick={() => setIsEditOpen(false)}>Cancelar</Button>
                  <Button onClick={handleUpdateUser} disabled={updating} className="bg-amber-600 hover:bg-amber-500 text-slate-950 font-bold rounded-xl px-8 h-11 text-[10px] uppercase shadow-lg flex items-center gap-2">
                     {updating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Guardar
                  </Button>
