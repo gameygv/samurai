@@ -7,14 +7,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { 
   Users as UsersIcon, UserPlus, Loader2, RefreshCw, Shield, Trash2, 
-  Edit3, Save, Phone, MapPin, Activity, AlertTriangle, TrendingUp, Target,
-  Brain, ShieldAlert, Award, MessageSquare, ArrowRight, UserCheck, Key
+  Edit3, Save, ArrowRight, UserCheck, Key, ShieldAlert
 } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription as DialogDesc } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { toast } from 'sonner';
 import { logActivity } from '@/utils/logger';
 import { cn } from '@/lib/utils';
@@ -54,7 +52,6 @@ const UsersPage = () => {
 
     let mergedUsers = uData || [];
     
-    // Combinar perfiles con sus respectivos emails
     if (!authErr && authRes?.users) {
         const emailMap = new Map(authRes.users.map((u: any) => [u.id, u.email]));
         mergedUsers = mergedUsers.map((u: any) => ({
@@ -76,7 +73,7 @@ const UsersPage = () => {
           email: createForm.email, 
           password: createForm.password, 
           fullName: createForm.fullName,
-          role: createForm.role
+          role: String(createForm.role).toLowerCase()
         }
       });
       if (error || !data.success) throw new Error(data?.error || "Error al crear");
@@ -100,13 +97,8 @@ const UsersPage = () => {
      if (!selectedUser) return;
      setUpdating(true);
      try {
-        const validRoles = ['admin', 'dev', 'gerente', 'agent'];
-        let roleToSave = selectedUser.role;
+        let roleToSave = String(selectedUser.role).toLowerCase();
         if (roleToSave === 'sales_agent' || roleToSave === 'sales') roleToSave = 'agent';
-
-        if (!validRoles.includes(roleToSave)) {
-            throw new Error(`El rol "${roleToSave}" no es válido en la base de datos.`);
-        }
 
         if (newPassword && newPassword.length < 6) {
             throw new Error("La nueva contraseña debe tener al menos 6 caracteres.");
@@ -140,7 +132,7 @@ const UsersPage = () => {
         
         if (error) throw error;
         
-        toast.success(newPassword ? "Perfil y contraseña actualizados correctamente." : "Perfil de usuario actualizado.");
+        toast.success(newPassword ? "Perfil y contraseña actualizados." : "Perfil de usuario actualizado.");
         setIsEditOpen(false);
         setNewPassword('');
         fetchAll();
@@ -164,7 +156,7 @@ const UsersPage = () => {
             body: { action: 'DELETE', userId: selectedUser.id, transferToId } 
         });
         if (error) throw error;
-        toast.success("Misión cumplida: Usuario borrado y activos transferidos.", { id: tid });
+        toast.success("Usuario borrado y activos transferidos.", { id: tid });
         setIsDeleteOpen(false);
         setIsEditOpen(false);
         fetchAll();
