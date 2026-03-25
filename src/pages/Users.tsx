@@ -42,10 +42,8 @@ const UsersPage = () => {
 
   const fetchAll = async () => {
     setLoading(true);
-    // Extraer perfiles básicos
     const { data: uData } = await supabase.from('profiles').select('*').order('created_at', { ascending: false });
     
-    // Extraer emails desde el túnel de Auth
     const { data: authRes, error: authErr } = await supabase.functions.invoke('manage-auth-users', {
         body: { action: 'LIST' }
     });
@@ -76,7 +74,10 @@ const UsersPage = () => {
           role: String(createForm.role).toLowerCase()
         }
       });
-      if (error || !data.success) throw new Error(data?.error || "Error al crear");
+      
+      // Control de errores mejorado
+      if (error) throw new Error("Falla de conexión al servidor Kernel.");
+      if (data && !data.success) throw new Error(data.error);
       
       const territoriesArray = createForm.territories.split(',').map(s => s.trim()).filter(Boolean);
       await supabase.from('profiles').update({ phone: createForm.phone, territories: territoriesArray }).eq('id', data.user.id);
@@ -87,7 +88,7 @@ const UsersPage = () => {
       setIsCreateOpen(false);
       setCreateForm({ email: '', password: '', fullName: '', phone: '', territories: '', role: 'agent' });
     } catch (error: any) {
-      toast.error(error.message);
+      toast.error(error.message); // <--- AHORA SÍ TE MOSTRARÁ LA CAUSA EXACTA
     } finally {
       setCreating(false);
     }
@@ -104,19 +105,16 @@ const UsersPage = () => {
             throw new Error("La nueva contraseña debe tener al menos 6 caracteres.");
         }
 
-        // 1. Actualizar el Email y/o Contraseña en la bóveda de Auth
         if (selectedUser.email || newPassword) {
            const payload: any = { action: 'UPDATE', userId: selectedUser.id };
            if (selectedUser.email) payload.email = selectedUser.email;
            if (newPassword) payload.password = newPassword;
 
-           const { error: authError } = await supabase.functions.invoke('manage-auth-users', {
-               body: payload
-           });
-           if (authError) throw authError;
+           const { data, error: authError } = await supabase.functions.invoke('manage-auth-users', { body: payload });
+           if (authError) throw new Error("Error de conexión al servidor.");
+           if (data && !data.success) throw new Error(data.error);
         }
 
-        // 2. Actualizar el perfil público
         const territoriesArray = Array.isArray(selectedUser.territories) 
             ? selectedUser.territories 
             : typeof selectedUser.territories === 'string' 
@@ -130,7 +128,7 @@ const UsersPage = () => {
            territories: territoriesArray
         }).eq('id', selectedUser.id);
         
-        if (error) throw error;
+        if (error) throw new Error("Error guardando perfil: " + error.message);
         
         toast.success(newPassword ? "Perfil y contraseña actualizados." : "Perfil de usuario actualizado.");
         setIsEditOpen(false);
@@ -152,10 +150,12 @@ const UsersPage = () => {
      setDeleting(true);
      const tid = toast.loading(`Transfiriendo y eliminando a ${selectedUser.full_name}...`);
      try {
-        const { error } = await supabase.functions.invoke('manage-auth-users', { 
+        const { data, error } = await supabase.functions.invoke('manage-auth-users', { 
             body: { action: 'DELETE', userId: selectedUser.id, transferToId } 
         });
-        if (error) throw error;
+        if (error) throw new Error("Fallo de red");
+        if (data && !data.success) throw new Error(data.error);
+
         toast.success("Usuario borrado y activos transferidos.", { id: tid });
         setIsDeleteOpen(false);
         setIsEditOpen(false);

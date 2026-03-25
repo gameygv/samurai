@@ -24,7 +24,6 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
-    // Usamos 'agent' internamente para evitar romper el Check Constraint de la BD
     const finalRole = (role === 'sales_agent' || role === 'sales') ? 'agent' : (role || 'agent');
 
     const { data, error } = await supabaseAdmin.auth.admin.createUser({
@@ -38,27 +37,33 @@ serve(async (req) => {
     })
 
     if (error) {
-        if (error.message.includes("already registered")) {
+        if (error.message.includes("already registered") || error.message.includes("User already exists")) {
             throw new Error("Este correo electrónico ya está registrado en el sistema.");
         }
         throw error;
     }
 
+    // Actualizamos el perfil público
     const { error: profileError } = await supabaseAdmin
       .from('profiles')
       .update({ role: finalRole, full_name: fullName })
       .eq('id', data.user.id);
     
-    if (profileError) console.error("Error actualizando perfil:", profileError);
+    if (profileError) {
+        // Hacemos rollback: Si la DB rechaza el rol, borramos el usuario recién creado
+        await supabaseAdmin.auth.admin.deleteUser(data.user.id);
+        throw new Error("Error en BD al asignar rol. ¿Corriste el script SQL de FIX_GERENTE_ROLE?: " + profileError.message);
+    }
     
     return new Response(JSON.stringify({ success: true, user: data.user }), {
+      status: 200,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     })
 
   } catch (error: any) {
     console.error("[admin-create-user] Error:", error.message);
-    return new Response(JSON.stringify({ error: error.message }), {
-      status: 400,
+    return new Response(JSON.stringify({ success: false, error: error.message }), {
+      status: 200, // Devolvemos 200 para que el frontend pueda leer el JSON sin problemas
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     })
   }
