@@ -17,7 +17,7 @@ export const AcademicRecord = ({ academicArray }: AcademicRecordProps) => {
     <div className="pt-2 border-t border-[#1a1a1a]">
        <div className="flex justify-between items-center py-2">
           <span className="text-[10px] font-bold text-white uppercase tracking-widest flex items-center gap-2">
-             <GraduationCap className="w-3.5 h-3.5 text-indigo-400" /> Historial Academia
+             <span className="p-1 bg-indigo-500/10 rounded-md"><GraduationCap className="w-3 h-3 text-indigo-400" /></span> Historial Academia
           </span>
           <Badge className="bg-indigo-900/50 text-indigo-300 border-indigo-500/30 text-[9px]">{safeArray.length}</Badge>
        </div>
