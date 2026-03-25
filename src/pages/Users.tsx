@@ -27,7 +27,7 @@ const UsersPage = () => {
   const [loading, setLoading] = useState(true);
   
   const [createForm, setCreateForm] = useState({ 
-    email: '', password: '', fullName: '', phone: '', territories: '', role: 'sales_agent' 
+    email: '', password: '', fullName: '', phone: '', territories: '', role: 'agent' 
   });
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -44,8 +44,26 @@ const UsersPage = () => {
 
   const fetchAll = async () => {
     setLoading(true);
+    // Extraer perfiles básicos
     const { data: uData } = await supabase.from('profiles').select('*').order('created_at', { ascending: false });
-    if (uData) setUsers(uData);
+    
+    // Extraer emails desde el túnel de Auth
+    const { data: authRes, error: authErr } = await supabase.functions.invoke('manage-auth-users', {
+        body: { action: 'LIST' }
+    });
+
+    let mergedUsers = uData || [];
+    
+    // Combinar perfiles con sus respectivos emails
+    if (!authErr && authRes?.users) {
+        const emailMap = new Map(authRes.users.map((u: any) => [u.id, u.email]));
+        mergedUsers = mergedUsers.map((u: any) => ({
+            ...u,
+            email: emailMap.get(u.id) || 'Sin email'
+        }));
+    }
+
+    setUsers(mergedUsers);
     setLoading(false);
   };
 
@@ -70,7 +88,7 @@ const UsersPage = () => {
       toast.success("Usuario activado e integrado al Kernel.");
       fetchAll();
       setIsCreateOpen(false);
-      setCreateForm({ email: '', password: '', fullName: '', phone: '', territories: '', role: 'sales_agent' });
+      setCreateForm({ email: '', password: '', fullName: '', phone: '', territories: '', role: 'agent' });
     } catch (error: any) {
       toast.error(error.message);
     } finally {
@@ -82,6 +100,23 @@ const UsersPage = () => {
      if (!selectedUser) return;
      setUpdating(true);
      try {
+        const validRoles = ['admin', 'dev', 'gerente', 'agent'];
+        let roleToSave = selectedUser.role;
+        if (roleToSave === 'sales_agent' || roleToSave === 'sales') roleToSave = 'agent';
+
+        if (!validRoles.includes(roleToSave)) {
+            throw new Error(`El rol "${roleToSave}" no es válido en la base de datos.`);
+        }
+
+        // 1. Actualizar el Email en la bóveda de Auth
+        if (selectedUser.email) {
+           const { error: authError } = await supabase.functions.invoke('manage-auth-users', {
+               body: { action: 'UPDATE', userId: selectedUser.id, email: selectedUser.email }
+           });
+           if (authError) throw authError;
+        }
+
+        // 2. Actualizar el perfil público
         const territoriesArray = Array.isArray(selectedUser.territories) 
             ? selectedUser.territories 
             : typeof selectedUser.territories === 'string' 
@@ -89,7 +124,7 @@ const UsersPage = () => {
                 : [];
 
         const { error } = await supabase.from('profiles').update({ 
-           role: selectedUser.role, 
+           role: roleToSave, 
            full_name: selectedUser.full_name,
            phone: selectedUser.phone, 
            territories: territoriesArray
@@ -179,7 +214,7 @@ const UsersPage = () => {
                      <TableCell className="pl-6 py-4">
                         <div className="flex flex-col">
                            <span className="font-bold text-slate-100">{u.full_name || 'Sin nombre'} {u.id === currentUser?.id && <Badge variant="secondary" className="ml-2 text-[8px] bg-indigo-900/50 text-indigo-300 border-indigo-500/30">TÚ</Badge>}</span>
-                           <span className="text-[10px] text-slate-500 font-mono mt-1">{u.email || 'Sin email'}</span>
+                           <span className="text-[10px] text-slate-500 font-mono mt-1">{u.email}</span>
                         </div>
                      </TableCell>
                      <TableCell><Badge variant="outline" className="text-[9px] font-bold uppercase border-[#333336] text-slate-400 bg-[#121214]">{getRoleLabel(u.role)}</Badge></TableCell>
@@ -207,16 +242,16 @@ const UsersPage = () => {
               <DialogHeader><DialogTitle className="text-sm uppercase tracking-widest text-indigo-400 font-bold flex items-center gap-2"><UserPlus className="w-5 h-5"/> Nuevo Miembro</DialogTitle></DialogHeader>
               <form onSubmit={handleCreateUser} className="space-y-4 pt-4">
                 <div className="grid grid-cols-2 gap-4">
-                   <div className="space-y-2"><Label className="text-[10px] text-slate-400 uppercase font-bold">Nombre *</Label><Input value={createForm.fullName} onChange={e => setCreateForm({...createForm, fullName: e.target.value})} className="bg-[#161618] border-[#222225] h-11 rounded-xl text-slate-200" required /></div>
-                   <div className="space-y-2"><Label className="text-[10px] text-slate-400 uppercase font-bold">WhatsApp</Label><Input value={createForm.phone} onChange={e => setCreateForm({...createForm, phone: e.target.value})} className="bg-[#161618] border-[#222225] h-11 rounded-xl text-slate-200" /></div>
+                   <div className="space-y-2"><Label className="text-[10px] text-slate-400 uppercase font-bold ml-1">Nombre *</Label><Input value={createForm.fullName} onChange={e => setCreateForm({...createForm, fullName: e.target.value})} className="bg-[#161618] border-[#222225] h-11 rounded-xl text-slate-200" required /></div>
+                   <div className="space-y-2"><Label className="text-[10px] text-slate-400 uppercase font-bold ml-1">WhatsApp</Label><Input value={createForm.phone} onChange={e => setCreateForm({...createForm, phone: e.target.value})} className="bg-[#161618] border-[#222225] h-11 rounded-xl text-slate-200" /></div>
                 </div>
-                <div className="space-y-2"><Label className="text-[10px] text-slate-400 uppercase font-bold">Email *</Label><Input type="email" value={createForm.email} onChange={e => setCreateForm({...createForm, email: e.target.value})} className="bg-[#161618] border-[#222225] h-11 rounded-xl text-slate-200" required /></div>
-                <div className="space-y-2"><Label className="text-[10px] text-slate-400 uppercase font-bold">Contraseña (Mín. 6) *</Label><Input type="password" value={createForm.password} onChange={e => setCreateForm({...createForm, password: e.target.value})} className="bg-[#161618] border-[#222225] h-11 rounded-xl text-slate-200" required /></div>
-                <div className="space-y-2"><Label className="text-[10px] text-slate-400 uppercase font-bold">Rol</Label>
+                <div className="space-y-2"><Label className="text-[10px] text-slate-400 uppercase font-bold ml-1">Email *</Label><Input type="email" value={createForm.email} onChange={e => setCreateForm({...createForm, email: e.target.value})} className="bg-[#161618] border-[#222225] h-11 rounded-xl text-slate-200" required /></div>
+                <div className="space-y-2"><Label className="text-[10px] text-slate-400 uppercase font-bold ml-1">Contraseña (Mín. 6) *</Label><Input type="password" value={createForm.password} onChange={e => setCreateForm({...createForm, password: e.target.value})} className="bg-[#161618] border-[#222225] h-11 rounded-xl text-slate-200" required /></div>
+                <div className="space-y-2"><Label className="text-[10px] text-slate-400 uppercase font-bold ml-1">Rol</Label>
                     <Select value={createForm.role} onValueChange={v => setCreateForm({...createForm, role: v})}>
                       <SelectTrigger className="bg-[#161618] border-[#222225] h-11 rounded-xl text-slate-200"><SelectValue /></SelectTrigger>
                       <SelectContent className="bg-[#121214] border-[#222225] text-white">
-                         <SelectItem value="sales_agent">Agente de Ventas</SelectItem>
+                         <SelectItem value="agent">Agente de Ventas</SelectItem>
                          <SelectItem value="gerente">Gerente</SelectItem>
                          <SelectItem value="admin">Administrador</SelectItem>
                          <SelectItem value="dev">Developer</SelectItem>
@@ -234,16 +269,20 @@ const UsersPage = () => {
               <DialogHeader><DialogTitle className="flex items-center gap-2 text-amber-500 text-sm uppercase font-bold"><Shield className="w-5 h-5" /> Perfil de Miembro</DialogTitle></DialogHeader>
               {selectedUser && (
                 <div className="space-y-6 py-4">
+                  <div className="space-y-2">
+                     <Label className="text-[10px] text-slate-400 uppercase font-bold ml-1">Email de Acceso</Label>
+                     <Input type="email" value={selectedUser.email || ''} onChange={e => setSelectedUser({...selectedUser, email: e.target.value})} className="bg-[#161618] border-[#222225] h-11 rounded-xl text-slate-200 font-mono" />
+                  </div>
                   <div className="grid grid-cols-2 gap-4">
-                     <div className="space-y-2"><Label className="text-[10px] text-slate-400 uppercase font-bold">Nombre</Label><Input value={selectedUser.full_name} onChange={e => setSelectedUser({...selectedUser, full_name: e.target.value})} className="bg-[#161618] border-[#222225] h-11 rounded-xl text-slate-200" /></div>
-                     <div className="space-y-2"><Label className="text-[10px] text-slate-400 uppercase font-bold">WhatsApp</Label><Input value={selectedUser.phone || ''} onChange={e => setSelectedUser({...selectedUser, phone: e.target.value})} className="bg-[#161618] border-[#222225] h-11 rounded-xl text-slate-200" /></div>
+                     <div className="space-y-2"><Label className="text-[10px] text-slate-400 uppercase font-bold ml-1">Nombre</Label><Input value={selectedUser.full_name} onChange={e => setSelectedUser({...selectedUser, full_name: e.target.value})} className="bg-[#161618] border-[#222225] h-11 rounded-xl text-slate-200" /></div>
+                     <div className="space-y-2"><Label className="text-[10px] text-slate-400 uppercase font-bold ml-1">WhatsApp</Label><Input value={selectedUser.phone || ''} onChange={e => setSelectedUser({...selectedUser, phone: e.target.value})} className="bg-[#161618] border-[#222225] h-11 rounded-xl text-slate-200" /></div>
                   </div>
                   <div className="space-y-2">
-                     <Label className="text-[10px] text-slate-400 uppercase font-bold">Rol</Label>
-                     <Select value={['sales_agent', 'agent', 'sales'].includes(selectedUser.role) ? 'sales_agent' : selectedUser.role} onValueChange={v => setSelectedUser({...selectedUser, role: v})} disabled={selectedUser.id === currentUser?.id}>
+                     <Label className="text-[10px] text-slate-400 uppercase font-bold ml-1">Rol</Label>
+                     <Select value={['sales_agent', 'sales'].includes(selectedUser.role) ? 'agent' : selectedUser.role} onValueChange={v => setSelectedUser({...selectedUser, role: v})} disabled={selectedUser.id === currentUser?.id}>
                        <SelectTrigger className="bg-[#161618] border-[#222225] h-11 rounded-xl text-slate-200"><SelectValue /></SelectTrigger>
                        <SelectContent className="bg-[#121214] border-[#222225] text-white">
-                          <SelectItem value="sales_agent">Agente de Ventas</SelectItem>
+                          <SelectItem value="agent">Agente de Ventas</SelectItem>
                           <SelectItem value="gerente">Gerente</SelectItem>
                           <SelectItem value="admin">Administrador</SelectItem>
                           <SelectItem value="dev">Developer</SelectItem>
@@ -251,7 +290,7 @@ const UsersPage = () => {
                      </Select>
                   </div>
                   <div className="space-y-2">
-                     <Label className="text-[10px] text-slate-400 uppercase font-bold">Territorios (Separados por coma)</Label>
+                     <Label className="text-[10px] text-slate-400 uppercase font-bold ml-1">Territorios (Separados por coma)</Label>
                      <Input 
                         value={Array.isArray(selectedUser.territories) ? selectedUser.territories.join(', ') : (selectedUser.territories || '')} 
                         onChange={e => setSelectedUser({...selectedUser, territories: e.target.value})} 
@@ -262,8 +301,10 @@ const UsersPage = () => {
                 </div>
               )}
               <DialogFooter>
-                 <Button variant="ghost" onClick={() => setIsEditOpen(false)}>Cancelar</Button>
-                 <Button onClick={handleUpdateUser} disabled={updating} className="bg-amber-600 hover:bg-amber-500 text-slate-950 font-bold rounded-xl px-8 h-11 text-[10px] uppercase shadow-lg">{updating ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2"/> + "Guardar"}</Button>
+                 <Button variant="ghost" onClick={() => setIsEditOpen(false)} className="uppercase text-[10px] font-bold rounded-xl">Cancelar</Button>
+                 <Button onClick={handleUpdateUser} disabled={updating} className="bg-amber-600 hover:bg-amber-500 text-slate-950 font-bold rounded-xl px-8 h-11 text-[10px] uppercase shadow-lg flex items-center gap-2">
+                    {updating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Guardar
+                 </Button>
               </DialogFooter>
            </DialogContent>
         </Dialog>

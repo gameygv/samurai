@@ -91,7 +91,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     await supabase.auth.signOut();
   };
 
-  const userRole = (user?.email === 'gameygv@gmail.com') ? 'dev' : (profile?.role?.toLowerCase() || 'sales_agent');
+  const userRole = (user?.email === 'gameygv@gmail.com') ? 'dev' : (profile?.role?.toLowerCase() || 'agent');
 
   const value = {
     session,

@@ -24,9 +24,8 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
-    const finalRole = (role === 'agent' || role === 'sales') ? 'sales_agent' : (role || 'sales_agent');
-
-    console.log(`[admin-create-user] Creando cuenta para: ${email}`);
+    // Usamos 'agent' internamente para evitar romper el Check Constraint de la BD
+    const finalRole = (role === 'sales_agent' || role === 'sales') ? 'agent' : (role || 'agent');
 
     const { data, error } = await supabaseAdmin.auth.admin.createUser({
       email: email,
@@ -45,7 +44,6 @@ serve(async (req) => {
         throw error;
     }
 
-    // Asegurar que el perfil se cree o actualice con el rol correcto
     const { error: profileError } = await supabaseAdmin
       .from('profiles')
       .update({ role: finalRole, full_name: fullName })
