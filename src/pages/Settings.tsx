@@ -131,6 +131,7 @@ const Settings = () => {
   };
 
   const getValue = (key: string) => configs.find(c => c.key === key)?.value || '';
+  
   const updateConfigValue = (key: string, value: string) => {
       const exists = configs.find(c => c.key === key);
       if (exists) {
@@ -139,6 +140,9 @@ const Settings = () => {
           setConfigs(prev => [...prev, { key, value, category: 'SYSTEM' }]);
       }
   };
+
+  // Convertimos el array de configs en un objeto simple llave-valor para pasarlo al KernelTab
+  const kernelConfigObj = configs.reduce((acc, c) => ({ ...acc, [c.key]: c.value }), {});
 
   // WooCommerce Handlers
   const handleAddProduct = () => setWcProducts([...wcProducts, { id: Date.now().toString(), wc_id: '', title: '', price: '', prompt: '' }]);
@@ -202,7 +206,15 @@ const Settings = () => {
           <TabsContent value="secrets" className="mt-6">
              <SecretsTab getValue={getValue} onChange={updateConfigValue} />
           </TabsContent>
-          {isDev && <TabsContent value="kernel" className="mt-6"><KernelTab kernelConfig={{}} onChange={()=>{}} /></TabsContent>}
+          
+          {isDev && (
+             <TabsContent value="kernel" className="mt-6">
+                <KernelTab 
+                   kernelConfig={kernelConfigObj} 
+                   onChange={updateConfigValue} 
+                />
+             </TabsContent>
+          )}
         </Tabs>
       </div>
     </Layout>
