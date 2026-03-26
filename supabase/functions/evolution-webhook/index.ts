@@ -14,10 +14,14 @@ serve(async (req) => {
   const channelIdParam = url.searchParams.get('channel_id');
   const supabaseClient = createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '');
 
+  // 1. VERIFICACIÓN DEL WEBHOOK DE META (Challenge)
   if (req.method === 'GET') {
     const mode = url.searchParams.get("hub.mode");
     const token = url.searchParams.get("hub.verify_token");
     const challenge = url.searchParams.get("hub.challenge");
+    
+    // Aquí puedes opcionalmente buscar el channel_id en la BD para validar que el `token` coincida con el guardado,
+    // o simplemente devolver el challenge si te envían un token.
     if (mode && token) return new Response(challenge, { status: 200 });
     return new Response("Forbidden", { status: 403 });
   }
@@ -38,7 +42,55 @@ serve(async (req) => {
     
     let phone, text = '', pushName = 'Cliente WA', mediaType = null, messageId = null;
 
-    if (payload.device_id && payload.event) { 
+    // =====================================================================
+    // DETECCIÓN Y PARSEO: META CLOUD API
+    // =====================================================================
+    if (payload.object === 'whatsapp_business_account' && payload.entry) {
+        const change = payload.entry[0]?.changes?.[0]?.value;
+        
+        // Ignorar actualizaciones de estado (entregado, leído)
+        if (change.statuses) return new Response('status_ignored', { status: 200 });
+        
+        const msg = change.messages?.[0];
+        if (!msg) return new Response('no_messages', { status: 200 });
+        
+        const contact = change.contacts?.[0];
+        phone = msg.from;
+        messageId = msg.id;
+        pushName = contact?.profile?.name || 'Lead Meta';
+
+        if (msg.type === 'text') {
+            text = msg.text?.body || '';
+            mediaType = 'text';
+        } else if (msg.type === 'image') {
+            text = msg.image?.caption || '[Imagen]';
+            mediaType = 'image';
+            // Nota: Meta envía el Media ID. La descarga de medios desde Meta requiere un paso extra
+            // con el token de acceso, por ahora lo pasamos como texto.
+        } else if (msg.type === 'audio') {
+            text = '[Audio]';
+            mediaType = 'audio';
+        } else if (msg.type === 'document') {
+            text = msg.document?.caption || '[Documento]';
+            mediaType = 'document';
+        } else if (msg.type === 'video') {
+            text = msg.video?.caption || '[Video]';
+            mediaType = 'video';
+        } else if (msg.type === 'button') {
+            text = msg.button?.text || '[Botón]';
+            mediaType = 'text';
+        } else if (msg.type === 'interactive') {
+            text = msg.interactive?.button_reply?.title || msg.interactive?.list_reply?.title || '[Interactivo]';
+            mediaType = 'text';
+        } else {
+            text = '[Mensaje no soportado]';
+            mediaType = 'text';
+        }
+    } 
+    // =====================================================================
+    // DETECCIÓN Y PARSEO: GOWA / EVOLUTION API
+    // =====================================================================
+    else if (payload.device_id && payload.event) { 
        if (payload.event !== 'message') return new Response('ignored_event', { status: 200 });
        const p = payload.payload;
        if (!p || p.is_from_me) return new Response('ignored_self', { status: 200 });
@@ -52,7 +104,9 @@ serve(async (req) => {
        else if (p.audio) { text = "[Audio]"; mediaType = 'audio'; } 
        else if (p.document) { text = p.body || "[Documento]"; mediaType = 'document'; } 
        else if (p.body) { text = p.body; mediaType = 'text'; }
-    } else {
+    } 
+    // Si no coincide con ninguno, lo abortamos
+    else {
        return new Response('unknown_payload', { status: 200 });
     }
 
@@ -62,12 +116,12 @@ serve(async (req) => {
     const { data: existingMsg } = await supabaseClient.from('conversaciones').select('id').contains('metadata', { msgId: messageId }).limit(1).maybeSingle();
     if (existingMsg) return new Response('duplicate', { status: 200 });
 
-    // BUSCAR CREDENCIALES DEL CANAL PARA DESCARGA DINÁMICA
+    // BUSCAR CREDENCIALES DEL CANAL PARA DESCARGA DINÁMICA (Solo Gowa por ahora)
     const { data: channelData } = await supabaseClient.from('whatsapp_channels').select('*').eq('id', channelIdParam).maybeSingle();
     let downloadedBlob = null;
     let finalMediaUrl = null;
 
-    if (mediaType && mediaType !== 'text' && channelData) {
+    if (mediaType && mediaType !== 'text' && channelData && channelData.provider === 'gowa') {
         try {
             const apiBaseUrl = channelData.api_url.endsWith('/') ? channelData.api_url.slice(0, -1) : channelData.api_url;
             const authHeader = channelData.api_key.startsWith('Basic ') ? channelData.api_key : `Basic ${channelData.api_key}`;
@@ -126,14 +180,13 @@ serve(async (req) => {
     });
 
     // === ENRUTAMIENTO AUTOMÁTICO DE COMPROBANTES DE PAGO ===
-    // Si el cliente está en etapa de Cierre (ALTO) y manda una foto, asumimos que es el comprobante y lo mandamos al Centro Financiero.
     if (mediaType === 'image' && finalMediaUrl && lead.buying_intent === 'ALTO') {
        await supabaseClient.from('media_assets').insert({
            title: `Comprobante de ${lead.nombre} (${new Date().toLocaleDateString()})`,
            url: finalMediaUrl,
            type: 'IMAGE',
            category: 'PAYMENT',
-           ai_instructions: `Lead ID: ${lead.id}` // Guardamos el ID para referencia interna
+           ai_instructions: `Lead ID: ${lead.id}` 
        });
        await logTrace(`Comprobante interceptado de ${lead.nombre}. Enviado al Centro Financiero.`, false);
     }

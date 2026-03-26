@@ -38,12 +38,10 @@ export const ChannelsTab = () => {
 
   const handleSetDefault = async (id: string) => {
     if (defaultNotifyId === id) {
-       // Si ya era el default, lo desactivamos
        setDefaultNotifyId('');
        await supabase.from('app_config').delete().eq('key', 'default_notification_channel');
        toast.success("Alertas desactivadas para este canal.");
     } else {
-       // Activamos este como el único canal de alertas
        setDefaultNotifyId(id);
        await supabase.from('app_config').upsert({ key: 'default_notification_channel', value: id, category: 'SYSTEM' }, { onConflict: 'key' });
        toast.success("Canal de alertas maestro actualizado.");
@@ -56,7 +54,7 @@ export const ChannelsTab = () => {
 
   const handleSaveChannel = async (ch: any) => {
     if (!ch.name || !ch.api_key || !ch.instance_id) {
-        toast.error("Por favor completa Nombre, API Key e Instance ID");
+        toast.error("Por favor completa Nombre, API Key e ID de Instancia/Teléfono");
         return;
     }
     setSaving(true);
@@ -65,16 +63,16 @@ export const ChannelsTab = () => {
       const data = { 
         name: payload.name, 
         provider: payload.provider, 
-        api_url: payload.api_url, 
+        api_url: payload.provider === 'meta' ? 'https://graph.facebook.com' : payload.api_url, 
         api_key: payload.api_key, 
         instance_id: payload.instance_id, 
-        verify_token: payload.verify_token, 
+        verify_token: payload.verify_token || 'samurai_v3', 
         is_active: true 
       };
       
       const { error } = is_new ? await supabase.from('whatsapp_channels').insert(data) : await supabase.from('whatsapp_channels').update(data).eq('id', ch.id);
       if (error) throw error;
-      toast.success("¡Canal guardado! Webhook generado.");
+      toast.success("¡Canal guardado exitosamente!");
       fetchAll();
     } catch (err: any) { toast.error(err.message); } finally { setSaving(false); }
   };
@@ -129,38 +127,65 @@ export const ChannelsTab = () => {
                </div>
             </CardHeader>
             <CardContent className="p-6">
-               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
                   <div className="space-y-2">
                      <Label className="text-[10px] uppercase font-bold text-slate-500 tracking-widest">Proveedor</Label>
                      <Select value={ch.provider} onValueChange={v => setChannels(channels.map(c => c.id === ch.id ? {...c, provider: v} : c))}>
                         <SelectTrigger className="bg-slate-950 border-slate-800 h-11"><SelectValue /></SelectTrigger>
                         <SelectContent className="bg-slate-900 border-slate-800 text-white">
                            <SelectItem value="gowa">GOWA (Recomendado)</SelectItem>
-                           <SelectItem value="meta">Meta Cloud API</SelectItem>
+                           <SelectItem value="meta">Meta Cloud API Oficial</SelectItem>
                            <SelectItem value="evolution">Evolution API</SelectItem>
                         </SelectContent>
                      </Select>
                   </div>
                   
                   <div className="space-y-2">
-                     <Label className="text-[10px] uppercase font-bold text-slate-500 tracking-widest">URL del Servidor</Label>
+                     <Label className="text-[10px] uppercase font-bold text-slate-500 tracking-widest">
+                       {ch.provider === 'meta' ? 'Identificador de Número' : 'Instance ID'}
+                     </Label>
                      <Input 
-                        value={ch.api_url} 
-                        onChange={e => setChannels(channels.map(c => c.id === ch.id ? {...c, api_url: e.target.value} : c))} 
-                        placeholder="https://gowa.poesis.net"
-                        className="bg-slate-950 border-slate-800 font-mono text-xs h-11" 
+                        value={ch.instance_id} 
+                        onChange={e => setChannels(channels.map(c => c.id === ch.id ? {...c, instance_id: e.target.value} : c))} 
+                        className="bg-slate-950 border-slate-800 h-11 font-mono" 
+                        placeholder={ch.provider === 'meta' ? "Ej: 106093498877543" : "Ej: instancia-gowa"} 
+                     />
+                  </div>
+
+                  <div className="space-y-2 lg:col-span-2">
+                     <Label className="text-[10px] uppercase font-bold text-slate-500 tracking-widest">
+                        {ch.provider === 'meta' ? 'Token de Acceso Permanente' : 'API Key / Token'}
+                     </Label>
+                     <Input 
+                        type="password" 
+                        value={ch.api_key} 
+                        onChange={e => setChannels(channels.map(c => c.id === ch.id ? {...c, api_key: e.target.value} : c))} 
+                        className="bg-slate-950 border-slate-800 h-11 font-mono" 
+                        placeholder={ch.provider === 'meta' ? "EAAX..." : "Token de seguridad..."} 
                      />
                   </div>
 
                   <div className="space-y-2">
-                     <Label className="text-[10px] uppercase font-bold text-slate-500 tracking-widest">API Key / Token</Label>
-                     <Input type="password" value={ch.api_key} onChange={e => setChannels(channels.map(c => c.id === ch.id ? {...c, api_key: e.target.value} : c))} className="bg-slate-950 border-slate-800 h-11" placeholder="Token de seguridad..." />
+                     <Label className="text-[10px] uppercase font-bold text-slate-500 tracking-widest flex items-center gap-1"><Key className="w-3 h-3"/> Verify Token</Label>
+                     <Input 
+                        value={ch.verify_token || 'samurai_v3'} 
+                        onChange={e => setChannels(channels.map(c => c.id === ch.id ? {...c, verify_token: e.target.value} : c))} 
+                        className="bg-slate-950 border-slate-800 h-11 font-mono text-emerald-400" 
+                        placeholder="Para verificar Webhook" 
+                     />
                   </div>
 
-                  <div className="space-y-2">
-                     <Label className="text-[10px] uppercase font-bold text-slate-500 tracking-widest">Instance ID / Dispositivo</Label>
-                     <Input value={ch.instance_id} onChange={e => setChannels(channels.map(c => c.id === ch.id ? {...c, instance_id: e.target.value} : c))} className="bg-slate-950 border-slate-800 h-11" placeholder="Nombre de tu instancia" />
-                  </div>
+                  {ch.provider !== 'meta' && (
+                      <div className="space-y-2 lg:col-span-2">
+                         <Label className="text-[10px] uppercase font-bold text-slate-500 tracking-widest">URL del Servidor</Label>
+                         <Input 
+                            value={ch.api_url} 
+                            onChange={e => setChannels(channels.map(c => c.id === ch.id ? {...c, api_url: e.target.value} : c))} 
+                            placeholder="https://gowa.poesis.net"
+                            className="bg-slate-950 border-slate-800 font-mono text-xs h-11" 
+                         />
+                      </div>
+                  )}
                </div>
 
                <div className="mt-6 flex justify-between items-center">
