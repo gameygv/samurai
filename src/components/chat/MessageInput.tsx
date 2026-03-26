@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Loader2, Send, ShieldAlert, Paperclip, X, Image as ImageIcon, FileText, MessageCircle, Lock, Sparkles, UploadCloud } from 'lucide-react';
+import { Loader2, Send, ShieldAlert, Paperclip, X, Image as ImageIcon, FileText, MessageCircle, Lock, Sparkles, UploadCloud, Bot, BotOff } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
@@ -49,7 +49,7 @@ export const MessageInput = ({ onSendMessage, sending, isAiPaused, initialValue 
      try {
          const draft = await onAutoGenerate();
          if (draft) {
-             setMessage(draft); // Inyectar directamente al input local
+             setMessage(draft);
              toast.success("Sugerencia generada.");
          } else {
              toast.error("La IA no pudo generar una sugerencia.");
@@ -60,6 +60,10 @@ export const MessageInput = ({ onSendMessage, sending, isAiPaused, initialValue 
          setGenerating(false);
      }
   };
+
+  // Detectar si el usuario está escribiendo un comando
+  const isTypingCommand = message.trim() === '#ON' || message.trim() === '#OFF' ||
+                          message.trim() === '#STOP' || message.trim() === '#START';
 
   return (
     <div 
@@ -96,6 +100,36 @@ export const MessageInput = ({ onSendMessage, sending, isAiPaused, initialValue 
          
          <div className="flex items-center gap-3">
              {toolbarAction}
+
+             {/* BOTONES RÁPIDOS DE COMANDO IA */}
+             {mode === 'message' && (
+               <div className="flex items-center gap-1.5">
+                  {isAiPaused ? (
+                     <Button
+                        type="button"
+                        size="sm"
+                        onClick={() => onSendMessage('#ON')}
+                        disabled={sending}
+                        className="h-7 px-3 bg-emerald-950/40 border border-emerald-500/40 text-emerald-400 hover:bg-emerald-600 hover:text-white text-[9px] font-bold uppercase tracking-widest rounded-lg transition-all"
+                        title="Activar IA en este chat (#ON)"
+                     >
+                        <Bot className="w-3 h-3 mr-1" /> #ON
+                     </Button>
+                  ) : (
+                     <Button
+                        type="button"
+                        size="sm"
+                        onClick={() => onSendMessage('#OFF')}
+                        disabled={sending}
+                        className="h-7 px-3 bg-red-950/40 border border-red-500/40 text-red-400 hover:bg-red-600 hover:text-white text-[9px] font-bold uppercase tracking-widest rounded-lg transition-all"
+                        title="Pausar IA en este chat (#OFF)"
+                     >
+                        <BotOff className="w-3 h-3 mr-1" /> #OFF
+                     </Button>
+                  )}
+               </div>
+             )}
+
              {isAiPaused && mode === 'message' && (
                <div className="text-[9px] text-red-400 flex items-center gap-1 opacity-80 font-bold tracking-widest bg-red-900/10 px-2 py-1 rounded-md border border-red-500/20">
                  <ShieldAlert className="w-3 h-3" /> BOT PAUSADO
@@ -114,6 +148,18 @@ export const MessageInput = ({ onSendMessage, sending, isAiPaused, initialValue 
           <Button type="button" variant="ghost" size="icon" className="h-7 w-7 text-indigo-300 hover:text-red-400 hover:bg-red-500/10 rounded-lg" onClick={() => setFile(null)}>
             <X className="w-4 h-4" />
           </Button>
+        </div>
+      )}
+
+      {/* HINT DE COMANDOS */}
+      {isTypingCommand && (
+        <div className="bg-indigo-950/40 border border-indigo-500/30 rounded-xl px-3 py-2 text-[10px] text-indigo-300 animate-in fade-in slide-in-from-bottom-2">
+          {(message.trim() === '#ON' || message.trim() === '#START') && (
+            <span className="flex items-center gap-2"><Bot className="w-3.5 h-3.5 text-emerald-400"/> Enviar para <strong className="text-emerald-400">ACTIVAR</strong> la IA en este chat.</span>
+          )}
+          {(message.trim() === '#OFF' || message.trim() === '#STOP') && (
+            <span className="flex items-center gap-2"><BotOff className="w-3.5 h-3.5 text-red-400"/> Enviar para <strong className="text-red-400">PAUSAR</strong> la IA en este chat.</span>
+          )}
         </div>
       )}
 

@@ -154,17 +154,21 @@ export default function ChatViewer({ lead, open, onOpenChange }: ChatViewerProps
     setSending(true);
 
     try {
-      if (text.trim() === '#STOP' || text.trim() === '#START') {
-        const isPaused = text.trim() === '#STOP';
-        await supabase.from('leads').update({ ai_paused: isPaused }).eq('id', leadId);
-        setLiveLead((prev: any) => ({...prev, ai_paused: isPaused}));
-        await supabase.from('conversaciones').insert({
-          lead_id: leadId,
-          mensaje: `IA ${isPaused ? 'Pausada' : 'Activada'} manualmente.`,
-          emisor: 'HUMANO',
-          platform: 'PANEL_INTERNO',
-        });
-        toast.success(`Samurai ${isPaused ? 'pausado' : 'activado'}`);
+      // Soportar #ON / #OFF (nuevos) y #START / #STOP (legacy)
+      const cmd = text.trim().toUpperCase();
+      if (cmd === '#ON' || cmd === '#START') {
+        await supabase.from('leads').update({ ai_paused: false }).eq('id', leadId);
+        setLiveLead((prev: any) => ({...prev, ai_paused: false}));
+        await supabase.from('conversaciones').insert({ lead_id: leadId, mensaje: 'IA Activada manualmente.', emisor: 'HUMANO', platform: 'PANEL_INTERNO' });
+        toast.success('Samurai activado ✅');
+        refetch();
+        return;
+      }
+      if (cmd === '#OFF' || cmd === '#STOP') {
+        await supabase.from('leads').update({ ai_paused: true }).eq('id', leadId);
+        setLiveLead((prev: any) => ({...prev, ai_paused: true}));
+        await supabase.from('conversaciones').insert({ lead_id: leadId, mensaje: 'IA Pausada manualmente.', emisor: 'HUMANO', platform: 'PANEL_INTERNO' });
+        toast.success('Samurai pausado ⏸');
         refetch();
         return;
       }
@@ -357,7 +361,7 @@ export default function ChatViewer({ lead, open, onOpenChange }: ChatViewerProps
             onSave={saveMemory} 
             saving={sending} 
             onReset={() => {}} 
-            onToggleFollowup={() => handleSendMessage(liveLead.ai_paused ? '#START' : '#STOP')} 
+            onToggleFollowup={() => handleSendMessage(liveLead.ai_paused ? '#ON' : '#OFF')} 
             onAnalysisComplete={() => { refreshLeadData(); refetch(); }} 
             onDeleteLead={handleDeleteLead}
           />
