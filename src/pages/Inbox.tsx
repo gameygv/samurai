@@ -17,6 +17,7 @@ import { MessageList } from '@/components/chat/MessageList';
 import { MessageInput } from '@/components/chat/MessageInput';
 import { MemoryPanel } from '@/components/chat/MemoryPanel';
 import { AiSuggestions } from '@/components/chat/AiSuggestions';
+import { GlobalAiToggle } from '@/components/chat/GlobalAiToggle';
 import { sendEvolutionMessage } from '@/utils/messagingService';
 import { useRealtimeMessages } from '@/hooks/useRealtimeMessages';
 import { extractTagText } from '@/lib/tag-parser';
@@ -211,7 +212,6 @@ const Inbox = () => {
             body: { question: "Por favor genera la mejor respuesta corta y persuasiva para continuar esta conversación como un experto humano.", history, customPrompts: null }
          });
          if (error) throw error;
-         
          let text = data.answer as string;
          return text.replace(/<<MEDIA:[^>]+>>/gi, '').trim();
       } catch (e) { return null; }
@@ -241,159 +241,167 @@ const Inbox = () => {
 
   return (
     <Layout>
-      <div className="h-[calc(100vh-64px)] -m-4 md:-m-8 flex overflow-hidden bg-[#050505] border-t border-[#1a1a1a]">
+      <div className="h-[calc(100vh-64px)] -m-4 md:-m-8 flex flex-col overflow-hidden bg-[#050505] border-t border-[#1a1a1a]">
         
-        {/* COLUMNA 1: LISTA */}
-        <div className={cn("w-full md:w-[340px] flex-shrink-0 border-r border-[#1a1a1a] bg-[#0a0a0c] flex flex-col", activeLead ? "hidden md:flex" : "flex")}>
-           <div className="p-4 border-b border-[#1a1a1a] shrink-0">
-               <div className="flex items-center justify-between mb-3">
-                  <h2 className="text-sm font-bold text-white uppercase tracking-widest flex items-center gap-2"><MessageCircle className="w-4 h-4 text-indigo-400"/> Bandeja</h2>
-               </div>
-               <div className="relative">
-                  <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-500" />
-                  <Input placeholder="Buscar nombre, ciudad, tag..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="pl-9 h-9 bg-[#121214] border-[#222225] text-xs rounded-xl focus-visible:ring-indigo-500/50"/>
-               </div>
-           </div>
-           <ScrollArea className="flex-1">
-              {loadingLeads ? <div className="flex justify-center p-8"><Loader2 className="w-6 h-6 animate-spin text-slate-600"/></div>
-              : <div className="divide-y divide-[#1a1a1a]">
-                    {filteredLeads.map(lead => (
-                       <button key={lead.id} onClick={() => setActiveLead(lead)}
-                         className={cn("w-full text-left p-4 hover:bg-[#161618] transition-colors flex items-start gap-3 relative", activeLead?.id === lead.id ? "bg-[#161618] border-l-2 border-l-indigo-500" : "")}>
-                          <Avatar className="h-10 w-10 border border-[#222225] bg-[#121214]">
-                               <AvatarFallback className="bg-transparent text-indigo-400 font-bold">{String(lead.nombre || 'CL').substring(0,2).toUpperCase()}</AvatarFallback>
-                          </Avatar>
-                          <div className="flex-1 min-w-0">
-                             <div className="flex justify-between items-baseline mb-0.5">
-                                <span className={cn("font-bold truncate text-sm flex-1", activeLead?.id === lead.id ? "text-indigo-400" : "text-slate-200")}>{String(lead.nombre || lead.telefono)}</span>
-                             </div>
-                             <div className="flex items-center gap-2 text-[10px] text-slate-400 mt-0.5">
-                                {lead.ciudad && <span className="flex items-center gap-1 font-bold text-indigo-300"><MapPin className="w-2.5 h-2.5"/>{String(lead.ciudad)}</span>}
-                                {lead.email && <span className="flex items-center gap-1 text-emerald-400"><Mail className="w-2.5 h-2.5"/>OK</span>}
-                             </div>
-                             {Array.isArray(lead.tags) && lead.tags.length > 0 && (
-                                <div className="flex gap-1.5 mt-1.5 flex-wrap">
-                                   {lead.tags.map((rawTag: any, idx: number) => {
-                                      const t = extractTagText(rawTag);
-                                      if (!t) return null;
-                                      const tagConf = allTags.find(lt => lt.text === t);
-                                      const isGlobal = globalTags.some(gt => gt.text === t);
-                                      return (
-                                        <Badge key={`${t}-${idx}`} variant="outline" className="text-[8px] h-4 px-1 font-medium flex items-center gap-1" style={{ backgroundColor: (tagConf?.color || '#1e293b') + '20', color: tagConf?.color || '#94a3b8', borderColor: (tagConf?.color || '#334155') + '50' }}>
-                                           {isGlobal ? <Globe className="w-2 h-2 opacity-70 shrink-0"/> : <User className="w-2 h-2 opacity-70 shrink-0"/>}
-                                           <span className="truncate max-w-[80px]">{t}</span>
-                                        </Badge>
-                                      );
-                                   })}
-                                </div>
-                             )}
-                          </div>
-                       </button>
-                    ))}
-                 </div>}
-           </ScrollArea>
+        {/* BARRA SUPERIOR CON PAUSA GLOBAL */}
+        <div className="flex items-center justify-between px-4 py-2 bg-[#0a0a0c] border-b border-[#1a1a1a] shrink-0">
+          <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 flex items-center gap-2">
+            <MessageCircle className="w-3.5 h-3.5 text-indigo-400" /> Bandeja de Entrada
+          </span>
+          <GlobalAiToggle />
         </div>
 
-        {/* COLUMNA 2: CHAT */}
-        <div className={cn("flex-1 min-w-0 flex flex-col bg-[#050505] relative", !activeLead ? "hidden md:flex items-center justify-center" : "flex")}>
-           {activeLead ? (
-              <>
-                 <div className="h-16 px-4 bg-[#0a0a0c]/80 backdrop-blur-md border-b border-[#1a1a1a] flex items-center justify-between shrink-0">
-                    <div className="flex items-center gap-3">
-                       <div className="flex flex-col">
-                          <span className="font-bold text-white">{String(activeLead.nombre || activeLead.telefono)}</span>
-                          <span className="text-[10px] text-slate-400 font-mono">{String(activeLead.telefono)}</span>
-                       </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                       <Button variant="ghost" size="icon" className="xl:hidden text-slate-400" onClick={() => setShowMemoryMobile(!showMemoryMobile)}><Menu className="w-5 h-5" /></Button>
-                    </div>
+        <div className="flex flex-1 min-h-0 overflow-hidden">
+          {/* COLUMNA 1: LISTA */}
+          <div className={cn("w-full md:w-[340px] flex-shrink-0 border-r border-[#1a1a1a] bg-[#0a0a0c] flex flex-col", activeLead ? "hidden md:flex" : "flex")}>
+             <div className="p-4 border-b border-[#1a1a1a] shrink-0">
+                 <div className="relative">
+                    <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-500" />
+                    <Input placeholder="Buscar nombre, ciudad, tag..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="pl-9 h-9 bg-[#121214] border-[#222225] text-xs rounded-xl focus-visible:ring-indigo-500/50"/>
                  </div>
+             </div>
+             <ScrollArea className="flex-1">
+                {loadingLeads ? <div className="flex justify-center p-8"><Loader2 className="w-6 h-6 animate-spin text-slate-600"/></div>
+                : <div className="divide-y divide-[#1a1a1a]">
+                      {filteredLeads.map(lead => (
+                         <button key={lead.id} onClick={() => setActiveLead(lead)}
+                           className={cn("w-full text-left p-4 hover:bg-[#161618] transition-colors flex items-start gap-3 relative", activeLead?.id === lead.id ? "bg-[#161618] border-l-2 border-l-indigo-500" : "")}>
+                            <Avatar className="h-10 w-10 border border-[#222225] bg-[#121214]">
+                                 <AvatarFallback className="bg-transparent text-indigo-400 font-bold">{String(lead.nombre || 'CL').substring(0,2).toUpperCase()}</AvatarFallback>
+                            </Avatar>
+                            <div className="flex-1 min-w-0">
+                               <div className="flex justify-between items-baseline mb-0.5">
+                                  <span className={cn("font-bold truncate text-sm flex-1", activeLead?.id === lead.id ? "text-indigo-400" : "text-slate-200")}>{String(lead.nombre || lead.telefono)}</span>
+                                  {lead.ai_paused && (
+                                    <span className="text-[8px] font-bold text-red-400 uppercase ml-2 shrink-0">PAUSADA</span>
+                                  )}
+                               </div>
+                               <div className="flex items-center gap-2 text-[10px] text-slate-400 mt-0.5">
+                                  {lead.ciudad && <span className="flex items-center gap-1 font-bold text-indigo-300"><MapPin className="w-2.5 h-2.5"/>{String(lead.ciudad)}</span>}
+                                  {lead.email && <span className="flex items-center gap-1 text-emerald-400"><Mail className="w-2.5 h-2.5"/>OK</span>}
+                               </div>
+                               {Array.isArray(lead.tags) && lead.tags.length > 0 && (
+                                  <div className="flex gap-1.5 mt-1.5 flex-wrap">
+                                     {lead.tags.map((rawTag: any, idx: number) => {
+                                        const t = extractTagText(rawTag);
+                                        if (!t) return null;
+                                        const tagConf = allTags.find(lt => lt.text === t);
+                                        return (
+                                          <Badge key={`${t}-${idx}`} variant="outline" className="text-[8px] h-4 px-1 font-medium" style={{ backgroundColor: (tagConf?.color || '#1e293b') + '20', color: tagConf?.color || '#94a3b8', borderColor: (tagConf?.color || '#334155') + '50' }}>
+                                             <span className="truncate max-w-[80px]">{t}</span>
+                                          </Badge>
+                                        );
+                                     })}
+                                  </div>
+                               )}
+                            </div>
+                         </button>
+                      ))}
+                   </div>}
+             </ScrollArea>
+          </div>
 
-                 <MessageList messages={messages} loading={loadingMessages} />
+          {/* COLUMNA 2: CHAT */}
+          <div className={cn("flex-1 min-w-0 flex flex-col bg-[#050505] relative", !activeLead ? "hidden md:flex items-center justify-center" : "flex")}>
+             {activeLead ? (
+                <>
+                   <div className="h-16 px-4 bg-[#0a0a0c]/80 backdrop-blur-md border-b border-[#1a1a1a] flex items-center justify-between shrink-0">
+                      <div className="flex items-center gap-3">
+                         <div className="flex flex-col">
+                            <span className="font-bold text-white">{String(activeLead.nombre || activeLead.telefono)}</span>
+                            <span className="text-[10px] text-slate-400 font-mono">{String(activeLead.telefono)}</span>
+                         </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                         <Button variant="ghost" size="icon" className="xl:hidden text-slate-400" onClick={() => setShowMemoryMobile(!showMemoryMobile)}><Menu className="w-5 h-5" /></Button>
+                      </div>
+                   </div>
 
-                 <div className="p-3 bg-[#0a0a0c] border-t border-[#1a1a1a] shrink-0">
-                    <AiSuggestions suggestions={suggestions} loading={loadingSuggestions} onSelect={(t) => setDraftMessage(t.replace(/<<MEDIA:[^>]+>>/gi, '').trim())} onRefresh={() => fetchAiSuggestions(activeLead.id, messages)} />
-                    <MessageInput 
-                        onSendMessage={handleSendMessage} 
-                        sending={sending} 
-                        isAiPaused={activeLead.ai_paused} 
-                        initialValue={draftMessage} 
-                        onAutoGenerate={handleAutoGenerate}
-                        toolbarAction={
-                           <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                 <Button size="sm" variant="outline" className="h-8 text-[10px] bg-[#121214] border-[#222225] text-amber-500 uppercase font-bold tracking-widest rounded-lg hover:bg-[#161618]">
-                                    <Zap className="w-3 h-3 mr-1.5" /> Plantillas
-                                 </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="start" className="bg-[#0a0a0c] border-[#222225] text-white w-64 max-h-[300px] overflow-y-auto">
-                                 {Array.isArray(products) && products.length > 0 && <>
-                                    <DropdownMenuLabel className="text-[10px] uppercase text-slate-500 font-bold">Catálogo</DropdownMenuLabel>
-                                    {products.map(p => (
-                                        <DropdownMenuItem key={p.id || p.title} onClick={() => setDraftMessage(`${quickActions.wcBaseUrl}/checkout/?add-to-cart=${p.wc_id}`)} className="cursor-pointer text-xs focus:bg-[#161618] focus:text-white">
-                                           <ShoppingCart className="w-3 h-3 mr-2 text-indigo-400 shrink-0" /><span className="truncate">{String(p.title)}</span>
-                                        </DropdownMenuItem>
-                                    ))}
-                                    <DropdownMenuSeparator className="bg-[#222225] my-2"/>
-                                 </>}
-                                 <DropdownMenuItem onClick={() => setDraftMessage(quickActions.bankInfo)} className="cursor-pointer text-xs focus:bg-[#161618] focus:text-white"><CreditCard className="w-3 h-3 mr-2 text-indigo-400" /> Datos Bancarios</DropdownMenuItem>
-                                 
-                                 {Array.isArray(globalReplies) && globalReplies.length > 0 && <>
-                                    <DropdownMenuSeparator className="bg-[#222225] my-2"/>
-                                    <DropdownMenuLabel className="text-[10px] uppercase text-slate-500 font-bold flex items-center gap-1.5"><Globe className="w-3 h-3"/> Globales (Equipo)</DropdownMenuLabel>
-                                    {globalReplies.map((qr) => (
-                                       <DropdownMenuItem key={qr.id || qr.title} onClick={() => setDraftMessage(qr.text)} className="cursor-pointer text-xs focus:bg-[#161618] focus:text-white">
-                                          <MessageSquarePlus className="w-3 h-3 mr-2 text-indigo-400 shrink-0" /><span className="truncate">{String(qr.title)}</span>
-                                       </DropdownMenuItem>
-                                    ))}
-                                 </>}
+                   <MessageList messages={messages} loading={loadingMessages} />
 
-                                 {Array.isArray(localReplies) && localReplies.length > 0 && <>
-                                    <DropdownMenuSeparator className="bg-[#222225] my-2"/>
-                                    <DropdownMenuLabel className="text-[10px] uppercase text-slate-500 font-bold flex items-center gap-1.5"><User className="w-3 h-3"/> Mis Plantillas (Personal)</DropdownMenuLabel>
-                                    {localReplies.map((qr) => (
-                                       <DropdownMenuItem key={qr.id || qr.title} onClick={() => setDraftMessage(qr.text)} className="cursor-pointer text-xs focus:bg-[#161618] focus:text-white">
-                                          <MessageSquarePlus className="w-3 h-3 mr-2 text-amber-500 shrink-0" /><span className="truncate">{String(qr.title)}</span>
-                                       </DropdownMenuItem>
-                                    ))}
-                                 </>}
-                              </DropdownMenuContent>
-                           </DropdownMenu>
-                        }
-                    />
-                 </div>
-              </>
-           ) : (
-              <div className="flex flex-col items-center justify-center text-slate-500 h-full">
-                 <MessageCircle className="w-12 h-12 mb-4 opacity-20" />
-                 <p className="text-xs uppercase font-bold tracking-widest">Selecciona un chat</p>
-              </div>
-           )}
+                   <div className="p-3 bg-[#0a0a0c] border-t border-[#1a1a1a] shrink-0">
+                      <AiSuggestions suggestions={suggestions} loading={loadingSuggestions} onSelect={(t) => setDraftMessage(t.replace(/<<MEDIA:[^>]+>>/gi, '').trim())} onRefresh={() => fetchAiSuggestions(activeLead.id, messages)} />
+                      <MessageInput 
+                          onSendMessage={handleSendMessage} 
+                          sending={sending} 
+                          isAiPaused={activeLead.ai_paused} 
+                          initialValue={draftMessage} 
+                          onAutoGenerate={handleAutoGenerate}
+                          toolbarAction={
+                             <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                   <Button size="sm" variant="outline" className="h-8 text-[10px] bg-[#121214] border-[#222225] text-amber-500 uppercase font-bold tracking-widest rounded-lg hover:bg-[#161618]">
+                                      <Zap className="w-3 h-3 mr-1.5" /> Plantillas
+                                   </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="start" className="bg-[#0a0a0c] border-[#222225] text-white w-64 max-h-[300px] overflow-y-auto">
+                                   {Array.isArray(products) && products.length > 0 && <>
+                                      <DropdownMenuLabel className="text-[10px] uppercase text-slate-500 font-bold">Catálogo</DropdownMenuLabel>
+                                      {products.map(p => (
+                                          <DropdownMenuItem key={p.id || p.title} onClick={() => setDraftMessage(`${quickActions.wcBaseUrl}/checkout/?add-to-cart=${p.wc_id}`)} className="cursor-pointer text-xs focus:bg-[#161618] focus:text-white">
+                                             <ShoppingCart className="w-3 h-3 mr-2 text-indigo-400 shrink-0" /><span className="truncate">{String(p.title)}</span>
+                                          </DropdownMenuItem>
+                                      ))}
+                                      <DropdownMenuSeparator className="bg-[#222225] my-2"/>
+                                   </>}
+                                   <DropdownMenuItem onClick={() => setDraftMessage(quickActions.bankInfo)} className="cursor-pointer text-xs focus:bg-[#161618] focus:text-white"><CreditCard className="w-3 h-3 mr-2 text-indigo-400" /> Datos Bancarios</DropdownMenuItem>
+                                   
+                                   {Array.isArray(globalReplies) && globalReplies.length > 0 && <>
+                                      <DropdownMenuSeparator className="bg-[#222225] my-2"/>
+                                      <DropdownMenuLabel className="text-[10px] uppercase text-slate-500 font-bold">Plantillas Globales</DropdownMenuLabel>
+                                      {globalReplies.map((qr) => (
+                                         <DropdownMenuItem key={qr.id || qr.title} onClick={() => setDraftMessage(qr.text)} className="cursor-pointer text-xs focus:bg-[#161618] focus:text-white">
+                                            <MessageSquarePlus className="w-3 h-3 mr-2 text-indigo-400 shrink-0" /><span className="truncate">{String(qr.title)}</span>
+                                         </DropdownMenuItem>
+                                      ))}
+                                   </>}
+
+                                   {Array.isArray(localReplies) && localReplies.length > 0 && <>
+                                      <DropdownMenuSeparator className="bg-[#222225] my-2"/>
+                                      <DropdownMenuLabel className="text-[10px] uppercase text-slate-500 font-bold">Mis Plantillas Privadas</DropdownMenuLabel>
+                                      {localReplies.map((qr) => (
+                                         <DropdownMenuItem key={qr.id || qr.title} onClick={() => setDraftMessage(qr.text)} className="cursor-pointer text-xs focus:bg-[#161618] focus:text-white">
+                                            <MessageSquarePlus className="w-3 h-3 mr-2 text-amber-500 shrink-0" /><span className="truncate">{String(qr.title)}</span>
+                                         </DropdownMenuItem>
+                                      ))}
+                                   </>}
+                                </DropdownMenuContent>
+                             </DropdownMenu>
+                          }
+                      />
+                   </div>
+                </>
+             ) : (
+                <div className="flex flex-col items-center justify-center text-slate-500 h-full">
+                   <MessageCircle className="w-12 h-12 mb-4 opacity-20" />
+                   <p className="text-xs uppercase font-bold tracking-widest">Selecciona un chat</p>
+                </div>
+             )}
+          </div>
+
+          {/* COLUMNA 3: FICHA TÁCTICA */}
+          {activeLead && (
+             <div className={cn("w-full xl:w-[360px] flex-shrink-0 bg-[#0a0a0c] border-l border-[#1a1a1a] flex flex-col absolute xl:relative z-20 h-full transition-transform duration-300", showMemoryMobile ? "translate-x-0" : "translate-x-full xl:translate-x-0")}>
+                <div className="xl:hidden p-4 border-b border-[#1a1a1a] flex justify-between items-center bg-[#0a0a0c]">
+                   <span className="font-bold text-sm">Ficha Táctica</span>
+                   <Button variant="ghost" size="sm" onClick={() => setShowMemoryMobile(false)}><X className="w-4 h-4" /></Button>
+                </div>
+                <MemoryPanel 
+                  currentAnalysis={activeLead} 
+                  isEditing={isEditingMemory} 
+                  setIsEditing={setIsEditingMemory} 
+                  memoryForm={memoryForm} 
+                  setMemoryForm={setMemoryForm} 
+                  onSave={saveMemory} 
+                  saving={sending} 
+                  onReset={() => {}} 
+                  onToggleFollowup={() => handleSendMessage(activeLead.ai_paused ? '#START' : '#STOP')} 
+                  onAnalysisComplete={() => { fetchLeads(false); refetchMessages(); }} 
+                  onDeleteLead={handleDeleteLead}
+                />
+             </div>
+          )}
         </div>
-
-        {/* COLUMNA 3: FICHA TÁCTICA */}
-        {activeLead && (
-           <div className={cn("w-full xl:w-[360px] flex-shrink-0 bg-[#0a0a0c] border-l border-[#1a1a1a] flex flex-col absolute xl:relative z-20 h-full transition-transform duration-300", showMemoryMobile ? "translate-x-0" : "translate-x-full xl:translate-x-0")}>
-              <div className="xl:hidden p-4 border-b border-[#1a1a1a] flex justify-between items-center bg-[#0a0a0c]">
-                 <span className="font-bold text-sm">Ficha Táctica</span>
-                 <Button variant="ghost" size="sm" onClick={() => setShowMemoryMobile(false)}><X className="w-4 h-4" /></Button>
-              </div>
-              <MemoryPanel 
-                currentAnalysis={activeLead} 
-                isEditing={isEditingMemory} 
-                setIsEditing={setIsEditingMemory} 
-                memoryForm={memoryForm} 
-                setMemoryForm={setMemoryForm} 
-                onSave={saveMemory} 
-                saving={sending} 
-                onReset={() => {}} 
-                onToggleFollowup={() => handleSendMessage(activeLead.ai_paused ? '#START' : '#STOP')} 
-                onAnalysisComplete={() => { fetchLeads(false); refetchMessages(); }} 
-                onDeleteLead={handleDeleteLead}
-              />
-           </div>
-        )}
       </div>
     </Layout>
   );
