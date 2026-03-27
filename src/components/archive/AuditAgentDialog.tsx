@@ -35,7 +35,8 @@ export const AuditAgentDialog = ({ open, onOpenChange, leadId, agentName }: Audi
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
 
-      setAudit(data);
+      // Aseguramos de que siempre haya un objeto válido para que React no crashee
+      setAudit(data || {});
     } catch (err: any) {
       toast.error("Error al generar auditoría: " + err.message);
       onOpenChange(false);
@@ -45,8 +46,9 @@ export const AuditAgentDialog = ({ open, onOpenChange, leadId, agentName }: Audi
   };
 
   const getScoreColor = (score: number) => {
-    if (score >= 90) return 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30';
-    if (score >= 70) return 'text-amber-400 bg-amber-500/10 border-amber-500/30';
+    const s = Number(score) || 0;
+    if (s >= 90) return 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30';
+    if (s >= 70) return 'text-amber-400 bg-amber-500/10 border-amber-500/30';
     return 'text-red-400 bg-red-500/10 border-red-500/30';
   };
 
@@ -77,17 +79,17 @@ export const AuditAgentDialog = ({ open, onOpenChange, leadId, agentName }: Audi
                  </div>
                  <div className={cn("px-4 py-2 rounded-xl border flex items-center gap-2", getScoreColor(audit.score))}>
                     <Award className="w-6 h-6" />
-                    <span className="text-3xl font-mono font-bold">{audit.score}</span>
+                    <span className="text-3xl font-mono font-bold">{Number(audit.score) || 0}</span>
                  </div>
               </div>
 
-              {/* SECCIÓN NUEVA: TRACKING BANCARIO */}
-              {audit.accounts_provided && audit.accounts_provided.length > 0 && (
+              {/* BLINDAJE: Verificamos explícitamente que accounts_provided sea un Array antes de usar .map() */}
+              {Array.isArray(audit.accounts_provided) && audit.accounts_provided.length > 0 && (
                  <div className="p-4 bg-slate-900 border border-slate-800 rounded-xl space-y-2 mb-6">
                     <h4 className="text-[10px] uppercase font-bold text-indigo-400 flex items-center gap-1.5"><CreditCard className="w-3.5 h-3.5"/> Cuentas Bancarias Proporcionadas</h4>
                     <ul className="space-y-1.5">
-                      {audit.accounts_provided.map((acc: string, i: number) => (
-                         <li key={i} className="text-xs text-slate-300 font-mono bg-slate-950 p-2 rounded-lg border border-slate-800">{acc}</li>
+                      {audit.accounts_provided.map((acc: any, i: number) => (
+                         <li key={i} className="text-xs text-slate-300 font-mono bg-slate-950 p-2 rounded-lg border border-slate-800">{String(acc)}</li>
                       ))}
                     </ul>
                  </div>
@@ -97,25 +99,28 @@ export const AuditAgentDialog = ({ open, onOpenChange, leadId, agentName }: Audi
                 <div className="space-y-2">
                    <h4 className="text-[10px] uppercase font-bold text-emerald-500 flex items-center gap-1.5"><TrendingUp className="w-3.5 h-3.5"/> Fortalezas</h4>
                    <ul className="space-y-1.5">
-                     {audit.strengths?.map((s: string, i: number) => (
-                        <li key={i} className="text-xs text-emerald-200/80 bg-emerald-950/20 border border-emerald-900/50 p-2 rounded-lg leading-relaxed">{s}</li>
-                     ))}
+                     {/* BLINDAJE Array */}
+                     {Array.isArray(audit.strengths) ? audit.strengths.map((s: any, i: number) => (
+                        <li key={i} className="text-xs text-emerald-200/80 bg-emerald-950/20 border border-emerald-900/50 p-2 rounded-lg leading-relaxed">{String(s)}</li>
+                     )) : <li className="text-xs text-slate-500 italic">Sin datos registrados.</li>}
                    </ul>
                 </div>
                 
                 <div className="space-y-2">
                    <h4 className="text-[10px] uppercase font-bold text-amber-500 flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5"/> Áreas de Mejora</h4>
                    <ul className="space-y-1.5">
-                     {audit.weaknesses?.map((w: string, i: number) => (
-                        <li key={i} className="text-xs text-amber-200/80 bg-amber-950/20 border border-amber-900/50 p-2 rounded-lg leading-relaxed">{w}</li>
-                     ))}
+                     {/* BLINDAJE Array */}
+                     {Array.isArray(audit.weaknesses) ? audit.weaknesses.map((w: any, i: number) => (
+                        <li key={i} className="text-xs text-amber-200/80 bg-amber-950/20 border border-amber-900/50 p-2 rounded-lg leading-relaxed">{String(w)}</li>
+                     )) : <li className="text-xs text-slate-500 italic">Sin datos registrados.</li>}
                    </ul>
                 </div>
               </div>
 
               <div className="p-4 bg-indigo-950/20 border border-indigo-900/50 rounded-xl space-y-2">
                  <p className="text-[10px] uppercase font-bold text-indigo-400 flex items-center gap-1.5"><Zap className="w-3 h-3"/> Conclusión</p>
-                 <p className="text-xs text-indigo-200/80 leading-relaxed italic">"{audit.conclusion}"</p>
+                 {/* BLINDAJE String */}
+                 <p className="text-xs text-indigo-200/80 leading-relaxed italic">"{String(audit.conclusion || 'Análisis completado.')}"</p>
               </div>
             </ScrollArea>
           ) : (

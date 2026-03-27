@@ -49,7 +49,7 @@ const UsersPage = () => {
     const { data: config } = await supabase.from('app_config').select('value').eq('key', 'auto_routing_agents').maybeSingle();
     let routingList: string[] = [];
     if (config?.value) { try { routingList = JSON.parse(config.value); } catch(e){} }
-    setAutoRoutingAgents(routingList);
+    setAutoRoutingAgents(Array.isArray(routingList) ? routingList : []);
 
     const { data: authRes, error: authErr } = await supabase.functions.invoke('manage-auth-users', {
         body: { action: 'LIST' }
@@ -238,19 +238,26 @@ const UsersPage = () => {
                      <TableCell><Badge variant="outline" className="text-[9px] font-bold uppercase border-[#333336] text-slate-400 bg-[#121214]">{getRoleLabel(u.role)}</Badge></TableCell>
                      <TableCell>
                         <div className="flex gap-1.5 flex-wrap max-w-[250px]">
-                           {u.territories && u.territories.length > 0 ? u.territories.map((t: string, i: number) => <Badge key={i} variant="outline" className="text-[9px] border-[#333336] text-slate-400 bg-[#121214] uppercase">{t}</Badge>) : <span className="text-[10px] text-slate-500 italic">Global</span>}
+                           {/* BLINDAJE EXTREMO DE ARRAYS PARA EVITAR BLANK SCREEN */}
+                           {Array.isArray(u.territories) && u.territories.length > 0 ? (
+                               u.territories.map((t: any, i: number) => (
+                                   <Badge key={i} variant="outline" className="text-[9px] border-[#333336] text-slate-400 bg-[#121214] uppercase">{String(t)}</Badge>
+                               ))
+                           ) : (
+                               <span className="text-[10px] text-slate-500 italic">Global</span>
+                           )}
                         </div>
                      </TableCell>
                      <TableCell>
                          {u.is_active ? (<span className="text-emerald-500 text-[10px] flex items-center gap-1.5 font-bold uppercase"><div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]"></div> ACTIVO</span>) : (<Badge variant="destructive" className="text-[9px]">INACTIVO</Badge>)}
-                         {autoRoutingAgents.includes(u.id) && (
+                         {Array.isArray(autoRoutingAgents) && autoRoutingAgents.includes(u.id) && (
                              <Badge variant="outline" className="mt-1.5 bg-indigo-950/30 text-indigo-400 border-indigo-500/30 text-[8px] flex w-fit items-center gap-1">
                                 <Network className="w-2.5 h-2.5" /> AUTO-ROUTING
                              </Badge>
                          )}
                      </TableCell>
                      <TableCell className="text-right pr-6">
-                        <Button variant="outline" size="sm" className="bg-[#121214] border-[#333336] text-amber-500 hover:bg-amber-500 hover:text-slate-950 h-9 px-4 text-[10px] font-bold uppercase tracking-widest transition-colors rounded-xl" onClick={() => { setSelectedUser({...u, auto_assign: autoRoutingAgents.includes(u.id)}); setNewPassword(''); setIsEditOpen(true); }}>
+                        <Button variant="outline" size="sm" className="bg-[#121214] border-[#333336] text-amber-500 hover:bg-amber-500 hover:text-slate-950 h-9 px-4 text-[10px] font-bold uppercase tracking-widest transition-colors rounded-xl" onClick={() => { setSelectedUser({...u, auto_assign: Array.isArray(autoRoutingAgents) && autoRoutingAgents.includes(u.id)}); setNewPassword(''); setIsEditOpen(true); }}>
                            <Edit3 className="w-3.5 h-3.5 mr-1.5" /> Gestionar
                         </Button>
                      </TableCell>
@@ -331,7 +338,8 @@ const UsersPage = () => {
                         <Label className="text-white font-bold text-xs flex items-center gap-2"><Network className="w-3.5 h-3.5 text-indigo-400"/> Auto-Routing (Leads Huérfanos)</Label>
                         <p className="text-[10px] text-slate-400 max-w-[250px] leading-relaxed">Si se activa, el sistema le asignará leads automáticamente basándose en su territorio cuando no entren por un canal directo.</p>
                      </div>
-                     <Switch checked={selectedUser.auto_assign || false} onCheckedChange={c => setSelectedUser({...selectedUser, auto_assign: c})} />
+                     {/* BLINDAJE SWITCH: Para evitar el warning de Uncontrolled Component en React */}
+                     <Switch checked={selectedUser.auto_assign === true} onCheckedChange={c => setSelectedUser({...selectedUser, auto_assign: c})} />
                   </div>
                   
                   {/* SECCIÓN CAMBIAR CONTRASEÑA */}
