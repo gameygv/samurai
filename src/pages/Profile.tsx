@@ -71,11 +71,21 @@ const Profile = () => {
                      parsed.working_hours[k].end = parsed.end || '22:00';
                   });
                }
-               setSchedule(parsed); 
+               setSchedule({ ...parsed, enabled: !!parsed.enabled }); 
             } catch(e){}
         }
-        if (bankData) try { setBank(JSON.parse(bankData)); } catch(e){}
-        if (closingData) try { setClosing(JSON.parse(closingData)); } catch(e){}
+        if (bankData) {
+            try { 
+                const parsed = JSON.parse(bankData); 
+                setBank({ ...bank, ...parsed, enabled: !!parsed.enabled }); 
+            } catch(e){}
+        }
+        if (closingData) {
+            try { 
+                const parsed = JSON.parse(closingData); 
+                setClosing({ auto_close: parsed.auto_close !== false }); 
+            } catch(e){}
+        }
      }
   };
 
@@ -195,7 +205,7 @@ const Profile = () => {
              </form>
            </Card>
 
-           {/* TARJETA DE HORARIO AUTOMATICO (ACTUALIZADA) */}
+           {/* TARJETA DE HORARIO AUTOMATICO */}
            <Card className="bg-[#0f0f11] border-[#222225] shadow-xl border-l-4 border-l-amber-500 h-fit md:row-span-2">
              <CardHeader className="border-b border-[#161618] bg-[#161618] px-6 py-5">
                <CardTitle className="text-white flex items-center gap-2"><CalendarDays className="w-5 h-5 text-amber-500" /> Mi Disponibilidad (Horario)</CardTitle>
@@ -205,21 +215,21 @@ const Profile = () => {
              </CardHeader>
              <CardContent className="space-y-6 p-6 bg-[#0a0a0c]">
                  <div className="flex items-center justify-between bg-[#161618] p-4 rounded-xl border border-[#222225]">
-                    <div className="space-y-1">
-                       <Label className="text-white font-bold text-sm">Habilitar Auto-Asistente</Label>
+                    <div className="space-y-1 flex-1 cursor-pointer" onClick={() => setSchedule({...schedule, enabled: !schedule.enabled})}>
+                       <Label htmlFor="switch-horario" className="text-white font-bold text-sm cursor-pointer">Habilitar Auto-Asistente</Label>
                        <p className="text-[10px] text-slate-400">Protege tu guardia nocturna y fines de semana.</p>
                     </div>
-                    <Switch checked={schedule.enabled} onCheckedChange={(c) => setSchedule({...schedule, enabled: c})} />
+                    <Switch id="switch-horario" checked={!!schedule?.enabled} onCheckedChange={(c) => setSchedule({...schedule, enabled: c})} />
                  </div>
 
-                 {schedule.enabled && (
+                 {schedule?.enabled && (
                     <div className="space-y-3 animate-in slide-in-from-top-2">
                        {DAYS_OF_WEEK.map((day) => {
                           const dayCfg = schedule.working_hours?.[day.id] || { active: false, start: '08:00', end: '22:00' };
                           return (
                              <div key={day.id} className="flex items-center gap-3 p-3 bg-[#121214] border border-[#222225] rounded-xl transition-colors hover:border-[#333336]">
                                 <div className="w-24 flex items-center gap-2">
-                                   <Switch checked={dayCfg.active} onCheckedChange={(c) => updateDaySchedule(day.id, 'active', c)} className="scale-75 origin-left" />
+                                   <Switch checked={!!dayCfg.active} onCheckedChange={(c) => updateDaySchedule(day.id, 'active', c)} className="scale-75 origin-left" />
                                    <span className={`text-[11px] font-bold ${dayCfg.active ? 'text-slate-200' : 'text-slate-600'}`}>{day.name}</span>
                                 </div>
                                 <div className="flex-1 flex items-center gap-2">
@@ -257,14 +267,14 @@ const Profile = () => {
              </CardHeader>
              <CardContent className="space-y-6 p-6 bg-[#0a0a0c]">
                  <div className="flex items-center justify-between bg-[#161618] p-4 rounded-xl border border-[#222225]">
-                    <div className="space-y-1">
-                       <Label className="text-white font-bold text-sm">Cierre de Ventas Automático</Label>
+                    <div className="space-y-1 flex-1 cursor-pointer" onClick={() => setClosing({ ...closing, auto_close: !closing.auto_close })}>
+                       <Label htmlFor="switch-cierre" className="text-white font-bold text-sm cursor-pointer">Cierre de Ventas Automático</Label>
                        <p className="text-[10px] text-slate-400 max-w-[200px]">La IA enviará métodos de pago y cuentas bancarias.</p>
                     </div>
-                    <Switch checked={closing.auto_close} onCheckedChange={(c) => setClosing({ auto_close: c })} />
+                    <Switch id="switch-cierre" checked={!!closing?.auto_close} onCheckedChange={(c) => setClosing({ ...closing, auto_close: c })} />
                  </div>
 
-                 {!closing.auto_close && (
+                 {!closing?.auto_close && (
                     <div className="bg-indigo-900/10 border border-indigo-500/20 p-4 rounded-xl flex items-start gap-3 animate-in slide-in-from-top-2">
                        <Bot className="w-5 h-5 text-indigo-400 shrink-0 mt-0.5" />
                        <p className="text-[10px] text-indigo-200 leading-relaxed">
@@ -289,14 +299,14 @@ const Profile = () => {
              </CardHeader>
              <CardContent className="space-y-6 p-6 bg-[#0a0a0c]">
                  <div className="flex items-center justify-between bg-[#161618] p-4 rounded-xl border border-[#222225]">
-                    <div className="space-y-1">
-                       <Label className="text-emerald-400 font-bold text-sm">Usar mi cuenta propia</Label>
+                    <div className="space-y-1 flex-1 cursor-pointer" onClick={() => setBank({...bank, enabled: !bank.enabled})}>
+                       <Label htmlFor="switch-banco" className="text-emerald-400 font-bold text-sm cursor-pointer">Usar mi cuenta propia</Label>
                        <p className="text-[10px] text-slate-400">Sobrescribe los datos de pago para mis leads.</p>
                     </div>
-                    <Switch checked={bank.enabled} onCheckedChange={(c) => setBank({...bank, enabled: c})} />
+                    <Switch id="switch-banco" checked={!!bank?.enabled} onCheckedChange={(c) => setBank({...bank, enabled: c})} />
                  </div>
 
-                 {bank.enabled && (
+                 {bank?.enabled && (
                     <div className="space-y-4 animate-in slide-in-from-top-2">
                        <div className="grid grid-cols-2 gap-4">
                           <div className="space-y-2">
