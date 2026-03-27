@@ -9,7 +9,7 @@ import { Switch } from '@/components/ui/switch';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { 
   Plus, Trash2, Smartphone, Globe, Key, 
-  Loader2, BellRing, Info, Send, ShieldCheck, Network, User
+  Loader2, BellRing, Info, Send, ShieldCheck, Network, User, AlertTriangle
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -146,11 +146,11 @@ export const ChannelsTab = () => {
   return (
     <div className="space-y-8">
 
-      {/* SECCIÓN DE ENRUTAMIENTO (AHORA SIEMPRE VISIBLE) */}
+      {/* SECCIÓN DE ENRUTAMIENTO GLOBAL */}
       <Card className="bg-slate-900 border-slate-800 shadow-xl overflow-hidden border-l-4 border-l-amber-500 animate-in fade-in slide-in-from-top-4">
          <CardHeader className="bg-slate-950/40 border-b border-slate-800 pb-4">
-            <CardTitle className="text-white text-base flex items-center gap-2"><Network className="w-5 h-5 text-amber-500"/> Estrategia de Asignación (Routing)</CardTitle>
-            <CardDescription className="text-xs text-slate-400">Define cómo se asignan los nuevos chats que entran a WhatsApp. Al asignarse, la IA cederá el control al humano automáticamente.</CardDescription>
+            <CardTitle className="text-white text-base flex items-center gap-2"><Network className="w-5 h-5 text-amber-500"/> Estrategia Global de Asignación (Routing)</CardTitle>
+            <CardDescription className="text-xs text-slate-400">Define cómo se asignan los nuevos chats que entran al sistema.</CardDescription>
          </CardHeader>
          <CardContent className="p-6 space-y-6">
             <RadioGroup value={routingMode} onValueChange={(v: 'auto' | 'channel') => setRoutingMode(v)} className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -277,25 +277,36 @@ export const ChannelsTab = () => {
                       </div>
                   )}
 
-                  {/* VÍNCULO DIRECTO (Si el modo es channel) */}
-                  {routingMode === 'channel' && !ch.is_new && (
-                      <div className="space-y-2 lg:col-span-3">
-                         <Label className="text-[10px] uppercase font-bold text-amber-500 tracking-widest flex items-center gap-1.5"><User className="w-3.5 h-3.5"/> Asesor Vinculado a este Canal</Label>
-                         <div className="flex gap-2 items-center">
-                            <Select value={agentMap[ch.id] || 'unassigned'} onValueChange={v => setAgentMap({...agentMap, [ch.id]: v === 'unassigned' ? '' : v})}>
-                               <SelectTrigger className="bg-amber-950/20 border-amber-900/50 h-11 text-amber-100 flex-1"><SelectValue placeholder="Seleccionar asesor..."/></SelectTrigger>
-                               <SelectContent className="bg-slate-900 border-slate-800 text-white">
-                                  <SelectItem value="unassigned">Ninguno (Libre)</SelectItem>
-                                  {agents.map(a => <SelectItem key={a.id} value={a.id}>{a.full_name}</SelectItem>)}
-                               </SelectContent>
-                            </Select>
-                            <Button onClick={handleSaveRouting} disabled={savingRouting} variant="outline" className="border-amber-500/50 text-amber-500 bg-amber-950/20 hover:bg-amber-900/50 h-11 px-4 font-bold text-[10px] uppercase tracking-widest">Guardar</Button>
-                         </div>
-                      </div>
-                  )}
+                  {/* ASIGNACIÓN DE ASESOR AL CANAL (SIEMPRE VISIBLE PERO CONDICIONADO AL ESTADO DE GUARDADO) */}
+                  <div className="space-y-2 lg:col-span-3">
+                     <Label className="text-[10px] uppercase font-bold text-amber-500 tracking-widest flex items-center gap-1.5"><User className="w-3.5 h-3.5"/> Asesor Vinculado a este Canal</Label>
+                     {ch.is_new ? (
+                        <div className="flex items-center gap-2 p-3 bg-amber-950/20 border border-amber-900/50 rounded-xl text-amber-500 text-[10px] uppercase font-bold tracking-widest">
+                           <AlertTriangle className="w-4 h-4" />
+                           Guarda este canal primero para poder asignarle un Asesor.
+                        </div>
+                     ) : (
+                        <div className="flex gap-2 items-center">
+                           <Select value={agentMap[ch.id] || 'unassigned'} onValueChange={v => setAgentMap({...agentMap, [ch.id]: v === 'unassigned' ? '' : v})}>
+                              <SelectTrigger className="bg-amber-950/20 border-amber-900/50 h-11 text-amber-100 flex-1"><SelectValue placeholder="Seleccionar asesor..."/></SelectTrigger>
+                              <SelectContent className="bg-slate-900 border-slate-800 text-white">
+                                 <SelectItem value="unassigned">Ninguno (Libre)</SelectItem>
+                                 {agents.map(a => <SelectItem key={a.id} value={a.id}>{a.full_name}</SelectItem>)}
+                              </SelectContent>
+                           </Select>
+                           <Button onClick={handleSaveRouting} disabled={savingRouting} variant="outline" className="border-amber-500/50 text-amber-500 bg-amber-950/20 hover:bg-amber-900/50 h-11 px-4 font-bold text-[10px] uppercase tracking-widest">Guardar Vínculo</Button>
+                        </div>
+                     )}
+                     
+                     {routingMode === 'auto' && !ch.is_new && (
+                        <p className="text-[9px] text-amber-500/70 italic mt-1.5 leading-relaxed">
+                           <strong className="font-bold">Nota:</strong> La estrategia global está en "Auto-Routing". Esta asignación manual no tomará efecto hasta que cambies la estrategia arriba.
+                        </p>
+                     )}
+                  </div>
                </div>
 
-               <div className="mt-6 flex justify-between items-center">
+               <div className="mt-6 flex justify-between items-center border-t border-slate-800 pt-6">
                   <div className="text-[10px] text-slate-500 italic">
                      {ch.is_new ? "Completa los campos y guarda para generar el Webhook." : "Configuración guardada correctamente."}
                   </div>
