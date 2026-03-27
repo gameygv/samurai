@@ -1,14 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { 
   Plus, Trash2, Smartphone, Globe, Key, 
-  CheckCircle2, AlertCircle, Loader2, RefreshCw, Layers, ShieldCheck, BellRing, Info, Send
+  Loader2, BellRing, Info, Send, ShieldCheck, Network, User
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -17,11 +18,16 @@ import { sendMessage } from '@/utils/messagingService';
 
 export const ChannelsTab = () => {
   const [channels, setChannels] = useState<any[]>([]);
+  const [agents, setAgents] = useState<any[]>([]);
+  
   const [defaultNotifyId, setDefaultNotifyId] = useState<string>('');
+  const [routingMode, setRoutingMode] = useState<'auto' | 'channel'>('auto');
+  const [agentMap, setAgentMap] = useState<Record<string, string>>({});
+  
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [savingRouting, setSavingRouting] = useState(false);
   
-  // States para pruebas
   const [testPhones, setTestPhones] = useState<Record<string, string>>({});
   const [testingId, setTestingId] = useState<string | null>(null);
 
@@ -30,11 +36,36 @@ export const ChannelsTab = () => {
   const fetchAll = async () => {
     setLoading(true);
     const { data: chs } = await supabase.from('whatsapp_channels').select('*').order('created_at', { ascending: true });
-    const { data: cfg } = await supabase.from('app_config').select('value').eq('key', 'default_notification_channel').maybeSingle();
+    const { data: profiles } = await supabase.from('profiles').select('id, full_name, role').eq('is_active', true);
+    const { data: cfgs } = await supabase.from('app_config').select('key, value').in('key', ['default_notification_channel', 'channel_routing_mode', 'channel_agent_map']);
     
     if (chs) setChannels(chs);
-    if (cfg?.value) setDefaultNotifyId(cfg.value);
+    if (profiles) setAgents(profiles);
+    
+    if (cfgs) {
+       const cfgMap = cfgs.reduce((acc, curr) => ({...acc, [curr.key]: curr.value}), {} as Record<string, string>);
+       if (cfgMap.default_notification_channel) setDefaultNotifyId(cfgMap.default_notification_channel);
+       if (cfgMap.channel_routing_mode) setRoutingMode(cfgMap.channel_routing_mode as 'auto'|'channel');
+       if (cfgMap.channel_agent_map) {
+           try { setAgentMap(JSON.parse(cfgMap.channel_agent_map)); } catch(e) {}
+       }
+    }
     setLoading(false);
+  };
+
+  const handleSaveRouting = async () => {
+     setSavingRouting(true);
+     try {
+         await supabase.from('app_config').upsert([
+             { key: 'channel_routing_mode', value: routingMode, category: 'SYSTEM' },
+             { key: 'channel_agent_map', value: JSON.stringify(agentMap), category: 'SYSTEM' }
+         ], { onConflict: 'key' });
+         toast.success("Estrategia de enrutamiento guardada con éxito.");
+     } catch (err: any) {
+         toast.error("Error al guardar enrutamiento: " + err.message);
+     } finally {
+         setSavingRouting(false);
+     }
   };
 
   const handleSetDefault = async (id: string) => {
@@ -114,6 +145,40 @@ export const ChannelsTab = () => {
 
   return (
     <div className="space-y-8">
+
+      {/* SECCIÓN DE ENRUTAMIENTO */}
+      <Card className="bg-slate-900 border-slate-800 shadow-xl overflow-hidden border-l-4 border-l-amber-500">
+         <CardHeader className="bg-slate-950/40 border-b border-slate-800 pb-4">
+            <CardTitle className="text-white text-base flex items-center gap-2"><Network className="w-5 h-5 text-amber-500"/> Estrategia de Asignación (Routing)</CardTitle>
+            <CardDescription className="text-xs text-slate-400">Define cómo se asignan los nuevos chats que entran a WhatsApp.</CardDescription>
+         </CardHeader>
+         <CardContent className="p-6 space-y-6">
+            <RadioGroup value={routingMode} onValueChange={(v: 'auto' | 'channel') => setRoutingMode(v)} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+               <div className={cn("flex flex-col p-4 rounded-xl border-2 transition-all cursor-pointer", routingMode === 'auto' ? "border-amber-500 bg-amber-500/10" : "border-slate-800 bg-slate-950 hover:border-slate-700")} onClick={() => setRoutingMode('auto')}>
+                  <div className="flex items-center gap-2 mb-2">
+                     <RadioGroupItem value="auto" id="auto" className="border-slate-600 text-amber-500" />
+                     <Label htmlFor="auto" className="font-bold text-sm text-white cursor-pointer">Auto-Routing (Por Territorio)</Label>
+                  </div>
+                  <p className="text-[10px] text-slate-400 leading-relaxed pl-6">Samurai atiende a todos los leads. Cuando descubre de qué ciudad son, se los asigna automáticamente al Asesor encargado de esa zona.</p>
+               </div>
+               
+               <div className={cn("flex flex-col p-4 rounded-xl border-2 transition-all cursor-pointer", routingMode === 'channel' ? "border-amber-500 bg-amber-500/10" : "border-slate-800 bg-slate-950 hover:border-slate-700")} onClick={() => setRoutingMode('channel')}>
+                  <div className="flex items-center gap-2 mb-2">
+                     <RadioGroupItem value="channel" id="channel" className="border-slate-600 text-amber-500" />
+                     <Label htmlFor="channel" className="font-bold text-sm text-white cursor-pointer">Vínculo Directo (Canal = Asesor)</Label>
+                  </div>
+                  <p className="text-[10px] text-slate-400 leading-relaxed pl-6">Todo mensaje que entre por un Canal de WhatsApp específico, se asignará inmediatamente a un Asesor fijo, ignorando la ciudad.</p>
+               </div>
+            </RadioGroup>
+
+            <div className="flex justify-end pt-4 border-t border-slate-800">
+               <Button onClick={handleSaveRouting} disabled={savingRouting} className="bg-amber-600 hover:bg-amber-500 text-slate-950 font-bold uppercase tracking-widest text-[10px] h-10 px-8 shadow-lg">
+                  {savingRouting ? <Loader2 className="w-4 h-4 animate-spin mr-2"/> : <ShieldCheck className="w-4 h-4 mr-2"/>} Guardar Estrategia
+               </Button>
+            </div>
+         </CardContent>
+      </Card>
+
       <div className="flex justify-between items-center bg-slate-900/50 p-4 rounded-2xl border border-slate-800">
         <div>
            <h2 className="text-lg font-bold text-white flex items-center gap-2"><Smartphone className="w-5 h-5 text-indigo-400"/> Flota Multicanal</h2>
@@ -211,6 +276,23 @@ export const ChannelsTab = () => {
                          />
                       </div>
                   )}
+
+                  {/* VÍNCULO DIRECTO (Si el modo es channel) */}
+                  {routingMode === 'channel' && !ch.is_new && (
+                      <div className="space-y-2 lg:col-span-3">
+                         <Label className="text-[10px] uppercase font-bold text-amber-500 tracking-widest flex items-center gap-1.5"><User className="w-3.5 h-3.5"/> Asesor Vinculado a este Canal</Label>
+                         <div className="flex gap-2 items-center">
+                            <Select value={agentMap[ch.id] || 'unassigned'} onValueChange={v => setAgentMap({...agentMap, [ch.id]: v === 'unassigned' ? '' : v})}>
+                               <SelectTrigger className="bg-amber-950/20 border-amber-900/50 h-11 text-amber-100 flex-1"><SelectValue placeholder="Seleccionar asesor..."/></SelectTrigger>
+                               <SelectContent className="bg-slate-900 border-slate-800 text-white">
+                                  <SelectItem value="unassigned">Ninguno (Libre)</SelectItem>
+                                  {agents.map(a => <SelectItem key={a.id} value={a.id}>{a.full_name}</SelectItem>)}
+                               </SelectContent>
+                            </Select>
+                            <Button onClick={handleSaveRouting} disabled={savingRouting} variant="outline" className="border-amber-500/50 text-amber-500 bg-amber-950/20 hover:bg-amber-900/50 h-11 px-4 font-bold text-[10px] uppercase tracking-widest">Guardar</Button>
+                         </div>
+                      </div>
+                  )}
                </div>
 
                <div className="mt-6 flex justify-between items-center">
@@ -261,15 +343,6 @@ export const ChannelsTab = () => {
                      </div>
                   </div>
                </div>
-            )}
-
-            {ch.is_new && (
-                <div className="bg-amber-900/10 p-4 border-t border-slate-800/50 flex items-center gap-3">
-                    <Info className="w-5 h-5 text-amber-500 shrink-0" />
-                    <p className="text-[10px] text-amber-500/80 leading-relaxed uppercase font-bold tracking-tight">
-                        Primero haz clic en "CREAR Y GENERAR WEBHOOK" para habilitar las pruebas de salida.
-                    </p>
-                </div>
             )}
           </Card>
         ))}

@@ -38,9 +38,14 @@ serve(async (req) => {
     let payload;
     try { payload = JSON.parse(payloadText); } catch (e) { return new Response("Invalid JSON", { status: 400 }); }
     
-    // Verificar Kill Switch Global antes de procesar IA
-    const { data: globalAiConf } = await supabaseClient.from('app_config').select('value').eq('key', 'global_ai_status').maybeSingle();
-    const isGlobalAiPaused = globalAiConf?.value === 'paused';
+    // CARGAR CONFIGURACIÓN GLOBAL DE ENRUTAMIENTO Y ESTADOS
+    const { data: appConfigData } = await supabaseClient.from('app_config').select('key, value').in('key', ['global_ai_status', 'channel_routing_mode', 'channel_agent_map', 'openai_api_key']);
+    const configMap = appConfigData?.reduce((acc, item) => ({...acc, [item.key]: item.value}), {});
+    
+    const isGlobalAiPaused = configMap['global_ai_status'] === 'paused';
+    const routingMode = configMap['channel_routing_mode'] || 'auto';
+    let channelAgentMap = {};
+    try { channelAgentMap = JSON.parse(configMap['channel_agent_map'] || '{}'); } catch(e) {}
 
     let phone, text = '', pushName = 'Cliente WA', mediaType = null, messageId = null;
     let actualChannelId = channelIdParam;
@@ -60,14 +65,14 @@ serve(async (req) => {
         messageId = msg.id;
         pushName = contact?.profile?.name || 'Lead Meta';
 
-        // ENFORCE CHANNEL MATCHING PARA META (Evita cruces)
+        // ENFORCE CHANNEL MATCHING
         const phoneNumberId = change.metadata?.phone_number_id;
         if (phoneNumberId) {
             const { data: ch } = await supabaseClient.from('whatsapp_channels').select('id').eq('instance_id', phoneNumberId).maybeSingle();
             if (ch) {
                 actualChannelId = ch.id;
             } else {
-                await logTrace(`Bloqueo de seguridad: Mensaje recibido del número ID '${phoneNumberId}', pero no está registrado en Canales WA del CRM. Ignorando para evitar responder desde otro número.`, true);
+                await logTrace(`Bloqueo de seguridad: Mensaje recibido del número ID '${phoneNumberId}', pero no está registrado en Canales WA del CRM.`, true);
                 return new Response('channel_not_registered', { status: 200 });
             }
         }
@@ -85,18 +90,17 @@ serve(async (req) => {
     else if ((payload.device_id || payload.instance) && payload.event) { 
        if (payload.event !== 'message' && payload.event !== 'messages.upsert') return new Response('ignored_event', { status: 200 });
        
-       // Soportar Gowa y Evolution V1/V2
        const p = payload.payload || payload.data;
        if (!p || p.is_from_me || p.fromMe) return new Response('ignored_self', { status: 200 });
 
-       // ENFORCE CHANNEL MATCHING PARA GOWA (Evita cruces de instancias nuevas no agregadas)
+       // ENFORCE CHANNEL MATCHING
        const instanceName = payload.device_id || payload.instance;
        if (instanceName) {
            const { data: ch } = await supabaseClient.from('whatsapp_channels').select('id').eq('instance_id', instanceName).maybeSingle();
            if (ch) {
                actualChannelId = ch.id;
            } else {
-               await logTrace(`Bloqueo de seguridad: Gowa envió un mensaje de la instancia '${instanceName}', pero no está agregada en Canales WA del CRM. Ignorando para evitar cruces.`, true);
+               await logTrace(`Bloqueo de seguridad: Instancia '${instanceName}' no está agregada en Canales WA.`, true);
                return new Response('channel_not_registered', { status: 200 });
            }
        }
@@ -124,6 +128,9 @@ serve(async (req) => {
 
     const { data: channelData } = await supabaseClient.from('whatsapp_channels').select('*').eq('id', actualChannelId).maybeSingle();
     const isChannelActive = channelData?.is_active !== false;
+
+    // RESOLUCIÓN DEL AGENTE (VÍNCULO DIRECTO)
+    let assignedAgent = routingMode === 'channel' ? (channelAgentMap[actualChannelId] || null) : null;
 
     let downloadedBlob = null;
     let finalMediaUrl = null;
@@ -156,14 +163,13 @@ serve(async (req) => {
     }
 
     if (mediaType === 'audio' && downloadedBlob) {
-        const { data: conf } = await supabaseClient.from('app_config').select('value').eq('key', 'openai_api_key').maybeSingle();
-        if (conf?.value) {
+        if (configMap['openai_api_key']) {
             const formData = new FormData();
             formData.append('file', downloadedBlob, 'voice_note.ogg'); 
             formData.append('model', 'whisper-1');
             formData.append('language', 'es');
 
-            const whisperRes = await fetch("https://api.openai.com/v1/audio/transcriptions", { method: 'POST', headers: { 'Authorization': `Bearer ${conf.value}` }, body: formData });
+            const whisperRes = await fetch("https://api.openai.com/v1/audio/transcriptions", { method: 'POST', headers: { 'Authorization': `Bearer ${configMap['openai_api_key']}` }, body: formData });
             if (whisperRes.ok) {
                 const whisperData = await whisperRes.json();
                 if (whisperData.text) text = `[TRANSCRIPCIÓN DE NOTA DE VOZ]: "${whisperData.text}"`;
@@ -171,14 +177,31 @@ serve(async (req) => {
         }
     }
 
+    // CREACIÓN O ACTUALIZACIÓN DEL LEAD CON EL NUEVO MODO DE ASIGNACIÓN
     let { data: lead } = await supabaseClient.from('leads').select('*').or(`telefono.ilike.%${senderPhone.slice(-10)}%`).limit(1).maybeSingle();
     if (!lead) {
-      const { data: nl } = await supabaseClient.from('leads').insert({ nombre: pushName, telefono: senderPhone, channel_id: actualChannelId || null }).select().single();
+      const { data: nl } = await supabaseClient.from('leads').insert({ 
+         nombre: pushName, 
+         telefono: senderPhone, 
+         channel_id: actualChannelId || null,
+         assigned_to: assignedAgent
+      }).select().single();
       lead = nl;
     } else {
-      // Actualiza el channel_id al que recibió el mensaje para asegurar que si le respondemos, salga del correcto
-      await supabaseClient.from('leads').update({ last_message_at: new Date().toISOString(), followup_stage: 0, channel_id: actualChannelId || lead.channel_id }).eq('id', lead.id);
-      lead.channel_id = actualChannelId || lead.channel_id;
+      const updates: any = { 
+         last_message_at: new Date().toISOString(), 
+         followup_stage: 0, 
+         channel_id: actualChannelId || lead.channel_id 
+      };
+      
+      // Si el modo es por canal y el canal tiene un agente, forzamos que todos los que escriban ahí sean de él.
+      if (assignedAgent && lead.assigned_to !== assignedAgent) {
+         updates.assigned_to = assignedAgent;
+      }
+
+      await supabaseClient.from('leads').update(updates).eq('id', lead.id);
+      lead.channel_id = updates.channel_id;
+      if (updates.assigned_to) lead.assigned_to = updates.assigned_to;
     }
 
     await supabaseClient.from('conversaciones').insert({ 
@@ -194,14 +217,14 @@ serve(async (req) => {
        await logTrace(`Comprobante interceptado de ${lead.nombre}. Enviado al Centro Financiero.`, false);
     }
 
+    // EL ANALISTA SILENCIOSO SE EJECUTA SIEMPRE (No le importa si el bot está pausado)
     await supabaseClient.functions.invoke('analyze-leads', { body: { lead_id: lead.id, force: false } });
 
     const { data: updatedLead } = await supabaseClient.from('leads').select('*').eq('id', lead.id).single();
     if (updatedLead) lead = updatedLead;
 
+    // LA IA SOLO RESPONDE SI EL BOT Y EL CANAL ESTÁN ACTIVOS Y NO ESTÁ PAUSADA GLOBALMENTE
     if (!lead.ai_paused && !isGlobalAiPaused && isChannelActive) {
-       const { data: configs } = await supabaseClient.from('app_config').select('key, value');
-       const configMap = configs?.reduce((acc, item) => ({...acc, [item.key]: item.value}), {});
        const openaiKey = configMap['openai_api_key'];
 
        if (openaiKey) {
