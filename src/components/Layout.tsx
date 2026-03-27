@@ -2,23 +2,20 @@ import React, { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { 
-  LayoutDashboard, Brain, Settings as SettingsIcon, Database, LogOut, 
-  Users, FileText, UserCircle, MessageSquare, Contact, Tag,
-  GitBranch, Link as LinkIcon, Image, Sparkles, BookOpen, Clock,
-  Archive, Globe, CreditCard, BarChart3, Zap, Trello, Menu, Activity, Search, MessageCircle, Shield, AlertCircle, Command, GraduationCap, Megaphone
+  LayoutDashboard, Brain, Settings as SettingsIcon, LogOut, 
+  Users, UserCircle, Contact, Tag, Image, Globe, CreditCard, BarChart3, Zap, Trello, Menu, Activity, Search, MessageCircle, Command, GraduationCap, Megaphone
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
-import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 
 const Layout = ({ children }: { children: React.ReactNode }) => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { profile, signOut, isAdmin, isDev, isManager } = useAuth();
+  const { profile, user, signOut, isAdmin, isDev, isManager } = useAuth();
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [brandName, setBrandName] = useState('Samurai Workspace');
 
@@ -42,15 +39,21 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
   }, []);
 
   useEffect(() => {
-     if (globalQuery.length > 2) {
-        supabase.from('leads').select('id, nombre, telefono, email').or(`nombre.ilike.%${globalQuery}%,telefono.ilike.%${globalQuery}%`).limit(5)
-        .then(({data}) => {
+     if (globalQuery.length > 2 && user) {
+        let query = supabase.from('leads').select('id, nombre, telefono, email').or(`nombre.ilike.%${globalQuery}%,telefono.ilike.%${globalQuery}%`);
+        
+        // PRIVACIDAD: Si no es manager, filtrar resultados de búsqueda global
+        if (!isManager) {
+            query = query.eq('assigned_to', user.id);
+        }
+
+        query.limit(5).then(({data}) => {
             if(data) setSearchResults(data);
         });
      } else {
         setSearchResults([]);
      }
-  }, [globalQuery]);
+  }, [globalQuery, user, isManager]);
 
   const handleLogout = async () => {
     await signOut();
@@ -77,7 +80,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
       title: "RECURSOS",
       items: [
         { icon: Globe, label: 'Verdad Maestra', path: '/website-content', roles: ['admin', 'dev'] },
-        { icon: Database, label: 'Base Conocimiento', path: '/knowledge', roles: ['admin', 'dev'] },
+        { icon: Globe, label: 'Base Conocimiento', path: '/knowledge', roles: ['admin', 'dev'] },
         { icon: Image, label: 'Media Manager', path: '/media', roles: ['admin', 'dev'] },
       ]
     },
@@ -85,13 +88,13 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
       title: "GESTIÓN",
       items: [
         { icon: Trello, label: 'Pipeline Ventas', path: '/pipeline', roles: ['any'] },
-        { icon: MessageSquare, label: 'Radar Leads', path: '/leads', roles: ['any'] },
+        { icon: MessageCircle, label: 'Radar Leads', path: '/leads', roles: ['any'] },
         { icon: Contact, label: 'Contactos', path: '/contacts', roles: ['any'] },
         { icon: Megaphone, label: 'Campañas', path: '/campaigns', roles: ['any'] },
         { icon: Tag, label: 'Mis Plantillas', path: '/tools', roles: ['any'] },
         { icon: GraduationCap, label: 'Academia', path: '/academic', roles: ['admin', 'dev', 'gerente'] },
         { icon: CreditCard, label: 'Pagos & Ventas', path: '/payments', roles: ['any'] },
-        { icon: Archive, label: 'Archivo de Chats', path: '/archive', roles: ['any'] },
+        { icon: Globe, label: 'Archivo de Chats', path: '/archive', roles: ['any'] },
       ]
     },
     {
@@ -121,7 +124,6 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
       <ScrollArea className="flex-1 px-4">
         <div className="space-y-6 py-4">
           {menuGroups.map((group, i) => {
-            // Filtramos los items permitidos para este usuario
             const visibleItems = group.items.filter(item => 
                item.roles.includes('any') || 
                (isAdmin && item.roles.includes('admin')) || 
