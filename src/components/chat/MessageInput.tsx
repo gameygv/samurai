@@ -61,9 +61,7 @@ export const MessageInput = ({ onSendMessage, sending, isAiPaused, initialValue 
      }
   };
 
-  // Detectar si el usuario está escribiendo un comando
-  const isTypingCommand = message.trim() === '#ON' || message.trim() === '#OFF' ||
-                          message.trim() === '#STOP' || message.trim() === '#START';
+  const isTypingCommand = message.trim() === '#START' || message.trim() === '#STOP';
 
   return (
     <div 
@@ -101,30 +99,29 @@ export const MessageInput = ({ onSendMessage, sending, isAiPaused, initialValue 
          <div className="flex items-center gap-3">
              {toolbarAction}
 
-             {/* BOTONES RÁPIDOS DE COMANDO IA */}
              {mode === 'message' && (
                <div className="flex items-center gap-1.5">
                   {isAiPaused ? (
                      <Button
                         type="button"
                         size="sm"
-                        onClick={() => onSendMessage('#ON')}
+                        onClick={() => onSendMessage('#START')}
                         disabled={sending}
                         className="h-7 px-3 bg-emerald-950/40 border border-emerald-500/40 text-emerald-400 hover:bg-emerald-600 hover:text-white text-[9px] font-bold uppercase tracking-widest rounded-lg transition-all"
-                        title="Activar IA en este chat (#ON)"
+                        title="Activar IA en este chat (#START)"
                      >
-                        <Bot className="w-3 h-3 mr-1" /> #ON
+                        <Bot className="w-3 h-3 mr-1" /> #START
                      </Button>
                   ) : (
                      <Button
                         type="button"
                         size="sm"
-                        onClick={() => onSendMessage('#OFF')}
+                        onClick={() => onSendMessage('#STOP')}
                         disabled={sending}
                         className="h-7 px-3 bg-red-950/40 border border-red-500/40 text-red-400 hover:bg-red-600 hover:text-white text-[9px] font-bold uppercase tracking-widest rounded-lg transition-all"
-                        title="Pausar IA en este chat (#OFF)"
+                        title="Pausar IA en este chat (#STOP)"
                      >
-                        <BotOff className="w-3 h-3 mr-1" /> #OFF
+                        <BotOff className="w-3 h-3 mr-1" /> #STOP
                      </Button>
                   )}
                </div>
@@ -151,13 +148,12 @@ export const MessageInput = ({ onSendMessage, sending, isAiPaused, initialValue 
         </div>
       )}
 
-      {/* HINT DE COMANDOS */}
       {isTypingCommand && (
         <div className="bg-indigo-950/40 border border-indigo-500/30 rounded-xl px-3 py-2 text-[10px] text-indigo-300 animate-in fade-in slide-in-from-bottom-2">
-          {(message.trim() === '#ON' || message.trim() === '#START') && (
+          {message.trim() === '#START' && (
             <span className="flex items-center gap-2"><Bot className="w-3.5 h-3.5 text-emerald-400"/> Enviar para <strong className="text-emerald-400">ACTIVAR</strong> la IA en este chat.</span>
           )}
-          {(message.trim() === '#OFF' || message.trim() === '#STOP') && (
+          {message.trim() === '#STOP' && (
             <span className="flex items-center gap-2"><BotOff className="w-3.5 h-3.5 text-red-400"/> Enviar para <strong className="text-red-400">PAUSAR</strong> la IA en este chat.</span>
           )}
         </div>

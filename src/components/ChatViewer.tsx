@@ -154,9 +154,8 @@ export default function ChatViewer({ lead, open, onOpenChange }: ChatViewerProps
     setSending(true);
 
     try {
-      // Soportar #ON / #OFF (nuevos) y #START / #STOP (legacy)
       const cmd = text.trim().toUpperCase();
-      if (cmd === '#ON' || cmd === '#START') {
+      if (cmd === '#START') {
         await supabase.from('leads').update({ ai_paused: false }).eq('id', leadId);
         setLiveLead((prev: any) => ({...prev, ai_paused: false}));
         await supabase.from('conversaciones').insert({ lead_id: leadId, mensaje: 'IA Activada manualmente.', emisor: 'HUMANO', platform: 'PANEL_INTERNO' });
@@ -164,7 +163,7 @@ export default function ChatViewer({ lead, open, onOpenChange }: ChatViewerProps
         refetch();
         return;
       }
-      if (cmd === '#OFF' || cmd === '#STOP') {
+      if (cmd === '#STOP') {
         await supabase.from('leads').update({ ai_paused: true }).eq('id', leadId);
         setLiveLead((prev: any) => ({...prev, ai_paused: true}));
         await supabase.from('conversaciones').insert({ lead_id: leadId, mensaje: 'IA Pausada manualmente.', emisor: 'HUMANO', platform: 'PANEL_INTERNO' });
@@ -245,7 +244,10 @@ export default function ChatViewer({ lead, open, onOpenChange }: ChatViewerProps
           {/* HEADER */}
           <div className="flex h-[72px] items-center justify-between border-b border-[#1a1a1a] bg-[#0a0a0c]/90 backdrop-blur-md px-6 shrink-0">
             <div className="flex items-center gap-4 min-w-0">
-              <Avatar className="h-10 w-10 border border-[#222225] bg-[#121214]">
+              <Button variant="ghost" size="icon" className="md:hidden text-slate-400 -ml-2 shrink-0" onClick={() => onOpenChange(false)}>
+                 <X className="w-6 h-6" />
+              </Button>
+              <Avatar className="h-10 w-10 border border-[#222225] bg-[#121214] hidden sm:flex">
                 <AvatarFallback className="bg-transparent text-indigo-400 font-bold">
                   {initials}
                 </AvatarFallback>
@@ -272,7 +274,7 @@ export default function ChatViewer({ lead, open, onOpenChange }: ChatViewerProps
                  <Menu className="w-5 h-5" />
               </Button>
               
-              <Button size="icon" variant="ghost" className="text-slate-500 hover:text-white hover:bg-red-500/20 hover:border-red-500/50 rounded-xl transition-all" onClick={() => onOpenChange(false)}>
+              <Button size="icon" variant="ghost" className="hidden md:flex text-slate-500 hover:text-white hover:bg-red-500/20 hover:border-red-500/50 rounded-xl transition-all" onClick={() => onOpenChange(false)}>
                 <X className="h-5 w-5" />
               </Button>
             </div>
@@ -361,7 +363,7 @@ export default function ChatViewer({ lead, open, onOpenChange }: ChatViewerProps
             onSave={saveMemory} 
             saving={sending} 
             onReset={() => {}} 
-            onToggleFollowup={() => handleSendMessage(liveLead.ai_paused ? '#ON' : '#OFF')} 
+            onToggleFollowup={() => handleSendMessage(liveLead.ai_paused ? '#START' : '#STOP')} 
             onAnalysisComplete={() => { refreshLeadData(); refetch(); }} 
             onDeleteLead={handleDeleteLead}
           />

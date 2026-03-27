@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { 
   Search, Loader2, MessageCircle, Bot, Zap, 
-  CreditCard, MessageSquarePlus, Play, Pause, X, Menu, ShoppingCart, User, AlertTriangle, MapPin, Mail, Tag, Globe
+  CreditCard, MessageSquarePlus, Play, Pause, X, Menu, ShoppingCart, User, AlertTriangle, MapPin, Mail, Tag, Globe, ChevronLeft
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -142,14 +142,22 @@ const Inbox = () => {
     if (!activeLead) return;
     setSending(true);
     try {
-      if (text.trim() === '#STOP' || text.trim() === '#START') {
-         const isPaused = text.trim() === '#STOP';
-         await supabase.from('leads').update({ ai_paused: isPaused }).eq('id', activeLead.id);
-         await supabase.from('conversaciones').insert({ lead_id: activeLead.id, mensaje: `IA ${isPaused ? 'Pausada' : 'Activada'} manualmente.`, emisor: 'HUMANO', platform: 'PANEL_INTERNO' });
-         toast.success(`Samurai ${isPaused ? 'Pausado' : 'Activado'}`);
+      const cmd = text.trim().toUpperCase();
+      if (cmd === '#STOP') {
+         await supabase.from('leads').update({ ai_paused: true }).eq('id', activeLead.id);
+         await supabase.from('conversaciones').insert({ lead_id: activeLead.id, mensaje: `IA Pausada manualmente.`, emisor: 'HUMANO', platform: 'PANEL_INTERNO' });
+         toast.success(`Samurai Pausado ⏸`);
          refetchMessages();
          return;
       }
+      if (cmd === '#START') {
+         await supabase.from('leads').update({ ai_paused: false }).eq('id', activeLead.id);
+         await supabase.from('conversaciones').insert({ lead_id: activeLead.id, mensaje: `IA Activada manualmente.`, emisor: 'HUMANO', platform: 'PANEL_INTERNO' });
+         toast.success(`Samurai Activado ✅`);
+         refetchMessages();
+         return;
+      }
+
       if (isInternalNote) {
          await supabase.from('conversaciones').insert({ 
              lead_id: activeLead.id, 
@@ -307,8 +315,11 @@ const Inbox = () => {
                 <>
                    <div className="h-16 px-4 bg-[#0a0a0c]/80 backdrop-blur-md border-b border-[#1a1a1a] flex items-center justify-between shrink-0">
                       <div className="flex items-center gap-3">
+                         <Button variant="ghost" size="icon" className="md:hidden text-slate-400 -ml-2 shrink-0" onClick={() => setActiveLead(null)}>
+                            <ChevronLeft className="w-6 h-6" />
+                         </Button>
                          <div className="flex flex-col">
-                            <span className="font-bold text-white">{String(activeLead.nombre || activeLead.telefono)}</span>
+                            <span className="font-bold text-white truncate max-w-[200px]">{String(activeLead.nombre || activeLead.telefono)}</span>
                             <span className="text-[10px] text-slate-400 font-mono">{String(activeLead.telefono)}</span>
                          </div>
                       </div>
