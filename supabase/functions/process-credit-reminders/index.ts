@@ -85,10 +85,10 @@ serve(async (req) => {
        }
        await supabaseClient.from('credit_installments').update({ reminder_sent_at: new Date().toISOString() }).eq('id', inst.id);
 
-       // 3. LUEGO ENVIAMOS LOS MENSAJES
+       // 3. LUEGO ENVIAMOS LOS MENSAJES (Pasando lead_id para respetar el canal)
        if (msgClient && sale.contact.telefono) {
            await supabaseClient.functions.invoke('send-message-v3', {
-               body: { phone: sale.contact.telefono, message: msgClient }
+               body: { lead_id: sale.contact.lead_id, phone: sale.contact.telefono, message: msgClient }
            });
            messagesSent++;
        }
@@ -97,7 +97,7 @@ serve(async (req) => {
            const { data: agentProfile } = await supabaseClient.from('profiles').select('phone').eq('id', sale.responsible_id).single();
            if (agentProfile?.phone) {
                await supabaseClient.functions.invoke('send-message-v3', {
-                   body: { phone: agentProfile.phone, message: msgAgent }
+                   body: { phone: agentProfile.phone, message: msgAgent } // Agente usa canal por defecto
                });
                messagesSent++;
            }

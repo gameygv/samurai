@@ -11,11 +11,31 @@ serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
   try {
-    const { channel_id, phone, message, mediaData } = await req.json();
+    const { channel_id, phone, message, mediaData, lead_id } = await req.json();
     const supabaseClient = createClient(Deno.env.get('SUPABASE_URL'), Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'));
 
+    let actualChannelId = channel_id;
+
+    // 1. AUTO-RESOLVER CANAL SI NO VIENE EXPLÍCITO (CRÍTICO PARA CAMPAÑAS Y COBRANZA)
+    if (!actualChannelId && lead_id) {
+       const { data: leadData } = await supabaseClient.from('leads').select('channel_id').eq('id', lead_id).single();
+       if (leadData?.channel_id) actualChannelId = leadData.channel_id;
+    }
+
+    // 2. FALLBACK AL CANAL POR DEFECTO (Para notificaciones internas a agentes)
+    if (!actualChannelId) {
+       const { data: cfg } = await supabaseClient.from('app_config').select('value').eq('key', 'default_notification_channel').maybeSingle();
+       if (cfg?.value) actualChannelId = cfg.value;
+    }
+
+    // 3. FALLBACK DE EMERGENCIA AL PRIMER CANAL ACTIVO
+    if (!actualChannelId) {
+       const { data: first } = await supabaseClient.from('whatsapp_channels').select('id').eq('is_active', true).limit(1).maybeSingle();
+       if (first?.id) actualChannelId = first.id;
+    }
+
     const { data: channel, error: chError } = await supabaseClient
-      .from('whatsapp_channels').select('*').eq('id', channel_id).single();
+      .from('whatsapp_channels').select('*').eq('id', actualChannelId).single();
 
     if (chError || !channel) throw new Error("Canal no encontrado en la base de datos.");
 
@@ -113,7 +133,7 @@ serve(async (req) => {
       }
     }
 
-    console.log(`[send-message] Ejecutando POST a: ${endpoint} via ${provider}`);
+    console.log(`[send-message] Ejecutando POST a: ${endpoint} via ${provider} | Canal: ${channel.name}`);
 
     const response = await fetch(endpoint, { 
         method: 'POST', 

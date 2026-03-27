@@ -48,8 +48,9 @@ serve(async (req) => {
                       .replace(/{nombre}/g, clientName)
                       .replace(/{ciudad}/g, contact.ciudad || '');
                   
+                  // Pasamos el lead_id para que el router de mensajes sepa de qué canal enviarlo
                   await supabaseClient.functions.invoke('send-message-v3', {
-                      body: { phone: contact.telefono, message: personalizedMsg, mediaData: camp.mediaData }
+                      body: { lead_id: contact.lead_id, phone: contact.telefono, message: personalizedMsg, mediaData: camp.mediaData }
                   });
                   
                   if (contact.lead_id) {
