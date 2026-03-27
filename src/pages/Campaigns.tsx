@@ -22,7 +22,7 @@ import { useAuth } from '@/context/AuthContext';
 import { extractTagText, parseTagsSafe } from '@/lib/tag-parser';
 
 const Campaigns = () => {
-  const { user } = useAuth();
+  const { user, isManager } = useAuth();
   const [contacts, setContacts] = useState<any[]>([]);
   const [groups, setGroups] = useState<string[]>([]);
   const [cities, setCities] = useState<string[]>([]); 
@@ -42,9 +42,11 @@ const Campaigns = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetchContacts();
-    fetchScheduledCampaigns();
-    if (user) fetchTags();
+    if (user) {
+        fetchContacts();
+        fetchScheduledCampaigns();
+        fetchTags();
+    }
   }, [user]);
 
   const fetchTags = async () => {
@@ -59,11 +61,20 @@ const Campaigns = () => {
   };
 
   const fetchContacts = async () => {
+    if (!user) return;
     setLoading(true);
-    const { data, error } = await supabase
+    
+    // INNER JOIN GARANTIZA QUE EL AGENTE SOLO VEA SUS CONTACTOS ASIGNADOS
+    let query = supabase
       .from('contacts')
-      .select('*, leads(id, buying_intent)')
+      .select('*, leads!inner(id, buying_intent, assigned_to)')
       .order('updated_at', { ascending: false });
+
+    if (!isManager) {
+       query = query.eq('leads.assigned_to', user.id);
+    }
+
+    const { data, error } = await query;
 
     if (!error && data) {
       setContacts(data);
