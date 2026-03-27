@@ -95,11 +95,27 @@ export const ChannelsTab = () => {
   };
 
   const handleAddChannel = () => {
-    setChannels([...channels, { id: `new-${Date.now()}`, name: '', provider: 'gowa', api_url: '', api_key: '', instance_id: '', verify_token: 'samurai_v3', is_new: true, is_active: true }]);
+    // Buscar si ya existe un canal Gowa configurado para heredar sus credenciales
+    const existingGowa = channels.find(c => c.provider === 'gowa' && c.api_key && !c.is_new);
+    
+    setChannels([...channels, { 
+      id: `new-${Date.now()}`, 
+      name: '', 
+      provider: 'gowa', 
+      api_url: existingGowa ? existingGowa.api_url : '', 
+      api_key: existingGowa ? existingGowa.api_key : '', 
+      instance_id: '', 
+      verify_token: 'samurai_v3', 
+      is_new: true, 
+      is_active: true 
+    }]);
+    
+    if (existingGowa) {
+       toast.info("Se ha copiado la URL y API Key de Gowa automáticamente.");
+    }
   };
 
   const handleSaveChannel = async (ch: any) => {
-    // Alertas hiper-específicas de error
     if (!ch.name) return toast.error("Error: Falta ponerle un NOMBRE a la cuenta (es el texto grande hasta arriba de la tarjeta).");
     if (!ch.instance_id) return toast.error(`Error: Falta el ${ch.provider === 'meta' ? 'Identificador' : 'Instance ID'}.`);
     if (!ch.api_key) return toast.error("Error: Falta introducir la API Key / Token de Gowa.");
