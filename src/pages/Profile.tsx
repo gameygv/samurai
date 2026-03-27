@@ -2,12 +2,12 @@ import React, { useState, useEffect } from 'react';
 import Layout from '@/components/Layout';
 import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import { UserCircle, Key, Loader2, Edit, Save, X, MapPin, Clock, Bot, CreditCard } from 'lucide-react';
+import { UserCircle, Loader2, Edit, Save, X, MapPin, Clock, Bot, CreditCard, Target } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { logActivity } from '@/utils/logger';
@@ -22,6 +22,7 @@ const Profile = () => {
   // Local Settings
   const [schedule, setSchedule] = useState({ enabled: false, start: '08:00', end: '22:00' });
   const [bank, setBank] = useState({ enabled: false, bank_name: '', bank_account: '', bank_clabe: '', bank_holder: '' });
+  const [closing, setClosing] = useState({ auto_close: true }); // Nuevo estado
   const [savingSettings, setSavingSettings] = useState(false);
 
   useEffect(() => {
@@ -33,13 +34,20 @@ const Profile = () => {
 
   const fetchLocalSettings = async () => {
      if (!user) return;
-     const { data } = await supabase.from('app_config').select('key, value').in('key', [`agent_schedule_${user.id}`, `agent_bank_${user.id}`]);
+     const { data } = await supabase.from('app_config').select('key, value').in('key', [
+        `agent_schedule_${user.id}`, 
+        `agent_bank_${user.id}`,
+        `agent_closing_${user.id}`
+     ]);
+
      if (data) {
         const scheduleData = data.find(d => d.key === `agent_schedule_${user.id}`)?.value;
         const bankData = data.find(d => d.key === `agent_bank_${user.id}`)?.value;
+        const closingData = data.find(d => d.key === `agent_closing_${user.id}`)?.value;
         
         if (scheduleData) try { setSchedule(JSON.parse(scheduleData)); } catch(e){}
         if (bankData) try { setBank(JSON.parse(bankData)); } catch(e){}
+        if (closingData) try { setClosing(JSON.parse(closingData)); } catch(e){}
      }
   };
 
@@ -49,7 +57,8 @@ const Profile = () => {
      try {
         await supabase.from('app_config').upsert([
            { key: `agent_schedule_${user.id}`, value: JSON.stringify(schedule), category: 'USER_SETTINGS' },
-           { key: `agent_bank_${user.id}`, value: JSON.stringify(bank), category: 'USER_SETTINGS' }
+           { key: `agent_bank_${user.id}`, value: JSON.stringify(bank), category: 'USER_SETTINGS' },
+           { key: `agent_closing_${user.id}`, value: JSON.stringify(closing), category: 'USER_SETTINGS' }
         ], { onConflict: 'key' });
         toast.success("Configuración personal guardada exitosamente.");
      } catch (err: any) {
@@ -100,11 +109,11 @@ const Profile = () => {
       <div className="max-w-5xl mx-auto space-y-8 pb-16 animate-in fade-in duration-300">
         <div>
           <h1 className="text-3xl font-bold text-white mb-1">Mi Perfil y Entorno</h1>
-          <p className="text-slate-400 text-sm">Gestiona tus datos de acceso, horario y cuentas bancarias.</p>
+          <p className="text-slate-400 text-sm">Gestiona tus datos de acceso, horario y estrategia de ventas.</p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-           <Card className="bg-[#0f0f11] border-[#222225] shadow-xl">
+           <Card className="bg-[#0f0f11] border-[#222225] shadow-xl h-fit">
              <CardHeader className="flex flex-row items-center justify-between border-b border-[#161618] bg-[#161618] px-6 py-5">
                <CardTitle className="text-white flex items-center gap-2"><UserCircle className="w-5 h-5 text-indigo-400" /> Información Personal</CardTitle>
                {!isEditing ? (
@@ -145,88 +154,119 @@ const Profile = () => {
              </form>
            </Card>
 
-           <div className="space-y-6">
-               {/* TARJETA DE HORARIO AUTOMATICO */}
-               <Card className="bg-[#0f0f11] border-[#222225] shadow-xl border-l-4 border-l-amber-500 h-fit">
-                 <CardHeader className="border-b border-[#161618] bg-[#161618] px-6 py-5">
-                   <CardTitle className="text-white flex items-center gap-2"><Clock className="w-5 h-5 text-amber-500" /> Horario de Trabajo (IA Automática)</CardTitle>
-                   <CardDescription className="text-xs text-slate-400 mt-1">
-                     Fuera de tu turno, el bot se encenderá automáticamente en tus chats.
-                   </CardDescription>
-                 </CardHeader>
-                 <CardContent className="space-y-6 p-6 bg-[#0a0a0c]">
-                     <div className="flex items-center justify-between bg-[#161618] p-4 rounded-xl border border-[#222225]">
-                        <div className="space-y-1">
-                           <Label className="text-white font-bold text-sm">Habilitar Auto-IA</Label>
-                           <p className="text-[10px] text-slate-400">La IA cubrirá tu guardia nocturna.</p>
-                        </div>
-                        <Switch checked={schedule.enabled} onCheckedChange={(c) => setSchedule({...schedule, enabled: c})} />
-                     </div>
+           {/* TARJETA DE ESTRATEGIA DE CIERRE (NUEVA) */}
+           <Card className="bg-[#0f0f11] border-[#222225] shadow-xl border-l-4 border-l-indigo-500 h-fit">
+             <CardHeader className="border-b border-[#161618] bg-[#161618] px-6 py-5">
+               <CardTitle className="text-white flex items-center gap-2"><Target className="w-5 h-5 text-indigo-500" /> Estrategia de Cierre (IA)</CardTitle>
+               <CardDescription className="text-xs text-slate-400 mt-1">
+                 Decide si quieres que la IA procese el pago o prefieres cerrarlo tú manualmente.
+               </CardDescription>
+             </CardHeader>
+             <CardContent className="space-y-6 p-6 bg-[#0a0a0c]">
+                 <div className="flex items-center justify-between bg-[#161618] p-4 rounded-xl border border-[#222225]">
+                    <div className="space-y-1">
+                       <Label className="text-white font-bold text-sm">Cierre de Ventas Automático</Label>
+                       <p className="text-[10px] text-slate-400 max-w-[200px]">La IA enviará métodos de pago y cuentas bancarias.</p>
+                    </div>
+                    <Switch checked={closing.auto_close} onCheckedChange={(c) => setClosing({ auto_close: c })} />
+                 </div>
 
-                     {schedule.enabled && (
-                        <div className="grid grid-cols-2 gap-4 animate-in slide-in-from-top-2">
-                           <div className="space-y-2">
-                              <Label className="text-[10px] uppercase font-bold text-slate-500 tracking-widest ml-1">Hora Inicio</Label>
-                              <Input type="time" value={schedule.start} onChange={e => setSchedule({...schedule, start: e.target.value})} className="bg-[#121214] border-[#222225] text-white h-11 rounded-xl text-center text-lg" />
-                           </div>
-                           <div className="space-y-2">
-                              <Label className="text-[10px] uppercase font-bold text-slate-500 tracking-widest ml-1">Hora Fin</Label>
-                              <Input type="time" value={schedule.end} onChange={e => setSchedule({...schedule, end: e.target.value})} className="bg-[#121214] border-[#222225] text-white h-11 rounded-xl text-center text-lg" />
-                           </div>
-                        </div>
-                     )}
-                     <Button onClick={handleSaveLocalSettings} disabled={savingSettings} className="w-full bg-[#161618] hover:bg-[#222225] border border-[#333336] text-slate-300 font-bold h-11 rounded-xl shadow-lg uppercase tracking-widest text-[10px]">
-                        {savingSettings ? <Loader2 className="w-4 h-4 animate-spin mr-2"/> : <Save className="w-4 h-4 mr-2"/>} Guardar Horario
-                     </Button>
-                 </CardContent>
-               </Card>
+                 {!closing.auto_close && (
+                    <div className="bg-indigo-900/10 border border-indigo-500/20 p-4 rounded-xl flex items-start gap-3 animate-in slide-in-from-top-2">
+                       <Bot className="w-5 h-5 text-indigo-400 shrink-0 mt-0.5" />
+                       <p className="text-[10px] text-indigo-200 leading-relaxed">
+                          La IA <strong>ocultará</strong> los precios y métodos de pago. Cuando el cliente quiera comprar, el bot detendrá la venta y le informará que tú ({profile?.full_name?.split(' ')[0] || 'su asesor'}) te pondrás en contacto personalmente para brindarle los detalles.
+                       </p>
+                    </div>
+                 )}
 
-               {/* TARJETA DE BANCO PERSONAL */}
-               <Card className="bg-[#0f0f11] border-[#222225] shadow-xl border-l-4 border-l-emerald-500 h-fit">
-                 <CardHeader className="border-b border-[#161618] bg-[#161618] px-6 py-5">
-                   <CardTitle className="text-white flex items-center gap-2"><CreditCard className="w-5 h-5 text-emerald-500" /> Cuenta Bancaria Personal</CardTitle>
-                   <CardDescription className="text-xs text-slate-400 mt-1">
-                     Si la activas, la IA dará esta cuenta en lugar de la general de la empresa.
-                   </CardDescription>
-                 </CardHeader>
-                 <CardContent className="space-y-6 p-6 bg-[#0a0a0c]">
-                     <div className="flex items-center justify-between bg-[#161618] p-4 rounded-xl border border-[#222225]">
-                        <div className="space-y-1">
-                           <Label className="text-emerald-400 font-bold text-sm">Usar mi cuenta propia</Label>
-                           <p className="text-[10px] text-slate-400">Sobrescribe los datos de pago para mis leads.</p>
-                        </div>
-                        <Switch checked={bank.enabled} onCheckedChange={(c) => setBank({...bank, enabled: c})} />
-                     </div>
+                 <Button onClick={handleSaveLocalSettings} disabled={savingSettings} className="w-full bg-[#161618] hover:bg-[#222225] border border-[#333336] text-slate-300 font-bold h-11 rounded-xl shadow-lg uppercase tracking-widest text-[10px]">
+                    {savingSettings ? <Loader2 className="w-4 h-4 animate-spin mr-2"/> : <Save className="w-4 h-4 mr-2"/>} Guardar Estrategia
+                 </Button>
+             </CardContent>
+           </Card>
 
-                     {bank.enabled && (
-                        <div className="space-y-4 animate-in slide-in-from-top-2">
-                           <div className="grid grid-cols-2 gap-4">
-                              <div className="space-y-2">
-                                 <Label className="text-[10px] uppercase font-bold text-slate-500 tracking-widest ml-1">Banco</Label>
-                                 <Input value={bank.bank_name} onChange={e => setBank({...bank, bank_name: e.target.value})} className="bg-[#121214] border-[#222225] text-white h-11 rounded-xl" placeholder="Ej: BBVA" />
-                              </div>
-                              <div className="space-y-2">
-                                 <Label className="text-[10px] uppercase font-bold text-slate-500 tracking-widest ml-1">Titular</Label>
-                                 <Input value={bank.bank_holder} onChange={e => setBank({...bank, bank_holder: e.target.value})} className="bg-[#121214] border-[#222225] text-white h-11 rounded-xl" placeholder="Nombre completo" />
-                              </div>
-                           </div>
-                           <div className="space-y-2">
-                              <Label className="text-[10px] uppercase font-bold text-slate-500 tracking-widest ml-1">Número de Cuenta / Tarjeta</Label>
-                              <Input value={bank.bank_account} onChange={e => setBank({...bank, bank_account: e.target.value})} className="bg-[#121214] border-[#222225] text-white font-mono h-11 rounded-xl" />
-                           </div>
-                           <div className="space-y-2">
-                              <Label className="text-[10px] uppercase font-bold text-slate-500 tracking-widest ml-1">CLABE Interbancaria</Label>
-                              <Input value={bank.bank_clabe} onChange={e => setBank({...bank, bank_clabe: e.target.value})} className="bg-[#121214] border-[#222225] text-white font-mono h-11 rounded-xl" />
-                           </div>
-                        </div>
-                     )}
+           {/* TARJETA DE HORARIO AUTOMATICO */}
+           <Card className="bg-[#0f0f11] border-[#222225] shadow-xl border-l-4 border-l-amber-500 h-fit">
+             <CardHeader className="border-b border-[#161618] bg-[#161618] px-6 py-5">
+               <CardTitle className="text-white flex items-center gap-2"><Clock className="w-5 h-5 text-amber-500" /> Horario de Trabajo (IA Automática)</CardTitle>
+               <CardDescription className="text-xs text-slate-400 mt-1">
+                 Fuera de tu turno, el bot se encenderá automáticamente en tus chats.
+               </CardDescription>
+             </CardHeader>
+             <CardContent className="space-y-6 p-6 bg-[#0a0a0c]">
+                 <div className="flex items-center justify-between bg-[#161618] p-4 rounded-xl border border-[#222225]">
+                    <div className="space-y-1">
+                       <Label className="text-white font-bold text-sm">Habilitar Auto-IA</Label>
+                       <p className="text-[10px] text-slate-400">La IA cubrirá tu guardia nocturna.</p>
+                    </div>
+                    <Switch checked={schedule.enabled} onCheckedChange={(c) => setSchedule({...schedule, enabled: c})} />
+                 </div>
 
-                     <Button onClick={handleSaveLocalSettings} disabled={savingSettings} className="w-full bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold h-11 rounded-xl shadow-lg uppercase tracking-widest text-[10px]">
-                        {savingSettings ? <Loader2 className="w-4 h-4 animate-spin mr-2"/> : <Save className="w-4 h-4 mr-2"/>} Guardar Datos Bancarios
-                     </Button>
-                 </CardContent>
-               </Card>
-           </div>
+                 {schedule.enabled && (
+                    <div className="grid grid-cols-2 gap-4 animate-in slide-in-from-top-2">
+                       <div className="space-y-2">
+                          <Label className="text-[10px] uppercase font-bold text-slate-500 tracking-widest ml-1">Hora Inicio Turno</Label>
+                          <Input type="time" value={schedule.start} onChange={e => setSchedule({...schedule, start: e.target.value})} className="bg-[#121214] border-[#222225] text-white h-11 rounded-xl text-center text-lg" />
+                       </div>
+                       <div className="space-y-2">
+                          <Label className="text-[10px] uppercase font-bold text-slate-500 tracking-widest ml-1">Hora Fin Turno</Label>
+                          <Input type="time" value={schedule.end} onChange={e => setSchedule({...schedule, end: e.target.value})} className="bg-[#121214] border-[#222225] text-white h-11 rounded-xl text-center text-lg" />
+                       </div>
+                    </div>
+                 )}
+
+                 <Button onClick={handleSaveLocalSettings} disabled={savingSettings} className="w-full bg-[#161618] hover:bg-[#222225] border border-[#333336] text-slate-300 font-bold h-11 rounded-xl shadow-lg uppercase tracking-widest text-[10px]">
+                    {savingSettings ? <Loader2 className="w-4 h-4 animate-spin mr-2"/> : <Save className="w-4 h-4 mr-2"/>} Guardar Horario
+                 </Button>
+             </CardContent>
+           </Card>
+
+           {/* TARJETA DE BANCO PERSONAL */}
+           <Card className="bg-[#0f0f11] border-[#222225] shadow-xl border-l-4 border-l-emerald-500 h-fit">
+             <CardHeader className="border-b border-[#161618] bg-[#161618] px-6 py-5">
+               <CardTitle className="text-white flex items-center gap-2"><CreditCard className="w-5 h-5 text-emerald-500" /> Cuenta Bancaria Personal</CardTitle>
+               <CardDescription className="text-xs text-slate-400 mt-1">
+                 Si la activas, la IA dará esta cuenta en lugar de la general.
+               </CardDescription>
+             </CardHeader>
+             <CardContent className="space-y-6 p-6 bg-[#0a0a0c]">
+                 <div className="flex items-center justify-between bg-[#161618] p-4 rounded-xl border border-[#222225]">
+                    <div className="space-y-1">
+                       <Label className="text-emerald-400 font-bold text-sm">Usar mi cuenta propia</Label>
+                       <p className="text-[10px] text-slate-400">Sobrescribe los datos de pago para mis leads.</p>
+                    </div>
+                    <Switch checked={bank.enabled} onCheckedChange={(c) => setBank({...bank, enabled: c})} />
+                 </div>
+
+                 {bank.enabled && (
+                    <div className="space-y-4 animate-in slide-in-from-top-2">
+                       <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                             <Label className="text-[10px] uppercase font-bold text-slate-500 tracking-widest ml-1">Banco</Label>
+                             <Input value={bank.bank_name} onChange={e => setBank({...bank, bank_name: e.target.value})} className="bg-[#121214] border-[#222225] text-white h-11 rounded-xl" placeholder="Ej: BBVA" />
+                          </div>
+                          <div className="space-y-2">
+                             <Label className="text-[10px] uppercase font-bold text-slate-500 tracking-widest ml-1">Titular</Label>
+                             <Input value={bank.bank_holder} onChange={e => setBank({...bank, bank_holder: e.target.value})} className="bg-[#121214] border-[#222225] text-white h-11 rounded-xl" placeholder="Nombre completo" />
+                          </div>
+                       </div>
+                       <div className="space-y-2">
+                          <Label className="text-[10px] uppercase font-bold text-slate-500 tracking-widest ml-1">Número de Cuenta / Tarjeta</Label>
+                          <Input value={bank.bank_account} onChange={e => setBank({...bank, bank_account: e.target.value})} className="bg-[#121214] border-[#222225] text-white font-mono h-11 rounded-xl" />
+                       </div>
+                       <div className="space-y-2">
+                          <Label className="text-[10px] uppercase font-bold text-slate-500 tracking-widest ml-1">CLABE Interbancaria</Label>
+                          <Input value={bank.bank_clabe} onChange={e => setBank({...bank, bank_clabe: e.target.value})} className="bg-[#121214] border-[#222225] text-white font-mono h-11 rounded-xl" />
+                       </div>
+                    </div>
+                 )}
+
+                 <Button onClick={handleSaveLocalSettings} disabled={savingSettings} className="w-full bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold h-11 rounded-xl shadow-lg uppercase tracking-widest text-[10px]">
+                    {savingSettings ? <Loader2 className="w-4 h-4 animate-spin mr-2"/> : <Save className="w-4 h-4 mr-2"/>} Guardar Datos Bancarios
+                 </Button>
+             </CardContent>
+           </Card>
         </div>
       </div>
     </Layout>

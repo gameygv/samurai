@@ -30,41 +30,76 @@ serve(async (req) => {
     let mediaContext = "\n=== BÓVEDA VISUAL (POSTERS) ===\nINSTRUCCIÓN CRÍTICA: Para enviar un poster usa EXACTAMENTE este formato en tu respuesta: <<MEDIA:url_del_poster>>\n";
     mediaAssets?.forEach(m => { mediaContext += `- ${m.title}: ${m.ai_instructions} -> <<MEDIA:${m.url}>>\n`; });
 
-    // --- CARGAR CATÁLOGO DE WOOCOMMERCE ---
-    let wcContext = "";
-    const wcProductsRaw = getConfig('wc_products');
-    if (wcProductsRaw) {
-        try {
-            const wcProducts = JSON.parse(wcProductsRaw);
-            const wcUrl = getConfig('wc_url', '').replace(/\/$/, ''); // Quita barra final si existe
-            let wcCheckout = getConfig('wc_checkout_path', '/checkout/');
-            if (!wcCheckout.startsWith('/')) wcCheckout = '/' + wcCheckout;
+    // --- EVALUAR CONFIGURACIÓN DE CIERRE Y AGENTE ---
+    let autoCloseEnabled = true;
+    let agentName = "un asesor";
+    
+    if (lead.assigned_to) {
+        // Obtener nombre del agente
+        const { data: agentData } = await supabaseClient.from('profiles').select('full_name').eq('id', lead.assigned_to).maybeSingle();
+        if (agentData?.full_name) agentName = agentData.full_name.split(' ')[0]; // Solo el primer nombre
 
-            if (wcProducts.length > 0) {
-                wcContext = "\n=== CATÁLOGO DE PRODUCTOS (TIENDA ONLINE WOOCOMMERCE) ===\n";
-                wcProducts.forEach(p => {
-                    const link = `${wcUrl}${wcCheckout}?add-to-cart=${p.wc_id}`;
-                    wcContext += `- PRODUCTO: ${p.title}\n  PRECIO: $${p.price}\n  LINK DE COMPRA: ${link}\n  REGLA DE VENTA E INSTRUCCIÓN IA: ${p.prompt}\n\n`;
-                });
-            }
-        } catch (e) {
-            console.error("Error parsing wc_products", e);
+        // Verificar si el agente apagó el cierre automático
+        const closingConfigRaw = getConfig(`agent_closing_${lead.assigned_to}`);
+        if (closingConfigRaw) {
+            try {
+                const closingConfig = JSON.parse(closingConfigRaw);
+                if (closingConfig.auto_close === false) autoCloseEnabled = false;
+            } catch(e) {}
         }
     }
 
-    // --- CARGAR CUENTA BANCARIA (GLOBAL O DEL AGENTE) ---
-    let bankInfo = `Banco: ${getConfig('bank_name')}\nCuenta: ${getConfig('bank_account')}\nCLABE: ${getConfig('bank_clabe')}\nTitular: ${getConfig('bank_holder')}`;
-    
-    if (lead.assigned_to) {
-        const agentBankRaw = getConfig(`agent_bank_${lead.assigned_to}`);
-        if (agentBankRaw) {
+    // --- CARGAR WOOCOMMERCE & BANCOS (SOLO SI EL CIERRE AUTOMÁTICO ESTÁ ACTIVO) ---
+    let wcContext = "";
+    let bankInfo = "";
+    let handoffRule = "";
+
+    if (autoCloseEnabled) {
+        const wcProductsRaw = getConfig('wc_products');
+        if (wcProductsRaw) {
             try {
-                const agentBank = JSON.parse(agentBankRaw);
-                if (agentBank.enabled) {
-                    bankInfo = `Banco: ${agentBank.bank_name}\nCuenta: ${agentBank.bank_account}\nCLABE: ${agentBank.bank_clabe}\nTitular: ${agentBank.bank_holder}`;
+                const wcProducts = JSON.parse(wcProductsRaw);
+                const wcUrl = getConfig('wc_url', '').replace(/\/$/, '');
+                let wcCheckout = getConfig('wc_checkout_path', '/checkout/');
+                if (!wcCheckout.startsWith('/')) wcCheckout = '/' + wcCheckout;
+
+                if (wcProducts.length > 0) {
+                    wcContext = "\n=== CATÁLOGO DE PRODUCTOS (TIENDA ONLINE WOOCOMMERCE) ===\n";
+                    wcProducts.forEach(p => {
+                        const link = `${wcUrl}${wcCheckout}?add-to-cart=${p.wc_id}`;
+                        wcContext += `- PRODUCTO: ${p.title}\n  PRECIO: $${p.price}\n  LINK DE COMPRA: ${link}\n  REGLA DE VENTA E INSTRUCCIÓN IA: ${p.prompt}\n\n`;
+                    });
                 }
-            } catch(e) {}
+            } catch (e) {}
         }
+
+        bankInfo = `Banco: ${getConfig('bank_name')}\nCuenta: ${getConfig('bank_account')}\nCLABE: ${getConfig('bank_clabe')}\nTitular: ${getConfig('bank_holder')}`;
+        
+        if (lead.assigned_to) {
+            const agentBankRaw = getConfig(`agent_bank_${lead.assigned_to}`);
+            if (agentBankRaw) {
+                try {
+                    const agentBank = JSON.parse(agentBankRaw);
+                    if (agentBank.enabled) {
+                        bankInfo = `Banco: ${agentBank.bank_name}\nCuenta: ${agentBank.bank_account}\nCLABE: ${agentBank.bank_clabe}\nTitular: ${agentBank.bank_holder}`;
+                    }
+                } catch(e) {}
+            }
+        }
+    } else {
+        // SI EL CIERRE MANUAL ESTÁ ACTIVADO (Auto-Close Off)
+        wcContext = "\n=== CATÁLOGO DE PRODUCTOS ===\n(PRECIOS Y LINKS NO DISPONIBLES. EL HUMANO LOS PROPORCIONARÁ.)\n";
+        bankInfo = "NO DISPONIBLE - EL HUMANO PROPORCIONARÁ LA CUENTA.";
+        
+        handoffRule = `
+### REGLA ESTRICTA DE CIERRE MANUAL (HANDOFF A HUMANO):
+El asesor humano (${agentName}) ha decidido cerrar las ventas personalmente.
+CUANDO EL CLIENTE MUESTRE INTENCIÓN DE COMPRA, PREGUNTE POR PRECIOS FINALES, MÉTODOS DE PAGO O DEPÓSITOS:
+1. NO ofrezcas ni menciones cuentas bancarias.
+2. NO proporciones enlaces de compra.
+3. DETÉN el proceso de venta y responde exactamente algo similar a esto:
+   "¡Excelente! En breve mi compañero(a) ${agentName} te contactará personalmente por aquí para brindarte los detalles de pago y ayudarte a completar tu registro."
+`;
     }
 
     // AQUI ESTÁ LA PROTECCIÓN CRÍTICA PARA DATOS Y PAGOS
@@ -89,6 +124,7 @@ REGLAS ESTRICTAS DE MEMORIA Y VENTAS:
     const systemPrompt = `
 ${voiceInstruction}
 ${activeLeadMemory}
+${handoffRule}
 
 ${getConfig('prompt_alma_samurai')}
 ${getConfig('prompt_adn_core')}
