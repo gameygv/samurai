@@ -7,10 +7,25 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import { UserCircle, Loader2, Edit, Save, X, MapPin, Clock, Bot, CreditCard, Target } from 'lucide-react';
+import { UserCircle, Loader2, Edit, Save, X, MapPin, Clock, Bot, CreditCard, Target, CalendarDays } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { logActivity } from '@/utils/logger';
+
+const defaultWorkingHours = {
+  1: { active: true, start: '08:00', end: '22:00' }, // Lunes
+  2: { active: true, start: '08:00', end: '22:00' }, // Martes
+  3: { active: true, start: '08:00', end: '22:00' }, // Miércoles
+  4: { active: true, start: '08:00', end: '22:00' }, // Jueves
+  5: { active: true, start: '08:00', end: '22:00' }, // Viernes
+  6: { active: false, start: '08:00', end: '14:00' }, // Sábado
+  0: { active: false, start: '08:00', end: '14:00' }, // Domingo
+};
+
+const DAYS_OF_WEEK = [
+  { id: 1, name: 'Lunes' }, { id: 2, name: 'Martes' }, { id: 3, name: 'Miércoles' },
+  { id: 4, name: 'Jueves' }, { id: 5, name: 'Viernes' }, { id: 6, name: 'Sábado' }, { id: 0, name: 'Domingo' }
+];
 
 const Profile = () => {
   const { profile, user, fetchProfile, signOut } = useAuth();
@@ -20,9 +35,9 @@ const Profile = () => {
   const [loadingProfile, setLoadingProfile] = useState(false);
 
   // Local Settings
-  const [schedule, setSchedule] = useState({ enabled: false, start: '08:00', end: '22:00' });
+  const [schedule, setSchedule] = useState<any>({ enabled: false, working_hours: defaultWorkingHours });
   const [bank, setBank] = useState({ enabled: false, bank_name: '', bank_account: '', bank_clabe: '', bank_holder: '' });
-  const [closing, setClosing] = useState({ auto_close: true }); // Nuevo estado
+  const [closing, setClosing] = useState({ auto_close: true });
   const [savingSettings, setSavingSettings] = useState(false);
 
   useEffect(() => {
@@ -45,7 +60,20 @@ const Profile = () => {
         const bankData = data.find(d => d.key === `agent_bank_${user.id}`)?.value;
         const closingData = data.find(d => d.key === `agent_closing_${user.id}`)?.value;
         
-        if (scheduleData) try { setSchedule(JSON.parse(scheduleData)); } catch(e){}
+        if (scheduleData) {
+            try { 
+               const parsed = JSON.parse(scheduleData); 
+               // Migración para usuarios viejos
+               if (!parsed.working_hours) {
+                  parsed.working_hours = { ...defaultWorkingHours };
+                  Object.keys(parsed.working_hours).forEach(k => {
+                     parsed.working_hours[k].start = parsed.start || '08:00';
+                     parsed.working_hours[k].end = parsed.end || '22:00';
+                  });
+               }
+               setSchedule(parsed); 
+            } catch(e){}
+        }
         if (bankData) try { setBank(JSON.parse(bankData)); } catch(e){}
         if (closingData) try { setClosing(JSON.parse(closingData)); } catch(e){}
      }
@@ -66,6 +94,19 @@ const Profile = () => {
      } finally {
         setSavingSettings(false);
      }
+  };
+
+  const updateDaySchedule = (dayId: number, field: string, value: any) => {
+     setSchedule((prev: any) => ({
+        ...prev,
+        working_hours: {
+           ...prev.working_hours,
+           [dayId]: {
+              ...prev.working_hours[dayId],
+              [field]: value
+           }
+        }
+     }));
   };
 
   const handleProfileUpdate = async (e: React.FormEvent) => {
@@ -154,7 +195,59 @@ const Profile = () => {
              </form>
            </Card>
 
-           {/* TARJETA DE ESTRATEGIA DE CIERRE (NUEVA) */}
+           {/* TARJETA DE HORARIO AUTOMATICO (ACTUALIZADA) */}
+           <Card className="bg-[#0f0f11] border-[#222225] shadow-xl border-l-4 border-l-amber-500 h-fit md:row-span-2">
+             <CardHeader className="border-b border-[#161618] bg-[#161618] px-6 py-5">
+               <CardTitle className="text-white flex items-center gap-2"><CalendarDays className="w-5 h-5 text-amber-500" /> Mi Disponibilidad (Horario)</CardTitle>
+               <CardDescription className="text-xs text-slate-400 mt-1">
+                 Fuera de tu horario o en tus días de descanso, el bot se encenderá automáticamente para no dejar al cliente en visto.
+               </CardDescription>
+             </CardHeader>
+             <CardContent className="space-y-6 p-6 bg-[#0a0a0c]">
+                 <div className="flex items-center justify-between bg-[#161618] p-4 rounded-xl border border-[#222225]">
+                    <div className="space-y-1">
+                       <Label className="text-white font-bold text-sm">Habilitar Auto-Asistente</Label>
+                       <p className="text-[10px] text-slate-400">Protege tu guardia nocturna y fines de semana.</p>
+                    </div>
+                    <Switch checked={schedule.enabled} onCheckedChange={(c) => setSchedule({...schedule, enabled: c})} />
+                 </div>
+
+                 {schedule.enabled && (
+                    <div className="space-y-3 animate-in slide-in-from-top-2">
+                       {DAYS_OF_WEEK.map((day) => {
+                          const dayCfg = schedule.working_hours?.[day.id] || { active: false, start: '08:00', end: '22:00' };
+                          return (
+                             <div key={day.id} className="flex items-center gap-3 p-3 bg-[#121214] border border-[#222225] rounded-xl transition-colors hover:border-[#333336]">
+                                <div className="w-24 flex items-center gap-2">
+                                   <Switch checked={dayCfg.active} onCheckedChange={(c) => updateDaySchedule(day.id, 'active', c)} className="scale-75 origin-left" />
+                                   <span className={`text-[11px] font-bold ${dayCfg.active ? 'text-slate-200' : 'text-slate-600'}`}>{day.name}</span>
+                                </div>
+                                <div className="flex-1 flex items-center gap-2">
+                                   {dayCfg.active ? (
+                                      <>
+                                         <Input type="time" value={dayCfg.start} onChange={e => updateDaySchedule(day.id, 'start', e.target.value)} className="h-8 text-xs bg-[#0a0a0c] border-[#333336] text-white px-2" />
+                                         <span className="text-slate-600 text-xs">a</span>
+                                         <Input type="time" value={dayCfg.end} onChange={e => updateDaySchedule(day.id, 'end', e.target.value)} className="h-8 text-xs bg-[#0a0a0c] border-[#333336] text-white px-2" />
+                                      </>
+                                   ) : (
+                                      <span className="text-[10px] text-amber-500/80 uppercase font-bold tracking-widest flex items-center gap-1.5 bg-amber-950/20 px-2 py-1 rounded-md w-full justify-center">
+                                         <Bot className="w-3 h-3"/> Día de Descanso (Bot Activo)
+                                      </span>
+                                   )}
+                                </div>
+                             </div>
+                          );
+                       })}
+                    </div>
+                 )}
+
+                 <Button onClick={handleSaveLocalSettings} disabled={savingSettings} className="w-full bg-[#161618] hover:bg-[#222225] border border-[#333336] text-slate-300 font-bold h-11 rounded-xl shadow-lg uppercase tracking-widest text-[10px]">
+                    {savingSettings ? <Loader2 className="w-4 h-4 animate-spin mr-2"/> : <Save className="w-4 h-4 mr-2"/>} Guardar Horario
+                 </Button>
+             </CardContent>
+           </Card>
+
+           {/* TARJETA DE ESTRATEGIA DE CIERRE */}
            <Card className="bg-[#0f0f11] border-[#222225] shadow-xl border-l-4 border-l-indigo-500 h-fit">
              <CardHeader className="border-b border-[#161618] bg-[#161618] px-6 py-5">
                <CardTitle className="text-white flex items-center gap-2"><Target className="w-5 h-5 text-indigo-500" /> Estrategia de Cierre (IA)</CardTitle>
@@ -182,42 +275,6 @@ const Profile = () => {
 
                  <Button onClick={handleSaveLocalSettings} disabled={savingSettings} className="w-full bg-[#161618] hover:bg-[#222225] border border-[#333336] text-slate-300 font-bold h-11 rounded-xl shadow-lg uppercase tracking-widest text-[10px]">
                     {savingSettings ? <Loader2 className="w-4 h-4 animate-spin mr-2"/> : <Save className="w-4 h-4 mr-2"/>} Guardar Estrategia
-                 </Button>
-             </CardContent>
-           </Card>
-
-           {/* TARJETA DE HORARIO AUTOMATICO */}
-           <Card className="bg-[#0f0f11] border-[#222225] shadow-xl border-l-4 border-l-amber-500 h-fit">
-             <CardHeader className="border-b border-[#161618] bg-[#161618] px-6 py-5">
-               <CardTitle className="text-white flex items-center gap-2"><Clock className="w-5 h-5 text-amber-500" /> Horario de Trabajo (IA Automática)</CardTitle>
-               <CardDescription className="text-xs text-slate-400 mt-1">
-                 Fuera de tu turno, el bot se encenderá automáticamente en tus chats.
-               </CardDescription>
-             </CardHeader>
-             <CardContent className="space-y-6 p-6 bg-[#0a0a0c]">
-                 <div className="flex items-center justify-between bg-[#161618] p-4 rounded-xl border border-[#222225]">
-                    <div className="space-y-1">
-                       <Label className="text-white font-bold text-sm">Habilitar Auto-IA</Label>
-                       <p className="text-[10px] text-slate-400">La IA cubrirá tu guardia nocturna.</p>
-                    </div>
-                    <Switch checked={schedule.enabled} onCheckedChange={(c) => setSchedule({...schedule, enabled: c})} />
-                 </div>
-
-                 {schedule.enabled && (
-                    <div className="grid grid-cols-2 gap-4 animate-in slide-in-from-top-2">
-                       <div className="space-y-2">
-                          <Label className="text-[10px] uppercase font-bold text-slate-500 tracking-widest ml-1">Hora Inicio Turno</Label>
-                          <Input type="time" value={schedule.start} onChange={e => setSchedule({...schedule, start: e.target.value})} className="bg-[#121214] border-[#222225] text-white h-11 rounded-xl text-center text-lg" />
-                       </div>
-                       <div className="space-y-2">
-                          <Label className="text-[10px] uppercase font-bold text-slate-500 tracking-widest ml-1">Hora Fin Turno</Label>
-                          <Input type="time" value={schedule.end} onChange={e => setSchedule({...schedule, end: e.target.value})} className="bg-[#121214] border-[#222225] text-white h-11 rounded-xl text-center text-lg" />
-                       </div>
-                    </div>
-                 )}
-
-                 <Button onClick={handleSaveLocalSettings} disabled={savingSettings} className="w-full bg-[#161618] hover:bg-[#222225] border border-[#333336] text-slate-300 font-bold h-11 rounded-xl shadow-lg uppercase tracking-widest text-[10px]">
-                    {savingSettings ? <Loader2 className="w-4 h-4 animate-spin mr-2"/> : <Save className="w-4 h-4 mr-2"/>} Guardar Horario
                  </Button>
              </CardContent>
            </Card>

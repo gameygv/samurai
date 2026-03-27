@@ -73,9 +73,6 @@ serve(async (req) => {
         messageId = msg.id;
         pushName = contact?.profile?.name || 'Lead Meta';
 
-        // Meta no suele enviar eventos de "fromMe" al webhook de mensajes estándar en Cloud API de la misma manera
-        // Pero lo preparamos por si acaso.
-        
         const phoneNumberId = change.metadata?.phone_number_id;
         if (phoneNumberId) {
             const { data: ch } = await supabaseClient.from('whatsapp_channels').select('id').eq('instance_id', phoneNumberId).maybeSingle();
@@ -106,7 +103,6 @@ serve(async (req) => {
            if (ch) actualChannelId = ch.id;
        }
 
-       // Si es del agente, el remoteJid es el cliente. Si es del cliente, el remoteJid es el cliente.
        phone = isFromMe ? (p.to || p.key?.remoteJid) : (p.from || p.key?.remoteJid);
        if (!phone) return new Response('no_phone', { status: 200 });
        
@@ -137,7 +133,7 @@ serve(async (req) => {
 
     let { data: lead } = await supabaseClient.from('leads').select('*').or(`telefono.ilike.%${senderPhone.slice(-10)}%`).limit(1).maybeSingle();
     if (!lead) {
-        if (isFromMe) return new Response('ignore_new_lead_from_me', { status: 200 }); // Evitar crear leads si el agente manda mensaje a alguien no registrado
+        if (isFromMe) return new Response('ignore_new_lead_from_me', { status: 200 }); 
 
         const { data: nl } = await supabaseClient.from('leads').insert({ 
            nombre: pushName, 
@@ -152,7 +148,6 @@ serve(async (req) => {
            channel_id: actualChannelId || lead.channel_id 
         };
         
-        // El cliente contestó, reiniciamos el funnel de retargeting
         if (!isFromMe) updates.followup_stage = 0;
 
         if (assignedAgent && lead.assigned_to !== assignedAgent) {
@@ -180,7 +175,6 @@ serve(async (req) => {
             return new Response('command_processed', { status: 200, headers: corsHeaders });
         }
 
-        // Si no es comando, registramos el mensaje del humano en el CRM y no disparamos IA
         await supabaseClient.from('conversaciones').insert({ 
             lead_id: lead.id, emisor: 'HUMANO', mensaje: text, platform: 'WHATSAPP',
             metadata: { msgId: messageId, mediaType, source: 'whatsapp_web' }
@@ -251,11 +245,11 @@ serve(async (req) => {
        await logTrace(`Comprobante interceptado de ${lead.nombre}. Enviado al Centro Financiero.`, false);
     }
 
-    // EXTRAER DATOS (SIEMPRE ACTIVO)
+    // EXTRAER DATOS (SIEMPRE ACTIVO, AÚN SI IA PAUSADA)
     await supabaseClient.functions.invoke('analyze-leads', { body: { lead_id: lead.id, force: false } });
 
     // =====================================================================
-    // CONTROL DE HORARIOS (Si la IA estaba pausada, verificar horario)
+    // CONTROL DE HORARIOS (NUEVO FORMATO SEMANAL)
     // =====================================================================
     const { data: updatedLead } = await supabaseClient.from('leads').select('*').eq('id', lead.id).single();
     if (updatedLead) lead = updatedLead;
@@ -265,37 +259,42 @@ serve(async (req) => {
         if (schedData?.value) {
             try {
                 const schedule = JSON.parse(schedData.value);
-                if (schedule.enabled && schedule.start && schedule.end) {
-                    const now = new Date();
-                    // Ajuste aprox a CST (UTC-6)
-                    const cstHour = (now.getUTCHours() - 6 + 24) % 24;
-                    const currentMinutes = cstHour * 60 + now.getUTCMinutes();
+                if (schedule.enabled && schedule.working_hours) {
+                    
+                    // Cálculo preciso de hora y día en CST (Mexico)
+                    const mxTimeStr = new Date().toLocaleString("en-US", { timeZone: "America/Mexico_City", hour12: false });
+                    const mxDate = new Date(mxTimeStr);
+                    const currentDay = mxDate.getDay(); // 0 = Domingo, 1 = Lunes, etc.
+                    const currentMinutes = mxDate.getHours() * 60 + mxDate.getMinutes();
 
-                    const [startH, startM] = schedule.start.split(':').map(Number);
-                    const [endH, endM] = schedule.end.split(':').map(Number);
-                    const startMinutes = startH * 60 + startM;
-                    const endMinutes = endH * 60 + endM;
-
+                    const dayConfig = schedule.working_hours[currentDay.toString()];
                     let isWorkingHours = false;
-                    if (startMinutes <= endMinutes) {
-                        isWorkingHours = currentMinutes >= startMinutes && currentMinutes <= endMinutes;
-                    } else {
-                        // Cruza la medianoche (ej 22:00 a 08:00)
-                        isWorkingHours = currentMinutes >= startMinutes || currentMinutes <= endMinutes;
-                    }
 
-                    // Si está FUERA del horario de trabajo, la IA DEBE contestar.
+                    if (dayConfig && dayConfig.active) {
+                        const [startH, startM] = dayConfig.start.split(':').map(Number);
+                        const [endH, endM] = dayConfig.end.split(':').map(Number);
+                        const startMinutes = startH * 60 + startM;
+                        const endMinutes = endH * 60 + endM;
+
+                        if (startMinutes <= endMinutes) {
+                            isWorkingHours = currentMinutes >= startMinutes && currentMinutes <= endMinutes;
+                        } else {
+                            isWorkingHours = currentMinutes >= startMinutes || currentMinutes <= endMinutes;
+                        }
+                    } // Si es false, isWorkingHours se queda false (Día de descanso)
+
+                    // Si está FUERA del horario de trabajo o es su día de descanso
                     if (!isWorkingHours) {
                         lead.ai_paused = false;
                         await supabaseClient.from('leads').update({ ai_paused: false }).eq('id', lead.id);
                         await supabaseClient.from('conversaciones').insert({
                             lead_id: lead.id, emisor: 'SISTEMA', platform: 'PANEL_INTERNO',
-                            mensaje: `IA auto-activada. El asesor está fuera de su turno (${schedule.start} - ${schedule.end}).`
+                            mensaje: `IA auto-activada. El asesor está en su día de descanso o fuera de turno laboral.`
                         });
                         await logTrace(`Auto-IA activada para ${lead.nombre} (Fuera de horario).`);
                     }
                 }
-            } catch(e) { console.error("Error parseando horario:", e); }
+            } catch(e) { console.error("Error parseando horario semanal:", e); }
         }
     }
 
