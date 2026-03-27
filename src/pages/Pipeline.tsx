@@ -36,33 +36,24 @@ const Pipeline = () => {
   const [showLost, setShowLost] = useState<boolean>(false);
 
   useEffect(() => {
-    if (user) {
-        fetchLeads();
-        fetchTags();
-        if (isManager) {
-            supabase.from('profiles').select('id, full_name').then(({data}) => {
-               if (data) {
-                  const map: any = {};
-                  data.forEach(d => map[d.id] = d.full_name);
-                  setAgentsMap(map);
-               }
-            });
-        }
-    }
+    fetchLeads();
+    if (user) fetchTags();
+    supabase.from('profiles').select('id, full_name').then(({data}) => {
+       if (data) {
+          const map: any = {};
+          data.forEach(d => map[d.id] = d.full_name);
+          setAgentsMap(map);
+       }
+    });
 
     const channel = supabase.channel('pipeline-live').on('postgres_changes', { event: '*', schema: 'public', table: 'leads' }, () => fetchLeads()).subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [user, isManager]);
+  }, [user]);
 
   const fetchLeads = async () => {
     setLoading(true);
     let query = supabase.from('leads').select('*').order('last_message_at', { ascending: false });
-    
-    // Si NO es gerente, solo traer sus leads
-    if (!isManager && user) {
-        query = query.eq('assigned_to', user.id);
-    }
-    
+    if (!isManager) query = query.eq('assigned_to', user?.id);
     const { data } = await query;
     if (data) setLeads(data);
     setLoading(false);
@@ -153,14 +144,7 @@ const Pipeline = () => {
 
         <div className="flex-1 flex gap-5 min-h-0 overflow-x-auto pb-4 custom-scrollbar">
           {visibleColumns.map((col) => {
-              // FIX: Se agregó .trim() al buying_intent para evitar fallos por espacios invisibles en la BD
-              const colLeads = leads.filter(l => {
-                  const intent = String(l.buying_intent || 'BAJO').toUpperCase().trim();
-                  const matchIntent = intent === col.id;
-                  const matchAgent = filterAgent === 'ALL' || l.assigned_to === filterAgent;
-                  return matchIntent && matchAgent;
-              });
-
+              const colLeads = leads.filter(l => (String(l.buying_intent || 'BAJO').toUpperCase() === col.id) && (filterAgent === 'ALL' || l.assigned_to === filterAgent));
               return (
               <div key={col.id} className={cn("rounded-3xl border flex flex-col min-h-0 min-w-[340px] w-[340px] shrink-0 bg-[#0a0a0c]/80 backdrop-blur-sm shadow-xl", col.color)} onDragOver={(e) => e.preventDefault()} onDrop={(e) => handleDrop(e, col.id)}>
                 <div className={cn("p-4 border-b border-[#1a1a1a] flex justify-between items-center rounded-t-3xl", col.headerBg)}>
@@ -192,8 +176,7 @@ const Pipeline = () => {
                               </div>
                               <Avatar className="w-8 h-8 rounded-lg border border-[#222225] bg-[#0a0a0c] shrink-0">
                                  <AvatarFallback className="text-[10px] text-slate-500 font-bold">
-                                    {isManager && agentsMap[lead.assigned_to] ? agentsMap[lead.assigned_to].substring(0,2).toUpperCase() : 
-                                     (!isManager && user) ? (profile?.full_name?.substring(0,2).toUpperCase() || 'YO') : 'BOT'}
+                                    {agentsMap[lead.assigned_to]?.substring(0,2).toUpperCase() || 'BOT'}
                                  </AvatarFallback>
                               </Avatar>
                            </div>

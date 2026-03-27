@@ -67,15 +67,13 @@ const Contacts = () => {
   const [analyzing, setAnalyzing] = useState(false);
 
   useEffect(() => {
-    if (user) {
-      fetchContacts();
-      fetchTags();
-      fetchGroupsCatalog();
-      const channel = supabase.channel('contacts-live')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'contacts' }, () => fetchContacts())
-        .subscribe();
-      return () => { supabase.removeChannel(channel); };
-    }
+    fetchContacts();
+    if (user) fetchTags();
+    fetchGroupsCatalog();
+    const channel = supabase.channel('contacts-live')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'contacts' }, () => fetchContacts())
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
   }, [user]);
 
   const fetchTags = async () => {
@@ -100,20 +98,11 @@ const Contacts = () => {
   };
 
   const fetchContacts = async () => {
-    if (!user) return;
     setLoading(true);
-    
-    // INNER JOIN GARANTIZA QUE EL AGENTE SOLO VEA SUS CONTACTOS ASIGNADOS
-    let query = supabase
+    const { data, error } = await supabase
       .from('contacts')
-      .select('*, leads!inner(id, buying_intent, payment_status, lead_score, ai_paused, summary, assigned_to), credit_sales(status, total_amount)')
+      .select('*, leads(id, buying_intent, payment_status, lead_score, ai_paused, summary), credit_sales(status, total_amount)')
       .order('updated_at', { ascending: false });
-
-    if (!isManager) {
-       query = query.eq('leads.assigned_to', user.id);
-    }
-
-    const { data, error } = await query;
 
     if (!error && data) {
       const mappedData = data.map(c => {

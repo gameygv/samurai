@@ -228,8 +228,7 @@ const Profile = () => {
                           const dayCfg = schedule.working_hours?.[day.id] || { active: false, start: '08:00', end: '22:00' };
                           return (
                              <div key={day.id} className="flex items-center gap-3 p-3 bg-[#121214] border border-[#222225] rounded-xl transition-colors hover:border-[#333336]">
-                                {/* FIX: Se ha expandido el ancho para que el Switch de Sábado y Domingo no se oculte */}
-                                <div className="w-[110px] flex items-center gap-2 shrink-0">
+                                <div className="w-24 flex items-center gap-2">
                                    <Switch checked={!!dayCfg.active} onCheckedChange={(c) => updateDaySchedule(day.id, 'active', c)} className="scale-75 origin-left" />
                                    <span className={`text-[11px] font-bold ${dayCfg.active ? 'text-slate-200' : 'text-slate-600'}`}>{day.name}</span>
                                 </div>
@@ -242,7 +241,7 @@ const Profile = () => {
                                       </>
                                    ) : (
                                       <span className="text-[10px] text-amber-500/80 uppercase font-bold tracking-widest flex items-center gap-1.5 bg-amber-950/20 px-2 py-1 rounded-md w-full justify-center">
-                                         <Bot className="w-3 h-3"/> Día Libre
+                                         <Bot className="w-3 h-3"/> Día de Descanso (Bot Activo)
                                       </span>
                                    )}
                                 </div>
