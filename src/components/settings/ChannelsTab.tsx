@@ -9,7 +9,7 @@ import { Switch } from '@/components/ui/switch';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { 
   Plus, Trash2, Smartphone, Globe, Key, 
-  Loader2, BellRing, Send, ShieldCheck, Network, User, AlertTriangle, Zap
+  Loader2, BellRing, Send, ShieldCheck, Network, User, AlertTriangle, Zap, CheckCircle2
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -54,14 +54,14 @@ export const ChannelsTab = () => {
     setLoading(false);
   };
 
-  const handleSaveRouting = async () => {
+  const handleSaveRoutingImmediate = async (newMode: 'auto' | 'channel', newAgentMap: Record<string, string>) => {
      setSavingRouting(true);
      try {
          await supabase.from('app_config').upsert([
-             { key: 'channel_routing_mode', value: routingMode, category: 'SYSTEM' },
-             { key: 'channel_agent_map', value: JSON.stringify(agentMap), category: 'SYSTEM' }
+             { key: 'channel_routing_mode', value: newMode, category: 'SYSTEM' },
+             { key: 'channel_agent_map', value: JSON.stringify(newAgentMap), category: 'SYSTEM' }
          ], { onConflict: 'key' });
-         toast.success("Estrategia de enrutamiento guardada con éxito.");
+         toast.success("Asignación actualizada en tiempo real.");
      } catch (err: any) {
          toast.error("Error al guardar enrutamiento: " + err.message);
      } finally {
@@ -95,7 +95,6 @@ export const ChannelsTab = () => {
   };
 
   const handleAddChannel = () => {
-    // Buscar si ya existe un canal Gowa configurado para heredar sus credenciales
     const existingGowa = channels.find(c => c.provider === 'gowa' && c.api_key && !c.is_new);
     
     setChannels([...channels, { 
@@ -110,13 +109,11 @@ export const ChannelsTab = () => {
       is_active: true 
     }]);
     
-    if (existingGowa) {
-       toast.info("Se ha copiado la URL y API Key de Gowa automáticamente.");
-    }
+    if (existingGowa) toast.info("Se ha copiado la URL y API Key de Gowa automáticamente.");
   };
 
   const handleSaveChannel = async (ch: any) => {
-    if (!ch.name) return toast.error("Error: Falta ponerle un NOMBRE a la cuenta (es el texto grande hasta arriba de la tarjeta).");
+    if (!ch.name) return toast.error("Error: Falta ponerle un NOMBRE a la cuenta.");
     if (!ch.instance_id) return toast.error(`Error: Falta el ${ch.provider === 'meta' ? 'Identificador' : 'Instance ID'}.`);
     if (!ch.api_key) return toast.error("Error: Falta introducir la API Key / Token de Gowa.");
 
@@ -124,29 +121,26 @@ export const ChannelsTab = () => {
     try {
       const { is_new, ...payload } = ch;
       const data = { 
-        name: payload.name, 
+        name: payload.name.trim(), 
         provider: payload.provider, 
-        api_url: payload.provider === 'meta' ? 'https://graph.facebook.com' : payload.api_url, 
-        api_key: payload.api_key, 
-        instance_id: payload.instance_id, 
+        api_url: payload.provider === 'meta' ? 'https://graph.facebook.com' : payload.api_url.trim(), 
+        api_key: payload.api_key.trim(), 
+        instance_id: payload.instance_id.trim(), 
         verify_token: payload.verify_token || 'samurai_v3', 
         is_active: payload.is_active !== false 
       };
       
       const { error } = is_new ? await supabase.from('whatsapp_channels').insert(data) : await supabase.from('whatsapp_channels').update(data).eq('id', ch.id);
       if (error) throw error;
-      toast.success("¡Canal guardado exitosamente en la Base de Datos!");
+      toast.success("¡Canal guardado exitosamente!");
       fetchAll();
     } catch (err: any) { toast.error(err.message); } finally { setSaving(false); }
   };
 
   const handleTestChannel = async (channelId: string) => {
      const phone = testPhones[channelId];
-     if (!phone || phone.length < 10) {
-        toast.error("Ingresa un número de teléfono válido (10+ dígitos)");
-        return;
-     }
-
+     if (!phone || phone.length < 10) return toast.error("Ingresa un número de teléfono válido (10+ dígitos)");
+     
      setTestingId(channelId);
      const tid = toast.loading("Enviando mensaje de prueba...");
      try {
@@ -163,13 +157,11 @@ export const ChannelsTab = () => {
      setAutoConfiguringId(ch.id);
      const tid = toast.loading("Inyectando configuración en servidor de Gowa...");
      try {
-        const { data, error } = await supabase.functions.invoke('setup-whatsapp-webhook', {
-            body: { channel: ch }
-        });
+        const { data, error } = await supabase.functions.invoke('setup-whatsapp-webhook', { body: { channel: ch } });
         if (error) throw error;
         toast.success("¡Webhook Inyectado! Samurai ya está escuchando a Gowa.", { id: tid });
      } catch (err: any) {
-        toast.error(`La auto-inyección falló. Puede que tu versión de Gowa requiera configurar el Webhook manualmente en el archivo .env del servidor.`, { id: tid, duration: 8000 });
+        toast.error(`La auto-inyección falló. Configura el Webhook manualmente.`, { id: tid, duration: 8000 });
      } finally {
         setAutoConfiguringId(null);
      }
@@ -187,8 +179,11 @@ export const ChannelsTab = () => {
             <CardDescription className="text-xs text-slate-400">Define cómo se asignan los nuevos chats que entran al sistema.</CardDescription>
          </CardHeader>
          <CardContent className="p-6 space-y-6">
-            <RadioGroup value={routingMode} onValueChange={(v: 'auto' | 'channel') => setRoutingMode(v)} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-               <div className={cn("flex flex-col p-4 rounded-xl border-2 transition-all cursor-pointer", routingMode === 'auto' ? "border-amber-500 bg-amber-500/10" : "border-slate-800 bg-slate-950 hover:border-slate-700")} onClick={() => setRoutingMode('auto')}>
+            <RadioGroup value={routingMode} onValueChange={(v: 'auto' | 'channel') => {
+               setRoutingMode(v);
+               handleSaveRoutingImmediate(v, agentMap);
+            }} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+               <div className={cn("flex flex-col p-4 rounded-xl border-2 transition-all cursor-pointer", routingMode === 'auto' ? "border-amber-500 bg-amber-500/10" : "border-slate-800 bg-slate-950 hover:border-slate-700")} onClick={() => { setRoutingMode('auto'); handleSaveRoutingImmediate('auto', agentMap); }}>
                   <div className="flex items-center gap-2 mb-2">
                      <RadioGroupItem value="auto" id="auto" className="border-slate-600 text-amber-500" />
                      <Label htmlFor="auto" className="font-bold text-sm text-white cursor-pointer">Auto-Routing (Por Territorio)</Label>
@@ -196,7 +191,7 @@ export const ChannelsTab = () => {
                   <p className="text-[10px] text-slate-400 leading-relaxed pl-6">Samurai atiende a todos los leads. Cuando descubre de qué ciudad son, se los asigna automáticamente al Asesor encargado de esa zona.</p>
                </div>
                
-               <div className={cn("flex flex-col p-4 rounded-xl border-2 transition-all cursor-pointer", routingMode === 'channel' ? "border-amber-500 bg-amber-500/10" : "border-slate-800 bg-slate-950 hover:border-slate-700")} onClick={() => setRoutingMode('channel')}>
+               <div className={cn("flex flex-col p-4 rounded-xl border-2 transition-all cursor-pointer", routingMode === 'channel' ? "border-amber-500 bg-amber-500/10" : "border-slate-800 bg-slate-950 hover:border-slate-700")} onClick={() => { setRoutingMode('channel'); handleSaveRoutingImmediate('channel', agentMap); }}>
                   <div className="flex items-center gap-2 mb-2">
                      <RadioGroupItem value="channel" id="channel" className="border-slate-600 text-amber-500" />
                      <Label htmlFor="channel" className="font-bold text-sm text-white cursor-pointer">Vínculo Directo (Canal = Asesor)</Label>
@@ -204,12 +199,6 @@ export const ChannelsTab = () => {
                   <p className="text-[10px] text-slate-400 leading-relaxed pl-6">Todo mensaje que entre por un Canal de WhatsApp específico, se asignará inmediatamente a un Asesor fijo, ignorando la ciudad.</p>
                </div>
             </RadioGroup>
-
-            <div className="flex justify-end pt-4 border-t border-slate-800">
-               <Button onClick={handleSaveRouting} disabled={savingRouting} className="bg-amber-600 hover:bg-amber-500 text-slate-950 font-bold uppercase tracking-widest text-[10px] h-10 px-8 shadow-lg">
-                  {savingRouting ? <Loader2 className="w-4 h-4 animate-spin mr-2"/> : <ShieldCheck className="w-4 h-4 mr-2"/>} Guardar Estrategia
-               </Button>
-            </div>
          </CardContent>
       </Card>
 
@@ -225,7 +214,6 @@ export const ChannelsTab = () => {
         {channels.map((ch) => (
           <Card key={ch.id} className={cn("bg-slate-900 border-slate-800 transition-all overflow-hidden", defaultNotifyId === ch.id && "border-amber-500/50 shadow-amber-900/10", ch.is_active === false && "opacity-75")}>
             
-            {/* CABECERA CON NOMBRE REALTADO */}
             <CardHeader className="py-4 border-b border-slate-800/50 flex flex-col sm:flex-row items-start sm:items-center justify-between bg-slate-950/20 gap-4">
                <div className="flex items-center gap-4 flex-1 w-full">
                   {!ch.is_new && (
@@ -237,7 +225,6 @@ export const ChannelsTab = () => {
                      </div>
                   )}
                   
-                  {/* CAMPO DE NOMBRE REALTADO */}
                   <div className="flex-1 min-w-0 flex flex-col">
                      <Label className={cn("text-[10px] font-bold uppercase tracking-widest mb-1", !ch.name ? "text-red-400 animate-pulse" : "text-slate-500")}>
                         {ch.is_new ? "🚨 Ponle un nombre aquí abajo ⬇️" : "Nombre Identificador"}
@@ -267,7 +254,6 @@ export const ChannelsTab = () => {
             <CardContent className="p-6">
                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
                   
-                  {/* CREDENCIALES DE CONEXIÓN */}
                   <div className="space-y-2">
                      <Label className="text-[10px] uppercase font-bold text-slate-500 tracking-widest">Proveedor</Label>
                      <Select value={ch.provider} onValueChange={v => setChannels(channels.map(c => c.id === ch.id ? {...c, provider: v} : c))}>
@@ -288,7 +274,7 @@ export const ChannelsTab = () => {
                         value={ch.instance_id} 
                         onChange={e => setChannels(channels.map(c => c.id === ch.id ? {...c, instance_id: e.target.value} : c))} 
                         className={cn("bg-slate-950 h-11 font-mono", !ch.instance_id ? "border-red-500/50 focus-visible:ring-red-500 placeholder:text-red-500/30" : "border-slate-800")} 
-                        placeholder={ch.provider === 'meta' ? "Ej: 106093498877543" : "Ej: anahi"} 
+                        placeholder={ch.provider === 'meta' ? "Ej: 106093498877543" : "Ej: edith"} 
                      />
                   </div>
 
@@ -328,7 +314,7 @@ export const ChannelsTab = () => {
                   )}
                </div>
 
-               {/* SECCIÓN VINCULACIÓN DE ASESOR CLARAMENTE VISIBLE (SIEMPRE VISIBLE AHORA) */}
+               {/* SECCIÓN VINCULACIÓN DE ASESOR */}
                <div className="mt-6 p-4 rounded-xl border border-indigo-500/30 bg-indigo-950/10">
                    <Label className="text-[10px] uppercase font-bold text-indigo-400 tracking-widest flex items-center gap-1.5 mb-3">
                       <User className="w-4 h-4"/> Asesor Vinculado a este Canal (Vínculo Directo)
@@ -336,16 +322,23 @@ export const ChannelsTab = () => {
                    
                    <div className="flex flex-col md:flex-row gap-4 items-start md:items-center">
                       <div className="flex-1 w-full flex gap-2 items-center">
-                         <Select value={agentMap[ch.id] || 'unassigned'} onValueChange={v => setAgentMap({...agentMap, [ch.id]: v === 'unassigned' ? '' : v})} disabled={ch.is_new}>
+                         <Select 
+                             value={agentMap[ch.id] || 'unassigned'} 
+                             onValueChange={v => {
+                                 const newMap = {...agentMap, [ch.id]: v === 'unassigned' ? '' : v};
+                                 setAgentMap(newMap);
+                                 handleSaveRoutingImmediate(routingMode, newMap); // AUTO-GUARDADO
+                             }} 
+                             disabled={ch.is_new || savingRouting}
+                         >
                             <SelectTrigger className="bg-[#0a0a0c] border-[#333336] h-11 text-slate-200 flex-1 disabled:opacity-50"><SelectValue placeholder="Seleccionar asesor..."/></SelectTrigger>
                             <SelectContent className="bg-[#121214] border-[#222225] text-white">
                                <SelectItem value="unassigned">Ninguno (Bot Global o Auto-Routing)</SelectItem>
                                {agents.map(a => <SelectItem key={a.id} value={a.id}>{a.full_name}</SelectItem>)}
                             </SelectContent>
                          </Select>
-                         <Button onClick={handleSaveRouting} disabled={savingRouting || ch.is_new} className="bg-indigo-600 hover:bg-indigo-500 text-white h-11 px-6 font-bold text-[10px] uppercase tracking-widest shadow-lg disabled:opacity-50">
-                            Guardar Vínculo
-                         </Button>
+                         {savingRouting && <Loader2 className="w-5 h-5 text-indigo-400 animate-spin" />}
+                         {!savingRouting && agentMap[ch.id] && <span title="Guardado Automáticamente" className="flex"><CheckCircle2 className="w-5 h-5 text-emerald-500" /></span>}
                       </div>
                       
                       {ch.is_new && (
@@ -355,7 +348,7 @@ export const ChannelsTab = () => {
                       )}
                       {!ch.is_new && routingMode === 'auto' && (
                          <p className="text-[10px] text-amber-500/80 italic md:max-w-[250px] leading-relaxed">
-                            <strong className="font-bold">Nota:</strong> La estrategia global está en "Auto-Routing". Esta asignación manual no tomará efecto.
+                            <strong className="font-bold">Nota:</strong> La estrategia global está en "Auto-Routing". Esta asignación manual no tomará efecto a menos que cambies la estrategia arriba.
                          </p>
                       )}
                    </div>
@@ -363,11 +356,11 @@ export const ChannelsTab = () => {
 
                <div className="mt-6 flex justify-between items-center border-t border-slate-800 pt-6">
                   <div className="text-[10px] text-slate-500 italic">
-                     {ch.is_new ? "Completa los campos rojos para poder guardar." : "Configuración guardada correctamente."}
+                     {ch.is_new ? "Completa los campos rojos para poder guardar." : "Configuración general del canal guardada correctamente."}
                   </div>
                   <Button onClick={() => handleSaveChannel(ch)} disabled={saving} className="bg-amber-600 hover:bg-amber-500 text-slate-950 font-bold px-10 h-11 rounded-xl shadow-lg uppercase tracking-widest text-[10px]">
                      {saving ? <Loader2 className="animate-spin w-4 h-4 mr-2"/> : <ShieldCheck className="w-4 h-4 mr-2"/>} 
-                     {ch.is_new ? "GUARDAR CANAL Y GENERAR WEBHOOK" : "GUARDAR CAMBIOS"}
+                     {ch.is_new ? "GUARDAR CANAL Y GENERAR WEBHOOK" : "GUARDAR CAMBIOS DEL CANAL"}
                   </Button>
                </div>
             </CardContent>

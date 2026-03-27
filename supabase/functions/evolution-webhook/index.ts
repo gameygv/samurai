@@ -97,7 +97,8 @@ serve(async (req) => {
        
        isFromMe = p.is_from_me || p.fromMe || false;
 
-       const instanceName = payload.device_id || payload.instance;
+       // BLINDAJE: Quitamos espacios vacíos que puedan venir de Gowa o de error humano en config
+       const instanceName = String(payload.device_id || payload.instance || '').trim();
        if (instanceName) {
            const { data: ch } = await supabaseClient.from('whatsapp_channels').select('id').eq('instance_id', instanceName).maybeSingle();
            if (ch) actualChannelId = ch.id;
@@ -133,6 +134,11 @@ serve(async (req) => {
     // =====================================================================
     let assignedAgent = routingMode === 'channel' ? (channelAgentMap[actualChannelId] || null) : null;
 
+    // Trazabilidad de enrutamiento en Monitor Live
+    if (!isFromMe) {
+       await logTrace(`Routing Check -> Mode: ${routingMode} | ChannelID: ${actualChannelId} | Agente Destino: ${assignedAgent || 'Bot Global'}`);
+    }
+
     let { data: lead } = await supabaseClient.from('leads').select('*').or(`telefono.ilike.%${senderPhone.slice(-10)}%`).limit(1).maybeSingle();
     if (!lead) {
         if (isFromMe) return new Response('ignore_new_lead_from_me', { status: 200 }); 
@@ -153,6 +159,7 @@ serve(async (req) => {
         
         if (!isFromMe) updates.followup_stage = 0;
 
+        // Si el lead ya existía pero entra por un canal que fuerza un agente distinto
         if (assignedAgent && lead.assigned_to !== assignedAgent) {
            updates.assigned_to = assignedAgent;
            updates.ai_paused = true; // Si cambia a un nuevo humano, el bot se apaga para ceder el control
@@ -287,7 +294,6 @@ serve(async (req) => {
                         }
                     }
 
-                    // Si el asesor NO está trabajando, el bot se quita la pausa y atiende al cliente
                     if (!isWorkingHours) {
                         lead.ai_paused = false;
                         await supabaseClient.from('leads').update({ ai_paused: false }).eq('id', lead.id);
