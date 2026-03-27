@@ -77,7 +77,14 @@ const Campaigns = () => {
   const fetchScheduledCampaigns = async () => {
     const { data } = await supabase.from('app_config').select('value').eq('key', 'scheduled_campaigns').maybeSingle();
     if (data?.value) {
-        try { setScheduledCampaigns(JSON.parse(data.value).reverse()); } catch(e){}
+        try { 
+            const parsed = JSON.parse(data.value); 
+            if (Array.isArray(parsed)) {
+                setScheduledCampaigns(parsed.reverse()); 
+            } else {
+                setScheduledCampaigns([]);
+            }
+        } catch(e) { setScheduledCampaigns([]); }
     }
   };
 

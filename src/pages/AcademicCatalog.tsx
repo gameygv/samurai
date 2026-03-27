@@ -27,9 +27,16 @@ const AcademicCatalog = () => {
         const c = data.find(d => d.key === 'academic_courses')?.value;
         const l = data.find(d => d.key === 'academic_locations')?.value;
         const t = data.find(d => d.key === 'academic_teachers')?.value;
-        if (c) try { setCourses(JSON.parse(c)); } catch(e){}
-        if (l) try { setLocations(JSON.parse(l)); } catch(e){}
-        if (t) try { setTeachers(JSON.parse(t)); } catch(e){}
+        
+        // BLINDAJE JSON.PARSE
+        const parseSafe = (val: string | undefined) => {
+            if (!val) return [];
+            try { const parsed = JSON.parse(val); return Array.isArray(parsed) ? parsed : []; } catch { return []; }
+        };
+        
+        setCourses(parseSafe(c));
+        setLocations(parseSafe(l));
+        setTeachers(parseSafe(t));
     }
     setLoading(false);
   };

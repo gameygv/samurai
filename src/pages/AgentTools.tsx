@@ -29,8 +29,9 @@ const AgentTools = () => {
      if (data) {
         const tpl = data.find(d => d.key === `agent_templates_${user?.id}`)?.value;
         const tgs = data.find(d => d.key === `agent_tags_${user?.id}`)?.value;
-        if (tpl) try { setLocalTemplates(JSON.parse(tpl)); } catch(e){}
-        if (tgs) try { setLocalTags(JSON.parse(tgs)); } catch(e){}
+        
+        if (tpl) { try { const p = JSON.parse(tpl); setLocalTemplates(Array.isArray(p) ? p : []); } catch(e){ setLocalTemplates([]); } }
+        if (tgs) { try { const p = JSON.parse(tgs); setLocalTags(Array.isArray(p) ? p : []); } catch(e){ setLocalTags([]); } }
      }
      setLoading(false);
   };
@@ -82,7 +83,7 @@ const AgentTools = () => {
                  {localTags.length === 0 ? (
                     <div className="text-center py-10 text-slate-600 italic uppercase text-[10px] font-bold tracking-widest">No tienes etiquetas creadas.</div>
                  ) : localTags.map(tag => (
-                    <div key={tag.id} className="p-4 bg-[#161618] border border-[#222225] rounded-xl flex flex-col gap-4 group transition-colors hover:border-[#333336]">
+                    <div key={tag.id} className="p-4 bg-[#161618] border-[#222225] rounded-xl flex flex-col gap-4 group transition-colors hover:border-[#333336]">
                        <div className="space-y-2">
                           <Label className="text-[10px] uppercase font-bold text-slate-500 tracking-widest ml-1">Nombre</Label>
                           <Input value={tag.text} onChange={e => setLocalTags(localTags.map(t => t.id === tag.id ? {...t, text: e.target.value.toUpperCase()} : t))} placeholder="Ej: VIP" className="bg-[#0a0a0c] border-[#222225] h-11 text-sm font-bold text-slate-200 uppercase focus-visible:ring-amber-500/50 rounded-xl" />
@@ -115,7 +116,7 @@ const AgentTools = () => {
                  {localTemplates.length === 0 ? (
                     <div className="text-center py-10 text-slate-600 italic uppercase text-[10px] font-bold tracking-widest">No tienes plantillas creadas.</div>
                  ) : localTemplates.map(qr => (
-                    <div key={qr.id} className="p-4 bg-[#161618] border border-[#222225] rounded-xl flex flex-col gap-4 group transition-colors hover:border-[#333336]">
+                    <div key={qr.id} className="p-4 bg-[#161618] border-[#222225] rounded-xl flex flex-col gap-4 group transition-colors hover:border-[#333336]">
                        <div className="space-y-2">
                           <Label className="text-[10px] uppercase font-bold text-slate-500 tracking-widest ml-1">Título / Asunto</Label>
                           <Input value={qr.title} onChange={e => setLocalTemplates(localTemplates.map(t => t.id === qr.id ? {...t, title: e.target.value} : t))} placeholder="Título corto" className="bg-[#0a0a0c] border-[#222225] h-11 text-sm font-bold text-slate-200 focus-visible:ring-indigo-500/50 rounded-xl" />

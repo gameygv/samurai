@@ -45,12 +45,16 @@ const Settings = () => {
       const { data: appData } = await supabase.from('app_config').select('*');
       if (appData) {
          setConfigs(appData);
+         
+         // BLINDAJE CONTRA JSONs CORRUPTOS
          const tagsStr = appData.find(c => c.key === 'global_tags')?.value;
-         if (tagsStr) { try { setGlobalTags(JSON.parse(tagsStr)); } catch(e){} }
+         if (tagsStr) { try { const p = JSON.parse(tagsStr); setGlobalTags(Array.isArray(p) ? p : []); } catch(e){ setGlobalTags([]); } }
+         
          const repliesStr = appData.find(c => c.key === 'quick_replies')?.value;
-         if (repliesStr) { try { setGlobalReplies(JSON.parse(repliesStr)); } catch(e){} }
+         if (repliesStr) { try { const p = JSON.parse(repliesStr); setGlobalReplies(Array.isArray(p) ? p : []); } catch(e){ setGlobalReplies([]); } }
+         
          const wcProdStr = appData.find(c => c.key === 'wc_products')?.value;
-         if (wcProdStr) { try { setWcProducts(JSON.parse(wcProdStr)); } catch(e){} }
+         if (wcProdStr) { try { const p = JSON.parse(wcProdStr); setWcProducts(Array.isArray(p) ? p : []); } catch(e){ setWcProducts([]); } }
          
          const daysToLostStr = appData.find(c => c.key === 'days_to_lost_lead')?.value;
          if (daysToLostStr) setDaysToLost(daysToLostStr);
