@@ -127,7 +127,8 @@ serve(async (req) => {
                 });
                 
                 if (match) {
-                    await supabaseClient.from('leads').update({ assigned_to: agent.id }).eq('id', ol.id);
+                    // Si el bot descubre la ciudad y se lo asigna al asesor, la IA se pausa (El humano toma el control)
+                    await supabaseClient.from('leads').update({ assigned_to: agent.id, ai_paused: true }).eq('id', ol.id);
                     
                     // Notificar al Asesor si hay un canal configurado
                     if (defaultCh && agent.phone && !inactiveChannelIds.includes(defaultCh)) {
@@ -234,8 +235,8 @@ serve(async (req) => {
           if (inactiveChannelIds.includes(lead.channel_id)) continue;
           
           try {
-             const apiBase = wcUrl.endsWith('/') ? wcUrl.slice(0, -1) : wcUrl;
-             const endpoint = `${apiBase}/wp-json/wc/v3/orders?customer=${encodeURIComponent(lead.email)}`;
+             const apiBaseUrl = wcUrl.endsWith('/') ? wcUrl.slice(0, -1) : wcUrl;
+             const endpoint = `${apiBaseUrl}/wp-json/wc/v3/orders?customer=${encodeURIComponent(lead.email)}`;
              const auth = btoa(`${wcKey}:${wcSecret}`);
              const wcRes = await fetch(endpoint, { headers: { 'Authorization': `Basic ${auth}` } });
 

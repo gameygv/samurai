@@ -128,7 +128,9 @@ serve(async (req) => {
     const { data: channelData } = await supabaseClient.from('whatsapp_channels').select('*').eq('id', actualChannelId).maybeSingle();
     const isChannelActive = channelData?.is_active !== false;
 
-    // RESOLUCIÓN DEL AGENTE Y LEAD
+    // =====================================================================
+    // RESOLUCIÓN DEL AGENTE Y LEAD CON BOT PAUSADO POR DEFECTO
+    // =====================================================================
     let assignedAgent = routingMode === 'channel' ? (channelAgentMap[actualChannelId] || null) : null;
 
     let { data: lead } = await supabaseClient.from('leads').select('*').or(`telefono.ilike.%${senderPhone.slice(-10)}%`).limit(1).maybeSingle();
@@ -139,7 +141,8 @@ serve(async (req) => {
            nombre: pushName, 
            telefono: senderPhone, 
            channel_id: actualChannelId || null,
-           assigned_to: assignedAgent
+           assigned_to: assignedAgent,
+           ai_paused: assignedAgent ? true : false // Si hay humano asignado, el bot nace apagado
         }).select().single();
         lead = nl;
     } else {
@@ -152,11 +155,13 @@ serve(async (req) => {
 
         if (assignedAgent && lead.assigned_to !== assignedAgent) {
            updates.assigned_to = assignedAgent;
+           updates.ai_paused = true; // Si cambia a un nuevo humano, el bot se apaga para ceder el control
         }
 
         await supabaseClient.from('leads').update(updates).eq('id', lead.id);
         lead.channel_id = updates.channel_id;
         if (updates.assigned_to) lead.assigned_to = updates.assigned_to;
+        if (updates.ai_paused !== undefined) lead.ai_paused = updates.ai_paused;
     }
 
     // =====================================================================
@@ -249,7 +254,7 @@ serve(async (req) => {
     await supabaseClient.functions.invoke('analyze-leads', { body: { lead_id: lead.id, force: false } });
 
     // =====================================================================
-    // CONTROL DE HORARIOS (NUEVO FORMATO SEMANAL)
+    // CONTROL DE HORARIOS (ACTIVA LA IA SI EL HUMANO NO ESTÁ DISPONIBLE)
     // =====================================================================
     const { data: updatedLead } = await supabaseClient.from('leads').select('*').eq('id', lead.id).single();
     if (updatedLead) lead = updatedLead;
@@ -261,10 +266,9 @@ serve(async (req) => {
                 const schedule = JSON.parse(schedData.value);
                 if (schedule.enabled && schedule.working_hours) {
                     
-                    // Cálculo preciso de hora y día en CST (Mexico)
                     const mxTimeStr = new Date().toLocaleString("en-US", { timeZone: "America/Mexico_City", hour12: false });
                     const mxDate = new Date(mxTimeStr);
-                    const currentDay = mxDate.getDay(); // 0 = Domingo, 1 = Lunes, etc.
+                    const currentDay = mxDate.getDay(); // 0 = Domingo, 1 = Lunes
                     const currentMinutes = mxDate.getHours() * 60 + mxDate.getMinutes();
 
                     const dayConfig = schedule.working_hours[currentDay.toString()];
@@ -281,9 +285,9 @@ serve(async (req) => {
                         } else {
                             isWorkingHours = currentMinutes >= startMinutes || currentMinutes <= endMinutes;
                         }
-                    } // Si es false, isWorkingHours se queda false (Día de descanso)
+                    }
 
-                    // Si está FUERA del horario de trabajo o es su día de descanso
+                    // Si el asesor NO está trabajando, el bot se quita la pausa y atiende al cliente
                     if (!isWorkingHours) {
                         lead.ai_paused = false;
                         await supabaseClient.from('leads').update({ ai_paused: false }).eq('id', lead.id);
@@ -291,7 +295,7 @@ serve(async (req) => {
                             lead_id: lead.id, emisor: 'SISTEMA', platform: 'PANEL_INTERNO',
                             mensaje: `IA auto-activada. El asesor está en su día de descanso o fuera de turno laboral.`
                         });
-                        await logTrace(`Auto-IA activada para ${lead.nombre} (Fuera de horario).`);
+                        await logTrace(`Auto-IA activada para ${lead.nombre} (Fuera de horario de asesor).`);
                     }
                 }
             } catch(e) { console.error("Error parseando horario semanal:", e); }

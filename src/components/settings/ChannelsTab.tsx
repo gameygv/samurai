@@ -146,11 +146,11 @@ export const ChannelsTab = () => {
   return (
     <div className="space-y-8">
 
-      {/* SECCIÓN DE ENRUTAMIENTO */}
-      <Card className="bg-slate-900 border-slate-800 shadow-xl overflow-hidden border-l-4 border-l-amber-500">
+      {/* SECCIÓN DE ENRUTAMIENTO (AHORA SIEMPRE VISIBLE) */}
+      <Card className="bg-slate-900 border-slate-800 shadow-xl overflow-hidden border-l-4 border-l-amber-500 animate-in fade-in slide-in-from-top-4">
          <CardHeader className="bg-slate-950/40 border-b border-slate-800 pb-4">
             <CardTitle className="text-white text-base flex items-center gap-2"><Network className="w-5 h-5 text-amber-500"/> Estrategia de Asignación (Routing)</CardTitle>
-            <CardDescription className="text-xs text-slate-400">Define cómo se asignan los nuevos chats que entran a WhatsApp.</CardDescription>
+            <CardDescription className="text-xs text-slate-400">Define cómo se asignan los nuevos chats que entran a WhatsApp. Al asignarse, la IA cederá el control al humano automáticamente.</CardDescription>
          </CardHeader>
          <CardContent className="p-6 space-y-6">
             <RadioGroup value={routingMode} onValueChange={(v: 'auto' | 'channel') => setRoutingMode(v)} className="grid grid-cols-1 md:grid-cols-2 gap-4">
