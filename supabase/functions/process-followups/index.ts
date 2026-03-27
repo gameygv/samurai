@@ -18,6 +18,9 @@ serve(async (req) => {
     const getConfig = (key) => configs?.find(c => c.key === key)?.value || null;
     const defaultCh = getConfig('default_notification_channel');
 
+    const { data: inactiveChannels } = await supabaseClient.from('whatsapp_channels').select('id').eq('is_active', false);
+    const inactiveChannelIds = inactiveChannels?.map(c => c.id) || [];
+
     // ========================================================
     // 1. LÓGICA DE RETARGETING / FOLLOW-UPS (IA)
     // ========================================================
@@ -37,6 +40,8 @@ serve(async (req) => {
                 .not('buying_intent', 'in', '("COMPRADO","PERDIDO")');
 
             for (const lead of (stagnantLeads || [])) {
+                if (inactiveChannelIds.includes(lead.channel_id)) continue;
+
                 const configToUse = lead.buying_intent === 'ALTO' ? salesConfig : explorationConfig;
                 if (!configToUse || !configToUse.enabled) continue;
 
@@ -125,7 +130,7 @@ serve(async (req) => {
                     await supabaseClient.from('leads').update({ assigned_to: agent.id }).eq('id', ol.id);
                     
                     // Notificar al Asesor si hay un canal configurado
-                    if (defaultCh && agent.phone) {
+                    if (defaultCh && agent.phone && !inactiveChannelIds.includes(defaultCh)) {
                         const msg = `🎯 *NUEVO LEAD ASIGNADO*\n\nHola ${agent.full_name?.split(' ')[0] || 'Asesor'},\nEl sistema te ha asignado automáticamente un nuevo prospecto de tu zona.\n\n👤 *Nombre:* ${ol.nombre || 'Sin nombre'}\n📍 *Ciudad:* ${ol.ciudad}\n📞 *Teléfono:* ${ol.telefono}\n\nIngresa al CRM para atenderlo.`;
                         await supabaseClient.functions.invoke('send-message-v3', {
                             body: { channel_id: defaultCh, phone: agent.phone, message: msg }
@@ -190,7 +195,7 @@ serve(async (req) => {
                     currentReminders[i].notified = true;
                     remindersModified = true;
 
-                    if (rem.notify_wa !== false && lead.assigned_to) {
+                    if (rem.notify_wa !== false && lead.assigned_to && !inactiveChannelIds.includes(defaultCh)) {
                         const agent = agentMap[lead.assigned_to];
                         if (agent && agent.phone && defaultCh) {
                             messagesToSend.push({
@@ -226,6 +231,8 @@ serve(async (req) => {
        const { data: highIntentLeads } = await supabaseClient.from('leads').select('id, nombre, email, telefono, channel_id').eq('buying_intent', 'ALTO').not('email', 'is', null);
 
        for (const lead of (highIntentLeads || [])) {
+          if (inactiveChannelIds.includes(lead.channel_id)) continue;
+          
           try {
              const apiBase = wcUrl.endsWith('/') ? wcUrl.slice(0, -1) : wcUrl;
              const endpoint = `${apiBase}/wp-json/wc/v3/orders?customer=${encodeURIComponent(lead.email)}`;

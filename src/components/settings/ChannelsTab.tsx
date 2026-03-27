@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
+import { Switch } from '@/components/ui/switch';
 import { 
   Plus, Trash2, Smartphone, Globe, Key, 
   CheckCircle2, AlertCircle, Loader2, RefreshCw, Layers, ShieldCheck, BellRing, Info, Send
@@ -48,8 +49,21 @@ export const ChannelsTab = () => {
     }
   };
 
+  const handleToggleActive = async (ch: any) => {
+    const newStatus = ch.is_active === false ? true : false;
+    const tid = toast.loading(newStatus ? "Encendiendo canal..." : "Apagando canal...");
+    try {
+      const { error } = await supabase.from('whatsapp_channels').update({ is_active: newStatus }).eq('id', ch.id);
+      if (error) throw error;
+      setChannels(channels.map(c => c.id === ch.id ? { ...c, is_active: newStatus } : c));
+      toast.success(newStatus ? "Canal encendido. La IA responderá aquí." : "Canal apagado. La IA ignorará este número.", { id: tid });
+    } catch (err: any) {
+      toast.error("Error: " + err.message, { id: tid });
+    }
+  };
+
   const handleAddChannel = () => {
-    setChannels([...channels, { id: `new-${Date.now()}`, name: '', provider: 'gowa', api_url: '', api_key: '', instance_id: '', verify_token: 'samurai_v3', is_new: true }]);
+    setChannels([...channels, { id: `new-${Date.now()}`, name: '', provider: 'gowa', api_url: '', api_key: '', instance_id: '', verify_token: 'samurai_v3', is_new: true, is_active: true }]);
   };
 
   const handleSaveChannel = async (ch: any) => {
@@ -67,7 +81,7 @@ export const ChannelsTab = () => {
         api_key: payload.api_key, 
         instance_id: payload.instance_id, 
         verify_token: payload.verify_token || 'samurai_v3', 
-        is_active: true 
+        is_active: payload.is_active !== false 
       };
       
       const { error } = is_new ? await supabase.from('whatsapp_channels').insert(data) : await supabase.from('whatsapp_channels').update(data).eq('id', ch.id);
@@ -110,9 +124,20 @@ export const ChannelsTab = () => {
 
       <div className="grid grid-cols-1 gap-6">
         {channels.map((ch) => (
-          <Card key={ch.id} className={cn("bg-slate-900 border-slate-800 transition-all overflow-hidden", defaultNotifyId === ch.id && "border-amber-500/50 shadow-amber-900/10")}>
+          <Card key={ch.id} className={cn("bg-slate-900 border-slate-800 transition-all overflow-hidden", defaultNotifyId === ch.id && "border-amber-500/50 shadow-amber-900/10", ch.is_active === false && "opacity-75")}>
             <CardHeader className="py-4 border-b border-slate-800/50 flex flex-row items-center justify-between bg-slate-950/20">
                <div className="flex items-center gap-4 flex-1">
+                  {!ch.is_new && (
+                     <div className="flex items-center gap-2 bg-slate-950/50 px-3 py-1.5 rounded-lg border border-slate-800 shrink-0">
+                       <Switch 
+                         checked={ch.is_active !== false} 
+                         onCheckedChange={() => handleToggleActive(ch)} 
+                       />
+                       <span className={cn("text-[10px] font-bold uppercase tracking-widest", ch.is_active !== false ? "text-emerald-500" : "text-red-500")}>
+                         {ch.is_active !== false ? "ON" : "OFF"}
+                       </span>
+                     </div>
+                  )}
                   <Input value={ch.name} onChange={e => setChannels(channels.map(c => c.id === ch.id ? {...c, name: e.target.value} : c))} className="bg-transparent border-0 font-bold text-slate-100 p-0 h-auto text-lg focus-visible:ring-0" placeholder="Nombre de la cuenta (Ej: WhatsApp Principal)" />
                   {defaultNotifyId === ch.id && <Badge className="bg-amber-600 text-white uppercase text-[9px] font-bold shrink-0"><BellRing className="w-3 h-3 mr-1"/> Canal de Alertas</Badge>}
                </div>

@@ -123,6 +123,8 @@ serve(async (req) => {
     if (existingMsg) return new Response('duplicate', { status: 200 });
 
     const { data: channelData } = await supabaseClient.from('whatsapp_channels').select('*').eq('id', actualChannelId).maybeSingle();
+    const isChannelActive = channelData?.is_active !== false;
+
     let downloadedBlob = null;
     let finalMediaUrl = null;
 
@@ -197,7 +199,7 @@ serve(async (req) => {
     const { data: updatedLead } = await supabaseClient.from('leads').select('*').eq('id', lead.id).single();
     if (updatedLead) lead = updatedLead;
 
-    if (!lead.ai_paused && !isGlobalAiPaused) {
+    if (!lead.ai_paused && !isGlobalAiPaused && isChannelActive) {
        const { data: configs } = await supabaseClient.from('app_config').select('key, value');
        const configMap = configs?.reduce((acc, item) => ({...acc, [item.key]: item.value}), {});
        const openaiKey = configMap['openai_api_key'];
@@ -232,7 +234,9 @@ serve(async (req) => {
           }
        }
     } else {
-       if (isGlobalAiPaused) {
+       if (!isChannelActive) {
+           await logTrace(`Mensaje guardado pero IA no respondió porque el CANAL '${channelData?.name || actualChannelId}' está APAGADO en el CRM.`, false);
+       } else if (isGlobalAiPaused) {
            await logTrace(`Mensaje guardado pero IA no respondió porque el KILL SWITCH GLOBAL está activado.`, false);
        }
     }
