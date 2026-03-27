@@ -20,8 +20,6 @@ serve(async (req) => {
     const token = url.searchParams.get("hub.verify_token");
     const challenge = url.searchParams.get("hub.challenge");
     
-    // Aquí puedes opcionalmente buscar el channel_id en la BD para validar que el `token` coincida con el guardado,
-    // o simplemente devolver el challenge si te envían un token.
     if (mode && token) return new Response(challenge, { status: 200 });
     return new Response("Forbidden", { status: 403 });
   }
@@ -40,15 +38,18 @@ serve(async (req) => {
     let payload;
     try { payload = JSON.parse(payloadText); } catch (e) { return new Response("Invalid JSON", { status: 400 }); }
     
+    // Verificar Kill Switch Global antes de procesar IA
+    const { data: globalAiConf } = await supabaseClient.from('app_config').select('value').eq('key', 'global_ai_status').maybeSingle();
+    const isGlobalAiPaused = globalAiConf?.value === 'paused';
+
     let phone, text = '', pushName = 'Cliente WA', mediaType = null, messageId = null;
+    let actualChannelId = channelIdParam;
 
     // =====================================================================
     // DETECCIÓN Y PARSEO: META CLOUD API
     // =====================================================================
     if (payload.object === 'whatsapp_business_account' && payload.entry) {
         const change = payload.entry[0]?.changes?.[0]?.value;
-        
-        // Ignorar actualizaciones de estado (entregado, leído)
         if (change.statuses) return new Response('status_ignored', { status: 200 });
         
         const msg = change.messages?.[0];
@@ -59,53 +60,58 @@ serve(async (req) => {
         messageId = msg.id;
         pushName = contact?.profile?.name || 'Lead Meta';
 
-        if (msg.type === 'text') {
-            text = msg.text?.body || '';
-            mediaType = 'text';
-        } else if (msg.type === 'image') {
-            text = msg.image?.caption || '[Imagen]';
-            mediaType = 'image';
-            // Nota: Meta envía el Media ID. La descarga de medios desde Meta requiere un paso extra
-            // con el token de acceso, por ahora lo pasamos como texto.
-        } else if (msg.type === 'audio') {
-            text = '[Audio]';
-            mediaType = 'audio';
-        } else if (msg.type === 'document') {
-            text = msg.document?.caption || '[Documento]';
-            mediaType = 'document';
-        } else if (msg.type === 'video') {
-            text = msg.video?.caption || '[Video]';
-            mediaType = 'video';
-        } else if (msg.type === 'button') {
-            text = msg.button?.text || '[Botón]';
-            mediaType = 'text';
-        } else if (msg.type === 'interactive') {
-            text = msg.interactive?.button_reply?.title || msg.interactive?.list_reply?.title || '[Interactivo]';
-            mediaType = 'text';
-        } else {
-            text = '[Mensaje no soportado]';
-            mediaType = 'text';
+        // ENFORCE CHANNEL MATCHING PARA META (Evita cruces)
+        const phoneNumberId = change.metadata?.phone_number_id;
+        if (phoneNumberId) {
+            const { data: ch } = await supabaseClient.from('whatsapp_channels').select('id').eq('instance_id', phoneNumberId).maybeSingle();
+            if (ch) {
+                actualChannelId = ch.id;
+            } else {
+                await logTrace(`Bloqueo de seguridad: Mensaje recibido del número ID '${phoneNumberId}', pero no está registrado en Canales WA del CRM. Ignorando para evitar responder desde otro número.`, true);
+                return new Response('channel_not_registered', { status: 200 });
+            }
         }
+
+        if (msg.type === 'text') { text = msg.text?.body || ''; mediaType = 'text'; } 
+        else if (msg.type === 'image') { text = msg.image?.caption || '[Imagen]'; mediaType = 'image'; } 
+        else if (msg.type === 'audio') { text = '[Audio]'; mediaType = 'audio'; } 
+        else if (msg.type === 'document') { text = msg.document?.caption || '[Documento]'; mediaType = 'document'; } 
+        else if (msg.type === 'video') { text = msg.video?.caption || '[Video]'; mediaType = 'video'; } 
+        else { text = '[Mensaje no soportado]'; mediaType = 'text'; }
     } 
     // =====================================================================
     // DETECCIÓN Y PARSEO: GOWA / EVOLUTION API
     // =====================================================================
-    else if (payload.device_id && payload.event) { 
-       if (payload.event !== 'message') return new Response('ignored_event', { status: 200 });
-       const p = payload.payload;
-       if (!p || p.is_from_me) return new Response('ignored_self', { status: 200 });
+    else if ((payload.device_id || payload.instance) && payload.event) { 
+       if (payload.event !== 'message' && payload.event !== 'messages.upsert') return new Response('ignored_event', { status: 200 });
+       
+       // Soportar Gowa y Evolution V1/V2
+       const p = payload.payload || payload.data;
+       if (!p || p.is_from_me || p.fromMe) return new Response('ignored_self', { status: 200 });
 
-       phone = p.from;
-       messageId = p.id;
-       pushName = p.from_name || 'Lead Gowa';
+       // ENFORCE CHANNEL MATCHING PARA GOWA (Evita cruces de instancias nuevas no agregadas)
+       const instanceName = payload.device_id || payload.instance;
+       if (instanceName) {
+           const { data: ch } = await supabaseClient.from('whatsapp_channels').select('id').eq('instance_id', instanceName).maybeSingle();
+           if (ch) {
+               actualChannelId = ch.id;
+           } else {
+               await logTrace(`Bloqueo de seguridad: Gowa envió un mensaje de la instancia '${instanceName}', pero no está agregada en Canales WA del CRM. Ignorando para evitar cruces.`, true);
+               return new Response('channel_not_registered', { status: 200 });
+           }
+       }
 
-       if (p.image) { text = p.body || "[Imagen]"; mediaType = 'image'; } 
-       else if (p.video) { text = p.body || "[Video]"; mediaType = 'video'; } 
-       else if (p.audio) { text = "[Audio]"; mediaType = 'audio'; } 
-       else if (p.document) { text = p.body || "[Documento]"; mediaType = 'document'; } 
-       else if (p.body) { text = p.body; mediaType = 'text'; }
+       phone = p.from || p.key?.remoteJid;
+       if (!phone) return new Response('no_phone', { status: 200 });
+       messageId = p.id || p.key?.id;
+       pushName = p.from_name || p.pushName || 'Lead Gowa';
+
+       if (p.image || p.message?.imageMessage) { text = p.body || p.message?.imageMessage?.caption || "[Imagen]"; mediaType = 'image'; } 
+       else if (p.video || p.message?.videoMessage) { text = p.body || p.message?.videoMessage?.caption || "[Video]"; mediaType = 'video'; } 
+       else if (p.audio || p.message?.audioMessage) { text = "[Audio]"; mediaType = 'audio'; } 
+       else if (p.document || p.message?.documentMessage) { text = p.body || "[Documento]"; mediaType = 'document'; } 
+       else { text = p.body || p.message?.conversation || p.message?.extendedTextMessage?.text || "[Mensaje]"; mediaType = 'text'; }
     } 
-    // Si no coincide con ninguno, lo abortamos
     else {
        return new Response('unknown_payload', { status: 200 });
     }
@@ -116,8 +122,7 @@ serve(async (req) => {
     const { data: existingMsg } = await supabaseClient.from('conversaciones').select('id').contains('metadata', { msgId: messageId }).limit(1).maybeSingle();
     if (existingMsg) return new Response('duplicate', { status: 200 });
 
-    // BUSCAR CREDENCIALES DEL CANAL PARA DESCARGA DINÁMICA (Solo Gowa por ahora)
-    const { data: channelData } = await supabaseClient.from('whatsapp_channels').select('*').eq('id', channelIdParam).maybeSingle();
+    const { data: channelData } = await supabaseClient.from('whatsapp_channels').select('*').eq('id', actualChannelId).maybeSingle();
     let downloadedBlob = null;
     let finalMediaUrl = null;
 
@@ -148,7 +153,6 @@ serve(async (req) => {
         } catch (e) { await logTrace(`Error en descarga multimedia: ${e.message}`, true); }
     }
 
-    // WHISPER (Si es audio)
     if (mediaType === 'audio' && downloadedBlob) {
         const { data: conf } = await supabaseClient.from('app_config').select('value').eq('key', 'openai_api_key').maybeSingle();
         if (conf?.value) {
@@ -167,41 +171,33 @@ serve(async (req) => {
 
     let { data: lead } = await supabaseClient.from('leads').select('*').or(`telefono.ilike.%${senderPhone.slice(-10)}%`).limit(1).maybeSingle();
     if (!lead) {
-      const { data: nl } = await supabaseClient.from('leads').insert({ nombre: pushName, telefono: senderPhone, channel_id: channelIdParam || null }).select().single();
+      const { data: nl } = await supabaseClient.from('leads').insert({ nombre: pushName, telefono: senderPhone, channel_id: actualChannelId || null }).select().single();
       lead = nl;
     } else {
-      await supabaseClient.from('leads').update({ last_message_at: new Date().toISOString(), followup_stage: 0 }).eq('id', lead.id);
+      // Actualiza el channel_id al que recibió el mensaje para asegurar que si le respondemos, salga del correcto
+      await supabaseClient.from('leads').update({ last_message_at: new Date().toISOString(), followup_stage: 0, channel_id: actualChannelId || lead.channel_id }).eq('id', lead.id);
+      lead.channel_id = actualChannelId || lead.channel_id;
     }
 
-    // Guardar el mensaje del cliente en la BD
     await supabaseClient.from('conversaciones').insert({ 
         lead_id: lead.id, emisor: 'CLIENTE', mensaje: text || " ", platform: 'WHATSAPP',
         metadata: { msgId: messageId, mediaUrl: finalMediaUrl, mediaType }
     });
 
-    // === ENRUTAMIENTO AUTOMÁTICO DE COMPROBANTES DE PAGO ===
     if (mediaType === 'image' && finalMediaUrl && lead.buying_intent === 'ALTO') {
        await supabaseClient.from('media_assets').insert({
            title: `Comprobante de ${lead.nombre} (${new Date().toLocaleDateString()})`,
-           url: finalMediaUrl,
-           type: 'IMAGE',
-           category: 'PAYMENT',
-           ai_instructions: `Lead ID: ${lead.id}` 
+           url: finalMediaUrl, type: 'IMAGE', category: 'PAYMENT', ai_instructions: `Lead ID: ${lead.id}` 
        });
        await logTrace(`Comprobante interceptado de ${lead.nombre}. Enviado al Centro Financiero.`, false);
     }
 
-    // 1. ESPERAR A QUE EL ANALISTA TERMINE DE EXTRAER DATOS (Email, Ciudad, Intent)
     await supabaseClient.functions.invoke('analyze-leads', { body: { lead_id: lead.id, force: false } });
 
-    // 2. RECARGAR EL LEAD FRESCO DESDE LA BASE DE DATOS
     const { data: updatedLead } = await supabaseClient.from('leads').select('*').eq('id', lead.id).single();
-    if (updatedLead) {
-        lead = updatedLead;
-    }
+    if (updatedLead) lead = updatedLead;
 
-    // 3. RESPONDER SI LA IA ESTÁ ACTIVA
-    if (!lead.ai_paused) {
+    if (!lead.ai_paused && !isGlobalAiPaused) {
        const { data: configs } = await supabaseClient.from('app_config').select('key, value');
        const configMap = configs?.reduce((acc, item) => ({...acc, [item.key]: item.value}), {});
        const openaiKey = configMap['openai_api_key'];
@@ -234,6 +230,10 @@ serve(async (req) => {
                 metadata: mediaUrlToSend ? { mediaUrl: mediaUrlToSend, mediaType: 'image' } : {}
              });
           }
+       }
+    } else {
+       if (isGlobalAiPaused) {
+           await logTrace(`Mensaje guardado pero IA no respondió porque el KILL SWITCH GLOBAL está activado.`, false);
        }
     }
 

@@ -19,7 +19,7 @@ serve(async (req) => {
     const cleanPhone = phone?.replace(/\D/g, '');
     let { data: lead } = await supabaseClient.from('leads').select('*').eq('telefono', cleanPhone).single();
     
-    if (!lead) return new Response('lead_not_found');
+    if (!lead) return new Response('lead_not_found', { headers: corsHeaders });
 
     // 1. SIEMPRE DISPARAR LA INTELIGENCIA (Extraer datos) Y ESPERAR A QUE TERMINE
     await supabaseClient.functions.invoke('analyze-leads', { body: { lead_id: lead.id } });
@@ -29,9 +29,13 @@ serve(async (req) => {
     if (updatedLead) lead = updatedLead;
 
     // 3. SI EL BOT ESTÁ PAUSADO, AQUÍ TERMINAMOS
-    if (lead.ai_paused) return new Response('skipped_due_to_pause');
+    if (lead.ai_paused) return new Response('skipped_due_to_pause', { headers: corsHeaders });
 
-    // 4. GENERAR RESPUESTA IA CON MEMORIA FRESCA
+    // 4. SI EL KILL SWITCH GLOBAL ESTÁ ACTIVO, TERMINAMOS
+    const { data: globalAiConf } = await supabaseClient.from('app_config').select('value').eq('key', 'global_ai_status').maybeSingle();
+    if (globalAiConf?.value === 'paused') return new Response('skipped_due_to_global_pause', { headers: corsHeaders });
+
+    // 5. GENERAR RESPUESTA IA CON MEMORIA FRESCA
     const { data: configs } = await supabaseClient.from('app_config').select('key, value');
     const configMap = configs?.reduce((acc, item) => ({...acc, [item.key]: item.value}), {});
     const openaiKey = configMap['openai_api_key'];

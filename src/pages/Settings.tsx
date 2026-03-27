@@ -5,9 +5,10 @@ import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Key, Save, Loader2, Clock, MessageSquarePlus, TerminalSquare, Smartphone, DollarSign, ShoppingCart } from 'lucide-react';
+import { Key, Save, Loader2, Clock, MessageSquarePlus, TerminalSquare, Smartphone, DollarSign, ShoppingCart, PowerOff } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/context/AuthContext';
+import { cn } from '@/lib/utils';
 
 import { BankTab, SecretsTab } from '@/components/settings/BankAndSecretsTabs';
 import { TemplatesTab } from '@/components/settings/TemplatesTab';
@@ -30,6 +31,8 @@ const Settings = () => {
   const [globalReplies, setGlobalReplies] = useState<{id: string, title: string, text: string}[]>([]);
   const [wcProducts, setWcProducts] = useState<any[]>([]);
 
+  const [globalAiStatus, setGlobalAiStatus] = useState('active');
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [testingWc, setTestingWc] = useState(false);
@@ -51,6 +54,9 @@ const Settings = () => {
          
          const daysToLostStr = appData.find(c => c.key === 'days_to_lost_lead')?.value;
          if (daysToLostStr) setDaysToLost(daysToLostStr);
+
+         const aiStatus = appData.find(c => c.key === 'global_ai_status')?.value || 'active';
+         setGlobalAiStatus(aiStatus);
       }
 
       const { data: flpData } = await supabase.from('followup_config').select('*');
@@ -67,6 +73,17 @@ const Settings = () => {
     }
   };
 
+  const handleToggleGlobalAi = async () => {
+    const newVal = globalAiStatus === 'active' ? 'paused' : 'active';
+    setGlobalAiStatus(newVal);
+    try {
+      await supabase.from('app_config').upsert({ key: 'global_ai_status', value: newVal, category: 'SYSTEM' }, { onConflict: 'key' });
+      toast.success(newVal === 'paused' ? '🚨 IA GLOBAL DETENIDA POR EMERGENCIA' : '✅ IA GLOBAL REANUDADA');
+    } catch(err: any) {
+      toast.error("Error al cambiar estado de IA: " + err.message);
+    }
+  };
+
   const handleSaveAll = async () => {
     setSaving(true);
     try {
@@ -79,7 +96,7 @@ const Settings = () => {
       ], { onConflict: 'key' });
 
       // 2. Guardado del resto de configuraciones simples
-      const filteredConfigs = configs.filter(c => !['global_tags', 'quick_replies', 'wc_products', 'days_to_lost_lead'].includes(c.key));
+      const filteredConfigs = configs.filter(c => !['global_tags', 'quick_replies', 'wc_products', 'days_to_lost_lead', 'global_ai_status'].includes(c.key));
       if (filteredConfigs.length > 0) {
          const updates = filteredConfigs.map(c => ({ 
             key: c.key, value: c.value, category: c.category || 'SYSTEM', updated_at: new Date().toISOString()
@@ -141,10 +158,8 @@ const Settings = () => {
       }
   };
 
-  // Convertimos el array de configs en un objeto simple llave-valor para pasarlo al KernelTab
   const kernelConfigObj = configs.reduce((acc, c) => ({ ...acc, [c.key]: c.value }), {});
 
-  // WooCommerce Handlers
   const handleAddProduct = () => setWcProducts([...wcProducts, { id: Date.now().toString(), wc_id: '', title: '', price: '', prompt: '' }]);
   const handleUpdateProduct = (id: string, field: string, value: string) => setWcProducts(wcProducts.map(p => p.id === id ? { ...p, [field]: value } : p));
   const handleRemoveProduct = (id: string) => setWcProducts(wcProducts.filter(p => p.id !== id));
@@ -156,9 +171,19 @@ const Settings = () => {
       <div className="max-w-6xl mx-auto space-y-8 pb-12 animate-in fade-in duration-500">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div><h1 className="text-3xl font-bold text-white tracking-tight">Centro de Control</h1><p className="text-slate-400">Gestión de flota multicanal, plantillas y retargeting.</p></div>
-          <Button onClick={handleSaveAll} disabled={saving} className="bg-indigo-600 hover:bg-indigo-700 shadow-lg px-8 rounded-xl font-bold uppercase tracking-widest text-[10px] h-11">
-            {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />} Guardar Cambios
-          </Button>
+          <div className="flex gap-3">
+             <Button 
+                onClick={handleToggleGlobalAi} 
+                variant={globalAiStatus === 'active' ? 'destructive' : 'default'} 
+                className={cn("shadow-lg px-6 rounded-xl font-bold uppercase tracking-widest text-[10px] h-11 transition-all", globalAiStatus === 'active' ? 'bg-red-600 hover:bg-red-700 text-white' : 'bg-emerald-600 hover:bg-emerald-700 text-slate-950')}
+             >
+               <PowerOff className="w-4 h-4 mr-2" />
+               {globalAiStatus === 'active' ? 'APAGAR IA GLOBAL (EMERGENCIA)' : 'ENCENDER IA GLOBAL'}
+             </Button>
+             <Button onClick={handleSaveAll} disabled={saving} className="bg-indigo-600 hover:bg-indigo-700 shadow-lg px-8 rounded-xl font-bold uppercase tracking-widest text-[10px] h-11">
+               {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />} Guardar Cambios
+             </Button>
+          </div>
         </div>
 
         <Tabs value={activeTab} onValueChange={v => setSearchParams({ tab: v })}>
