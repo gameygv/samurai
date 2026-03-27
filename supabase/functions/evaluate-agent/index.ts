@@ -24,14 +24,16 @@ serve(async (req) => {
     const bankInfo = `Banco: ${getConfig('bank_name')}\nCuenta: ${getConfig('bank_account')}\nCLABE: ${getConfig('bank_clabe')}\nTitular: ${getConfig('bank_holder')}`;
     const productsStr = getConfig('wc_products') || '[]';
 
+    // Se actualizó el prompt para no penalizar cuentas bancarias diferentes, sino extraerlas pacíficamente.
     const pQaAuditor = getConfig('prompt_qa_auditor', `
 Eres el Auditor de Calidad (QA). Evalúa este mensaje enviado por un VENDEDOR HUMANO a un cliente.
 Reglas:
 1. SCORE (0-100): Evalúa ortografía y persuasión.
 2. TONE_ANALYSIS: Describe en 5 palabras el tono.
-3. ANOMALY_DETECTED (CRÍTICO): PON TRUE SI da cuenta bancaria o precios falsos, o es grosero. Si no, false.
+3. ANOMALY_DETECTED (CRÍTICO): PON TRUE SI el agente da precios falsos, insulta o es grosero. (¡ATENCIÓN! Dar cuentas bancarias diferentes NO es una anomalía, los agentes tienen permitido usar sus propias cuentas).
 4. ANOMALY_DETAILS: Explica la anomalía si existe, si no, null.
-Responde ÚNICAMENTE con JSON: {"score": 85, "tone_analysis": "Amable", "anomaly_detected": false, "anomaly_details": null}
+5. BANK_ACCOUNT_OFFERED: Si el mensaje contiene números de cuenta, tarjetas, CLABE o nombres de bancos proporcionados por el agente, extráelos textualmente (ej: "Banamex 1234567890"). Si no hay, pon null.
+Responde ÚNICAMENTE con JSON: {"score": 85, "tone_analysis": "Amable", "anomaly_detected": false, "anomaly_details": null, "bank_account_offered": null}
     `);
 
     const auditPrompt = `
@@ -72,6 +74,19 @@ ${pQaAuditor}
     if (result.anomaly_detected) {
         await supabaseClient.from('activity_logs').insert({
             action: 'ERROR', resource: 'USERS', description: `🚨 ALERTA QA (Vendedor): ${result.anomaly_details}`, status: 'ERROR'
+        });
+    }
+
+    // TRACKING SILENCIOSO DE CUENTAS BANCARIAS
+    if (result.bank_account_offered) {
+        const { data: agent } = await supabaseClient.from('profiles').select('full_name').eq('id', agent_id).maybeSingle();
+        const { data: lead } = await supabaseClient.from('leads').select('nombre').eq('id', lead_id).maybeSingle();
+        
+        await supabaseClient.from('activity_logs').insert({
+            action: 'UPDATE', 
+            resource: 'USERS', 
+            description: `🏦 TRACKING BANCARIO: El agente ${agent?.full_name || 'Desconocido'} le envió la cuenta [${result.bank_account_offered}] al cliente ${lead?.nombre || 'Desconocido'}.`, 
+            status: 'OK'
         });
     }
 

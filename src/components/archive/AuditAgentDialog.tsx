@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Loader2, ShieldCheck, Award, Zap, TrendingUp, AlertTriangle } from 'lucide-react';
+import { Loader2, ShieldCheck, Award, Zap, TrendingUp, AlertTriangle, CreditCard } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -80,6 +80,18 @@ export const AuditAgentDialog = ({ open, onOpenChange, leadId, agentName }: Audi
                     <span className="text-3xl font-mono font-bold">{audit.score}</span>
                  </div>
               </div>
+
+              {/* SECCIÓN NUEVA: TRACKING BANCARIO */}
+              {audit.accounts_provided && audit.accounts_provided.length > 0 && (
+                 <div className="p-4 bg-slate-900 border border-slate-800 rounded-xl space-y-2 mb-6">
+                    <h4 className="text-[10px] uppercase font-bold text-indigo-400 flex items-center gap-1.5"><CreditCard className="w-3.5 h-3.5"/> Cuentas Bancarias Proporcionadas</h4>
+                    <ul className="space-y-1.5">
+                      {audit.accounts_provided.map((acc: string, i: number) => (
+                         <li key={i} className="text-xs text-slate-300 font-mono bg-slate-950 p-2 rounded-lg border border-slate-800">{acc}</li>
+                      ))}
+                    </ul>
+                 </div>
+              )}
 
               <div className="space-y-4 mb-6">
                 <div className="space-y-2">

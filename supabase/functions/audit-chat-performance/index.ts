@@ -36,7 +36,8 @@ serve(async (req) => {
           score: 100,
           strengths: ["El bot manejó toda la conversación."],
           weaknesses: ["El asesor humano no ha intervenido."],
-          conclusion: "Atención automatizada al 100% por la IA. El agente aún no toma el control."
+          conclusion: "Atención automatizada al 100% por la IA. El agente aún no toma el control.",
+          accounts_provided: []
        }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
@@ -50,15 +51,15 @@ Evalúa lo siguiente:
 1. Tiempo de respuesta (si contestó rápidamente después de un mensaje del cliente o tras pausar a la IA).
 2. Empatía, amabilidad y ortografía.
 3. Habilidad y agresividad comercial (si está cerrando la venta o resolviendo dudas eficazmente).
-
-Proporciona un puntaje del 0 al 100 y una breve crítica.
+4. Extracción de cuentas: Identifica TODAS las cuentas bancarias, tarjetas o CLABEs que el HUMANO le haya enviado al cliente durante la conversación.
 
 RESPONDE ESTRICTAMENTE EN JSON:
 {
   "score": 85,
   "strengths": ["...", "..."],
   "weaknesses": ["...", "..."],
-  "conclusion": "Resumen ejecutivo..."
+  "conclusion": "Resumen ejecutivo...",
+  "accounts_provided": ["Banamex 1234...", "Oxxo Pay 9876..."] // Array vacío si no mandó ninguna
 }
 
 Transcripción del Chat:
