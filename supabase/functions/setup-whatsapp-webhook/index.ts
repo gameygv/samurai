@@ -16,21 +16,20 @@ serve(async (req) => {
     let endpoint = channel.api_url;
     if (endpoint.endsWith('/')) endpoint = endpoint.slice(0, -1);
     
-    // Tratamos de abarcar las diferentes autenticaciones de Gowa / Evolution
     const authHeader = channel.api_key.startsWith('Basic ') ? channel.api_key : `Bearer ${channel.api_key}`;
     const headers = {
        'Content-Type': 'application/json',
        'Authorization': authHeader,
        'X-Device-Id': channel.instance_id,
-       'apikey': channel.api_key // Evolution API suele pedir esto
+       'apikey': channel.api_key // Evolution API
     };
 
-    // GOWA suele usar /webhook con un payload de URL y ENABLED.
     const urlToCall = `${endpoint}/webhook`; 
     const bodyToCall = { 
        url: webhookUrl, 
        enabled: true, 
-       webhook: webhookUrl // Evolution API v1
+       webhook: webhookUrl, // Evolution v1 fallback
+       events: ["MESSAGES_UPSERT", "MESSAGES_UPDATE", "SEND_MESSAGE"] // Evolution v2 asegura salientes
     }; 
     
     console.log(`[Webhook-Setup] Enviando inyección a ${urlToCall} para el instance: ${channel.instance_id}`);
@@ -42,11 +41,7 @@ serve(async (req) => {
     });
 
     const text = await response.text();
-    console.log(`[Webhook-Setup] Respuesta de Gowa:`, text);
-
-    if (!response.ok) {
-        throw new Error(`Servidor Gowa rechazó la petición (${response.status}): ${text}`);
-    }
+    if (!response.ok) throw new Error(`Servidor Gowa rechazó la petición (${response.status}): ${text}`);
 
     return new Response(JSON.stringify({ success: true, meta: text }), { 
        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
@@ -55,7 +50,7 @@ serve(async (req) => {
   } catch (err: any) {
     console.error("[Webhook-Setup] Error:", err.message);
     return new Response(JSON.stringify({ error: err.message }), { 
-       status: 200, // Mandamos 200 para que el frontend maneje el JSON.error gracefully
+       status: 200, 
        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
     });
   }
