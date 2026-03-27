@@ -76,10 +76,22 @@ export default function ChatViewer({ lead, open, onOpenChange }: ChatViewerProps
 
   const fetchQuickActions = async () => {
     if(!user) return;
-    const { data } = await supabase.from('app_config').select('key, value').in('key', ['wc_url', 'bank_name', 'bank_account', 'bank_clabe', 'bank_holder', 'quick_replies', 'wc_products', `agent_templates_${user.id}`]);
+    const { data } = await supabase.from('app_config').select('key, value').in('key', ['wc_url', 'bank_name', 'bank_account', 'bank_clabe', 'bank_holder', 'quick_replies', 'wc_products', `agent_templates_${user.id}`, `agent_bank_${user.id}`]);
     if (data) {
        const config: any = data.reduce((acc, item) => ({...acc, [item.key]: item.value}), {});
-       setQuickActions({ wcBaseUrl: config.wc_url || '', bankInfo: `Banco: ${config.bank_name}\nCuenta: ${config.bank_account}\nCLABE: ${config.bank_clabe}\nTitular: ${config.bank_holder}` });
+       
+       let finalBankInfo = `Banco: ${config.bank_name}\nCuenta: ${config.bank_account}\nCLABE: ${config.bank_clabe}\nTitular: ${config.bank_holder}`;
+       
+       if (config[`agent_bank_${user.id}`]) {
+           try {
+               const agentBank = JSON.parse(config[`agent_bank_${user.id}`]);
+               if (agentBank.enabled) {
+                   finalBankInfo = `Banco: ${agentBank.bank_name}\nCuenta: ${agentBank.bank_account}\nCLABE: ${agentBank.bank_clabe}\nTitular: ${agentBank.bank_holder}`;
+               }
+           } catch(e) {}
+       }
+
+       setQuickActions({ wcBaseUrl: config.wc_url || '', bankInfo: finalBankInfo });
        
        try { if (config.quick_replies) { const parsed = JSON.parse(config.quick_replies); if (Array.isArray(parsed)) setGlobalReplies(parsed); } } catch (e) {}
        try { if (config[`agent_templates_${user.id}`]) { const parsed = JSON.parse(config[`agent_templates_${user.id}`]); if (Array.isArray(parsed)) setLocalReplies(parsed); } } catch (e) {}

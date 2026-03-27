@@ -52,7 +52,20 @@ serve(async (req) => {
         }
     }
 
-    const bankInfo = `Banco: ${getConfig('bank_name')}\nCuenta: ${getConfig('bank_account')}\nCLABE: ${getConfig('bank_clabe')}\nTitular: ${getConfig('bank_holder')}`;
+    // --- CARGAR CUENTA BANCARIA (GLOBAL O DEL AGENTE) ---
+    let bankInfo = `Banco: ${getConfig('bank_name')}\nCuenta: ${getConfig('bank_account')}\nCLABE: ${getConfig('bank_clabe')}\nTitular: ${getConfig('bank_holder')}`;
+    
+    if (lead.assigned_to) {
+        const agentBankRaw = getConfig(`agent_bank_${lead.assigned_to}`);
+        if (agentBankRaw) {
+            try {
+                const agentBank = JSON.parse(agentBankRaw);
+                if (agentBank.enabled) {
+                    bankInfo = `Banco: ${agentBank.bank_name}\nCuenta: ${agentBank.bank_account}\nCLABE: ${agentBank.bank_clabe}\nTitular: ${agentBank.bank_holder}`;
+                }
+            } catch(e) {}
+        }
+    }
 
     // AQUI ESTÁ LA PROTECCIÓN CRÍTICA PARA DATOS Y PAGOS
     const activeLeadMemory = `
