@@ -33,15 +33,21 @@ const Leads = () => {
   const [localTags, setLocalTags] = useState<any[]>([]);
 
   useEffect(() => { 
-    fetchLeads(); 
-    if (user) fetchTags();
+    if (user) {
+        fetchLeads(); 
+        fetchTags();
+    }
   }, [user]);
 
   const fetchLeads = async () => {
     setLoading(true);
     try {
+      // FILTRO DE PRIVACIDAD: Si no es manager, solo ve lo asignado a él
       let query = supabase.from('leads').select('*').order('last_message_at', { ascending: false });
-      if (!isManager && user?.id) query = query.eq('assigned_to', user.id);
+      
+      if (!isManager) {
+          query = query.eq('assigned_to', user?.id);
+      }
       
       const { data, error } = await query;
       if (error) throw error;
@@ -121,20 +127,22 @@ const Leads = () => {
               <div className="p-2 bg-amber-500/10 rounded-xl border border-amber-500/20">
                 <Target className="w-6 h-6 text-amber-500" />
               </div>
-              Radar Leads
+              Radar Leads {!isManager && <span className="text-slate-500 font-normal text-lg ml-2">| Mis Asignados</span>}
             </h1>
             <p className="text-slate-500 text-sm mt-1">Monitoreo de inteligencia y embudo en tiempo real.</p>
           </div>
           <div className="flex gap-3">
-            <Button 
-              variant="outline" 
-              className="border-[#333336] bg-[#0a0a0c] hover:bg-[#161618] text-amber-500 h-10 px-4 font-bold rounded-xl text-[10px] uppercase tracking-widest"
-              onClick={handleRunMassAnalysis}
-              disabled={analyzing}
-            >
-              {analyzing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Sparkles className="w-4 h-4 mr-2" />}
-              Forzar Análisis IA
-            </Button>
+            {isManager && (
+              <Button 
+                variant="outline" 
+                className="border-[#333336] bg-[#0a0a0c] hover:bg-[#161618] text-amber-500 h-10 px-4 font-bold rounded-xl text-[10px] uppercase tracking-widest"
+                onClick={handleRunMassAnalysis}
+                disabled={analyzing}
+              >
+                {analyzing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Sparkles className="w-4 h-4 mr-2" />}
+                Forzar Análisis IA
+              </Button>
+            )}
             <Button onClick={() => setIsCreateOpen(true)} className="bg-indigo-600 hover:bg-indigo-700 text-white p-2.5 px-6 rounded-xl shadow-lg transition-all font-bold text-[10px] uppercase tracking-widest">
               <UserPlus className="w-4 h-4 mr-2" /> Nuevo Lead
             </Button>
@@ -203,7 +211,7 @@ const Leads = () => {
               {loading ? (
                 <TableRow><TableCell colSpan={5} className="h-60 text-center"><Loader2 className="animate-spin inline-block text-indigo-500" /></TableCell></TableRow>
               ) : filtered.length === 0 ? (
-                <TableRow><TableCell colSpan={5} className="h-60 text-center text-slate-600 italic text-[10px] uppercase font-bold tracking-widest">No hay leads que coincidan.</TableCell></TableRow>
+                <TableRow><TableCell colSpan={5} className="h-60 text-center text-slate-600 italic text-[10px] uppercase font-bold tracking-widest">No tienes leads asignados que coincidan.</TableCell></TableRow>
               ) : (
                 filtered.map(lead => (
                   <LeadRow 

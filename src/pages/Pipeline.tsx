@@ -36,15 +36,17 @@ const Pipeline = () => {
   const [showLost, setShowLost] = useState<boolean>(false);
 
   useEffect(() => {
-    fetchLeads();
-    if (user) fetchTags();
-    supabase.from('profiles').select('id, full_name').then(({data}) => {
-       if (data) {
-          const map: any = {};
-          data.forEach(d => map[d.id] = d.full_name);
-          setAgentsMap(map);
-       }
-    });
+    if (user) {
+        fetchLeads();
+        fetchTags();
+        supabase.from('profiles').select('id, full_name').then(({data}) => {
+           if (data) {
+              const map: any = {};
+              data.forEach(d => map[d.id] = d.full_name);
+              setAgentsMap(map);
+           }
+        });
+    }
 
     const channel = supabase.channel('pipeline-live').on('postgres_changes', { event: '*', schema: 'public', table: 'leads' }, () => fetchLeads()).subscribe();
     return () => { supabase.removeChannel(channel); };
@@ -53,7 +55,12 @@ const Pipeline = () => {
   const fetchLeads = async () => {
     setLoading(true);
     let query = supabase.from('leads').select('*').order('last_message_at', { ascending: false });
-    if (!isManager) query = query.eq('assigned_to', user?.id);
+    
+    // FILTRO DE PRIVACIDAD
+    if (!isManager) {
+        query = query.eq('assigned_to', user?.id);
+    }
+    
     const { data } = await query;
     if (data) setLeads(data);
     setLoading(false);
@@ -112,7 +119,7 @@ const Pipeline = () => {
                  <Trello className="w-6 h-6 text-indigo-400" />
               </div>
               <div>
-                 <h1 className="text-xl font-bold text-white">Embudo de Ventas (Pipeline)</h1>
+                 <h1 className="text-xl font-bold text-white">Embudo de Ventas {!isManager && <span className="font-normal opacity-50">| Mis Prospectos</span>}</h1>
                  <p className="text-xs text-slate-500 mt-0.5">Arrastra las tarjetas para cambiar su etapa de maduración.</p>
               </div>
            </div>
@@ -136,7 +143,7 @@ const Pipeline = () => {
                     </SelectContent>
                  </Select>
               )}
-              <Button onClick={() => setIsCreateOpen(true)} className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold h-11 px-6 rounded-xl shadow-lg uppercase tracking-widest text-xs">
+              <Button onClick={() => setIsCreateOpen(true)} className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold h-11 px-6 rounded-xl shadow-lg uppercase tracking-widest text-xs">
                  <UserPlus className="w-4 h-4 mr-2" /> Nuevo Lead
               </Button>
            </div>
