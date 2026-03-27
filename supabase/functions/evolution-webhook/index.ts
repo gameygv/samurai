@@ -52,12 +52,11 @@ serve(async (req) => {
     const isGlobalAiPaused = configMap['global_ai_status'] === 'paused';
     const routingMode = configMap['channel_routing_mode'] || 'auto';
     let channelAgentMap = {};
-    try { 
-        channelAgentMap = JSON.parse(configMap['channel_agent_map'] || '{}'); 
-    } catch(e) {}
+    try { channelAgentMap = JSON.parse(configMap['channel_agent_map'] || '{}'); } catch(e) {}
 
     let phone, text = '', pushName = 'Cliente WA', mediaType = null, messageId = null;
     let actualChannelId = channelIdParam;
+    let isFromMe = false;
 
     // =====================================================================
     // DETECCIÓN Y PARSEO: META CLOUD API
@@ -74,16 +73,13 @@ serve(async (req) => {
         messageId = msg.id;
         pushName = contact?.profile?.name || 'Lead Meta';
 
-        // ENFORCE CHANNEL MATCHING PARA META (Evita cruces)
+        // Meta no suele enviar eventos de "fromMe" al webhook de mensajes estándar en Cloud API de la misma manera
+        // Pero lo preparamos por si acaso.
+        
         const phoneNumberId = change.metadata?.phone_number_id;
         if (phoneNumberId) {
             const { data: ch } = await supabaseClient.from('whatsapp_channels').select('id').eq('instance_id', phoneNumberId).maybeSingle();
-            if (ch) {
-                actualChannelId = ch.id;
-            } else {
-                await logTrace(`Bloqueo de seguridad: Mensaje recibido del número ID '${phoneNumberId}', pero no está registrado en Canales WA del CRM. Ignorando para evitar responder desde otro número.`, true);
-                return new Response('channel_not_registered', { status: 200 });
-            }
+            if (ch) actualChannelId = ch.id;
         }
 
         if (msg.type === 'text') { text = msg.text?.body || ''; mediaType = 'text'; } 
@@ -99,24 +95,21 @@ serve(async (req) => {
     else if ((payload.device_id || payload.instance) && payload.event) { 
        if (payload.event !== 'message' && payload.event !== 'messages.upsert') return new Response('ignored_event', { status: 200 });
        
-       // Soportar Gowa y Evolution V1/V2
        const p = payload.payload || payload.data;
-       if (!p || p.is_from_me || p.fromMe) return new Response('ignored_self', { status: 200 });
+       if (!p) return new Response('ignored_empty', { status: 200 });
+       
+       isFromMe = p.is_from_me || p.fromMe || false;
 
-       // ENFORCE CHANNEL MATCHING PARA GOWA (Evita cruces de instancias nuevas no agregadas)
        const instanceName = payload.device_id || payload.instance;
        if (instanceName) {
            const { data: ch } = await supabaseClient.from('whatsapp_channels').select('id').eq('instance_id', instanceName).maybeSingle();
-           if (ch) {
-               actualChannelId = ch.id;
-           } else {
-               await logTrace(`Bloqueo de seguridad: Gowa envió un mensaje de la instancia '${instanceName}', pero no está agregada en Canales WA del CRM. Ignorando para evitar cruces.`, true);
-               return new Response('channel_not_registered', { status: 200 });
-           }
+           if (ch) actualChannelId = ch.id;
        }
 
-       phone = p.from || p.key?.remoteJid;
+       // Si es del agente, el remoteJid es el cliente. Si es del cliente, el remoteJid es el cliente.
+       phone = isFromMe ? (p.to || p.key?.remoteJid) : (p.from || p.key?.remoteJid);
        if (!phone) return new Response('no_phone', { status: 200 });
+       
        messageId = p.id || p.key?.id;
        pushName = p.from_name || p.pushName || 'Lead Gowa';
 
@@ -139,6 +132,66 @@ serve(async (req) => {
     const { data: channelData } = await supabaseClient.from('whatsapp_channels').select('*').eq('id', actualChannelId).maybeSingle();
     const isChannelActive = channelData?.is_active !== false;
 
+    // RESOLUCIÓN DEL AGENTE Y LEAD
+    let assignedAgent = routingMode === 'channel' ? (channelAgentMap[actualChannelId] || null) : null;
+
+    let { data: lead } = await supabaseClient.from('leads').select('*').or(`telefono.ilike.%${senderPhone.slice(-10)}%`).limit(1).maybeSingle();
+    if (!lead) {
+        if (isFromMe) return new Response('ignore_new_lead_from_me', { status: 200 }); // Evitar crear leads si el agente manda mensaje a alguien no registrado
+
+        const { data: nl } = await supabaseClient.from('leads').insert({ 
+           nombre: pushName, 
+           telefono: senderPhone, 
+           channel_id: actualChannelId || null,
+           assigned_to: assignedAgent
+        }).select().single();
+        lead = nl;
+    } else {
+        const updates: any = { 
+           last_message_at: new Date().toISOString(), 
+           channel_id: actualChannelId || lead.channel_id 
+        };
+        
+        // El cliente contestó, reiniciamos el funnel de retargeting
+        if (!isFromMe) updates.followup_stage = 0;
+
+        if (assignedAgent && lead.assigned_to !== assignedAgent) {
+           updates.assigned_to = assignedAgent;
+        }
+
+        await supabaseClient.from('leads').update(updates).eq('id', lead.id);
+        lead.channel_id = updates.channel_id;
+        if (updates.assigned_to) lead.assigned_to = updates.assigned_to;
+    }
+
+    // =====================================================================
+    // MANEJO DE MENSAJES ENVIADOS POR EL AGENTE (isFromMe = true)
+    // =====================================================================
+    if (isFromMe) {
+        const cmd = text.trim().toUpperCase();
+        
+        if (cmd === '#STOP' || cmd === '#START') {
+            const isPaused = cmd === '#STOP';
+            await supabaseClient.from('leads').update({ ai_paused: isPaused }).eq('id', lead.id);
+            await supabaseClient.from('conversaciones').insert({
+                lead_id: lead.id, emisor: 'SISTEMA', platform: 'PANEL_INTERNO',
+                mensaje: `IA ${isPaused ? 'Pausada' : 'Activada'} por comando desde WhatsApp.`
+            });
+            return new Response('command_processed', { status: 200, headers: corsHeaders });
+        }
+
+        // Si no es comando, registramos el mensaje del humano en el CRM y no disparamos IA
+        await supabaseClient.from('conversaciones').insert({ 
+            lead_id: lead.id, emisor: 'HUMANO', mensaje: text, platform: 'WHATSAPP',
+            metadata: { msgId: messageId, mediaType, source: 'whatsapp_web' }
+        });
+
+        return new Response('human_message_saved', { status: 200, headers: corsHeaders });
+    }
+
+    // =====================================================================
+    // MANEJO DE MULTIMEDIA DEL CLIENTE (isFromMe = false)
+    // =====================================================================
     let downloadedBlob = null;
     let finalMediaUrl = null;
 
@@ -184,35 +237,7 @@ serve(async (req) => {
         }
     }
 
-    // RESOLUCIÓN DEL AGENTE (VÍNCULO DIRECTO O AUTO)
-    let assignedAgent = routingMode === 'channel' ? (channelAgentMap[actualChannelId] || null) : null;
-
-    let { data: lead } = await supabaseClient.from('leads').select('*').or(`telefono.ilike.%${senderPhone.slice(-10)}%`).limit(1).maybeSingle();
-    if (!lead) {
-      const { data: nl } = await supabaseClient.from('leads').insert({ 
-         nombre: pushName, 
-         telefono: senderPhone, 
-         channel_id: actualChannelId || null,
-         assigned_to: assignedAgent
-      }).select().single();
-      lead = nl;
-    } else {
-      const updates: any = { 
-         last_message_at: new Date().toISOString(), 
-         followup_stage: 0, 
-         channel_id: actualChannelId || lead.channel_id 
-      };
-      
-      // Si el modo es por canal y el canal tiene un agente, forzamos que todos los que escriban ahí sean de él.
-      if (assignedAgent && lead.assigned_to !== assignedAgent) {
-         updates.assigned_to = assignedAgent;
-      }
-
-      await supabaseClient.from('leads').update(updates).eq('id', lead.id);
-      lead.channel_id = updates.channel_id;
-      if (updates.assigned_to) lead.assigned_to = updates.assigned_to;
-    }
-
+    // REGISTRO DE MENSAJE DEL CLIENTE
     await supabaseClient.from('conversaciones').insert({ 
         lead_id: lead.id, emisor: 'CLIENTE', mensaje: text || " ", platform: 'WHATSAPP',
         metadata: { msgId: messageId, mediaUrl: finalMediaUrl, mediaType }
@@ -226,11 +251,57 @@ serve(async (req) => {
        await logTrace(`Comprobante interceptado de ${lead.nombre}. Enviado al Centro Financiero.`, false);
     }
 
+    // EXTRAER DATOS (SIEMPRE ACTIVO)
     await supabaseClient.functions.invoke('analyze-leads', { body: { lead_id: lead.id, force: false } });
 
+    // =====================================================================
+    // CONTROL DE HORARIOS (Si la IA estaba pausada, verificar horario)
+    // =====================================================================
     const { data: updatedLead } = await supabaseClient.from('leads').select('*').eq('id', lead.id).single();
     if (updatedLead) lead = updatedLead;
 
+    if (lead.ai_paused && lead.assigned_to) {
+        const { data: schedData } = await supabaseClient.from('app_config').select('value').eq('key', `agent_schedule_${lead.assigned_to}`).maybeSingle();
+        if (schedData?.value) {
+            try {
+                const schedule = JSON.parse(schedData.value);
+                if (schedule.enabled && schedule.start && schedule.end) {
+                    const now = new Date();
+                    // Ajuste aprox a CST (UTC-6)
+                    const cstHour = (now.getUTCHours() - 6 + 24) % 24;
+                    const currentMinutes = cstHour * 60 + now.getUTCMinutes();
+
+                    const [startH, startM] = schedule.start.split(':').map(Number);
+                    const [endH, endM] = schedule.end.split(':').map(Number);
+                    const startMinutes = startH * 60 + startM;
+                    const endMinutes = endH * 60 + endM;
+
+                    let isWorkingHours = false;
+                    if (startMinutes <= endMinutes) {
+                        isWorkingHours = currentMinutes >= startMinutes && currentMinutes <= endMinutes;
+                    } else {
+                        // Cruza la medianoche (ej 22:00 a 08:00)
+                        isWorkingHours = currentMinutes >= startMinutes || currentMinutes <= endMinutes;
+                    }
+
+                    // Si está FUERA del horario de trabajo, la IA DEBE contestar.
+                    if (!isWorkingHours) {
+                        lead.ai_paused = false;
+                        await supabaseClient.from('leads').update({ ai_paused: false }).eq('id', lead.id);
+                        await supabaseClient.from('conversaciones').insert({
+                            lead_id: lead.id, emisor: 'SISTEMA', platform: 'PANEL_INTERNO',
+                            mensaje: `IA auto-activada. El asesor está fuera de su turno (${schedule.start} - ${schedule.end}).`
+                        });
+                        await logTrace(`Auto-IA activada para ${lead.nombre} (Fuera de horario).`);
+                    }
+                }
+            } catch(e) { console.error("Error parseando horario:", e); }
+        }
+    }
+
+    // =====================================================================
+    // RESPUESTA DE LA IA
+    // =====================================================================
     if (!lead.ai_paused && !isGlobalAiPaused && isChannelActive) {
        const openaiKey = configMap['openai_api_key'];
 
