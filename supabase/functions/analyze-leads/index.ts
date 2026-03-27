@@ -33,8 +33,13 @@ serve(async (req) => {
     const configMap = configs?.reduce((acc, item) => ({...acc, [item.key]: item.value}), {});
     const apiKey = configMap['openai_api_key'];
 
+    const autoRoutingAgentsStr = configMap['auto_routing_agents'] || '[]';
+    let autoRoutingAgents = [];
+    try { autoRoutingAgents = JSON.parse(autoRoutingAgentsStr); } catch(e) {}
+
     const { data: agents } = await supabaseClient.from('profiles').select('id, full_name, territories').eq('is_active', true);
-    const agentsContext = agents?.map(a => `- ID: ${a.id}, Nombre: ${a.full_name}, Zonas: ${a.territories?.join(', ') || 'GLOBAL'}`).join('\n');
+    const validAgents = agents?.filter(a => autoRoutingAgents.includes(a.id)) || [];
+    const agentsContext = validAgents.map(a => `- ID: ${a.id}, Nombre: ${a.full_name}, Zonas: ${a.territories?.join(', ') || 'GLOBAL'}`).join('\n');
 
     const results = [];
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -58,6 +63,11 @@ DATOS GEOGRÁFICOS (CRÍTICO):
 1. Si el cliente menciona una ciudad (ej: Monterrey), DEBES identificar el ESTADO (ej: Nuevo Leon) y el CÓDIGO POSTAL (CP) más representativo de esa zona.
 2. Si el cliente da su CP exacto, úsalo. Si no, calcúlalo tú basándote en la ciudad.
 3. El CP es vital para la calidad del match en Facebook Ads.
+
+AGENTES DISPONIBLES PARA AUTO-ROUTING:
+${agentsContext || 'NINGUNO DISPONIBLE'}
+
+Si logras identificar la ciudad, sugiere el ID del agente correspondiente según sus zonas. Si no hay agente o no hay ciudad, pon null.
 
 RESPONDE SOLO JSON: {
   "nombre": "...", 

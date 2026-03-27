@@ -18,6 +18,10 @@ serve(async (req) => {
     const getConfig = (key) => configs?.find(c => c.key === key)?.value || null;
     const defaultCh = getConfig('default_notification_channel');
 
+    const autoRoutingAgentsStr = getConfig('auto_routing_agents') || '[]';
+    let autoRoutingAgents = [];
+    try { autoRoutingAgents = JSON.parse(autoRoutingAgentsStr); } catch(e) {}
+
     const { data: inactiveChannels } = await supabaseClient.from('whatsapp_channels').select('id').eq('is_active', false);
     const inactiveChannelIds = inactiveChannels?.map(c => c.id) || [];
 
@@ -114,12 +118,14 @@ serve(async (req) => {
     // 3. AUTO-ROUTING BATCH (Asignación de huérfanos) + NOTIFICACIÓN
     // ========================================================
     const { data: activeAgents } = await supabaseClient.from('profiles').select('id, phone, full_name, territories').eq('is_active', true);
+    const validRoutingAgents = activeAgents?.filter(a => autoRoutingAgents.includes(a.id)) || [];
+    
     const { data: orphanLeads } = await supabaseClient.from('leads').select('id, nombre, ciudad, telefono').is('assigned_to', null).not('ciudad', 'is', null);
     
-    if (orphanLeads && orphanLeads.length > 0 && activeAgents) {
+    if (orphanLeads && orphanLeads.length > 0 && validRoutingAgents.length > 0) {
         for (const ol of orphanLeads) {
             const cityNorm = ol.ciudad.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-            for (const agent of activeAgents) {
+            for (const agent of validRoutingAgents) {
                 if (!agent.territories) continue;
                 const match = agent.territories.some((t: string) => {
                     const tNorm = t.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
