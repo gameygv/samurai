@@ -34,11 +34,44 @@ serve(async (req) => {
         if (!change || change.statuses) return new Response('ok', { status: 200 });
         const msg = change.messages?.[0];
         if (!msg) return new Response('ok', { status: 200 });
-        
+
+        // Ignorar reacciones (no son mensajes reales)
+        if (msg.type === 'reaction') return new Response('ok', { status: 200 });
+
         phone = msg.from;
         messageId = msg.id;
         pushName = change.contacts?.[0]?.profile?.name || 'Lead WhatsApp';
-        text = msg.text?.body || msg.image?.caption || '[Mensaje]';
+
+        // Parseo completo de TODOS los tipos de mensaje de Meta Cloud API
+        if (msg.type === 'text') {
+            text = msg.text?.body || '';
+        } else if (msg.type === 'image') {
+            text = msg.image?.caption || '[Imagen]';
+        } else if (msg.type === 'video') {
+            text = msg.video?.caption || '[Video]';
+        } else if (msg.type === 'audio') {
+            text = '[Nota de Voz]';
+        } else if (msg.type === 'document') {
+            text = msg.document?.caption || `[Documento: ${msg.document?.filename || 'archivo'}]`;
+        } else if (msg.type === 'sticker') {
+            text = '[Sticker]';
+        } else if (msg.type === 'location') {
+            const lat = msg.location?.latitude || '';
+            const lng = msg.location?.longitude || '';
+            text = `[Ubicacion: ${lat}, ${lng}]`;
+        } else if (msg.type === 'contacts') {
+            const contactName = msg.contacts?.[0]?.name?.formatted_name || 'contacto';
+            text = `[Contacto: ${contactName}]`;
+        } else if (msg.type === 'button') {
+            text = msg.button?.text || '[Respuesta de boton]';
+        } else if (msg.type === 'interactive') {
+            text = msg.interactive?.button_reply?.title || msg.interactive?.list_reply?.title || msg.interactive?.nfm_reply?.body || '[Respuesta interactiva]';
+        } else if (msg.type === 'order') {
+            text = '[Pedido recibido]';
+        } else {
+            // Fallback: intentar extraer texto de cualquier campo conocido
+            text = msg.text?.body || msg.image?.caption || msg.video?.caption || msg.document?.caption || msg.button?.text || `[${msg.type || 'Mensaje'}]`;
+        }
 
         const phoneId = change.metadata?.phone_number_id;
         if (phoneId) {
@@ -50,7 +83,7 @@ serve(async (req) => {
         isFromMe = p.is_from_me || p.fromMe || p.key?.fromMe || false;
         phone = p.remoteJid || p.key?.remoteJid || p.from;
         if (!phone) return new Response('ok', { status: 200 });
-        text = p.body || p.message?.conversation || '[Mensaje]';
+        text = p.body || p.message?.conversation || p.message?.extendedTextMessage?.text || p.message?.imageMessage?.caption || p.message?.videoMessage?.caption || p.message?.documentMessage?.caption || p.message?.buttonsResponseMessage?.selectedDisplayText || '[Mensaje]';
         messageId = p.id || p.key?.id;
     }
 
