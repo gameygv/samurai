@@ -103,20 +103,17 @@ serve(async (req) => {
     });
 
     // --- 4. PROCESAMIENTO SECUENCIAL PROTEGIDO ---
-    // Primero analizar, luego responder
     const { data: config } = await supabase.from('app_config').select('value').eq('key', 'global_ai_status').maybeSingle();
     
     if (config?.value !== 'paused' && !lead.ai_paused) {
-        // PASO 1: Analizar el lead (extraer ciudad, email, etc.)
         await supabase.functions.invoke('analyze-leads', { body: { lead_id: lead.id, force: false } });
-        
-        // PASO 2: Generar respuesta de IA
         await supabase.functions.invoke('process-samurai-response', { body: { lead_id: lead.id, client_message: text } });
     }
 
     return new Response('ok', { status: 200, headers: corsHeaders });
 
-  } now catch (err) {
+  } catch (err) {
+    console.error(err);
     return new Response('error', { status: 200 });
   }
 });

@@ -10,7 +10,8 @@ const corsHeaders = {
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
-  const supabase = createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.let('SUPABASE_SERVICE_ROLE_KEY') ?? '');
+  // FIX: Supabase env variable read fix.
+  const supabase = createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '');
 
   try {
     const { lead_id, client_message } = await req.json();
@@ -152,7 +153,7 @@ serve(async (req) => {
   } catch (err: any) {
     await supabase.from('activity_logs').insert({ 
         action: 'ERROR', resource: 'SYSTEM', 
-        message: `🚨 CRASH en IA: ${err.message}`, 
+        description: `🚨 CRASH en IA: ${err.message}`, 
         status: 'ERROR' 
     });
     return new Response(err.message, { status: 200, headers: corsHeaders });

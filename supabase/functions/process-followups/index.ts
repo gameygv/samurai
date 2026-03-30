@@ -10,7 +10,8 @@ const corsHeaders = {
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
-  const supabase = createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('PERDIDO_PROTECTION') ?? '');
+  // FIX: Configuración correcta de variables de entorno para DB
+  const supabase = createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '');
 
   try {
     const { data: configs } = await supabase.from('app_config').select('key, value');
