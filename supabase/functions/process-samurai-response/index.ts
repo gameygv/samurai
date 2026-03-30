@@ -39,22 +39,116 @@ serve(async (req) => {
     if (lead.buying_intent === 'COMPRADO' || lead.buying_intent === 'PERDIDO') return new Response('skipped_stage', { headers: corsHeaders });
 
     const { data: configs } = await supabaseClient.from('app_config').select('key, value');
-    const configMap = configs?.reduce((acc, item) => ({...acc, [item.key]: item.value}), {});
-    const openaiKey = configMap['openai_api_key'];
+    const getConfig = (key: string, def = "") => configs?.find((c: any) => c.key === key)?.value || def;
+    const openaiKey = getConfig('openai_api_key');
 
     if (!openaiKey) {
         await logTrace("Abortado: OpenAI API Key faltante.", true);
         return new Response('missing_key', { headers: corsHeaders });
     }
 
-    await logTrace(`Construyendo contexto del sistema para ${lead.nombre}...`);
-    const { data: context } = await supabaseClient.functions.invoke('get-samurai-context', { body: { lead, platform: lead.platform } });
+    await logTrace(`Construyendo contexto del sistema localmente para ${lead.nombre}...`);
     
-    const { data: history } = await supabaseClient.from('conversaciones').select('emisor, mensaje').eq('lead_id', lead.id).order('created_at', { ascending: true }).limit(15);
+    // FETCH CONTEXT IN PARALLEL FOR SPEED (Optimización de 2 segundos)
+    const [
+        { data: webPages },
+        { data: kbDocs },
+        { data: mediaAssets },
+        { data: history }
+    ] = await Promise.all([
+        supabaseClient.from('main_website_content').select('title, content').eq('scrape_status', 'success'),
+        supabaseClient.from('knowledge_documents').select('title, category, content'),
+        supabaseClient.from('media_assets').select('title, url, ai_instructions').eq('category', 'POSTER'),
+        supabaseClient.from('conversaciones').select('emisor, mensaje').eq('lead_id', lead.id).order('created_at', { ascending: true }).limit(15)
+    ]);
 
-    const messages = [
-        { role: 'system', content: context?.system_prompt || 'Eres un asistente de ventas.' },
-        ...history.map(h => ({ role: (['IA', 'SAMURAI', 'BOT'].includes(h.emisor)) ? 'assistant' : 'user', content: h.mensaje })),
+    let masterTruth = "\n=== VERDAD MAESTRA (SITIO WEB) ===\n";
+    webPages?.forEach(p => { if(p.content) masterTruth += `\n[PÁGINA: ${p.title}]\n${p.content.substring(0, 1500)}\n`; });
+
+    let kbContext = "\n=== CONOCIMIENTO TÉCNICO ===\n";
+    kbDocs?.forEach(d => { if(d.content) kbContext += `\n[RECURSO: ${d.title}]\n${d.content.substring(0, 1000)}\n`; });
+
+    let mediaContext = "\n=== BÓVEDA VISUAL (POSTERS) ===\nUsa <<MEDIA:url>> para enviar posters.\n";
+    mediaAssets?.forEach(m => { mediaContext += `- ${m.title}: ${m.ai_instructions} -> <<MEDIA:${m.url}>>\n`; });
+
+    let wcContext = "";
+    let bankInfo = `Banco: ${getConfig('bank_name')}\nCuenta: ${getConfig('bank_account')}\nCLABE: ${getConfig('bank_clabe')}\nTitular: ${getConfig('bank_holder')}`;
+    let autoCloseEnabled = true;
+    let agentName = "un asesor";
+
+    if (lead.assigned_to) {
+        const { data: agentData } = await supabaseClient.from('profiles').select('full_name').eq('id', lead.assigned_to).maybeSingle();
+        if (agentData?.full_name) agentName = agentData.full_name.split(' ')[0];
+        
+        const closingConfigRaw = getConfig(`agent_closing_${lead.assigned_to}`);
+        if (closingConfigRaw) {
+            try { if (JSON.parse(closingConfigRaw).auto_close === false) autoCloseEnabled = false; } catch(e) {}
+        }
+        
+        const agentBankRaw = getConfig(`agent_bank_${lead.assigned_to}`);
+        if (agentBankRaw) {
+            try {
+                const agentBank = JSON.parse(agentBankRaw);
+                if (agentBank.enabled) bankInfo = `Banco: ${agentBank.bank_name}\nCuenta: ${agentBank.bank_account}\nCLABE: ${agentBank.bank_clabe}\nTitular: ${agentBank.bank_holder}`;
+            } catch(e) {}
+        }
+    }
+
+    if (autoCloseEnabled) {
+        const wcProductsRaw = getConfig('wc_products');
+        if (wcProductsRaw) {
+            try {
+                const wcProducts = JSON.parse(wcProductsRaw);
+                const wcUrl = getConfig('wc_url', '').replace(/\/$/, '');
+                let wcCheckout = getConfig('wc_checkout_path', '/checkout/');
+                if (!wcCheckout.startsWith('/')) wcCheckout = '/' + wcCheckout;
+                
+                if (wcProducts.length > 0) {
+                    wcContext = "\n=== CATÁLOGO DE PRODUCTOS ===\n";
+                    wcProducts.forEach(p => {
+                        const link = `${wcUrl}${wcCheckout}?add-to-cart=${p.wc_id}`;
+                        wcContext += `- PRODUCTO: ${p.title}\n  PRECIO: $${p.price}\n  LINK DE COMPRA: ${link}\n  REGLA DE VENTA: ${p.prompt}\n\n`;
+                    });
+                }
+            } catch (e) {}
+        }
+    } else {
+        wcContext = "\n=== CATÁLOGO DE PRODUCTOS ===\n(PRECIOS NO DISPONIBLES. EL HUMANO LOS DARÁ.)\n";
+        bankInfo = "NO DISPONIBLE - EL HUMANO PROPORCIONARÁ LA CUENTA.";
+    }
+
+    const activeLeadMemory = `
+=== ESTADO ACTUAL ===
+Nombre: ${lead.nombre && !lead.nombre.includes('Nuevo') ? lead.nombre : 'NO PROPORCIONADO'}
+Email: ${lead.email || 'NO PROPORCIONADO'}
+Ciudad: ${lead.ciudad || 'NO PROPORCIONADA'}
+
+REGLAS DE MEMORIA:
+1. SI EL EMAIL O LA CIUDAD YA ESTÁN CAPTURADOS, NO VUELVAS A PEDIRLOS.
+2. Si el cliente dice "ya pagué", NUNCA valides el pago tú. Di que lo verificarán en breve.
+    `;
+
+    const systemPrompt = `
+${activeLeadMemory}
+
+${getConfig('prompt_alma_samurai')}
+${getConfig('prompt_adn_core')}
+${getConfig('prompt_estrategia_cierre')}
+${getConfig('prompt_behavior_rules')}
+${getConfig('prompt_relearning')}
+
+${masterTruth}
+${kbContext}
+${mediaContext}
+${wcContext}
+
+=== DATOS BANCARIOS ===
+${bankInfo}
+`;
+
+    const msgs = [
+        { role: 'system', content: systemPrompt },
+        ...(history || []).map(h => ({ role: (['IA', 'SAMURAI', 'BOT'].includes(h.emisor)) ? 'assistant' : 'user', content: h.mensaje })),
         { role: 'user', content: clientMessage }
     ];
 
@@ -62,7 +156,7 @@ serve(async (req) => {
     const aiRes = await fetch("https://api.openai.com/v1/chat/completions", {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${openaiKey}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: "gpt-4o", messages, temperature: 0.5 })
+        body: JSON.stringify({ model: "gpt-4o", messages: msgs, temperature: 0.5 })
     });
 
     if (!aiRes.ok) {

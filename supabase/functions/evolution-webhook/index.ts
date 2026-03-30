@@ -7,8 +7,6 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-
 serve(async (req) => {
   const url = new URL(req.url);
   const channelIdParam = url.searchParams.get('channel_id');
@@ -141,17 +139,28 @@ serve(async (req) => {
         metadata: { msgId: messageId, mediaType }
     });
 
-    await logTrace(`Extrayendo datos CAPI del mensaje de ${lead.nombre}...`);
-    await supabaseClient.functions.invoke('analyze-leads', { body: { lead_id: lead.id, force: false } });
+    const tasks = [];
 
-    // RESPUESTA DE IA
+    // Tarea 1: Analizar CRM en paralelo
+    tasks.push(
+        logTrace(`Extrayendo datos CAPI del mensaje de ${lead.nombre}...`)
+        .then(() => supabaseClient.functions.invoke('analyze-leads', { body: { lead_id: lead.id, force: false } }))
+        .catch(err => logTrace(`Error analyze-leads: ${err.message}`, true))
+    );
+
+    // Tarea 2: Generar y enviar respuesta IA en paralelo
     if (!lead.ai_paused && !isGlobalAiPaused && isChannelActive && configMap['openai_api_key']) {
-        await logTrace(`🤖 Delegando respuesta a Samurai Kernel para el lead ${lead.nombre}...`);
-        // Invocamos directamente pasando el lead_id para evitar dobles búsquedas y retrasos.
-        await supabaseClient.functions.invoke('process-samurai-response', { body: { lead_id: lead.id, client_message: text } });
+        tasks.push(
+            logTrace(`🤖 Delegando respuesta a Samurai Kernel para el lead ${lead.nombre}...`)
+            .then(() => supabaseClient.functions.invoke('process-samurai-response', { body: { lead_id: lead.id, client_message: text } }))
+            .catch(err => logTrace(`Error Samurai: ${err.message}`, true))
+        );
     } else {
-        await logTrace(`⏸️ Samurai NO respondió. Causas posibles: Lead Pausado=${lead.ai_paused}, Global Pausado=${isGlobalAiPaused}, Canal Inactivo=${!isChannelActive}, API Key=${!!configMap['openai_api_key']}`);
+        await logTrace(`⏸️ Samurai NO respondió. Causas: Lead Pausado=${lead.ai_paused}, Global=${isGlobalAiPaused}, Canal=${isChannelActive}`);
     }
+
+    // Esperamos a que ambas terminen antes de devolver respuesta a Gowa
+    await Promise.allSettled(tasks);
 
     return new Response('ok', { headers: corsHeaders });
   } catch (err) {
