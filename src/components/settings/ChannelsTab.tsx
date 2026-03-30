@@ -9,7 +9,7 @@ import { Switch } from '@/components/ui/switch';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { 
   Plus, Trash2, Smartphone, Globe, Key, 
-  Loader2, BellRing, Send, ShieldCheck, Network, User, AlertTriangle, Zap, CheckCircle2
+  Loader2, BellRing, Send, ShieldCheck, Network, User, AlertTriangle, Zap, CheckCircle2, Info
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -367,7 +367,7 @@ export const ChannelsTab = () => {
             
             {!ch.is_new && (
                <div className="bg-slate-950/60 border-t border-slate-800/50 p-4 space-y-4">
-                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
                      <div className="flex-1 space-y-2">
                         <Label className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest flex items-center gap-2">
                            <Send className="w-3.5 h-3.5" /> Enviar Mensaje de Prueba:
@@ -400,15 +400,24 @@ export const ChannelsTab = () => {
                            {`https://giwoovmvwlddaizorizk.supabase.co/functions/v1/evolution-webhook?channel_id=${ch.id}`}
                         </code>
                         
-                        <Button 
-                           variant="secondary" 
-                           className="w-full bg-emerald-950/40 hover:bg-emerald-900/60 border border-emerald-500/30 text-emerald-400 font-bold uppercase tracking-widest text-[10px] h-9"
-                           onClick={() => handleAutoConfigureWebhook(ch)}
-                           disabled={autoConfiguringId === ch.id}
-                        >
-                           {autoConfiguringId === ch.id ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-2"/> : <Zap className="w-3.5 h-3.5 mr-2"/>}
-                           Auto-Inyectar Webhook en Gowa
-                        </Button>
+                        {ch.provider !== 'meta' ? (
+                           <Button 
+                              variant="secondary" 
+                              className="w-full bg-emerald-950/40 hover:bg-emerald-900/60 border border-emerald-500/30 text-emerald-400 font-bold uppercase tracking-widest text-[10px] h-9"
+                              onClick={() => handleAutoConfigureWebhook(ch)}
+                              disabled={autoConfiguringId === ch.id}
+                           >
+                              {autoConfiguringId === ch.id ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-2"/> : <Zap className="w-3.5 h-3.5 mr-2"/>}
+                              Auto-Inyectar Webhook en Gowa
+                           </Button>
+                        ) : (
+                           <div className="bg-amber-900/10 border border-amber-500/20 p-3 rounded-lg text-[10px] text-amber-500 mt-2 flex items-start gap-2">
+                              <Info className="w-4 h-4 shrink-0 mt-0.5" />
+                              <p className="leading-relaxed">
+                                 Para recibir mensajes de Meta: Entra a <strong>developers.facebook.com</strong> {'>'} Configuración de WhatsApp {'>'} Webhooks. Pega esta URL y el Verify Token. <strong>¡Asegúrate de suscribirte al campo "messages"!</strong>
+                              </p>
+                           </div>
+                        )}
                      </div>
                   </div>
                </div>

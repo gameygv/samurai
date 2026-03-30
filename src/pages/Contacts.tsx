@@ -30,7 +30,7 @@ import { useAuth } from '@/context/AuthContext';
 import { extractTagText, parseTagsSafe } from '@/lib/tag-parser';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
-  AlertDialogHeader, AlertDialogTitle, AlertDialogFooter
+  AlertDialogHeader, AlertDialogTitle, AlertDialogFooter, AlertDialogDescription
 } from "@/components/ui/alert-dialog";
 
 const Contacts = () => {
@@ -61,7 +61,7 @@ const Contacts = () => {
   const [contactForCredit, setContactForCredit] = useState<any>(null);
   const [isCreditOpen, setIsCreditOpen] = useState(false);
 
-  const [contactToDelete, setContactToDelete] = useState<any>(null);
+  const [isBulkDeleteOpen, setIsBulkDeleteOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [loading, setLoading] = useState(true);
   const [analyzing, setAnalyzing] = useState(false);
@@ -95,7 +95,7 @@ const Contacts = () => {
   const fetchContacts = async () => {
     setLoading(true);
     
-    // FILTRO DE PRIVACIDAD: Si no es manager, solo carga los vinculados a sus leads
+    // FILTRO DE PRIVACIDAD
     let query = supabase
       .from('contacts')
       .select('*, leads!inner(id, assigned_to, buying_intent, payment_status, lead_score, ai_paused, summary), credit_sales(status, total_amount)');
@@ -134,6 +134,35 @@ const Contacts = () => {
 
   const handleToggleSelectAll = () => setSelectedIds(selectedIds.length === filteredContacts.length ? [] : filteredContacts.map(c => c.id));
   const handleToggleSelect = (id: string) => setSelectedIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
+
+  const handleBulkDelete = async () => {
+      setIsDeleting(true);
+      const tid = toast.loading(`Eliminando ${selectedIds.length} contactos...`);
+      try {
+          const { data: contactsToDelete } = await supabase
+              .from('contacts')
+              .select('lead_id')
+              .in('id', selectedIds);
+
+          const leadIds = contactsToDelete?.map(c => c.lead_id).filter(Boolean) || [];
+
+          if (leadIds.length > 0) {
+              await supabase.from('conversaciones').delete().in('lead_id', leadIds);
+              await supabase.from('leads').delete().in('id', leadIds);
+          }
+
+          await supabase.from('contacts').delete().in('id', selectedIds);
+
+          toast.success(`${selectedIds.length} contactos eliminados permanentemente.`, { id: tid });
+          setSelectedIds([]);
+          setIsBulkDeleteOpen(false);
+          fetchContacts();
+      } catch (err: any) {
+          toast.error("Error al eliminar: " + err.message, { id: tid });
+      } finally {
+          setIsDeleting(false);
+      }
+  };
 
   const handleExportCSV = (dataToExport: any[]) => {
     if (dataToExport.length === 0) return toast.error("No hay datos para exportar.");
@@ -306,13 +335,19 @@ const Contacts = () => {
               {selectedIds.length === filteredContacts.length ? "Deseleccionar" : `Seleccionar Cartera (${filteredContacts.length})`}
             </Button>
           )}
+
+          {selectedIds.length > 0 && (
+             <Button onClick={() => setIsBulkDeleteOpen(true)} variant="destructive" className="h-10 px-4 rounded-xl text-[10px] font-bold uppercase tracking-widest shadow-lg animate-in fade-in ml-2">
+                <Trash2 className="w-3.5 h-3.5 mr-2" /> Eliminar ({selectedIds.length})
+             </Button>
+          )}
         </div>
 
         <Card className="bg-[#0f0f11] border-[#222225] shadow-2xl rounded-2xl overflow-hidden min-h-[400px]">
           <CardContent className="p-0">
             <Table>
               <TableHeader>
-                <TableRow className="border-b border-[#161618] bg-[#161618] hover:bg-[#161618]">
+                <TableRow className="border-b border-[#222225] bg-[#161618] hover:bg-[#161618]">
                   <TableHead className="w-12 pl-6"><Checkbox checked={selectedIds.length > 0 && selectedIds.length === filteredContacts.length} onCheckedChange={handleToggleSelectAll} className="border-slate-600 data-[state=checked]:bg-indigo-500"/></TableHead>
                   <TableHead className="text-slate-400 text-[10px] uppercase font-bold tracking-widest py-4">Nombre y Contacto</TableHead>
                   <TableHead className="text-slate-400 text-[10px] uppercase font-bold tracking-widest">Ubicación & Etiquetas</TableHead>
@@ -398,6 +433,26 @@ const Contacts = () => {
       <EditContactDialog open={isEditOpen} onOpenChange={setIsEditOpen} contact={contactToEdit} existingGroups={groups} allTags={allTags} globalTags={globalTags} onSuccess={fetchContacts} />
       {isCreateOpen && <CreateLeadDialog open={isCreateOpen} onOpenChange={setIsCreateOpen} onSuccess={fetchContacts} />}
       {selectedLead && <ChatViewer lead={selectedLead} open={isChatOpen} onOpenChange={setIsChatOpen} />}
+
+      <AlertDialog open={isBulkDeleteOpen} onOpenChange={setIsBulkDeleteOpen}>
+        <AlertDialogContent className="bg-[#0f0f11] border-[#222225] text-white rounded-3xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-red-400 flex items-center gap-2">
+              <Trash2 className="w-5 h-5" /> ¿Eliminar {selectedIds.length} contactos?
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-slate-400 text-sm mt-2">
+              Esta acción eliminará de forma permanente los contactos seleccionados y todo su historial de conversaciones. <strong className="text-red-400">No se puede deshacer.</strong>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="mt-4">
+            <AlertDialogCancel disabled={isDeleting} className="bg-transparent border-[#222225] text-slate-400 hover:text-white rounded-xl h-11 uppercase font-bold text-[10px] tracking-widest">Cancelar</AlertDialogCancel>
+            <AlertDialogAction disabled={isDeleting} onClick={handleBulkDelete} className="bg-red-600 hover:bg-red-500 text-white rounded-xl h-11 uppercase font-bold text-[10px] tracking-widest border-none shadow-lg">
+               {isDeleting ? <Loader2 className="w-4 h-4 animate-spin mr-2"/> : <Trash2 className="w-4 h-4 mr-2"/>} Sí, Eliminar Todo
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
     </Layout>
   );
 };
