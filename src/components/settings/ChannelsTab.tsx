@@ -31,6 +31,7 @@ export const ChannelsTab = () => {
   const [testPhones, setTestPhones] = useState<Record<string, string>>({});
   const [testingId, setTestingId] = useState<string | null>(null);
   const [autoConfiguringId, setAutoConfiguringId] = useState<string | null>(null);
+  const [showUnofficial, setShowUnofficial] = useState(false);
 
   useEffect(() => { fetchAll(); }, []);
 
@@ -38,11 +39,11 @@ export const ChannelsTab = () => {
     setLoading(true);
     const { data: chs } = await supabase.from('whatsapp_channels').select('*').order('created_at', { ascending: true });
     const { data: profiles } = await supabase.from('profiles').select('id, full_name, role').eq('is_active', true);
-    const { data: cfgs } = await supabase.from('app_config').select('key, value').in('key', ['default_notification_channel', 'channel_routing_mode', 'channel_agent_map']);
-    
+    const { data: cfgs } = await supabase.from('app_config').select('key, value').in('key', ['default_notification_channel', 'channel_routing_mode', 'channel_agent_map', 'show_unofficial_providers']);
+
     if (chs) setChannels(chs);
     if (profiles) setAgents(profiles);
-    
+
     if (cfgs) {
        const cfgMap = cfgs.reduce((acc, curr) => ({...acc, [curr.key]: curr.value}), {} as Record<string, string>);
        if (cfgMap.default_notification_channel) setDefaultNotifyId(cfgMap.default_notification_channel);
@@ -50,6 +51,7 @@ export const ChannelsTab = () => {
        if (cfgMap.channel_agent_map) {
            try { setAgentMap(JSON.parse(cfgMap.channel_agent_map)); } catch(e) {}
        }
+       setShowUnofficial(cfgMap.show_unofficial_providers === 'true');
     }
     setLoading(false);
   };
@@ -95,21 +97,22 @@ export const ChannelsTab = () => {
   };
 
   const handleAddChannel = () => {
-    const existingGowa = channels.find(c => c.provider === 'gowa' && c.api_key && !c.is_new);
-    
-    setChannels([...channels, { 
-      id: `new-${Date.now()}`, 
-      name: '', 
-      provider: 'gowa', 
-      api_url: existingGowa ? existingGowa.api_url : '', 
-      api_key: existingGowa ? existingGowa.api_key : '', 
-      instance_id: '', 
-      verify_token: 'samurai_v3', 
-      is_new: true, 
-      is_active: true 
-    }]);
-    
-    if (existingGowa) toast.info("Se ha copiado la URL y API Key de Gowa automáticamente.");
+    if (showUnofficial) {
+      const existingGowa = channels.find(c => c.provider === 'gowa' && c.api_key && !c.is_new);
+      setChannels([...channels, {
+        id: `new-${Date.now()}`, name: '', provider: 'gowa',
+        api_url: existingGowa ? existingGowa.api_url : '',
+        api_key: existingGowa ? existingGowa.api_key : '',
+        instance_id: '', verify_token: 'samurai_v3', is_new: true, is_active: true
+      }]);
+      if (existingGowa) toast.info("Se ha copiado la URL y API Key de Gowa automáticamente.");
+    } else {
+      setChannels([...channels, {
+        id: `new-${Date.now()}`, name: '', provider: 'meta',
+        api_url: 'https://graph.facebook.com', api_key: '',
+        instance_id: '', verify_token: 'samurai_v3', is_new: true, is_active: true
+      }]);
+    }
   };
 
   const handleSaveChannel = async (ch: any) => {
@@ -167,6 +170,13 @@ export const ChannelsTab = () => {
      }
   };
 
+  const handleToggleUnofficial = async (val: boolean) => {
+    setShowUnofficial(val);
+    await supabase.from('app_config').upsert({ key: 'show_unofficial_providers', value: String(val), category: 'SYSTEM' }, { onConflict: 'key' });
+  };
+
+  const visibleChannels = showUnofficial ? channels : channels.filter(ch => ch.provider === 'meta' || ch.is_new);
+
   if (loading) return <div className="flex justify-center py-20"><Loader2 className="animate-spin text-indigo-500" /></div>;
 
   return (
@@ -207,11 +217,14 @@ export const ChannelsTab = () => {
            <h2 className="text-lg font-bold text-white flex items-center gap-2"><Smartphone className="w-5 h-5 text-indigo-400"/> Flota Multicanal</h2>
            <p className="text-xs text-slate-500">Configura tus instancias de WhatsApp para enviar y recibir mensajes.</p>
         </div>
-        <Button onClick={handleAddChannel} className="bg-indigo-900 hover:bg-indigo-800 text-amber-500 font-bold"><Plus className="w-4 h-4 mr-2"/> AÑADIR NÚMERO</Button>
+        <div className="flex items-center gap-4">
+           <Switch checked={showUnofficial} onCheckedChange={handleToggleUnofficial} />
+           <Button onClick={handleAddChannel} className="bg-indigo-900 hover:bg-indigo-800 text-amber-500 font-bold"><Plus className="w-4 h-4 mr-2"/> AÑADIR NÚMERO</Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-6">
-        {channels.map((ch) => (
+        {visibleChannels.map((ch) => (
           <Card key={ch.id} className={cn("bg-slate-900 border-slate-800 transition-all overflow-hidden", defaultNotifyId === ch.id && "border-amber-500/50 shadow-amber-900/10", ch.is_active === false && "opacity-75")}>
             
             <CardHeader className="py-4 border-b border-slate-800/50 flex flex-col sm:flex-row items-start sm:items-center justify-between bg-slate-950/20 gap-4">
@@ -259,9 +272,9 @@ export const ChannelsTab = () => {
                      <Select value={ch.provider} onValueChange={v => setChannels(channels.map(c => c.id === ch.id ? {...c, provider: v} : c))}>
                         <SelectTrigger className="bg-slate-950 border-slate-800 h-11"><SelectValue /></SelectTrigger>
                         <SelectContent className="bg-slate-900 border-slate-800 text-white">
-                           <SelectItem value="gowa">GOWA (Recomendado)</SelectItem>
                            <SelectItem value="meta">Meta Cloud API Oficial</SelectItem>
-                           <SelectItem value="evolution">Evolution API</SelectItem>
+                           {showUnofficial && <SelectItem value="gowa">GOWA</SelectItem>}
+                           {showUnofficial && <SelectItem value="evolution">Evolution API</SelectItem>}
                         </SelectContent>
                      </Select>
                   </div>
