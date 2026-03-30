@@ -163,7 +163,7 @@ const Index = () => {
         <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-[#0a0a0c] p-6 rounded-3xl border border-[#1a1a1a] shadow-2xl">
           <div>
             <h1 className="text-3xl font-bold text-white tracking-tight flex items-center gap-3">
-               System Console <Badge className="bg-indigo-600 hover:bg-indigo-600 text-white border-none shadow-lg">v2.5 Pro</Badge>
+               Dashboard <Badge className="bg-indigo-600 hover:bg-indigo-600 text-white border-none shadow-lg">v2.5 Pro</Badge>
             </h1>
             <p className="text-slate-400 text-sm mt-1">Status: Operational | User: {profile?.full_name}</p>
           </div>
