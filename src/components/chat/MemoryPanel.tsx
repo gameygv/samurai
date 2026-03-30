@@ -216,6 +216,7 @@ export const MemoryPanel = ({
       if (currentAnalysis?.buying_intent === newIntent) return;
       try {
           await supabase.from('leads').update({ buying_intent: newIntent }).eq('id', currentAnalysis.id);
+          setMemoryForm(prev => ({ ...prev, buying_intent: newIntent })); // UPDATE LOCAL STATE
           toast.success(`Movido a: ${newIntent}`);
           if (onAnalysisComplete) onAnalysisComplete();
       } catch (err: any) {

@@ -33,18 +33,6 @@ serve(async (req) => {
     const configMap = configs?.reduce((acc, item) => ({...acc, [item.key]: item.value}), {});
     const apiKey = configMap['openai_api_key'];
 
-    const autoRoutingAgentsStr = configMap['auto_routing_agents'] || '[]';
-    let autoRoutingAgents = [];
-    try { autoRoutingAgents = JSON.parse(autoRoutingAgentsStr); } catch(e) {}
-
-    const { data: agents } = await supabaseClient.from('profiles').select('id, full_name, territories').eq('is_active', true);
-    const validAgents = agents?.filter(a => autoRoutingAgents.includes(a.id)) || [];
-    const agentsContext = validAgents.map(a => `- ID: ${a.id}, Nombre: ${a.full_name}, Zonas: ${a.territories?.join(', ') || 'GLOBAL'}`).join('\n');
-
-    const results = [];
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-    const intentLevels = { 'BAJO': 1, 'MEDIO': 2, 'ALTO': 3, 'COMPRADO': 4, 'PERDIDO': 5 };
-
     for (const lead of leadsToProcess) {
         if (!force && (lead.buying_intent === 'COMPRADO' || lead.buying_intent === 'PERDIDO')) continue;
 
@@ -58,27 +46,13 @@ serve(async (req) => {
         const transcript = (messagesData || []).reverse().map(m => `[${m.emisor}]: ${m.mensaje}`).join('\n');
 
         const systemPrompt = `
-Eres el Auditor de Identidad del CRM. Tu misión es extraer datos reales de la conversación para Meta CAPI.
-DATOS GEOGRÁFICOS (CRÍTICO):
-1. Si el cliente menciona una ciudad (ej: Monterrey), DEBES identificar el ESTADO (ej: Nuevo Leon) y el CÓDIGO POSTAL (CP) más representativo de esa zona.
-2. Si el cliente da su CP exacto, úsalo. Si no, calcúlalo tú basándote en la ciudad.
-3. El CP es vital para la calidad del match en Facebook Ads.
-
-AGENTES DISPONIBLES PARA AUTO-ROUTING:
-${agentsContext || 'NINGUNO DISPONIBLE'}
-
-Si logras identificar la ciudad, sugiere el ID del agente correspondiente según sus zonas. Si no hay agente o no hay ciudad, pon null.
+Eres el Auditor de Identidad del CRM. Tu misión es extraer datos reales de la conversación.
+REGLA DE ORO: NUNCA sugieras 'PERDIDO' a menos que el cliente explícitamente diga que NO le interesa o te insulte. 
+Si solo dice "hola" o está conociendo el negocio, mantén el intent en 'BAJO'.
 
 RESPONDE SOLO JSON: {
-  "nombre": "...", 
-  "email": "...", 
-  "ciudad": "...", 
-  "estado": "...", 
-  "cp": "...", 
-  "intent": "BAJO|MEDIO|ALTO|PERDIDO", 
-  "perfil": "...", 
-  "summary": "...", 
-  "suggested_agent_id": "UUID"
+  "nombre": "...", "email": "...", "ciudad": "...", "estado": "...", "cp": "...", 
+  "intent": "BAJO|MEDIO|ALTO", "perfil": "...", "summary": "..."
 }`;
 
         const aiRes = await fetch(OPENAI_URL, {
@@ -102,51 +76,21 @@ RESPONDE SOLO JSON: {
         if (result.estado && result.estado !== 'null') updates.estado = result.estado;
         if (result.cp && result.cp !== 'null') updates.cp = String(result.cp);
         
-        const currentLevel = intentLevels[lead.buying_intent] || 1;
-        const suggestedLevel = intentLevels[result.intent] || 1;
+        // Solo subimos la intención si es mayor a la actual y no es PERDIDO/COMPRADO manual
+        const intentLevels = { 'BAJO': 1, 'MEDIO': 2, 'ALTO': 3 };
         if (lead.buying_intent !== 'COMPRADO' && lead.buying_intent !== 'PERDIDO') {
-            if (result.intent === 'PERDIDO') updates.buying_intent = 'PERDIDO';
-            else if (suggestedLevel > currentLevel && result.intent !== 'COMPRADO') updates.buying_intent = result.intent;
+            const currentLvl = intentLevels[lead.buying_intent] || 1;
+            const newLvl = intentLevels[result.intent] || 1;
+            if (newLvl > currentLvl) updates.buying_intent = result.intent;
         }
 
         if (result.perfil) updates.perfil_psicologico = result.perfil;
         if (result.summary) updates.summary = result.summary;
         
-        if (!lead.assigned_to) {
-            let finalAgentId = result.suggested_agent_id;
-            if (uuidRegex.test(finalAgentId)) updates.assigned_to = finalAgentId;
-        }
-
         await supabaseClient.from('leads').update(updates).eq('id', lead.id);
-        
-        // DISPARO CAPI ENRIQUECIDO
-        if ((updates.email || updates.ciudad || updates.cp) && !lead.capi_lead_event_sent_at) {
-             try {
-                 await supabaseClient.functions.invoke('meta-capi-sender', {
-                    body: {
-                        eventData: { 
-                           event_name: 'Lead', 
-                           lead_id: lead.id, 
-                           user_data: { 
-                               em: updates.email || lead.email, 
-                               ph: lead.telefono, 
-                               fn: updates.nombre || lead.nombre, 
-                               ct: updates.ciudad || lead.ciudad,
-                               st: updates.estado || lead.estado,
-                               zp: updates.cp || lead.cp
-                           },
-                           custom_data: { intent: updates.buying_intent || lead.buying_intent }
-                        },
-                        config: { pixel_id: configMap['meta_pixel_id'], access_token: configMap['meta_access_token'] }
-                    }
-                 });
-                 await supabaseClient.from('leads').update({ capi_lead_event_sent_at: new Date().toISOString() }).eq('id', lead.id);
-             } catch (e) { console.error("CAPI error:", e); }
-        }
-        results.push({ id: lead.id, updates });
     }
 
-    return new Response(JSON.stringify({ success: true, results }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    return new Response(JSON.stringify({ success: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   } catch (error) {
     return new Response(JSON.stringify({ error: error.message }), { status: 200, headers: corsHeaders });
   }

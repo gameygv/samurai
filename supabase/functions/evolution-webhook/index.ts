@@ -20,22 +20,11 @@ serve(async (req) => {
 
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
-  const logTrace = async (msg: string, isError = false) => {
-    await supabaseClient.from('activity_logs').insert({
-        action: isError ? 'ERROR' : 'UPDATE', resource: 'SYSTEM',
-        description: `Webhook Trace: ${msg}`, status: isError ? 'ERROR' : 'OK'
-    });
-  };
-
   try {
     const payloadText = await req.text();
     let payload;
     try { payload = JSON.parse(payloadText); } catch (e) { return new Response("Invalid JSON", { status: 400 }); }
     
-    const { data: configData } = await supabaseClient.from('app_config').select('key, value').in('key', ['global_ai_status', 'openai_api_key']);
-    const configMap = configData?.reduce((acc, item) => ({...acc, [item.key]: item.value}), {}) || {};
-    const isGlobalAiPaused = configMap['global_ai_status'] === 'paused';
-
     let phone, text = '', pushName = 'Cliente WA', messageId = null;
     let actualChannelId = channelIdParam;
     let isFromMe = false;
@@ -52,19 +41,16 @@ serve(async (req) => {
         pushName = change.contacts?.[0]?.profile?.name || 'Lead WhatsApp';
         text = msg.text?.body || msg.image?.caption || '[Mensaje]';
 
-        // Resolución de canal por ID de número de Meta
         const phoneId = change.metadata?.phone_number_id;
         if (phoneId) {
             const { data: ch } = await supabaseClient.from('whatsapp_channels').select('id').eq('instance_id', phoneId).maybeSingle();
             if (ch) actualChannelId = ch.id;
         }
     } else {
-        // GOWA / EVOLUTION
         const p = payload.payload || payload.data || payload;
         isFromMe = p.is_from_me || p.fromMe || p.key?.fromMe || false;
         phone = p.remoteJid || p.key?.remoteJid || p.from;
         if (!phone) return new Response('ok', { status: 200 });
-        senderPhone = phone.split('@')[0].replace(/\D/g, '');
         text = p.body || p.message?.conversation || '[Mensaje]';
         messageId = p.id || p.key?.id;
     }
@@ -72,7 +58,7 @@ serve(async (req) => {
     if (!phone) return new Response('ok', { status: 200 });
     let senderPhone = String(phone).split('@')[0].replace(/\D/g, '');
 
-    // --- BUSCAR O CREAR LEAD ---
+    // --- 1. BUSCAR O CREAR LEAD ---
     let { data: lead } = await supabaseClient.from('leads').select('*').or(`telefono.ilike.%${senderPhone.slice(-10)}%`).limit(1).maybeSingle();
     
     if (!lead) {
@@ -90,18 +76,22 @@ serve(async (req) => {
 
     if (isFromMe) return new Response('ok', { status: 200 });
 
-    // --- REGISTRAR MENSAJE ---
+    // --- 2. REGISTRAR MENSAJE ---
     await supabaseClient.from('conversaciones').insert({ lead_id: lead.id, emisor: 'CLIENTE', mensaje: text, platform: 'WHATSAPP' });
 
-    // --- DISPARAR IA ---
-    if (!lead.ai_paused && !isGlobalAiPaused && configMap['openai_api_key']) {
-        logTrace(`🤖 Samurai respondiendo a ${lead.nombre}...`);
-        await supabaseClient.functions.invoke('process-samurai-response', { body: { lead_id: lead.id, client_message: text } });
+    // --- 3. DISPARO ASÍNCRONO DE IA (ESTA ES LA CLAVE) ---
+    // Lanzamos las peticiones pero NO las esperamos (await) para que Meta reciba su 200 OK de inmediato
+    supabaseClient.functions.invoke('analyze-leads', { body: { lead_id: lead.id, force: false } }).catch(e => {});
+    
+    const { data: config } = await supabaseClient.from('app_config').select('value').eq('key', 'global_ai_status').maybeSingle();
+    if (config?.value !== 'paused' && !lead.ai_paused) {
+        supabaseClient.functions.invoke('process-samurai-response', { body: { lead_id: lead.id, client_message: text } }).catch(e => {});
     }
 
-    return new Response('ok', { headers: corsHeaders });
+    // Devolvemos respuesta a Meta en menos de 1 segundo
+    return new Response('ok', { status: 200, headers: corsHeaders });
+
   } catch (err) {
-    await logTrace(`ERROR WEBHOOK: ${err.message}`, true);
     return new Response('error', { status: 200 });
   }
 });
