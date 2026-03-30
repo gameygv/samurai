@@ -63,13 +63,30 @@ serve(async (req) => {
     
     if (!lead) {
         if (isFromMe) return new Response('ok', { status: 200 });
+        
+        // BLINDAJE: Forzar BAJO explícitamente y registrar timestamp
         const { data: nl } = await supabaseClient.from('leads').insert({ 
-           nombre: pushName, telefono: senderPhone, channel_id: actualChannelId, ai_paused: false 
+           nombre: pushName, 
+           telefono: senderPhone, 
+           channel_id: actualChannelId, 
+           ai_paused: false,
+           buying_intent: 'BAJO',
+           last_message_at: new Date().toISOString(),
+           followup_stage: 0
         }).select().single();
         lead = nl;
     } else {
         const updates: any = { last_message_at: new Date().toISOString(), followup_stage: 0 };
         if (actualChannelId) updates.channel_id = actualChannelId;
+        
+        // Si estaba en PERDIDO pero nos vuelve a escribir, lo pasamos a BAJO automáticamente
+        if (lead.buying_intent === 'PERDIDO') {
+            updates.buying_intent = 'BAJO';
+            await supabaseClient.from('activity_logs').insert({
+               action: 'UPDATE', resource: 'LEADS', description: `El cliente ${lead.nombre} (Perdido) ha vuelto a escribir. Movido a Hunting.`, status: 'OK'
+            });
+        }
+        
         await supabaseClient.from('leads').update(updates).eq('id', lead.id);
         lead = { ...lead, ...updates };
     }
@@ -79,8 +96,7 @@ serve(async (req) => {
     // --- 2. REGISTRAR MENSAJE ---
     await supabaseClient.from('conversaciones').insert({ lead_id: lead.id, emisor: 'CLIENTE', mensaje: text, platform: 'WHATSAPP' });
 
-    // --- 3. DISPARO ASÍNCRONO DE IA (ESTA ES LA CLAVE) ---
-    // Lanzamos las peticiones pero NO las esperamos (await) para que Meta reciba su 200 OK de inmediato
+    // --- 3. DISPARO ASÍNCRONO DE IA ---
     supabaseClient.functions.invoke('analyze-leads', { body: { lead_id: lead.id, force: false } }).catch(e => {});
     
     const { data: config } = await supabaseClient.from('app_config').select('value').eq('key', 'global_ai_status').maybeSingle();
@@ -88,7 +104,6 @@ serve(async (req) => {
         supabaseClient.functions.invoke('process-samurai-response', { body: { lead_id: lead.id, client_message: text } }).catch(e => {});
     }
 
-    // Devolvemos respuesta a Meta en menos de 1 segundo
     return new Response('ok', { status: 200, headers: corsHeaders });
 
   } catch (err) {

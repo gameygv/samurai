@@ -19,22 +19,26 @@ serve(async (req) => {
     const { data: lead } = await supabaseClient.from('leads').select('*').eq('id', lead_id).single();
     if (!lead || lead.ai_paused) return new Response('skip', { headers: corsHeaders });
     
-    // Si está en PERDIDO o COMPRADO, la IA no responde para no molestar
     if (lead.buying_intent === 'PERDIDO' || lead.buying_intent === 'COMPRADO') return new Response('closed', { headers: corsHeaders });
 
     const { data: configs } = await supabaseClient.from('app_config').select('key, value');
     const configMap = configs?.reduce((acc, item) => ({...acc, [item.key]: item.value}), {});
     const apiKey = configMap['openai_api_key'];
 
-    if (!apiKey) return new Response('no_key', { headers: corsHeaders });
+    if (!apiKey) {
+        await supabaseClient.from('activity_logs').insert({ action: 'ERROR', resource: 'BRAIN', description: "Falta OpenAI API Key en Ajustes.", status: 'ERROR' });
+        return new Response('no_key', { headers: corsHeaders });
+    }
 
-    // CARGA DE CONTEXTO ULTRA RÁPIDA
     const [ { data: history } ] = await Promise.all([
         supabaseClient.from('conversaciones').select('emisor, mensaje').eq('lead_id', lead.id).order('created_at', { ascending: true }).limit(10)
     ]);
 
-    // LLAMADA AL KERNEL PARA EL PROMPT FINAL
-    const { data: kernel } = await supabaseClient.functions.invoke('get-samurai-context', { body: { lead } });
+    const { data: kernel, error: kernelErr } = await supabaseClient.functions.invoke('get-samurai-context', { body: { lead } });
+    if (kernelErr) {
+        await supabaseClient.from('activity_logs').insert({ action: 'ERROR', resource: 'BRAIN', description: `Fallo al cargar contexto del Kernel: ${kernelErr.message}`, status: 'ERROR' });
+    }
+
     const systemPrompt = kernel?.system_prompt || "Eres Sam, asistente de ventas.";
 
     const msgs = [
@@ -50,17 +54,37 @@ serve(async (req) => {
     });
 
     const aiData = await aiRes.json();
+    
+    // DETECTOR DE ERRORES OPENAI (Saldo, Bloqueo, Límite)
+    if (aiData.error) {
+        await supabaseClient.from('activity_logs').insert({ 
+            action: 'ERROR', resource: 'BRAIN', description: `OpenAI rechazó la conexión: ${aiData.error.message}`, status: 'ERROR' 
+        });
+        return new Response('openai_error', { headers: corsHeaders });
+    }
+
     const aiText = aiData.choices?.[0]?.message?.content || '';
 
     if (aiText) {
-        await supabaseClient.functions.invoke('send-message-v3', { 
+        // Enviar a WhatsApp
+        const { data: sendData, error: sendErr } = await supabaseClient.functions.invoke('send-message-v3', { 
             body: { channel_id: lead.channel_id, phone: lead.telefono, message: aiText, lead_id: lead.id } 
         });
+        
+        // DETECTOR DE ERRORES WHATSAPP (Meta / Gowa rechaza el mensaje)
+        if (sendErr || (sendData && !sendData.success)) {
+            await supabaseClient.from('activity_logs').insert({ 
+                action: 'ERROR', resource: 'SYSTEM', description: `Error WhatsApp API (${lead.telefono}): ${sendErr?.message || sendData?.error}`, status: 'ERROR' 
+            });
+        }
+
+        // SIEMPRE registrar la respuesta de la IA en el chat, incluso si WhatsApp falla
         await supabaseClient.from('conversaciones').insert({ lead_id: lead.id, emisor: 'IA', mensaje: aiText, platform: 'WHATSAPP' });
     }
 
     return new Response('ok', { headers: corsHeaders });
   } catch (err: any) {
+    await supabaseClient.from('activity_logs').insert({ action: 'ERROR', resource: 'SYSTEM', description: `Crash crítico en IA: ${err.message}`, status: 'ERROR' });
     return new Response(err.message, { status: 200, headers: corsHeaders });
   }
 });
