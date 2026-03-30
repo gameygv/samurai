@@ -90,7 +90,8 @@ serve(async (req) => {
     // 2. META CLOUD API OFICIAL (JSON Payload)
     // ====================================================================
     else if (provider === 'meta') {
-      endpoint = `https://graph.facebook.com/v20.0/${channel.instance_id}/messages`;
+      // Actualizado a v22.0
+      endpoint = `https://graph.facebook.com/v22.0/${channel.instance_id}/messages`;
       headers['Authorization'] = `Bearer ${channel.api_key}`;
       
       if (mediaData?.url) {
