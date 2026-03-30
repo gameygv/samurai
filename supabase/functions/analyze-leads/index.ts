@@ -25,15 +25,14 @@ serve(async (req) => {
        if (batch) leadsToProcess = batch;
     }
 
-    if (leadsToProcess.length === 0) {
-       return new Response(JSON.stringify({ message: "No leads pending analysis." }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-    }
+    if (leadsToProcess.length === 0) return new Response(JSON.stringify({ message: "No leads" }), { headers: corsHeaders });
 
     const { data: configs } = await supabaseClient.from('app_config').select('key, value');
     const configMap = configs?.reduce((acc, item) => ({...acc, [item.key]: item.value}), {});
     const apiKey = configMap['openai_api_key'];
 
     for (const lead of leadsToProcess) {
+        // SEGURIDAD: Nunca analizar leads cerrados a menos que se fuerce
         if (!force && (lead.buying_intent === 'COMPRADO' || lead.buying_intent === 'PERDIDO')) continue;
 
         const { data: messagesData } = await supabaseClient
@@ -41,14 +40,14 @@ serve(async (req) => {
             .select('emisor, mensaje')
             .eq('lead_id', lead.id)
             .order('created_at', { ascending: false })
-            .limit(20);
+            .limit(15);
             
         const transcript = (messagesData || []).reverse().map(m => `[${m.emisor}]: ${m.mensaje}`).join('\n');
 
         const systemPrompt = `
-Eres el Auditor de Identidad del CRM. Tu misión es extraer datos reales de la conversación.
-REGLA DE ORO: NUNCA sugieras 'PERDIDO' a menos que el cliente explícitamente diga que NO le interesa o te insulte. 
-Si solo dice "hola" o está conociendo el negocio, mantén el intent en 'BAJO'.
+Eres el Auditor de Identidad. Extrae datos del chat.
+REGLA SUPREMA: NUNCA, bajo ninguna circunstancia, marques un lead como PERDIDO. 
+Si el cliente no está interesado, mantén el intent en 'BAJO'. Solo el humano decide el abandono.
 
 RESPONDE SOLO JSON: {
   "nombre": "...", "email": "...", "ciudad": "...", "estado": "...", "cp": "...", 
@@ -76,12 +75,16 @@ RESPONDE SOLO JSON: {
         if (result.estado && result.estado !== 'null') updates.estado = result.estado;
         if (result.cp && result.cp !== 'null') updates.cp = String(result.cp);
         
-        // Solo subimos la intención si es mayor a la actual y no es PERDIDO/COMPRADO manual
+        // BLOQUEO FÍSICO CONTRA "PERDIDO" AUTOMÁTICO
         const intentLevels = { 'BAJO': 1, 'MEDIO': 2, 'ALTO': 3 };
+        const newIntent = (result.intent || 'BAJO').toUpperCase();
+        
         if (lead.buying_intent !== 'COMPRADO' && lead.buying_intent !== 'PERDIDO') {
-            const currentLvl = intentLevels[lead.buying_intent] || 1;
-            const newLvl = intentLevels[result.intent] || 1;
-            if (newLvl > currentLvl) updates.buying_intent = result.intent;
+            if (intentLevels[newIntent]) { // Si la IA devuelve BAJO, MEDIO o ALTO
+                const currentLvl = intentLevels[lead.buying_intent] || 1;
+                const newLvl = intentLevels[newIntent];
+                if (newLvl > currentLvl) updates.buying_intent = newIntent;
+            }
         }
 
         if (result.perfil) updates.perfil_psicologico = result.perfil;
@@ -90,7 +93,7 @@ RESPONDE SOLO JSON: {
         await supabaseClient.from('leads').update(updates).eq('id', lead.id);
     }
 
-    return new Response(JSON.stringify({ success: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    return new Response(JSON.stringify({ success: true }), { headers: corsHeaders });
   } catch (error) {
     return new Response(JSON.stringify({ error: error.message }), { status: 200, headers: corsHeaders });
   }

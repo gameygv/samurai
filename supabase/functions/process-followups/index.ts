@@ -6,86 +6,70 @@ import { corsHeaders } from '../_shared/cors.ts'
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders })
 
-  console.log("[process-followups] Iniciando ciclo de mantenimiento...");
+  console.log("[process-followups] Ciclo de mantenimiento iniciado...");
 
   try {
-    const supabaseClient = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-    )
+    const supabaseClient = createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '');
 
     const { data: configs } = await supabaseClient.from('app_config').select('key, value');
     const getConfig = (key) => configs?.find(c => c.key === key)?.value || null;
-    const defaultCh = getConfig('default_notification_channel');
 
-    // ========================================================
-    // 1. RETARGETING / FOLLOW-UPS (IA)
-    // ========================================================
-    const { data: followupConfigs } = await supabaseClient.from('followup_config').select('*');
-    const explorationConfig = (followupConfigs || []).find(c => c.strategy_type === 'exploration');
-    const salesConfig = (followupConfigs || []).find(c => c.strategy_type === 'sales');
+    // 1. LIMPIEZA AUTOMÁTICA (SOLO SI SE CONFIGURÓ EXPLÍCITAMENTE)
+    const daysToLostRaw = getConfig('days_to_lost_lead');
+    const daysToLost = parseInt(daysToLostRaw || '0');
     
-    if (explorationConfig?.enabled || salesConfig?.enabled) {
-        const { data: stagnantLeads } = await supabaseClient.from('leads')
-            .select('id, nombre, telefono, channel_id, last_message_at, followup_stage, buying_intent')
+    // Si daysToLost es 0 o no existe, NO DESCARTAR NADA
+    if (daysToLost > 0) {
+        const thresholdDate = new Date();
+        thresholdDate.setDate(thresholdDate.getDate() - daysToLost);
+
+        const { data: staleLeads } = await supabaseClient.from('leads')
+            .select('id, nombre')
+            .not('buying_intent', 'in', '("COMPRADO","PERDIDO")')
+            .not('last_message_at', 'is', null) 
+            .lt('last_message_at', thresholdDate.toISOString());
+
+        if (staleLeads && staleLeads.length > 0) {
+            console.log(`[Cleanup] Descartando ${staleLeads.length} leads por inactividad de ${daysToLost} días.`);
+            await supabaseClient.from('leads').update({ buying_intent: 'PERDIDO' }).in('id', staleLeads.map(l => l.id));
+        }
+    }
+
+    // 2. RETARGETING (MENSAJES AUTOMÁTICOS)
+    const { data: followupConfigs } = await supabaseClient.from('followup_config').select('*');
+    const exploration = (followupConfigs || []).find(c => c.strategy_type === 'exploration');
+    const sales = (followupConfigs || []).find(c => c.strategy_type === 'sales');
+    
+    if (exploration?.enabled || sales?.enabled) {
+        const { data: leads } = await supabaseClient.from('leads')
+            .select('*')
             .eq('ai_paused', false)
-            .not('last_message_at', 'is', null) // Protegemos contra nulos
+            .not('last_message_at', 'is', null)
             .not('buying_intent', 'in', '("COMPRADO","PERDIDO")');
 
-        for (const lead of (stagnantLeads || [])) {
-            const configToUse = lead.buying_intent === 'ALTO' ? salesConfig : explorationConfig;
-            if (!configToUse || !configToUse.enabled) continue;
+        for (const lead of (leads || [])) {
+            const cfg = lead.buying_intent === 'ALTO' ? sales : exploration;
+            if (!cfg?.enabled) continue;
 
-            const minutesSinceLastMsg = Math.floor((new Date().getTime() - new Date(lead.last_message_at).getTime()) / 60000);
+            const minsSinceMsg = Math.floor((new Date().getTime() - new Date(lead.last_message_at).getTime()) / 60000);
             const stage = lead.followup_stage || 0;
-            let messageToSend = null;
-            let nextStage = stage;
+            let msg = null;
+            let next = stage;
 
-            if (stage === 0 && minutesSinceLastMsg >= (configToUse.stage_1_delay || 60)) {
-                messageToSend = configToUse.stage_1_message;
-                nextStage = 1;
-            } else if (stage === 1 && minutesSinceLastMsg >= (configToUse.stage_2_delay || 1440)) {
-                messageToSend = configToUse.stage_2_message;
-                nextStage = 2;
-            }
+            if (stage === 0 && minsSinceMsg >= (cfg.stage_1_delay || 60)) { msg = cfg.stage_1_message; next = 1; }
+            else if (stage === 1 && minsSinceMsg >= (cfg.stage_2_delay || 1440)) { msg = cfg.stage_2_message; next = 2; }
 
-            if (messageToSend && lead.telefono) {
-                await supabaseClient.from('leads').update({ followup_stage: nextStage }).eq('id', lead.id);
+            if (msg && lead.telefono) {
+                await supabaseClient.from('leads').update({ followup_stage: next }).eq('id', lead.id);
                 await supabaseClient.functions.invoke('send-message-v3', {
-                    body: { channel_id: lead.channel_id, phone: lead.telefono, message: messageToSend.replace(/{nombre}/g, lead.nombre || 'amigo') }
+                    body: { channel_id: lead.channel_id, phone: lead.telefono, message: msg.replace(/{nombre}/g, lead.nombre || 'amigo') }
                 });
-                await supabaseClient.from('conversaciones').insert({
-                    lead_id: lead.id, emisor: 'SAMURAI', mensaje: messageToSend, platform: 'WHATSAPP_FOLLOWUP'
-                });
+                await supabaseClient.from('conversaciones').insert({ lead_id: lead.id, emisor: 'SAMURAI', mensaje: msg, platform: 'AUTO_FOLLOWUP' });
             }
         }
     }
 
-    // ========================================================
-    // 2. LIMPIEZA AUTOMÁTICA (DESCARTAR A PERDIDO) - CORREGIDO
-    // ========================================================
-    const daysToLostRaw = getConfig('days_to_lost_lead');
-    const daysToLost = parseInt(daysToLostRaw || '14');
-    
-    if (!isNaN(daysToLost) && daysToLost > 0) {
-        const lostDateThreshold = new Date();
-        lostDateThreshold.setDate(lostDateThreshold.getDate() - daysToLost);
-
-        const { data: leadsToLose } = await supabaseClient.from('leads')
-            .select('id')
-            .not('buying_intent', 'in', '("COMPRADO","PERDIDO")')
-            .not('last_message_at', 'is', null) // Solo descartar si realmente hubo actividad previa
-            .lt('last_message_at', lostDateThreshold.toISOString());
-
-        if (leadsToLose && leadsToLose.length > 0) {
-            const ids = leadsToLose.map(l => l.id);
-            await supabaseClient.from('leads').update({ buying_intent: 'PERDIDO' }).in('id', ids);
-            console.log(`[process-followups] ${ids.length} leads movidos a PERDIDO por inactividad.`);
-        }
-    }
-
-    return new Response(JSON.stringify({ success: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-
+    return new Response(JSON.stringify({ success: true }), { headers: corsHeaders });
   } catch (error: any) {
     return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: corsHeaders });
   }
