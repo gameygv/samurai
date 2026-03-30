@@ -73,7 +73,7 @@ export const MemoryPanel = ({
   const safeAgents = Array.isArray(agents) ? agents : [];
   const safeChannels = Array.isArray(channels) ? channels : [];
   const currentAgentName = String(safeAgents.find(a => a.id === currentAnalysis?.assigned_to)?.full_name || 'Bot Global');
-  const currentChannelName = String(safeChannels.find(c => c.id === currentAnalysis?.channel_id)?.name || 'Canal Desconocido');
+  const currentChannelName = String(safeChannels.find(c => c.id === currentAnalysis?.channel_id)?.name || 'WhatsApp API');
   const allAvailableTags = [...(Array.isArray(globalTags) ? globalTags : []), ...(Array.isArray(localTags) ? localTags : [])];
 
   useEffect(() => { 
@@ -169,9 +169,8 @@ export const MemoryPanel = ({
       try {
           await supabase.from('leads').update({ assigned_to: newAgent }).eq('id', currentAnalysis.id);
           setMemoryForm({ ...memoryForm, assigned_to: newAgent });
-          if (currentAnalysis) currentAnalysis.assigned_to = newAgent;
-          toast.success("Agente reasignado exitosamente.");
           if (onAnalysisComplete) onAnalysisComplete();
+          toast.success("Agente reasignado exitosamente.");
       } catch (err: any) {
           toast.error("Error al reasignar agente.");
       }
@@ -189,14 +188,7 @@ export const MemoryPanel = ({
      try {
          const updates: any = { payment_status: status };
          if (status === 'VALID') { updates.buying_intent = 'COMPRADO'; updates.followup_stage = 100; }
-         
          await supabase.from('leads').update(updates).eq('id', currentAnalysis.id);
-         
-         if (currentAnalysis) {
-             currentAnalysis.payment_status = status;
-             if (status === 'VALID') currentAnalysis.buying_intent = 'COMPRADO';
-         }
-         
          toast.success(status === 'VALID' ? "Comprobante aprobado." : "Comprobante denegado.");
          if (onAnalysisComplete) onAnalysisComplete();
      } catch (err: any) { 
@@ -224,8 +216,6 @@ export const MemoryPanel = ({
       if (currentAnalysis?.buying_intent === newIntent) return;
       try {
           await supabase.from('leads').update({ buying_intent: newIntent }).eq('id', currentAnalysis.id);
-          setMemoryForm({ ...memoryForm, buying_intent: newIntent });
-          if (currentAnalysis) currentAnalysis.buying_intent = newIntent;
           toast.success(`Movido a: ${newIntent}`);
           if (onAnalysisComplete) onAnalysisComplete();
       } catch (err: any) {

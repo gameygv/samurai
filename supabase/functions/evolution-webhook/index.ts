@@ -15,7 +15,7 @@ serve(async (req) => {
   if (req.method === 'GET') {
     const challenge = url.searchParams.get("hub.challenge");
     if (challenge) return new Response(challenge, { status: 200 });
-    return new Response("Forbidden", { status: 403 });
+    return new Response("OK", { status: 200 });
   }
 
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
@@ -32,139 +32,76 @@ serve(async (req) => {
     let payload;
     try { payload = JSON.parse(payloadText); } catch (e) { return new Response("Invalid JSON", { status: 400 }); }
     
-    const { data: appConfigData } = await supabaseClient.from('app_config').select('key, value').in('key', ['global_ai_status', 'channel_routing_mode', 'channel_agent_map', 'openai_api_key']);
-    const configMap = appConfigData?.reduce((acc, item) => ({...acc, [item.key]: item.value}), {}) || {};
-    
+    const { data: configData } = await supabaseClient.from('app_config').select('key, value').in('key', ['global_ai_status', 'openai_api_key']);
+    const configMap = configData?.reduce((acc, item) => ({...acc, [item.key]: item.value}), {}) || {};
     const isGlobalAiPaused = configMap['global_ai_status'] === 'paused';
-    let channelAgentMap = {};
-    try { channelAgentMap = JSON.parse(configMap['channel_agent_map'] || '{}'); } catch(e) {}
 
-    let phone, text = '', pushName = 'Cliente WA', mediaType = null, messageId = null;
+    let phone, text = '', pushName = 'Cliente WA', messageId = null;
     let actualChannelId = channelIdParam;
     let isFromMe = false;
 
-    // 1. META CLOUD API
-    if (payload.object === 'whatsapp_business_account' && payload.entry) {
-        const change = payload.entry[0]?.changes?.[0]?.value;
-        if (change.statuses) return new Response('status_ignored', { status: 200 });
+    // --- IDENTIFICAR PAYLOAD (META O GOWA) ---
+    if (payload.object === 'whatsapp_business_account') {
+        const change = payload.entry?.[0]?.changes?.[0]?.value;
+        if (!change || change.statuses) return new Response('ok', { status: 200 });
         const msg = change.messages?.[0];
-        if (!msg) return new Response('no_messages', { status: 200 });
+        if (!msg) return new Response('ok', { status: 200 });
         
         phone = msg.from;
         messageId = msg.id;
-        pushName = change.contacts?.[0]?.profile?.name || 'Lead Meta';
+        pushName = change.contacts?.[0]?.profile?.name || 'Lead WhatsApp';
+        text = msg.text?.body || msg.image?.caption || '[Mensaje]';
 
-        const phoneNumberId = change.metadata?.phone_number_id;
-        if (!actualChannelId && phoneNumberId) {
-            const { data: ch } = await supabaseClient.from('whatsapp_channels').select('id').eq('instance_id', phoneNumberId).maybeSingle();
+        // Resolución de canal por ID de número de Meta
+        const phoneId = change.metadata?.phone_number_id;
+        if (phoneId) {
+            const { data: ch } = await supabaseClient.from('whatsapp_channels').select('id').eq('instance_id', phoneId).maybeSingle();
             if (ch) actualChannelId = ch.id;
         }
+    } else {
+        // GOWA / EVOLUTION
+        const p = payload.payload || payload.data || payload;
+        isFromMe = p.is_from_me || p.fromMe || p.key?.fromMe || false;
+        phone = p.remoteJid || p.key?.remoteJid || p.from;
+        if (!phone) return new Response('ok', { status: 200 });
+        senderPhone = phone.split('@')[0].replace(/\D/g, '');
+        text = p.body || p.message?.conversation || '[Mensaje]';
+        messageId = p.id || p.key?.id;
+    }
 
-        if (msg.type === 'text') { text = msg.text?.body || ''; mediaType = 'text'; } 
-        else if (msg.type === 'image') { text = msg.image?.caption || '[Imagen]'; mediaType = 'image'; } 
-        else { text = '[Mensaje]'; mediaType = 'text'; }
-    } 
-    // 2. GOWA / EVOLUTION API
-    else if ((payload.device_id || payload.instance) && payload.event) { 
-       if (payload.event !== 'message' && payload.event !== 'messages.upsert' && payload.event !== 'SEND_MESSAGE') return new Response('ignored_event', { status: 200 });
-       
-       const p = payload.payload || payload.data || payload;
-       if (!p) return new Response('ignored_empty', { status: 200 });
-       
-       isFromMe = p.is_from_me === true || p.fromMe === true || p.key?.fromMe === true || false;
+    if (!phone) return new Response('ok', { status: 200 });
+    let senderPhone = String(phone).split('@')[0].replace(/\D/g, '');
 
-       const instanceName = String(payload.device_id || payload.instance || '').trim();
-       if (!actualChannelId && instanceName) {
-           const { data: ch } = await supabaseClient.from('whatsapp_channels').select('id').ilike('instance_id', instanceName).maybeSingle();
-           if (ch) actualChannelId = ch.id;
-       }
-
-       phone = p.remoteJid || p.key?.remoteJid || (isFromMe ? p.to : p.from);
-       if (!phone) return new Response('no_phone', { status: 200 });
-       
-       messageId = p.id || p.key?.id || `msg-${Date.now()}`;
-       pushName = p.from_name || p.pushName || 'Lead Gowa';
-
-       if (p.image || p.message?.imageMessage) { text = p.body || p.message?.imageMessage?.caption || "[Imagen]"; mediaType = 'image'; } 
-       else { text = p.body || p.message?.conversation || p.message?.extendedTextMessage?.text || "[Mensaje]"; mediaType = 'text'; }
-    } else { return new Response('unknown_payload', { status: 200 }); }
-
-    if (!phone || !messageId) return new Response('invalid_data', { status: 200 });
-    let senderPhone = phone.split('@')[0].replace(/\D/g, '');
-
-    const { data: channelData } = await supabaseClient.from('whatsapp_channels').select('*').eq('id', actualChannelId).maybeSingle();
-    const isChannelActive = channelData?.is_active !== false;
-
-    // RESOLUCIÓN DE ASIGNACIÓN PRIORITARIA
-    let assignedAgent = channelAgentMap[actualChannelId] || null;
-
+    // --- BUSCAR O CREAR LEAD ---
     let { data: lead } = await supabaseClient.from('leads').select('*').or(`telefono.ilike.%${senderPhone.slice(-10)}%`).limit(1).maybeSingle();
     
     if (!lead) {
-        if (isFromMe) return new Response('ignore_new_lead_from_me', { status: 200 }); 
+        if (isFromMe) return new Response('ok', { status: 200 });
         const { data: nl } = await supabaseClient.from('leads').insert({ 
-           nombre: pushName, telefono: senderPhone, channel_id: actualChannelId || null, assigned_to: assignedAgent,
-           ai_paused: assignedAgent ? true : false 
+           nombre: pushName, telefono: senderPhone, channel_id: actualChannelId, ai_paused: false 
         }).select().single();
         lead = nl;
     } else {
-        const updates: any = { last_message_at: new Date().toISOString() };
+        const updates: any = { last_message_at: new Date().toISOString(), followup_stage: 0 };
         if (actualChannelId) updates.channel_id = actualChannelId;
-        if (!isFromMe) updates.followup_stage = 0;
-
-        if (assignedAgent && lead.assigned_to !== assignedAgent) {
-           updates.assigned_to = assignedAgent;
-           updates.ai_paused = true; 
-        }
-
         await supabaseClient.from('leads').update(updates).eq('id', lead.id);
-        lead.channel_id = updates.channel_id || lead.channel_id;
-        if (updates.assigned_to) lead.assigned_to = updates.assigned_to;
-        if (updates.ai_paused !== undefined) lead.ai_paused = updates.ai_paused;
+        lead = { ...lead, ...updates };
     }
 
-    if (isFromMe) {
-        const cmd = text.trim().toUpperCase();
-        if (cmd === '#STOP' || cmd === '#START') {
-            await supabaseClient.from('leads').update({ ai_paused: cmd === '#STOP' }).eq('id', lead.id);
-            return new Response('ok', { status: 200 });
-        }
-        await supabaseClient.from('conversaciones').insert({ lead_id: lead.id, emisor: 'HUMANO', mensaje: text, platform: 'WHATSAPP', metadata: { msgId: messageId } });
-        return new Response('ok', { status: 200 });
+    if (isFromMe) return new Response('ok', { status: 200 });
+
+    // --- REGISTRAR MENSAJE ---
+    await supabaseClient.from('conversaciones').insert({ lead_id: lead.id, emisor: 'CLIENTE', mensaje: text, platform: 'WHATSAPP' });
+
+    // --- DISPARAR IA ---
+    if (!lead.ai_paused && !isGlobalAiPaused && configMap['openai_api_key']) {
+        logTrace(`🤖 Samurai respondiendo a ${lead.nombre}...`);
+        await supabaseClient.functions.invoke('process-samurai-response', { body: { lead_id: lead.id, client_message: text } });
     }
-
-    // REGISTRO DE CLIENTE
-    await supabaseClient.from('conversaciones').insert({ 
-        lead_id: lead.id, emisor: 'CLIENTE', mensaje: text || " ", platform: 'WHATSAPP',
-        metadata: { msgId: messageId, mediaType }
-    });
-
-    const tasks = [];
-
-    // Tarea 1: Analizar CRM en paralelo
-    tasks.push(
-        logTrace(`Extrayendo datos CAPI del mensaje de ${lead.nombre}...`)
-        .then(() => supabaseClient.functions.invoke('analyze-leads', { body: { lead_id: lead.id, force: false } }))
-        .catch(err => logTrace(`Error analyze-leads: ${err.message}`, true))
-    );
-
-    // Tarea 2: Generar y enviar respuesta IA en paralelo
-    if (!lead.ai_paused && !isGlobalAiPaused && isChannelActive && configMap['openai_api_key']) {
-        tasks.push(
-            logTrace(`🤖 Delegando respuesta a Samurai Kernel para el lead ${lead.nombre}...`)
-            .then(() => supabaseClient.functions.invoke('process-samurai-response', { body: { lead_id: lead.id, client_message: text } }))
-            .catch(err => logTrace(`Error Samurai: ${err.message}`, true))
-        );
-    } else {
-        await logTrace(`⏸️ Samurai NO respondió. Causas: Lead Pausado=${lead.ai_paused}, Global=${isGlobalAiPaused}, Canal=${isChannelActive}`);
-    }
-
-    // Esperamos a que ambas terminen antes de devolver respuesta a Gowa
-    await Promise.allSettled(tasks);
 
     return new Response('ok', { headers: corsHeaders });
   } catch (err) {
-    await logTrace(`ERROR CRÍTICO WEBHOOK: ${err.message}`, true);
-    return new Response(err.message, { status: 200, headers: corsHeaders });
+    await logTrace(`ERROR WEBHOOK: ${err.message}`, true);
+    return new Response('error', { status: 200 });
   }
 });
