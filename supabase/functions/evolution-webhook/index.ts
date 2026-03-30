@@ -101,8 +101,11 @@ serve(async (req) => {
     const { data: config } = await supabase.from('app_config').select('value').eq('key', 'global_ai_status').maybeSingle();
     
     if (config?.value !== 'paused' && !lead.ai_paused) {
-        await supabase.functions.invoke('analyze-leads', { body: { lead_id: lead.id, force: false } });
+        // CRÍTICO: process-samurai-response PRIMERO (user-facing, genera respuesta al cliente).
+        // analyze-leads es background (scoring/CAPI) y NO debe bloquear la respuesta.
         await supabase.functions.invoke('process-samurai-response', { body: { lead_id: lead.id, client_message: text } });
+        // Fire-and-forget: analyze-leads corre en background sin bloquear el webhook
+        supabase.functions.invoke('analyze-leads', { body: { lead_id: lead.id } }).catch(() => {});
     }
 
     return new Response('ok', { status: 200, headers: corsHeaders });
