@@ -125,12 +125,7 @@ serve(async (req) => {
     const aiText = aiData.choices?.[0]?.message?.content || '';
 
     if (aiText) {
-        // PRIMERO: Guardar en el CRM (esto NUNCA debe fallar por culpa de WhatsApp)
-        await supabase.from('conversaciones').insert({
-            lead_id: lead.id, emisor: 'IA', mensaje: aiText, platform: 'WHATSAPP'
-        });
-
-        // DESPUÉS: Enviar a WhatsApp (en su propio try/catch para no afectar el registro)
+        // Enviar a WhatsApp (en su propio try/catch)
         try {
             const { data: sendData, error: sendErr } = await supabase.functions.invoke('send-message-v3', {
                 body: { channel_id: lead.channel_id, phone: lead.telefono, message: aiText, lead_id: lead.id }
@@ -141,12 +136,6 @@ serve(async (req) => {
                     action: 'ERROR', resource: 'SYSTEM',
                     description: `ERROR WHATSAPP (${lead.telefono}): ${sendErr?.message || JSON.stringify(sendData?.error || 'unknown')}`,
                     status: 'ERROR'
-                });
-            } else {
-                await supabase.from('activity_logs').insert({
-                    action: 'UPDATE', resource: 'BRAIN',
-                    description: `[IA RESPONDIO] Mensaje enviado a ${lead.nombre}`,
-                    status: 'OK'
                 });
             }
         } catch (sendError: any) {
@@ -164,7 +153,10 @@ serve(async (req) => {
         });
     }
 
-    return new Response('ok', { headers: corsHeaders });
+    // RETORNAR el texto IA para que el webhook lo guarde también (doble seguridad)
+    return new Response(JSON.stringify({ aiText: aiText || '' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    });
   } catch (err: any) {
     await supabase.from('activity_logs').insert({ 
         action: 'ERROR', resource: 'SYSTEM', 

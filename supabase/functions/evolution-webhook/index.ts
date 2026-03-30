@@ -134,10 +134,25 @@ serve(async (req) => {
     const { data: config } = await supabase.from('app_config').select('value').eq('key', 'global_ai_status').maybeSingle();
     
     if (config?.value !== 'paused' && !lead.ai_paused) {
-        // CRÍTICO: process-samurai-response PRIMERO (user-facing, genera respuesta al cliente).
-        // analyze-leads es background (scoring/CAPI) y NO debe bloquear la respuesta.
-        await supabase.functions.invoke('process-samurai-response', { body: { lead_id: lead.id, client_message: text } });
-        // Fire-and-forget: analyze-leads corre en background sin bloquear el webhook
+        // Llamar al procesador IA y capturar la respuesta
+        try {
+            const { data: aiResult, error: aiErr } = await supabase.functions.invoke('process-samurai-response', {
+                body: { lead_id: lead.id, client_message: text }
+            });
+
+            // DOBLE SEGURIDAD: si process-samurai-response retorna el texto IA,
+            // guardarlo desde AQUÍ (mismo cliente que ya guarda mensajes del cliente exitosamente)
+            const aiText = aiResult?.aiText;
+            if (aiText && !aiErr) {
+                await supabase.from('conversaciones').insert({
+                    lead_id: lead.id, emisor: 'IA', mensaje: aiText, platform: 'WHATSAPP'
+                });
+            }
+        } catch (invokeErr) {
+            console.error('Error invoking process-samurai-response:', invokeErr);
+        }
+
+        // Fire-and-forget: analyze-leads corre en background
         supabase.functions.invoke('analyze-leads', { body: { lead_id: lead.id } }).catch(() => {});
     }
 
