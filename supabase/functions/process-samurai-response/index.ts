@@ -70,17 +70,26 @@ serve(async (req) => {
         .order('created_at', { ascending: true })
         .limit(10);
 
-    // Obtener constitución del Kernel
-    const { data: kernel, error: kernelErr } = await supabase.functions.invoke('get-samurai-context', { body: { lead } });
-    if (kernelErr) {
-        await supabase.from('activity_logs').insert({ 
-            action: 'ERROR', resource: 'BRAIN', 
-            description: `⚠️ Fallo al obtener contexto del Kernel: ${kernelErr.message}`, 
-            status: 'ERROR' 
+    // Obtener constitución del Kernel (protegido para no matar el flujo)
+    let systemPrompt = "Eres Sam, asistente de ventas amigable y profesional.";
+    try {
+        const { data: kernel, error: kernelErr } = await supabase.functions.invoke('get-samurai-context', { body: { lead } });
+        if (kernelErr) {
+            await supabase.from('activity_logs').insert({
+                action: 'ERROR', resource: 'BRAIN',
+                description: `Fallo al obtener contexto del Kernel: ${kernelErr.message}`,
+                status: 'ERROR'
+            });
+        } else if (kernel?.system_prompt) {
+            systemPrompt = kernel.system_prompt;
+        }
+    } catch (ctxErr: any) {
+        await supabase.from('activity_logs').insert({
+            action: 'ERROR', resource: 'BRAIN',
+            description: `CRASH get-samurai-context: ${ctxErr.message}`,
+            status: 'ERROR'
         });
     }
-
-    const systemPrompt = kernel?.system_prompt || "Eres Sam, asistente de ventas amigable y profesional.";
 
     const msgs = [
         { role: 'system', content: systemPrompt },
@@ -116,36 +125,42 @@ serve(async (req) => {
     const aiText = aiData.choices?.[0]?.message?.content || '';
 
     if (aiText) {
-        // Enviar a WhatsApp
-        const { data: sendData, error: sendErr } = await supabase.functions.invoke('send-message-v3', { 
-            body: { channel_id: lead.channel_id, phone: lead.telefono, message: aiText, lead_id: lead.id } 
+        // PRIMERO: Guardar en el CRM (esto NUNCA debe fallar por culpa de WhatsApp)
+        await supabase.from('conversaciones').insert({
+            lead_id: lead.id, emisor: 'IA', mensaje: aiText, platform: 'WHATSAPP'
         });
-        
-        // DETECTOR DE ERRORES WHATSAPP
-        if (sendErr || (sendData && !sendData.success)) {
-            await supabase.from('activity_logs').insert({ 
-                action: 'ERROR', resource: 'SYSTEM', 
-                description: `🚨 ERROR WHATSAPP (${lead.telefono}): ${sendErr?.message || sendData?.error}`, 
-                status: 'ERROR' 
+
+        // DESPUÉS: Enviar a WhatsApp (en su propio try/catch para no afectar el registro)
+        try {
+            const { data: sendData, error: sendErr } = await supabase.functions.invoke('send-message-v3', {
+                body: { channel_id: lead.channel_id, phone: lead.telefono, message: aiText, lead_id: lead.id }
+            });
+
+            if (sendErr || (sendData && !sendData.success)) {
+                await supabase.from('activity_logs').insert({
+                    action: 'ERROR', resource: 'SYSTEM',
+                    description: `ERROR WHATSAPP (${lead.telefono}): ${sendErr?.message || JSON.stringify(sendData?.error || 'unknown')}`,
+                    status: 'ERROR'
+                });
+            } else {
+                await supabase.from('activity_logs').insert({
+                    action: 'UPDATE', resource: 'BRAIN',
+                    description: `[IA RESPONDIO] Mensaje enviado a ${lead.nombre}`,
+                    status: 'OK'
+                });
+            }
+        } catch (sendError: any) {
+            await supabase.from('activity_logs').insert({
+                action: 'ERROR', resource: 'SYSTEM',
+                description: `ERROR ENVIO WA (${lead.telefono}): ${sendError.message}`,
+                status: 'ERROR'
             });
         }
-
-        // SIEMPRE registrar la respuesta en el chat
-        await supabase.from('conversaciones').insert({ 
-            lead_id: lead.id, emisor: 'IA', mensaje: aiText, platform: 'WHATSAPP' 
-        });
-        
-        // LOG: Éxito
-        await supabase.from('activity_logs').insert({ 
-            action: 'UPDATE', resource: 'BRAIN', 
-            description: `✅ [IA RESPONDIÓ] Mensaje enviado a ${lead.nombre}`, 
-            status: 'OK' 
-        });
     } else {
-        await supabase.from('activity_logs').insert({ 
-            action: 'ERROR', resource: 'BRAIN', 
-            description: `⚠️ OpenAI devolvió respuesta vacía para ${lead.nombre}`, 
-            status: 'ERROR' 
+        await supabase.from('activity_logs').insert({
+            action: 'ERROR', resource: 'BRAIN',
+            description: `OpenAI devolvio respuesta vacia para ${lead.nombre}`,
+            status: 'ERROR'
         });
     }
 
