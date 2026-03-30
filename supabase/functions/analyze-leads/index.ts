@@ -16,63 +16,46 @@ serve(async (req) => {
     const body = await req.json();
     const lead_id = body.lead_id;
     
-    if (!lead_id) {
-      return new Response(JSON.stringify({ error: 'lead_id required' }), { headers: corsHeaders });
-    }
+    if (!lead_id) return new Response(JSON.stringify({ error: 'lead_id required' }), { headers: corsHeaders });
 
     const { data: lead } = await supabase.from('leads').select('*').eq('id', lead_id).single();
-    if (!lead) {
-      return new Response(JSON.stringify({ error: 'Lead not found' }), { headers: corsHeaders });
+    if (!lead) return new Response(JSON.stringify({ error: 'Lead not found' }), { headers: corsHeaders });
+
+    // BLINDAJE 1: Nunca analizar ni cambiar leads que ya están en COMPRADO
+    if (lead.buying_intent === 'COMPRADO') {
+      return new Response(JSON.stringify({ message: 'Ignorado: Lead ya está ganado' }), { headers: corsHeaders });
     }
 
-    // NUNCA cambiar buying_intent de leads que ya están en PERDIDO o COMPRADO
-    if (lead.buying_intent === 'PERDIDO' || lead.buying_intent === 'COMPRADO') {
-      return new Response(JSON.stringify({ message: 'Lead is in closed state, skipping analysis' }), { headers: corsHeaders });
+    // BLINDAJE 2: Si por alguna razón extraña llegó como PERDIDO, lo rescatamos a BAJO
+    if (lead.buying_intent === 'PERDIDO') {
+       await supabase.from('leads').update({ buying_intent: 'BAJO' }).eq('id', lead.id);
+       lead.buying_intent = 'BAJO';
     }
 
     const { data: configs } = await supabase.from('app_config').select('key, value');
     const configMap = configs?.reduce((acc: any, c) => ({ ...acc, [c.key]: c.value }), {}) || {};
     const apiKey = configMap.openai_api_key;
 
-    // Extraer información del mensaje del cliente
+    if (!apiKey) return new Response(JSON.stringify({ message: 'No API key' }), { headers: corsHeaders });
+
     const { data: lastMessages } = await supabase.from('conversaciones')
       .select('mensaje, emisor')
       .eq('lead_id', lead.id)
       .order('created_at', { ascending: false })
-      .limit(5);
+      .limit(3);
 
-    const clientMessages = (lastMessages || [])
-      .filter(m => m.emisor === 'CLIENTE')
-      .map(m => m.mensaje)
-      .join('\n');
+    const clientMessages = (lastMessages || []).filter(m => m.emisor === 'CLIENTE').map(m => m.mensaje).join('\n');
+    if (!clientMessages) return new Response(JSON.stringify({ message: 'No client messages' }), { headers: corsHeaders });
 
-    if (!clientMessages) {
-      // Si no hay mensajes de cliente, mantener el intent actual (default BAJO)
-      if (!lead.buying_intent || lead.buying_intent === 'PERDIDO') {
-        await supabase.from('leads').update({ buying_intent: 'BAJO' }).eq('id', lead.id);
-      }
-      return new Response(JSON.stringify({ message: 'No client messages to analyze' }), { headers: corsHeaders });
-    }
+    const analysisPrompt = `Analiza este mensaje de cliente y extrae:
+    1. Ciudad (si la menciona)
+    2. Email (si lo menciona)
+    3. Intención de compra: Responde ESTRICTAMENTE con una de estas tres palabras: "BAJO", "MEDIO" o "ALTO". (Nunca respondas PERDIDO).
 
-    // Si no hay API key, mantener intent actual o asignar BAJO
-    if (!apiKey) {
-      if (!lead.buying_intent || lead.buying_intent === 'PERDIDO') {
-        await supabase.from('leads').update({ buying_intent: 'BAJO' }).eq('id', lead.id);
-      }
-      return new Response(JSON.stringify({ message: 'No API key, keeping current intent' }), { headers: corsHeaders });
-    }
+    Mensaje:
+    ${clientMessages}
 
-    // Analizar con IA
-    const analysisPrompt = `Analiza el siguiente mensaje de un cliente y extrae:
-1. Ciudad mencionada (si hay)
-2. Email mencionado (si hay)
-3. Intención de compra (BAJO, MEDIO, ALTO - NUNCA usar PERDIDO)
-
-Mensajes del cliente:
-${clientMessages}
-
-Responde SOLO en formato JSON:
-{"ciudad": "", "email": "", "intent": "BAJO|MEDIO|ALTO"}`;
+    Responde en JSON exacto: {"ciudad": "", "email": "", "intent": "BAJO"}`;
 
     const aiRes = await fetch("https://api.openai.com/v1/chat/completions", {
       method: 'POST',
@@ -80,41 +63,44 @@ Responde SOLO en formato JSON:
       body: JSON.stringify({ 
         model: "gpt-4o-mini", 
         messages: [{ role: 'user', content: analysisPrompt }],
-        temperature: 0.1
+        temperature: 0.1,
+        response_format: { type: "json_object" }
       })
     });
 
     const aiData = await aiRes.json();
-    const content = aiData.choices?.[0]?.message?.content || '';
+    const content = aiData.choices?.[0]?.message?.content || '{}';
 
     try {
       const parsed = JSON.parse(content);
-      
       const updates: any = {};
       
-      // NUNCA permitir que la IA asigne PERDIDO
-      if (parsed.intent && ['BAJO', 'MEDIO', 'ALTO'].includes(parsed.intent)) {
-        updates.buying_intent = parsed.intent;
+      // BLINDAJE 3 DE HIERRO: Solo permitimos que la IA asigne estados positivos.
+      const allowedIntents = ['BAJO', 'MEDIO', 'ALTO'];
+      let newIntent = parsed.intent ? String(parsed.intent).toUpperCase() : '';
+      
+      if (allowedIntents.includes(newIntent)) {
+         updates.buying_intent = newIntent;
       } else {
-        // Default a BAJO si la IA devuelve algo inválido
-        updates.buying_intent = lead.buying_intent || 'BAJO';
+         // Si la IA alucina y responde "PERDIDO" u otra cosa, forzamos BAJO.
+         updates.buying_intent = allowedIntents.includes(lead.buying_intent) ? lead.buying_intent : 'BAJO';
       }
       
-      if (parsed.ciudad) updates.ciudad = parsed.ciudad;
-      if (parsed.email) updates.email = parsed.email;
+      if (parsed.ciudad && parsed.ciudad.length > 2) updates.ciudad = parsed.ciudad;
+      if (parsed.email && parsed.email.includes('@')) updates.email = parsed.email;
+
+      // Doble validación final
+      if (updates.buying_intent === 'PERDIDO') updates.buying_intent = 'BAJO';
 
       await supabase.from('leads').update(updates).eq('id', lead.id);
 
-      return new Response(JSON.stringify({ success: true, updates }), { headers: corsHeaders });
+      return new Response(JSON.stringify({ success: true, intent: updates.buying_intent }), { headers: corsHeaders });
+
     } catch (parseError) {
-      // Si falla el parseo, mantener intent actual
-      if (!lead.buying_intent || lead.buying_intent === 'PERDIDO') {
-        await supabase.from('leads').update({ buying_intent: 'BAJO' }).eq('id', lead.id);
-      }
-      return new Response(JSON.stringify({ message: 'Parse error, keeping current intent' }), { headers: corsHeaders });
+      return new Response(JSON.stringify({ message: 'Parse error' }), { headers: corsHeaders });
     }
 
   } catch (err: any) {
-    return new Response(JSON.stringify({ error: err.message }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    return new Response(JSON.stringify({ error: err.message }), { status: 200, headers: corsHeaders });
   }
 });

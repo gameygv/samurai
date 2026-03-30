@@ -10,7 +10,6 @@ const corsHeaders = {
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
-  // FIX: Configuración correcta de variables de entorno para DB
   const supabase = createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '');
 
   try {
@@ -19,18 +18,16 @@ serve(async (req) => {
     
     const daysToLost = parseInt(configMap.days_to_lost_lead || '14');
     
-    // NUNCA marcar leads como PERDIDO si el setting es 0 o negativo
     if (daysToLost <= 0) {
-      return new Response(JSON.stringify({ message: 'Auto-lost disabled (days_to_lost_lead <= 0)' }), { headers: corsHeaders });
+      return new Response(JSON.stringify({ message: 'Auto-lost disabled' }), { headers: corsHeaders });
     }
 
-    // Buscar leads que NO estén en etapa cerrada
     const { data: activeLeads } = await supabase.from('leads')
       .select('id, nombre, buying_intent, last_message_at, created_at')
       .not('buying_intent', 'in', '("PERDIDO","COMPRADO")');
 
     if (!activeLeads || activeLeads.length === 0) {
-      return new Response(JSON.stringify({ message: 'No active leads found' }), { headers: corsHeaders });
+      return new Response(JSON.stringify({ message: 'No active leads' }), { headers: corsHeaders });
     }
 
     const now = new Date();
@@ -40,34 +37,29 @@ serve(async (req) => {
     const results = [];
 
     for (const lead of activeLeads) {
-      // PROTECCIÓN CRÍTICA: Lead debe existir por al menos 24 horas antes de poder ser marcado como PERDIDO
+      // BLINDAJE 4: Protección de 24 horas. El cron job JAMÁS matará un lead que acaba de entrar.
       const leadCreatedAt = new Date(lead.created_at);
       const leadAgeMs = now.getTime() - leadCreatedAt.getTime();
       const leadAgeHours = leadAgeMs / (1000 * 60 * 60);
       
       if (leadAgeHours < 24) {
-        results.push({ id: lead.id, status: 'PROTECTED', reason: `Lead creado hace ${leadAgeHours.toFixed(1)} horas (menos de 24h)` });
+        results.push({ id: lead.id, status: 'PROTECTED', reason: '< 24h old' });
         continue;
       }
 
-      // Si no hay last_message_at, usar created_at como fallback
       const lastActivity = lead.last_message_at ? new Date(lead.last_message_at) : new Date(lead.created_at);
       
       if (lastActivity < thresholdDate) {
         const { error } = await supabase.from('leads').update({ buying_intent: 'PERDIDO' }).eq('id', lead.id);
         if (!error) {
           lostCount++;
-          results.push({ id: lead.id, status: 'MARKED_LOST', reason: `Sin actividad por ${daysToLost}+ días` });
+          results.push({ id: lead.id, status: 'MARKED_LOST' });
         }
       }
     }
 
-    return new Response(JSON.stringify({ 
-      message: `Processed ${activeLeads.length} leads. Marked ${lostCount} as lost. Protected new leads.`,
-      results 
-    }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-
+    return new Response(JSON.stringify({ message: `Processed. Marked ${lostCount} lost.`, results }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   } catch (err: any) {
-    return new Response(JSON.stringify({ error: err.message }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    return new Response(JSON.stringify({ error: err.message }), { status: 200, headers: corsHeaders });
   }
 });

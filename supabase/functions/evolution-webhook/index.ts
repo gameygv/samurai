@@ -29,7 +29,6 @@ serve(async (req) => {
     let actualChannelId = channelIdParam;
     let isFromMe = false;
 
-    // --- IDENTIFICAR PAYLOAD (META O GOWA) ---
     if (payload.object === 'whatsapp_business_account') {
         const change = payload.entry?.[0]?.changes?.[0]?.value;
         if (!change || change.statuses) return new Response('ok', { status: 200 });
@@ -58,34 +57,36 @@ serve(async (req) => {
     if (!phone) return new Response('ok', { status: 200 });
     let senderPhone = String(phone).split('@')[0].replace(/\D/g, '');
 
-    // --- 1. BUSCAR O CREAR LEAD ---
     let { data: lead } = await supabase.from('leads').select('*').or(`telefono.ilike.%${senderPhone.slice(-10)}%`).limit(1).maybeSingle();
     
     if (!lead) {
         if (isFromMe) return new Response('ok', { status: 200 });
         
-        // CREACIÓN PROTEGIDA: Forzar BAJO explícitamente
         const { data: nl, error: insertError } = await supabase.from('leads').insert({ 
            nombre: pushName, 
            telefono: senderPhone, 
            channel_id: actualChannelId, 
            ai_paused: false,
-           buying_intent: 'BAJO',
+           buying_intent: 'BAJO', // ESTRICTO
            last_message_at: new Date().toISOString(),
            followup_stage: 0
         }).select().single();
         
-        if (insertError) {
-          console.error('Error creating lead:', insertError);
-        }
+        if (insertError) console.error(insertError);
         lead = nl;
+        
+        await supabase.from('activity_logs').insert({ 
+            action: 'CREATE', resource: 'LEADS', description: `Lead entrante (${pushName}). Asignado a etapa BAJO (Hunting).`, status: 'OK' 
+        });
     } else {
         const updates: any = { last_message_at: new Date().toISOString(), followup_stage: 0 };
         if (actualChannelId) updates.channel_id = actualChannelId;
         
-        // AUTO-RESCATE: Si el cliente escribe y estaba en "Perdido", lo regresamos a Hunting
         if (lead.buying_intent === 'PERDIDO') {
             updates.buying_intent = 'BAJO';
+            await supabase.from('activity_logs').insert({ 
+                action: 'UPDATE', resource: 'LEADS', description: `Rescate Automático: El lead ${lead.nombre} estaba en PERDIDO pero escribió. Regresa a etapa BAJO.`, status: 'OK' 
+            });
         }
         
         await supabase.from('leads').update(updates).eq('id', lead.id);
@@ -94,15 +95,9 @@ serve(async (req) => {
 
     if (isFromMe) return new Response('ok', { status: 200 });
 
-    // --- 2. REGISTRAR MENSAJE DEL CLIENTE ---
     await supabase.from('conversaciones').insert({ lead_id: lead.id, emisor: 'CLIENTE', mensaje: text, platform: 'WHATSAPP' });
+    await supabase.from('activity_logs').insert({ action: 'CHAT', resource: 'SYSTEM', description: `Mensaje de ${lead.nombre}: "${text.substring(0, 30)}..."`, status: 'OK' });
 
-    // --- 3. LOG VISIBLE EN MONITOR ---
-    await supabase.from('activity_logs').insert({ 
-        action: 'CHAT', resource: 'SYSTEM', description: `Mensaje recibido de ${lead.nombre}: "${text.substring(0, 30)}..."`, status: 'OK' 
-    });
-
-    // --- 4. PROCESAMIENTO SECUENCIAL PROTEGIDO ---
     const { data: config } = await supabase.from('app_config').select('value').eq('key', 'global_ai_status').maybeSingle();
     
     if (config?.value !== 'paused' && !lead.ai_paused) {
@@ -111,7 +106,6 @@ serve(async (req) => {
     }
 
     return new Response('ok', { status: 200, headers: corsHeaders });
-
   } catch (err) {
     console.error(err);
     return new Response('error', { status: 200 });
