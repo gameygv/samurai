@@ -97,10 +97,8 @@ serve(async (req) => {
     const { data: channelData } = await supabaseClient.from('whatsapp_channels').select('*').eq('id', actualChannelId).maybeSingle();
     const isChannelActive = channelData?.is_active !== false;
 
-    // RESOLUCIÓN DE ASIGNACIÓN PRIORITARIA: Si el canal tiene dueño, se le asigna SIEMPRE.
+    // RESOLUCIÓN DE ASIGNACIÓN PRIORITARIA
     let assignedAgent = channelAgentMap[actualChannelId] || null;
-    
-    await logTrace(`Routing Check -> Channel: ${channelData?.name || actualChannelId} | Destino Forzoso: ${assignedAgent || 'Auto/Bot'}`);
 
     let { data: lead } = await supabaseClient.from('leads').select('*').or(`telefono.ilike.%${senderPhone.slice(-10)}%`).limit(1).maybeSingle();
     
@@ -143,12 +141,16 @@ serve(async (req) => {
         metadata: { msgId: messageId, mediaType }
     });
 
+    await logTrace(`Extrayendo datos CAPI del mensaje de ${lead.nombre}...`);
     await supabaseClient.functions.invoke('analyze-leads', { body: { lead_id: lead.id, force: false } });
 
     // RESPUESTA DE IA
     if (!lead.ai_paused && !isGlobalAiPaused && isChannelActive && configMap['openai_api_key']) {
-        // Lógica de respuesta IA...
-        await supabaseClient.functions.invoke('process-samurai-response', { body: { phone: senderPhone, client_message: text } });
+        await logTrace(`🤖 Delegando respuesta a Samurai Kernel para el lead ${lead.nombre}...`);
+        // Invocamos directamente pasando el lead_id para evitar dobles búsquedas y retrasos.
+        await supabaseClient.functions.invoke('process-samurai-response', { body: { lead_id: lead.id, client_message: text } });
+    } else {
+        await logTrace(`⏸️ Samurai NO respondió. Causas posibles: Lead Pausado=${lead.ai_paused}, Global Pausado=${isGlobalAiPaused}, Canal Inactivo=${!isChannelActive}, API Key=${!!configMap['openai_api_key']}`);
     }
 
     return new Response('ok', { headers: corsHeaders });
