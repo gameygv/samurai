@@ -10,7 +10,7 @@ const corsHeaders = {
 serve(async (req) => {
   const url = new URL(req.url);
   const channelIdParam = url.searchParams.get('channel_id');
-  const supabaseClient = createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '');
+  const supabase = createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '');
 
   if (req.method === 'GET') {
     const challenge = url.searchParams.get("hub.challenge");
@@ -43,7 +43,7 @@ serve(async (req) => {
 
         const phoneId = change.metadata?.phone_number_id;
         if (phoneId) {
-            const { data: ch } = await supabaseClient.from('whatsapp_channels').select('id').eq('instance_id', phoneId).maybeSingle();
+            const { data: ch } = await supabase.from('whatsapp_channels').select('id').eq('instance_id', phoneId).maybeSingle();
             if (ch) actualChannelId = ch.id;
         }
     } else {
@@ -59,67 +59,64 @@ serve(async (req) => {
     let senderPhone = String(phone).split('@')[0].replace(/\D/g, '');
 
     // --- 1. BUSCAR O CREAR LEAD ---
-    let { data: lead } = await supabaseClient.from('leads').select('*').or(`telefono.ilike.%${senderPhone.slice(-10)}%`).limit(1).maybeSingle();
+    let { data: lead } = await supabase.from('leads').select('*').or(`telefono.ilike.%${senderPhone.slice(-10)}%`).limit(1).maybeSingle();
     
     if (!lead) {
         if (isFromMe) return new Response('ok', { status: 200 });
         
-        // BLINDAJE: Forzar BAJO explícitamente y registrar timestamp
-        const { data: nl } = await supabaseClient.from('leads').insert({ 
+        // CREACIÓN PROTEGIDA: Forzar BAJO explícitamente
+        const { data: nl, error: insertError } = await supabase.from('leads').insert({ 
            nombre: pushName, 
            telefono: senderPhone, 
            channel_id: actualChannelId, 
            ai_paused: false,
-           buying_intent: 'BAJO', // FORZAMOS HUNTING DESDE EL NACIMIENTO
+           buying_intent: 'BAJO',
            last_message_at: new Date().toISOString(),
            followup_stage: 0
         }).select().single();
+        
+        if (insertError) {
+          console.error('Error creating lead:', insertError);
+        }
         lead = nl;
     } else {
         const updates: any = { last_message_at: new Date().toISOString(), followup_stage: 0 };
         if (actualChannelId) updates.channel_id = actualChannelId;
         
-        // AUTO-RESCATE: Si el cliente escribe y estaba en "Perdido", lo regresamos a Hunting obligatoriamente.
+        // AUTO-RESCATE: Si el cliente escribe y estaba en "Perdido", lo regresamos a Hunting
         if (lead.buying_intent === 'PERDIDO') {
             updates.buying_intent = 'BAJO';
         }
         
-        await supabaseClient.from('leads').update(updates).eq('id', lead.id);
+        await supabase.from('leads').update(updates).eq('id', lead.id);
         lead = { ...lead, ...updates };
     }
 
     if (isFromMe) return new Response('ok', { status: 200 });
 
     // --- 2. REGISTRAR MENSAJE DEL CLIENTE ---
-    await supabaseClient.from('conversaciones').insert({ lead_id: lead.id, emisor: 'CLIENTE', mensaje: text, platform: 'WHATSAPP' });
+    await supabase.from('conversaciones').insert({ lead_id: lead.id, emisor: 'CLIENTE', mensaje: text, platform: 'WHATSAPP' });
 
-    // Log visible en el Monitor
-    await supabaseClient.from('activity_logs').insert({ 
-        action: 'CHAT', resource: 'SYSTEM', description: `Mensaje recibido de ${lead.nombre}: "${text.substring(0, 20)}..."`, status: 'OK' 
+    // --- 3. LOG VISIBLE EN MONITOR ---
+    await supabase.from('activity_logs').insert({ 
+        action: 'CHAT', resource: 'SYSTEM', description: `Mensaje recibido de ${lead.nombre}: "${text.substring(0, 30)}..."`, status: 'OK' 
     });
 
-    // --- 3. DISPARO PROTEGIDO DE IA ---
-    const promises = [];
-    const { data: config } = await supabaseClient.from('app_config').select('value').eq('key', 'global_ai_status').maybeSingle();
+    // --- 4. PROCESAMIENTO SECUENCIAL PROTEGIDO ---
+    // Primero analizar, luego responder
+    const { data: config } = await supabase.from('app_config').select('value').eq('key', 'global_ai_status').maybeSingle();
     
-    // Si la IA no está pausada globalmente ni en este lead, la invocamos
     if (config?.value !== 'paused' && !lead.ai_paused) {
-        promises.push(
-            supabaseClient.functions.invoke('process-samurai-response', { body: { lead_id: lead.id, client_message: text } })
-        );
+        // PASO 1: Analizar el lead (extraer ciudad, email, etc.)
+        await supabase.functions.invoke('analyze-leads', { body: { lead_id: lead.id, force: false } });
+        
+        // PASO 2: Generar respuesta de IA
+        await supabase.functions.invoke('process-samurai-response', { body: { lead_id: lead.id, client_message: text } });
     }
-
-    // Invocamos al analista para extraer ciudad/email
-    promises.push(
-        supabaseClient.functions.invoke('analyze-leads', { body: { lead_id: lead.id, force: false } })
-    );
-
-    // ESTA LÍNEA ES LA MAGIA: Obliga al servidor a no cerrarse hasta que la IA termine (máximo 15 segundos permitidos por Meta)
-    await Promise.allSettled(promises);
 
     return new Response('ok', { status: 200, headers: corsHeaders });
 
-  } catch (err) {
+  } now catch (err) {
     return new Response('error', { status: 200 });
   }
 });
