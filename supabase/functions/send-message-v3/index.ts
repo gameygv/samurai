@@ -16,7 +16,6 @@ serve(async (req) => {
 
     let actualChannelId = channel_id;
 
-    // 1. AUTO-RESOLVER CANAL
     if (!actualChannelId && lead_id) {
        const { data: leadData } = await supabaseClient.from('leads').select('channel_id').eq('id', lead_id).single();
        if (leadData?.channel_id) actualChannelId = leadData.channel_id;
@@ -41,7 +40,6 @@ serve(async (req) => {
     let cleanPhone = phone.replace(/\D/g, '');
     
     // CORRECCIÓN CRÍTICA MÉXICO PARA META CLOUD API
-    // Meta prefiere 52 + 10 dígitos (sin el 1 de móvil)
     if (provider === 'meta' && cleanPhone.startsWith('521') && cleanPhone.length === 13) {
         cleanPhone = '52' + cleanPhone.substring(3);
     }
@@ -53,7 +51,8 @@ serve(async (req) => {
     let bodyContent: any;
 
     if (provider === 'meta') {
-      endpoint = `https://graph.facebook.com/v22.0/${channel.instance_id}/messages`;
+      // USAMOS v20.0 ESTABLE EN VEZ DE v22.0 EXPERIMENTAL
+      endpoint = `https://graph.facebook.com/v20.0/${channel.instance_id}/messages`;
       headers['Authorization'] = `Bearer ${channel.api_key}`;
       
       if (mediaData?.url) {
@@ -101,13 +100,10 @@ serve(async (req) => {
       }
     }
 
-    console.log(`[send-message] Despachando via ${provider} a ${cleanPhone}`);
-
     const response = await fetch(endpoint, { method: 'POST', headers, body: bodyContent });
     const resText = await response.text();
 
     if (!response.ok) {
-       console.error(`[send-message] Error ${response.status}:`, resText);
        return new Response(JSON.stringify({ success: false, error: resText, status: response.status }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 

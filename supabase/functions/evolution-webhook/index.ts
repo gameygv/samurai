@@ -70,7 +70,7 @@ serve(async (req) => {
            telefono: senderPhone, 
            channel_id: actualChannelId, 
            ai_paused: false,
-           buying_intent: 'BAJO',
+           buying_intent: 'BAJO', // FORZAMOS HUNTING DESDE EL NACIMIENTO
            last_message_at: new Date().toISOString(),
            followup_stage: 0
         }).select().single();
@@ -79,12 +79,9 @@ serve(async (req) => {
         const updates: any = { last_message_at: new Date().toISOString(), followup_stage: 0 };
         if (actualChannelId) updates.channel_id = actualChannelId;
         
-        // Si estaba en PERDIDO pero nos vuelve a escribir, lo pasamos a BAJO automáticamente
+        // AUTO-RESCATE: Si el cliente escribe y estaba en "Perdido", lo regresamos a Hunting obligatoriamente.
         if (lead.buying_intent === 'PERDIDO') {
             updates.buying_intent = 'BAJO';
-            await supabaseClient.from('activity_logs').insert({
-               action: 'UPDATE', resource: 'LEADS', description: `El cliente ${lead.nombre} (Perdido) ha vuelto a escribir. Movido a Hunting.`, status: 'OK'
-            });
         }
         
         await supabaseClient.from('leads').update(updates).eq('id', lead.id);
@@ -93,16 +90,32 @@ serve(async (req) => {
 
     if (isFromMe) return new Response('ok', { status: 200 });
 
-    // --- 2. REGISTRAR MENSAJE ---
+    // --- 2. REGISTRAR MENSAJE DEL CLIENTE ---
     await supabaseClient.from('conversaciones').insert({ lead_id: lead.id, emisor: 'CLIENTE', mensaje: text, platform: 'WHATSAPP' });
 
-    // --- 3. DISPARO ASÍNCRONO DE IA ---
-    supabaseClient.functions.invoke('analyze-leads', { body: { lead_id: lead.id, force: false } }).catch(e => {});
-    
+    // Log visible en el Monitor
+    await supabaseClient.from('activity_logs').insert({ 
+        action: 'CHAT', resource: 'SYSTEM', description: `Mensaje recibido de ${lead.nombre}: "${text.substring(0, 20)}..."`, status: 'OK' 
+    });
+
+    // --- 3. DISPARO PROTEGIDO DE IA ---
+    const promises = [];
     const { data: config } = await supabaseClient.from('app_config').select('value').eq('key', 'global_ai_status').maybeSingle();
+    
+    // Si la IA no está pausada globalmente ni en este lead, la invocamos
     if (config?.value !== 'paused' && !lead.ai_paused) {
-        supabaseClient.functions.invoke('process-samurai-response', { body: { lead_id: lead.id, client_message: text } }).catch(e => {});
+        promises.push(
+            supabaseClient.functions.invoke('process-samurai-response', { body: { lead_id: lead.id, client_message: text } })
+        );
     }
+
+    // Invocamos al analista para extraer ciudad/email
+    promises.push(
+        supabaseClient.functions.invoke('analyze-leads', { body: { lead_id: lead.id, force: false } })
+    );
+
+    // ESTA LÍNEA ES LA MAGIA: Obliga al servidor a no cerrarse hasta que la IA termine (máximo 15 segundos permitidos por Meta)
+    await Promise.allSettled(promises);
 
     return new Response('ok', { status: 200, headers: corsHeaders });
 
