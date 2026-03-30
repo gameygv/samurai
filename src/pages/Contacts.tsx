@@ -256,6 +256,24 @@ const Contacts = () => {
           </div>
         </div>
 
+        {/* BANNER DE ACCIONES MASIVAS (MUCHO MÁS VISIBLE) */}
+        {selectedIds.length > 0 && (
+          <div className="bg-red-950/20 border border-red-500/30 p-4 rounded-2xl flex flex-col sm:flex-row justify-between items-center gap-4 animate-in slide-in-from-top-2 shadow-lg">
+             <div className="flex items-center gap-3 text-red-400">
+                <CheckSquare className="w-5 h-5"/> 
+                <span className="font-bold">{selectedIds.length} contactos seleccionados</span>
+             </div>
+             <div className="flex gap-3 w-full sm:w-auto">
+                <Button onClick={() => setSelectedIds([])} variant="outline" className="flex-1 sm:flex-none border-red-500/30 text-red-400 hover:bg-red-950/40 h-10 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-colors">
+                   Cancelar
+                </Button>
+                <Button onClick={() => setIsBulkDeleteOpen(true)} variant="destructive" className="flex-1 sm:flex-none bg-red-600 hover:bg-red-500 text-white h-10 px-6 rounded-xl font-bold uppercase tracking-widest text-[10px] shadow-lg transition-all active:scale-95">
+                   <Trash2 className="w-4 h-4 mr-2"/> Eliminar Masivamente
+                </Button>
+             </div>
+          </div>
+        )}
+
         <div className="flex flex-wrap items-center gap-3 bg-[#0f0f11] p-3 rounded-2xl border border-[#222225] shadow-md">
           <div className="flex items-center gap-2 pl-2 border-r border-[#222225] pr-4">
             <Filter className="w-4 h-4 text-slate-500" />
@@ -332,14 +350,8 @@ const Contacts = () => {
           {hasActiveFilters && filteredContacts.length > 0 && (
             <Button onClick={handleToggleSelectAll} variant="secondary" className={cn("h-10 px-4 ml-auto rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all", selectedIds.length === filteredContacts.length ? "bg-indigo-600/20 text-indigo-400 border border-indigo-500/30" : "bg-[#161618] text-slate-300 hover:bg-[#222225] border border-[#333336]")}>
               <CheckSquare className="w-3.5 h-3.5 mr-2" />
-              {selectedIds.length === filteredContacts.length ? "Deseleccionar" : `Seleccionar Cartera (${filteredContacts.length})`}
+              {selectedIds.length === filteredContacts.length ? "Deseleccionar Lista" : `Seleccionar Cartera (${filteredContacts.length})`}
             </Button>
-          )}
-
-          {selectedIds.length > 0 && (
-             <Button onClick={() => setIsBulkDeleteOpen(true)} variant="destructive" className="h-10 px-4 rounded-xl text-[10px] font-bold uppercase tracking-widest shadow-lg animate-in fade-in ml-2">
-                <Trash2 className="w-3.5 h-3.5 mr-2" /> Eliminar ({selectedIds.length})
-             </Button>
           )}
         </div>
 
@@ -367,7 +379,7 @@ const Contacts = () => {
                       <div className="flex items-center gap-4">
                         <Avatar className="h-10 w-10 border border-[#222225] bg-[#121214]"><AvatarFallback className="bg-transparent text-indigo-300 font-bold text-sm">{String(contact.nombre || 'NA').substring(0, 2).toUpperCase()}</AvatarFallback></Avatar>
                         <div className="flex flex-col">
-                          <span className="font-bold text-slate-100 text-sm flex items-gap-2">
+                          <span className="font-bold text-slate-100 text-sm flex items-center gap-2">
                              {contact.nombre} {contact.apellido}
                              {Number(contact.academic_count || 0) > 0 && (
                                 <span className="flex items-center gap-1 bg-indigo-950/40 text-indigo-400 border border-indigo-500/30 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-widest ml-2">
@@ -382,7 +394,7 @@ const Contacts = () => {
                     <TableCell>
                       <div className="flex flex-col gap-2">
                         <span className={cn("text-[10px] flex items-center gap-1.5", contact.email ? "text-slate-300" : "text-slate-600 italic")}><Mail className="w-3 h-3" /> {contact.email || 'Sin email'}</span>
-                        <span className={cn("text-[10px] flex items-center gap-1.5", contact.ciudad ? "text-slate-300" : "text-slate-600 italic")}><MapPin className="w-3 h-3" /> {contact.ciudad || 'Sin ciudad'}</span>
+                        <span className={cn("text-[10px] flex items-center gap-1.5", contact.ciudad ? "text-slate-300" : "text-slate-600 italic")}><MapPin className="w-3 h-3" /> {contact.ciudad || 'Sin ciudad'}{contact.grupo && <span className="ml-2 text-amber-500 font-bold">• {contact.grupo}</span>}</span>
                         {Array.isArray(contact.tags) && contact.tags.length > 0 && (
                           <div className="flex gap-1.5 flex-wrap mt-1">
                             {contact.tags.map((rawTag: any, idx: number) => {
@@ -432,6 +444,7 @@ const Contacts = () => {
       <ManageGroupsDialog open={isManageGroupsOpen} onOpenChange={setIsManageGroupsOpen} groups={groups} onGroupsChange={(newGroups) => { setGroups(newGroups); fetchContacts(); }} />
       <EditContactDialog open={isEditOpen} onOpenChange={setIsEditOpen} contact={contactToEdit} existingGroups={groups} allTags={allTags} globalTags={globalTags} onSuccess={fetchContacts} />
       {isCreateOpen && <CreateLeadDialog open={isCreateOpen} onOpenChange={setIsCreateOpen} onSuccess={fetchContacts} />}
+      {isImportOpen && <ImportContactsDialog open={isImportOpen} onOpenChange={setIsImportOpen} onSuccess={fetchContacts} />}
       {selectedLead && <ChatViewer lead={selectedLead} open={isChatOpen} onOpenChange={setIsChatOpen} />}
 
       <AlertDialog open={isBulkDeleteOpen} onOpenChange={setIsBulkDeleteOpen}>
