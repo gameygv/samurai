@@ -145,14 +145,8 @@ serve(async (req) => {
                 },
                 body: JSON.stringify({ lead_id: lead.id, client_message: text })
             });
-            const fnData = await fnRes.json().catch(() => ({}));
-
-            // Guardar respuesta IA en conversaciones desde AQUÍ
-            if (fnData.aiText) {
-                await supabase.from('conversaciones').insert({
-                    lead_id: lead.id, emisor: 'IA', mensaje: fnData.aiText, platform: 'WHATSAPP'
-                });
-            }
+            // process-samurai-response se encarga de guardar la respuesta IA en conversaciones (S2.1)
+            await fnRes.json().catch(() => ({}));
         } catch (invokeErr) {
             console.error('Error calling process-samurai-response:', invokeErr);
         }
