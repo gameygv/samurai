@@ -67,6 +67,15 @@ información más precisa sobre talleres.
 **Contexto:** El campo ocr_content existe en media_assets pero no se carga
 en el contexto del AI.
 
+### S6.6: Media Gowa/Evolution — Recibir imágenes y audio (M)
+**Donde:** `evolution-webhook/index.ts` + `transcribe-audio/index.ts` + `analyze-receipt/index.ts`
+**Que:** Extraer URL directa de media del payload Gowa/Evolution (imageMessage.url,
+audioMessage.url). Adaptar transcribe-audio y analyze-receipt para descargar
+media vía URL directa (sin Graph API). Soportar ambos: Meta (media_id → Graph API)
+y Gowa (url directo).
+**Contexto:** Gowa/Evolution envían URL directa en el webhook, no media IDs.
+El código actual solo lee captions, ignorando las URLs.
+
 ### S6.5: Editor Analista CAPI en Cerebro Core (XS)
 **Donde:** `src/pages/AgentBrain.tsx`
 **Que:** Agregar tab o sección para editar prompt_analista_datos directamente,
@@ -138,4 +147,5 @@ sin depender del Laboratorio IA.
 | S6.5: Editor Analista CAPI | complete | — | 2026-03-31 | Ya existia en AgentBrain tab "analista" |
 | S6.4: OCR en contexto AI | complete | 2026-03-31 | 2026-03-31 | ocr_content inyectado en media context |
 | S6.3: CAPI automatico | complete | 2026-03-31 | 2026-03-31 | Lead event auto + Purchase already existed |
-| S6.1: Ojo de Halcon automatico | pending | — | — | |
+| S6.1: Ojo de Halcon automatico | pending | — | — | Meta only |
+| S6.6: Media Gowa/Evolution | pending | — | — | Extract URL from webhook + download |
