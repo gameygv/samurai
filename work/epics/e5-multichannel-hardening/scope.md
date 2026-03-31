@@ -102,3 +102,56 @@ Cerrar con retrospectiva.
 | Matching IA devuelve agente incorrecto | Baja | Media | Log en activity_logs para revision manual |
 | Cron de recordatorios tiene delay (hasta 1h) | Media | Baja | Aceptable para recordatorios de agente |
 | Agente sin telefono en perfil | Media | Media | Skip + log warning |
+
+## Implementation Plan
+
+### Sequencing
+
+| Order | Story | Size | Strategy | Rationale |
+|-------|-------|------|----------|-----------|
+| 1 | S5.4: Fixes menores | XS | Quick win | 2 cambios de una linea, valor inmediato |
+| 2 | S5.3: Transcripcion multi-provider | S | Quick win | Un check de provider, evita crashes |
+| 3 | S5.1: Recordatorios por lead | M | Walking skeleton | Nueva function + cron, patron conocido (credit-reminders) |
+| 4 | S5.2: Auto-routing por ciudad | M | Risk-first | Mas complejo: matching exacto + IA, integracion con analyze-leads |
+| 5 | S5.5: Cerrar E3 | XS | Cleanup | Solo documentacion, sin dependencias |
+
+**Parallelismo:** Todas las stories tocan archivos diferentes — podrian correr en paralelo.
+Ejecutamos secuencialmente por ser un solo desarrollador. Quick wins primero para momentum.
+
+**Critical path:** S5.2 (auto-routing) es la story mas compleja y con mas riesgo.
+
+### Milestones
+
+#### M1: Fixes + Transcripcion (after S5.4 + S5.3)
+- [ ] Telefono normalizado para todos los providers
+- [ ] Fallback canal con ORDER BY
+- [ ] Audio Gowa no crashea
+- **Demo:** Enviar mensaje por Gowa sin error de formato
+
+#### M2: Recordatorios Funcionando (after S5.1)
+- [ ] Crear recordatorio en chat con notify_wa=true
+- [ ] Cron ejecuta y envia WhatsApp al agente
+- [ ] Recordatorio marcado como sent (no se repite)
+- **Demo:** Crear recordatorio para dentro de 1h, verificar que llega al agente
+
+#### M3: Auto-Routing Funcionando (after S5.2)
+- [ ] Lead menciona ciudad en chat
+- [ ] analyze-leads extrae ciudad
+- [ ] Matching exacto asigna al agente correcto
+- [ ] Fallback IA asigna cuando no hay match exacto
+- **Demo:** Escribir "soy de Monterrey" → lead asignado al agente de Monterrey
+
+#### M4: Epic Complete (after S5.5)
+- [ ] E3 cerrada con retrospectiva
+- [ ] Todos los done criteria verificados
+- **Gate:** `/rai-epic-close`
+
+### Progress Tracking
+
+| Story | Status | Started | Completed | Notes |
+|-------|--------|---------|-----------|-------|
+| S5.4: Fixes menores | pending | — | — | |
+| S5.3: Transcripcion multi-provider | pending | — | — | |
+| S5.1: Recordatorios por lead | pending | — | — | |
+| S5.2: Auto-routing por ciudad | pending | — | — | |
+| S5.5: Cerrar E3 | pending | — | — | |
