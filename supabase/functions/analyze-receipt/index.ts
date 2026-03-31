@@ -9,48 +9,54 @@ serve(async (req) => {
   const supabase = createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '');
 
   try {
-    const { image_id, lead_id, channel_id, caption } = await req.json();
-    if (!image_id || !lead_id || !channel_id) {
+    const { image_id, media_url, lead_id, channel_id, caption } = await req.json();
+    if ((!image_id && !media_url) || !lead_id || !channel_id) {
       return new Response('missing_params', { headers: corsHeaders });
     }
 
-    // 1. Obtener api_key del canal (para descargar imagen de Meta)
+    // 1. Obtener api_key del canal
     const { data: channel } = await supabase.from('whatsapp_channels').select('api_key, provider').eq('id', channel_id).single();
     if (!channel?.api_key) {
       await supabase.from('activity_logs').insert({ action: 'ERROR', resource: 'BRAIN', description: `🔍 Ojo de Halcón: canal no encontrado para lead ${lead_id}`, status: 'ERROR' });
       return new Response('no_channel', { headers: corsHeaders });
     }
 
-    // Solo Meta soporta Graph API para descargar media
-    if (channel.provider && channel.provider !== 'meta') {
-      await supabase.from('activity_logs').insert({ action: 'UPDATE', resource: 'BRAIN', description: `🔍 Ojo de Halcón: análisis no disponible para provider ${channel.provider}`, status: 'OK' });
-      return new Response('unsupported_provider', { headers: corsHeaders });
+    // 2. Descargar imagen — S7.1: dual-mode (Meta Graph API o URL directa Gowa)
+    let imageBlob;
+    if (media_url) {
+      // Gowa/Evolution: URL directa
+      const imageRes = await fetch(media_url);
+      if (!imageRes.ok) {
+        await supabase.from('activity_logs').insert({ action: 'ERROR', resource: 'BRAIN', description: `🔍 Ojo de Halcón: descarga imagen falló (${imageRes.status}) from direct URL`, status: 'ERROR' });
+        return new Response('download_error', { headers: corsHeaders });
+      }
+      imageBlob = await imageRes.blob();
+    } else if (image_id) {
+      // Meta: 2-step Graph API
+      const mediaRes = await fetch(`https://graph.facebook.com/v21.0/${image_id}`, {
+        headers: { 'Authorization': `Bearer ${channel.api_key}` }
+      });
+      if (!mediaRes.ok) {
+        const errText = await mediaRes.text().catch(() => 'unknown');
+        await supabase.from('activity_logs').insert({ action: 'ERROR', resource: 'BRAIN', description: `🔍 Ojo de Halcón: Meta Graph API error (${mediaRes.status}): ${errText.substring(0, 100)}`, status: 'ERROR' });
+        return new Response('meta_error', { headers: corsHeaders });
+      }
+      const mediaData = await mediaRes.json();
+      const imageUrl = mediaData.url;
+      if (!imageUrl) {
+        return new Response('no_image_url', { headers: corsHeaders });
+      }
+      const imageRes = await fetch(imageUrl, {
+        headers: { 'Authorization': `Bearer ${channel.api_key}` }
+      });
+      if (!imageRes.ok) {
+        await supabase.from('activity_logs').insert({ action: 'ERROR', resource: 'BRAIN', description: `🔍 Ojo de Halcón: descarga imagen falló (${imageRes.status})`, status: 'ERROR' });
+        return new Response('download_error', { headers: corsHeaders });
+      }
+      imageBlob = await imageRes.blob();
+    } else {
+      return new Response('no_media', { headers: corsHeaders });
     }
-
-    // 2. Obtener URL temporal de la imagen (Meta Graph API)
-    const mediaRes = await fetch(`https://graph.facebook.com/v21.0/${image_id}`, {
-      headers: { 'Authorization': `Bearer ${channel.api_key}` }
-    });
-    if (!mediaRes.ok) {
-      const errText = await mediaRes.text().catch(() => 'unknown');
-      await supabase.from('activity_logs').insert({ action: 'ERROR', resource: 'BRAIN', description: `🔍 Ojo de Halcón: Meta Graph API error (${mediaRes.status}): ${errText.substring(0, 100)}`, status: 'ERROR' });
-      return new Response('meta_error', { headers: corsHeaders });
-    }
-    const mediaData = await mediaRes.json();
-    const imageUrl = mediaData.url;
-    if (!imageUrl) {
-      return new Response('no_image_url', { headers: corsHeaders });
-    }
-
-    // 3. Descargar imagen y convertir a data URL para Vision API
-    const imageRes = await fetch(imageUrl, {
-      headers: { 'Authorization': `Bearer ${channel.api_key}` }
-    });
-    if (!imageRes.ok) {
-      await supabase.from('activity_logs').insert({ action: 'ERROR', resource: 'BRAIN', description: `🔍 Ojo de Halcón: descarga imagen falló (${imageRes.status})`, status: 'ERROR' });
-      return new Response('download_error', { headers: corsHeaders });
-    }
-    const imageBlob = await imageRes.blob();
     const imageBuffer = await imageBlob.arrayBuffer();
     const base64 = btoa(String.fromCharCode(...new Uint8Array(imageBuffer)));
     const mimeType = imageBlob.type || 'image/jpeg';

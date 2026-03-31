@@ -13,8 +13,8 @@ serve(async (req) => {
   const supabase = createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '');
 
   try {
-    const { media_id, lead_id, message_id, channel_id } = await req.json();
-    if (!media_id || !lead_id || !message_id || !channel_id) {
+    const { media_id, media_url, lead_id, message_id, channel_id } = await req.json();
+    if ((!media_id && !media_url) || !lead_id || !message_id || !channel_id) {
       return new Response('missing_params', { headers: corsHeaders });
     }
 
@@ -25,12 +25,6 @@ serve(async (req) => {
       return new Response('no_channel', { headers: corsHeaders });
     }
 
-    // S5.3: Solo Meta soporta Graph API para descargar audio
-    if (channel.provider && channel.provider !== 'meta') {
-      await logAndFallback(supabase, lead_id, message_id, `Transcripcion no disponible para provider ${channel.provider} (solo Meta Cloud API soporta descarga de audio)`);
-      return new Response('unsupported_provider', { headers: corsHeaders });
-    }
-
     // 2. Obtener OpenAI api_key
     const { data: configs } = await supabase.from('app_config').select('key, value');
     const openaiKey = configs?.find(c => c.key === 'openai_api_key')?.value;
@@ -39,31 +33,44 @@ serve(async (req) => {
       return new Response('no_openai_key', { headers: corsHeaders });
     }
 
-    // 3. Obtener URL temporal del audio (Meta Graph API)
-    const mediaRes = await fetch(`https://graph.facebook.com/v21.0/${media_id}`, {
-      headers: { 'Authorization': `Bearer ${channel.api_key}` }
-    });
-    if (!mediaRes.ok) {
-      const errText = await mediaRes.text().catch(() => 'unknown');
-      await logAndFallback(supabase, lead_id, message_id, `Meta Graph API error (${mediaRes.status}): ${errText.substring(0, 150)}`);
-      return new Response('meta_error', { headers: corsHeaders });
+    // 3. Descargar audio — S7.1: dual-mode (Meta Graph API o URL directa Gowa)
+    let audioBlob;
+    if (media_url) {
+      // Gowa/Evolution: URL directa
+      const audioRes = await fetch(media_url);
+      if (!audioRes.ok) {
+        await logAndFallback(supabase, lead_id, message_id, `Audio download failed (${audioRes.status}) from direct URL`);
+        return new Response('download_error', { headers: corsHeaders });
+      }
+      audioBlob = await audioRes.blob();
+    } else if (media_id) {
+      // Meta: 2-step Graph API
+      const mediaRes = await fetch(`https://graph.facebook.com/v21.0/${media_id}`, {
+        headers: { 'Authorization': `Bearer ${channel.api_key}` }
+      });
+      if (!mediaRes.ok) {
+        const errText = await mediaRes.text().catch(() => 'unknown');
+        await logAndFallback(supabase, lead_id, message_id, `Meta Graph API error (${mediaRes.status}): ${errText.substring(0, 150)}`);
+        return new Response('meta_error', { headers: corsHeaders });
+      }
+      const mediaData = await mediaRes.json();
+      const audioUrl = mediaData.url;
+      if (!audioUrl) {
+        await logAndFallback(supabase, lead_id, message_id, 'Meta Graph API no devolvio URL de audio');
+        return new Response('no_audio_url', { headers: corsHeaders });
+      }
+      const audioRes = await fetch(audioUrl, {
+        headers: { 'Authorization': `Bearer ${channel.api_key}` }
+      });
+      if (!audioRes.ok) {
+        await logAndFallback(supabase, lead_id, message_id, `Audio download failed (${audioRes.status})`);
+        return new Response('download_error', { headers: corsHeaders });
+      }
+      audioBlob = await audioRes.blob();
+    } else {
+      await logAndFallback(supabase, lead_id, message_id, 'No media_id ni media_url proporcionados');
+      return new Response('no_media', { headers: corsHeaders });
     }
-    const mediaData = await mediaRes.json();
-    const audioUrl = mediaData.url;
-    if (!audioUrl) {
-      await logAndFallback(supabase, lead_id, message_id, 'Meta Graph API no devolvio URL de audio');
-      return new Response('no_audio_url', { headers: corsHeaders });
-    }
-
-    // 4. Descargar binario del audio
-    const audioRes = await fetch(audioUrl, {
-      headers: { 'Authorization': `Bearer ${channel.api_key}` }
-    });
-    if (!audioRes.ok) {
-      await logAndFallback(supabase, lead_id, message_id, `Audio download failed (${audioRes.status})`);
-      return new Response('download_error', { headers: corsHeaders });
-    }
-    const audioBlob = await audioRes.blob();
 
     // S4.3: Verificar tamaño del audio (Whisper limite 25MB)
     const maxSize = 25 * 1024 * 1024;

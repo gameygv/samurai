@@ -28,8 +28,10 @@ serve(async (req) => {
     let phone, text = '', pushName = 'Cliente WA', messageId = null;
     let actualChannelId = channelIdParam;
     let isFromMe = false;
-    let audioMediaId = null; // S4.1: media_id para transcripcion async
-    let imageMediaId = null; // S6.1: media_id para analisis de comprobante
+    let audioMediaId = null; // S4.1: media_id para transcripcion async (Meta)
+    let audioMediaUrl = null; // S7.1: URL directa para audio (Gowa)
+    let imageMediaId = null; // S6.1: media_id para analisis de comprobante (Meta)
+    let imageMediaUrl = null; // S7.1: URL directa para imagen (Gowa)
 
     if (payload.object === 'whatsapp_business_account') {
         const change = payload.entry?.[0]?.changes?.[0]?.value;
@@ -111,7 +113,18 @@ serve(async (req) => {
         isFromMe = p.is_from_me || p.fromMe || p.key?.fromMe || false;
         phone = p.remoteJid || p.key?.remoteJid || p.from;
         if (!phone) return new Response('ok', { status: 200 });
-        text = p.body || p.message?.conversation || p.message?.extendedTextMessage?.text || p.message?.imageMessage?.caption || p.message?.videoMessage?.caption || p.message?.documentMessage?.caption || p.message?.buttonsResponseMessage?.selectedDisplayText || '[Mensaje]';
+        const msgContent = p.message || {};
+
+        // S7.1: Detectar tipo de media en Gowa/Evolution
+        if (msgContent.audioMessage) {
+            text = '[Nota de Voz]';
+            audioMediaUrl = msgContent.audioMessage.url || null;
+        } else if (msgContent.imageMessage) {
+            text = msgContent.imageMessage.caption || '[Imagen]';
+            imageMediaUrl = msgContent.imageMessage.url || null;
+        } else {
+            text = p.body || msgContent.conversation || msgContent.extendedTextMessage?.text || msgContent.videoMessage?.caption || msgContent.documentMessage?.caption || msgContent.buttonsResponseMessage?.selectedDisplayText || '[Mensaje]';
+        }
         messageId = p.id || p.key?.id;
     }
 
@@ -169,16 +182,15 @@ serve(async (req) => {
     }
     await supabase.from('activity_logs').insert({ action: 'CHAT', resource: 'SYSTEM', description: `Mensaje de ${lead.nombre}: "${text.substring(0, 30)}..."`, status: 'OK' });
 
-    // S6.1: Ojo de Halcón — analizar comprobante si contexto indica pago
-    if (imageMediaId) {
-        const caption = (msg?.image?.caption || '').toLowerCase();
+    // S6.1 + S7.1: Ojo de Halcón — analizar comprobante si contexto indica pago
+    if (imageMediaId || imageMediaUrl) {
         const textLower = text.toLowerCase();
         const paymentPhrases = ['pagué', 'pague', 'transferí', 'transferi', 'comprobante', 'deposité', 'deposite', 'ya pagué', 'aqui va', 'aquí va', 'envio comprobante', 'ficha', 'boucher', 'voucher'];
-        const hasPaymentContext = paymentPhrases.some(p => caption.includes(p) || textLower.includes(p));
+        const hasPaymentContext = paymentPhrases.some(p => textLower.includes(p));
 
         if (hasPaymentContext || lead.buying_intent === 'ALTO') {
             supabase.functions.invoke('analyze-receipt', {
-                body: { image_id: imageMediaId, lead_id: lead.id, channel_id: actualChannelId, caption: text }
+                body: { image_id: imageMediaId || null, media_url: imageMediaUrl || null, lead_id: lead.id, channel_id: actualChannelId, caption: text }
             }).catch(err => console.error('analyze-receipt fire error:', err));
         }
     }
@@ -186,11 +198,10 @@ serve(async (req) => {
     const { data: config } = await supabase.from('app_config').select('value').eq('key', 'global_ai_status').maybeSingle();
 
     if (config?.value !== 'paused' && !lead.ai_paused) {
-        if (audioMediaId) {
-            // S4.1: Audio detectado — fire-and-forget a transcribe-audio
-            // transcribe-audio se encarga de transcribir y llamar a process-samurai-response
+        if (audioMediaId || audioMediaUrl) {
+            // S4.1 + S7.1: Audio detectado — fire-and-forget a transcribe-audio
             supabase.functions.invoke('transcribe-audio', {
-                body: { media_id: audioMediaId, lead_id: lead.id, message_id: messageId, channel_id: actualChannelId }
+                body: { media_id: audioMediaId || null, media_url: audioMediaUrl || null, lead_id: lead.id, message_id: messageId, channel_id: actualChannelId }
             }).catch((err) => console.error('transcribe-audio fire error:', err));
         } else {
             // Llamar al procesador IA con fetch directo (no supabase.functions.invoke)
