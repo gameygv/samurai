@@ -134,4 +134,4 @@ pero como es un solo desarrollador, se ejecutan secuencialmente. S4.2 primero po
 |-------|--------|---------|-----------|-------|
 | S4.2: Media Tag Parser | complete | 2026-03-30 | 2026-03-30 | E2E validated, +bonus valid_until filter |
 | S4.1: Audio Transcription | complete | 2026-03-30 | 2026-03-30 | E2E validated, Whisper transcription working |
-| S4.3: Edge Cases | pending | — | — | |
+| S4.3: Edge Cases | complete | 2026-03-30 | 2026-03-30 | Audio size check, URL validation, success logs |
