@@ -59,6 +59,13 @@ serve(async (req) => {
     }
     const audioBlob = await audioRes.blob();
 
+    // S4.3: Verificar tamaño del audio (Whisper limite 25MB)
+    const maxSize = 25 * 1024 * 1024;
+    if (audioBlob.size > maxSize) {
+      await logAndFallback(supabase, lead_id, message_id, `Audio demasiado grande (${(audioBlob.size / 1024 / 1024).toFixed(1)}MB, limite 25MB)`);
+      return new Response('audio_too_large', { headers: corsHeaders });
+    }
+
     // 5. Transcribir con OpenAI Whisper
     const form = new FormData();
     form.append('file', audioBlob, 'audio.ogg');

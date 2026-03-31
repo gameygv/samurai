@@ -136,7 +136,20 @@ serve(async (req) => {
         try {
             if (mediaMatch) {
                 const mediaUrl = mediaMatch[1];
-                if (cleanText && cleanText.length <= 1024) {
+                // S4.3: Validar URL de media antes de enviar
+                if (!mediaUrl.startsWith('https://')) {
+                    await supabase.from('activity_logs').insert({ action: 'ERROR', resource: 'BRAIN', description: `URL de media invalida: ${mediaUrl.substring(0, 100)}`, status: 'ERROR' });
+                    // Fallback: enviar solo texto sin imagen
+                    const { data: sendData, error: sendErr } = await supabase.functions.invoke('send-message-v3', {
+                        body: { channel_id: lead.channel_id, phone: lead.telefono, message: cleanText || aiText, lead_id: lead.id }
+                    });
+                    if (sendErr || (sendData && !sendData.success)) {
+                        sendFailed = true;
+                        await supabase.from('activity_logs').insert({ action: 'ERROR', resource: 'SYSTEM', description: `ERROR WHATSAPP (${lead.telefono}): ${sendErr?.message || JSON.stringify(sendData?.error || 'unknown')}`, status: 'ERROR' });
+                    } else {
+                        wamid = sendData?.wamid || null;
+                    }
+                } else if (cleanText && cleanText.length <= 1024) {
                     // Caption mode: imagen con texto como caption
                     const { data: sendData, error: sendErr } = await supabase.functions.invoke('send-message-v3', {
                         body: { channel_id: lead.channel_id, phone: lead.telefono, message: cleanText, mediaData: { url: mediaUrl, type: 'image' }, lead_id: lead.id }
@@ -146,6 +159,7 @@ serve(async (req) => {
                         await supabase.from('activity_logs').insert({ action: 'ERROR', resource: 'SYSTEM', description: `ERROR WHATSAPP MEDIA (${lead.telefono}): ${sendErr?.message || JSON.stringify(sendData?.error || 'unknown')}`, status: 'ERROR' });
                     } else {
                         wamid = sendData?.wamid || null;
+                        await supabase.from('activity_logs').insert({ action: 'UPDATE', resource: 'BRAIN', description: `🖼️ Imagen enviada a ${lead.nombre} (caption mode)`, status: 'OK' });
                     }
                 } else if (cleanText && cleanText.length > 1024) {
                     // Split mode: imagen sola + texto aparte
@@ -163,6 +177,7 @@ serve(async (req) => {
                             await supabase.from('activity_logs').insert({ action: 'ERROR', resource: 'SYSTEM', description: `ERROR WHATSAPP TEXTO (${lead.telefono}): ${txtErr?.message || JSON.stringify(txtData?.error || 'unknown')}`, status: 'ERROR' });
                         }
                         wamid = txtData?.wamid || imgData?.wamid || null;
+                        await supabase.from('activity_logs').insert({ action: 'UPDATE', resource: 'BRAIN', description: `🖼️ Imagen enviada a ${lead.nombre} (split mode)`, status: 'OK' });
                     }
                 } else {
                     // Solo imagen, sin texto
@@ -174,6 +189,7 @@ serve(async (req) => {
                         await supabase.from('activity_logs').insert({ action: 'ERROR', resource: 'SYSTEM', description: `ERROR WHATSAPP MEDIA (${lead.telefono}): ${sendErr?.message || JSON.stringify(sendData?.error || 'unknown')}`, status: 'ERROR' });
                     } else {
                         wamid = sendData?.wamid || null;
+                        await supabase.from('activity_logs').insert({ action: 'UPDATE', resource: 'BRAIN', description: `🖼️ Imagen enviada a ${lead.nombre} (image only)`, status: 'OK' });
                     }
                 }
             } else {
