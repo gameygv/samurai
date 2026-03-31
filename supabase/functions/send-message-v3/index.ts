@@ -36,7 +36,7 @@ serve(async (req) => {
 
     if (chError || !channel) throw new Error("Canal no encontrado.");
 
-    const provider = channel.provider || 'gowa';
+    const provider = channel.provider || 'meta';
     let cleanPhone = phone.replace(/\D/g, '');
     
     // CORRECCIÓN CRÍTICA MÉXICO PARA META CLOUD API
