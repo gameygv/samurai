@@ -25,6 +25,12 @@ serve(async (req) => {
       return new Response('no_channel', { headers: corsHeaders });
     }
 
+    // S5.3: Solo Meta soporta Graph API para descargar audio
+    if (channel.provider && channel.provider !== 'meta') {
+      await logAndFallback(supabase, lead_id, message_id, `Transcripcion no disponible para provider ${channel.provider} (solo Meta Cloud API soporta descarga de audio)`);
+      return new Response('unsupported_provider', { headers: corsHeaders });
+    }
+
     // 2. Obtener OpenAI api_key
     const { data: configs } = await supabase.from('app_config').select('key, value');
     const openaiKey = configs?.find(c => c.key === 'openai_api_key')?.value;
