@@ -28,16 +28,23 @@ disparo automático de CAPI, y inyección de OCR en el contexto AI.
 - CAPI para eventos distintos a Lead y Purchase
 - Cambios a #CIA (ya funciona correctamente)
 
+## Decisions
+
+| # | Decision | Choice |
+|---|----------|--------|
+| D1 | Cuando analizar imagen | Solo cuando buying_intent = ALTO o frases de pago en caption |
+| D2 | Cuando disparar CAPI | Lead event en analyze-leads (intent sube) + Purchase cuando COMPRADO |
+| D3 | Que hacer con resultado comprobante | Nota interna en chat (amarilla) + WhatsApp al agente |
+
 ## Stories
 
 ### S6.1: Ojo de Halcón Automático (M)
-**Donde:** `evolution-webhook/index.ts` + nueva lógica de detección
-**Que:** Cuando el cliente envía una imagen por WhatsApp y el contexto indica
-intención de pago (frases como "ya pagué", "aquí está mi comprobante", o el
-buying_intent es ALTO), invocar scrape-website en modo VISION para analizar
-la imagen. Guardar resultado en conversaciones y notificar al agente.
-**Contexto:** scrape-website ya tiene modo VISION. prompt_vision_instrucciones existe.
-El guard de pagos ya impide que el bot confirme pagos.
+**Donde:** Nueva function `analyze-receipt` + cambios en `evolution-webhook`
+**Que:** Cuando el cliente envía una imagen y el contexto indica pago
+(buying_intent ALTO o frases como "ya pagué"), fire-and-forget a analyze-receipt.
+La function descarga la imagen de Meta Graph API, invoca scrape-website VISION,
+inserta nota interna (amarilla) en conversaciones, notifica al agente por WhatsApp.
+**Contexto:** scrape-website VISION ya funciona. Patron similar a transcribe-audio.
 
 ### S6.2: Cron Verdad Maestra (S)
 **Donde:** Nuevo SQL cron + verificación de scrape-main-website
