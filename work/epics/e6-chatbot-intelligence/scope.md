@@ -89,3 +89,53 @@ sin depender del Laboratorio IA.
 | Falsos positivos en detección de comprobante | Media | Media | Solo analizar cuando buying_intent es ALTO o frase de pago |
 | Scrape falla silenciosamente en cron | Baja | Media | Log en activity_logs |
 | CAPI duplicado por múltiples cambios de intent | Media | Baja | Event ID único por lead + intent change |
+
+## Implementation Plan
+
+### Sequencing
+
+| Order | Story | Size | Strategy | Rationale |
+|-------|-------|------|----------|-----------|
+| 1 | S6.2: Cron Verdad Maestra | S | Quick win | Solo un archivo SQL, impacto inmediato |
+| 2 | S6.5: Editor Analista CAPI | XS | Quick win | Cambio UI solamente |
+| 3 | S6.4: OCR en contexto AI | S | Quick win | Una linea en get-samurai-context |
+| 4 | S6.3: CAPI automatico | M | Walking skeleton | Conecta analyze-leads con meta-capi-sender |
+| 5 | S6.1: Ojo de Halcon automatico | M | Risk-first | La mas compleja: nueva function + deteccion contexto |
+
+**Parallelismo:** Todas tocan archivos diferentes. Quick wins primero para momentum.
+
+**Critical path:** S6.1 (Ojo de Halcon) es la story mas compleja y con mas riesgo.
+
+### Milestones
+
+#### M1: Quick Wins (after S6.2 + S6.5 + S6.4)
+- [ ] Verdad Maestra se actualiza sola a las 3am
+- [ ] prompt_analista_datos editable en Cerebro Core
+- [ ] OCR de posters visible para el AI
+- **Demo:** Verificar cron en Supabase + editar prompt + respuesta AI con datos de poster
+
+#### M2: CAPI Funcionando (after S6.3)
+- [ ] Lead event disparado cuando intent sube
+- [ ] Evento visible en meta_capi_events
+- **Demo:** Enviar mensaje al bot que suba intent → verificar evento en Meta CAPI dashboard
+
+#### M3: Ojo de Halcon E2E (after S6.1)
+- [ ] Enviar imagen de comprobante por WhatsApp
+- [ ] Nota interna aparece en chat con analisis
+- [ ] Agente recibe WhatsApp con resumen
+- **Demo:** Enviar foto de comprobante → verificar nota + notificacion
+
+#### M4: Epic Complete
+- [ ] Todos los done criteria verificados
+- [ ] Retrospectiva completada
+- **Gate:** `/rai-epic-close`
+
+### Progress Tracking
+
+| Story | Status | Started | Completed | Notes |
+|-------|--------|---------|-----------|-------|
+| S6.2: Cron Verdad Maestra | pending | — | — | |
+| S6.5: Editor Analista CAPI | pending | — | — | |
+| S6.4: OCR en contexto AI | pending | — | — | |
+| S6.3: CAPI automatico | pending | — | — | |
+| S6.1: Ojo de Halcon automatico | pending | — | — | |
