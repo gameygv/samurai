@@ -8,19 +8,28 @@ status: in-progress
 
 ## Objective
 
-Completar la infraestructura multicanal para produccion: horario de IA por agente,
-procesador de recordatorios, auto-routing por ciudad, y compatibilidad multi-provider
-(Meta + Gowa). Preparar el sistema para operar con 3 canales simultaneos.
+Completar la infraestructura multicanal para produccion: procesador de recordatorios
+para agentes, auto-routing por ciudad con matching inteligente, compatibilidad
+multi-provider (Meta + Gowa), y fixes menores. Preparar el sistema para operar
+con 3 canales simultaneos.
+
+## Decisions
+
+| # | Decision | Choice |
+|---|----------|--------|
+| D1 | Horario de IA | Bot siempre responde. Horario es del agente (Profile.tsx), no del bot |
+| D2 | Recordatorios por lead | Son para el agente. Se envian por default_notification_channel |
+| D3 | Cuando hacer auto-routing | Cuando analyze-leads detecta ciudad (no al crear lead) |
+| D4 | Matching de ciudad | Exacto case-insensitive + fallback IA si no matchea |
+| D5 | Canal para avisos | Reutilizar default_notification_channel existente |
 
 ## In Scope
 
-- S5.1: Horario de IA en respuestas (evolution-webhook revisa followup_config)
-- S5.2: Procesador de recordatorios por lead (nueva edge function + cron)
-- S5.3: Auto-routing por ciudad (asignar lead al agente mas cercano)
-- S5.4: Transcripcion multi-provider (fallback para canales no-Meta)
-- S5.5: Canal Gowa para avisos (flag is_notification_channel)
-- S5.6: Normalizacion telefono multi-provider + orden fallback canal
-- S5.7: Cerrar E3 (marcar stories resueltas, actualizar scope)
+- S5.1: Procesador de recordatorios por lead (nueva edge function + cron)
+- S5.2: Auto-routing por ciudad en analyze-leads (matching exacto + IA)
+- S5.3: Transcripcion multi-provider (fallback para canales no-Meta)
+- S5.4: Fixes menores multi-provider (normalizacion telefono + orden fallback)
+- S5.5: Cerrar E3 (marcar stories resueltas)
 
 ## Out of Scope
 
@@ -29,76 +38,67 @@ procesador de recordatorios, auto-routing por ciudad, y compatibilidad multi-pro
 - Transcripcion de audio via Gowa (no hay API de media)
 - Scheduler complejo (cron cada hora suficiente)
 - Migracion de datos historicos entre canales
+- Cambios al horario del bot (D1: bot siempre responde)
+- Nuevo flag is_notification_channel (D5: reutilizar default_notification_channel)
 
 ## Stories
 
-### S5.1: Horario de IA en Respuestas (S)
-**Donde:** `evolution-webhook/index.ts`
-**Que:** Antes de llamar a process-samurai-response, revisar followup_config
-(start_hour, end_hour, allowed_days, timezone). Si esta fuera de horario,
-no invocar IA. Opcionalmente enviar mensaje de "fuera de horario".
-**Contexto:** La UI ya existe en FollowupTab.tsx. La tabla followup_config ya
-tiene los campos. Solo falta el check en el webhook.
-
-### S5.2: Procesador de Recordatorios por Lead (M)
+### S5.1: Procesador de Recordatorios por Lead (M)
 **Donde:** Nueva edge function `process-lead-reminders` + cron job
 **Que:** Revisar `leads.reminders` JSONB, encontrar recordatorios donde
-datetime <= ahora y notify_wa = true, enviar por WhatsApp via send-message-v3,
-marcar como enviado para no repetir.
-**Contexto:** UI completa en RemindersBlock.tsx + ReminderItem.tsx. Datos se
-guardan en leads.reminders. Falta el procesador y el cron.
+datetime - notify_minutes <= ahora y notify_wa = true y no marcados como enviados.
+Enviar al AGENTE (assigned_to) por el default_notification_channel.
+Marcar como sent para no repetir.
+**Contexto:** UI completa (RemindersBlock + ReminderItem). Datos en leads.reminders.
+Falta el procesador y el cron. Patron similar a process-credit-reminders.
+**Deps:** Ninguna
 
-### S5.3: Auto-Routing por Ciudad (M)
-**Donde:** `evolution-webhook/index.ts` + logica de matching
-**Que:** Cuando se crea un lead nuevo y channel_routing_mode = 'auto', buscar
-en profiles los agentes con territories que incluyan la ciudad del lead.
-Asignar assigned_to al agente mas cercano.
-**Contexto:** Config auto_routing_agents existe. profiles.territories existe.
-Falta la logica de matching en el webhook.
-**Reto:** El lead no siempre tiene ciudad al momento de creacion. Puede
-necesitar re-routing cuando se detecta la ciudad.
+### S5.2: Auto-Routing por Ciudad (M)
+**Donde:** `analyze-leads/index.ts` (despues de actualizar ciudad)
+**Que:** Cuando analyze-leads detecta ciudad y channel_routing_mode = 'auto':
+1. Buscar en profiles.territories matching exacto (case-insensitive)
+2. Si no hay match → preguntarle a OpenAI cual agente tiene la ciudad mas cercana
+3. Actualizar leads.assigned_to con el agente encontrado
+4. Log en activity_logs
+**Contexto:** profiles.territories existe. Config auto_routing_agents existe.
+analyze-leads ya extrae ciudad. Solo falta el paso de matching + asignacion.
+**Deps:** Ninguna (independiente de S5.1)
 
-### S5.4: Transcripcion Multi-Provider (S)
+### S5.3: Transcripcion Multi-Provider (S)
 **Donde:** `transcribe-audio/index.ts`
-**Que:** Verificar provider del canal antes de intentar descargar audio.
-Si provider != 'meta', usar fallback (no intentar Graph API).
-Fallback: '[Nota de Voz — transcripcion no disponible en este canal]'.
-**Contexto:** Actualmente hardcodea Meta Graph API para todos los canales.
+**Que:** Verificar provider del canal. Si != 'meta', fallback directo:
+'[Nota de Voz — transcripcion no disponible en este canal]'.
+No intentar Graph API para Gowa/Evolution.
+**Deps:** Ninguna
 
-### S5.5: Canal Gowa para Avisos (S)
-**Donde:** Migracion + `send-message-v3/index.ts` + `process-lead-reminders`
-**Que:** Flag `is_notification_channel` en whatsapp_channels. Los recordatorios
-y avisos usan este canal si existe. UI en ChannelsTab para activar/desactivar.
-**Contexto:** default_notification_channel existe como fallback pero no es
-un concepto dedicado para avisos.
-
-### S5.6: Fixes Menores Multi-Provider (XS)
+### S5.4: Fixes Menores Multi-Provider (XS)
 **Donde:** `send-message-v3/index.ts`
 **Que:**
-- Normalizacion telefono 521→52 para todos los providers
+- Normalizacion telefono 521→52 para todos los providers (no solo Meta)
 - ORDER BY created_at en fallback de canal
-**Contexto:** Actualmente solo normaliza para Meta.
+**Deps:** Ninguna
 
-### S5.7: Cerrar E3 (XS)
+### S5.5: Cerrar E3 (XS)
 **Donde:** `work/epics/e3-whatsapp-hardening/`
-**Que:** Marcar S3.1 como parcial (token temporal renovado, permanente pendiente),
-S3.2 como completada (leads borrados), S3.3 como completada (checkmarks en E4),
-S3.4 como descoped (Gowa se mantiene). Cerrar epic con retrospectiva.
+**Que:** Marcar S3.1 parcial, S3.2 completa, S3.3 completa (E4), S3.4 descoped.
+Cerrar con retrospectiva.
+**Deps:** Ninguna
 
 ## Done Criteria
 
-- [ ] IA no responde fuera de horario configurado en followup_config
-- [ ] Recordatorios por lead se envian automaticamente por WhatsApp
-- [ ] Leads nuevos asignados a agente por ciudad (modo auto)
+- [ ] Recordatorios por lead enviados automaticamente al agente por WhatsApp
+- [ ] Leads asignados a agente cuando analyze-leads detecta ciudad (modo auto)
+- [ ] Matching exacto + fallback IA para ciudades ambiguas
 - [ ] Transcripcion no crashea en canales Gowa
-- [ ] Canal Gowa dedicado para avisos funciona
 - [ ] Telefono normalizado para todos los providers
+- [ ] Fallback de canal con ORDER BY
 - [ ] E3 cerrada con retrospectiva
 
 ## Risks
 
 | Risk | Likelihood | Impact | Mitigation |
 |------|-----------|--------|------------|
-| Lead no tiene ciudad al crearse | Alta | Media | Re-routing cuando IA detecta ciudad |
-| Cron de recordatorios tiene delay | Media | Baja | Cron cada hora, no cada minuto |
-| followup_config no existe para algun canal | Media | Media | Usar defaults (9-21, lun-vie) |
+| Lead no menciona ciudad en conversacion | Alta | Media | AI debe preguntar proactivamente (prompt config) |
+| Matching IA devuelve agente incorrecto | Baja | Media | Log en activity_logs para revision manual |
+| Cron de recordatorios tiene delay (hasta 1h) | Media | Baja | Aceptable para recordatorios de agente |
+| Agente sin telefono en perfil | Media | Media | Skip + log warning |
