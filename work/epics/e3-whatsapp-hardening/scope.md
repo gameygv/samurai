@@ -1,6 +1,8 @@
 ---
 epic: E3
 name: whatsapp-hardening
+status: closed
+closed: 2026-03-31
 ---
 
 # E3: Scope — WhatsApp Hardening & Cleanup
@@ -29,10 +31,10 @@ provider deprecated.
 
 | ID   | Title                                          | Priority |
 |------|------------------------------------------------|----------|
-| S3.1 | Renovar token Meta Cloud API                   | P0       |
-| S3.2 | Limpiar datos de prueba E2E                    | P3       |
-| S3.3 | Delivery checkmarks en ChatViewer              | P2       |
-| S3.4 | Eliminar/deshabilitar provider GOWA            | P3       |
+| S3.1 | Renovar token Meta Cloud API                   | P0       | PARCIAL — token temporal renovado, permanente pendiente |
+| S3.2 | Limpiar datos de prueba E2E                    | P3       | COMPLETA — leads borrados manualmente |
+| S3.3 | Delivery checkmarks en ChatViewer              | P2       | COMPLETA — implementado en E4 (sent/delivered/read) |
+| S3.4 | Eliminar/deshabilitar provider GOWA            | P3       | DESCOPED — Gowa se mantiene (multicanal) |
 
 ## Done Criteria
 

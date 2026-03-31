@@ -1,7 +1,7 @@
 ---
 epic: E3
 name: whatsapp-hardening
-status: in_progress
+status: closed
 created: 2026-03-30
 predecessor: E2
 ---
