@@ -17,11 +17,11 @@ serve(async (req) => {
 
     // --- CARGAR VERDAD MAESTRA ---
     const { data: webPages } = await supabaseClient.from('main_website_content').select('title, content').eq('scrape_status', 'success');
-    let masterTruth = "\n=== VERDAD MAESTRA (SITIO WEB) ===\n";
+    let masterTruth = `\n=== VERDAD MAESTRA (SITIO WEB) ===\nIMPORTANTE: La fecha de hoy es ${today}. NUNCA recomiendes talleres, cursos o eventos con fechas anteriores a hoy. Si el sitio web menciona eventos pasados, ignóralos y sugiere solo los que aún no han ocurrido.\n`;
     webPages?.forEach(p => { if(p.content) masterTruth += `\n[PÁGINA: ${p.title}]\n${p.content.substring(0, 1500)}\n`; });
 
     // --- CARGAR BASE DE CONOCIMIENTO ---
-    const { data: kbDocs } = await supabaseClient.from('knowledge_documents').select('title, category, content');
+    const { data: kbDocs } = await supabaseClient.from('knowledge_documents').select('title, category, content').or(`valid_until.is.null,valid_until.gte.${today}`);
     let kbContext = "\n=== CONOCIMIENTO TÉCNICO (PDFs/NOTAS) ===\n";
     kbDocs?.forEach(d => { if(d.content) kbContext += `\n[RECURSO: ${d.title}]\n${d.content.substring(0, 1000)}\n`; });
 
