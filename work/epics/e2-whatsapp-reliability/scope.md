@@ -34,9 +34,20 @@ sin duplicados, siguiendo las mejores prácticas de Meta Cloud API.
 | S2.3 | Procesar status webhooks de Meta               | P1       |
 | S2.4 | Actualizar Graph API a versión estable reciente | P2       |
 
+## Design Decisions (ADR)
+
+| # | Decisión | Elección | Razón |
+|---|----------|----------|-------|
+| D1 | ¿Dónde vive el INSERT de mensajes IA? | Solo en process-samurai-response | Responsabilidad única: quien genera, persiste |
+| D2 | ¿Cómo hacer el insert? | Cliente supabase estándar (.insert().select()) | Idiomático, SERVICE_ROLE_KEY bypasea RLS, retorna row |
+| D3 | ¿Cómo deduplicar? | Columna message_id + UNIQUE parcial (WHERE NOT NULL) | BD protege WhatsApp, Panel sin wamid pasa normal |
+| D4 | ¿Status webhooks? | Campo delivery_status en conversaciones | Ligero, aprovecha wamid, sin tabla extra |
+| D5 | ¿Versión Graph API? | v21.0 | Estable, v20.0 expira ~mayo 2026, formato idéntico |
+
 ## Done Criteria
 
 - Mensajes IA se guardan exactamente 1 vez en conversaciones
 - wamid almacenado para mensajes entrantes y salientes
-- Status webhooks actualizan estado de entrega
+- Status webhooks actualizan estado de entrega en conversaciones
+- Graph API actualizada a v21.0
 - Tests verifican cada escenario
