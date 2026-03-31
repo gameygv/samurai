@@ -31,7 +31,31 @@ serve(async (req) => {
 
     if (payload.object === 'whatsapp_business_account') {
         const change = payload.entry?.[0]?.changes?.[0]?.value;
-        if (!change || change.statuses) return new Response('ok', { status: 200 });
+        if (!change) return new Response('ok', { status: 200 });
+
+        // Procesar status webhooks de Meta: sent/delivered/read/failed (S2.3)
+        if (change.statuses) {
+            const status = change.statuses[0];
+            if (status?.id && status?.status) {
+                const { data: updated } = await supabase.from('conversaciones')
+                    .update({ delivery_status: status.status })
+                    .eq('message_id', status.id)
+                    .select('id')
+                    .maybeSingle();
+
+                // Si falló la entrega, loggear para visibilidad del operador (S2.3-D2)
+                if (status.status === 'failed' && updated) {
+                    const errMsg = status.errors?.[0]?.message || 'Unknown error';
+                    const errCode = status.errors?.[0]?.code || '';
+                    await supabase.from('activity_logs').insert({
+                        action: 'ERROR', resource: 'SYSTEM',
+                        description: `WhatsApp delivery failed (${status.recipient_id}): [${errCode}] ${errMsg}`,
+                        status: 'ERROR'
+                    });
+                }
+            }
+            return new Response('ok', { status: 200, headers: corsHeaders });
+        }
         const msg = change.messages?.[0];
         if (!msg) return new Response('ok', { status: 200 });
 
