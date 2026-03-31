@@ -1,0 +1,75 @@
+artifact: design
+story: S4.1
+epic: E4
+name: audio-transcription
+created: 2026-03-30
+status: complete
+
+summary: >
+  New transcribe-audio edge function invoked fire-and-forget from evolution-webhook
+  when audio messages arrive. Downloads audio via Meta Graph API v21.0, transcribes
+  with OpenAI Whisper, updates conversaciones with transcription, then triggers
+  process-samurai-response with real text. Fallback on any failure.
+
+components:
+  new:
+    - path: supabase/functions/transcribe-audio/index.ts
+      type: edge-function
+      purpose: Download audio from Meta, transcribe via Whisper, update DB, invoke AI
+  modified:
+    - path: supabase/functions/evolution-webhook/index.ts
+      type: edge-function
+      change: Add fire-and-forget call to transcribe-audio for audio messages
+      lines: 76-77
+
+decisions:
+  - id: D1
+    decision: Separate transcribe-audio edge function
+    choice: fire-and-forget from webhook
+    rationale: Decouples latency from webhook response; keeps webhook fast
+  - id: D2
+    decision: Audio download method
+    choice: Two Graph API calls (media ID -> URL -> binary)
+    rationale: Meta requires this two-step flow
+  - id: D3
+    decision: Fallback strategy
+    choice: Generic bot response + activity_log entry
+    rationale: Simple, observable, no silent failures
+
+input_contract:
+  media_id: string    # msg.audio.id from Meta webhook
+  lead_id: string     # UUID of the lead
+  message_id: string  # wamid from conversaciones
+  channel_id: string  # UUID of the channel (to get api_key)
+
+external_integrations:
+  - name: Meta Graph API v21.0
+    calls:
+      - GET https://graph.facebook.com/v21.0/{media_id} (get temporary URL)
+      - GET {temporary_url} (download audio binary)
+    auth: Bearer {channel.api_key}
+  - name: OpenAI Whisper
+    calls:
+      - POST https://api.openai.com/v1/audio/transcriptions
+    auth: Bearer {openai_api_key from app_config}
+    params: { model: whisper-1, language: es }
+
+flows:
+  success:
+    - Webhook receives audio message
+    - Inserts "[Nota de Voz]" placeholder in conversaciones
+    - Fires transcribe-audio (fire-and-forget)
+    - transcribe-audio gets channel api_key from whatsapp_channels
+    - transcribe-audio gets openai_api_key from app_config
+    - GET Graph API for temporary audio URL
+    - GET temporary URL for audio binary
+    - POST binary to Whisper
+    - UPDATE conversaciones.mensaje to '[TRANSCRIPCION DE NOTA DE VOZ]: "{text}"'
+    - Invoke process-samurai-response with { lead_id, client_message: text }
+  failure:
+    - Any step fails (Meta download or Whisper)
+    - UPDATE conversaciones.mensaje to '[Nota de Voz — no se pudo transcribir]'
+    - Invoke process-samurai-response with fallback text
+    - Log error to activity_logs
+
+acceptance_criteria_count: 3
