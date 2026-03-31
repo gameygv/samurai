@@ -60,7 +60,7 @@ const MetaVerify = () => {
       if (!accessToken) throw new Error('Access Token CAPI no configurado. Ve a /meta-capi');
 
       const { data, error } = await supabase.functions.invoke('meta-wa-capi-verify', {
-        body: { waba_id: WABA_ID, access_token: accessToken, test_event_code: config.meta_test_event_code || undefined }
+        body: { waba_id: WABA_ID, access_token: accessToken, wa_channel_token: channel?.api_key || null, test_event_code: config.meta_test_event_code || undefined }
       });
       if (error) throw error;
 

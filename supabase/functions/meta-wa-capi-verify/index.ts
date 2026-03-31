@@ -6,16 +6,20 @@ serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
   try {
-    const { waba_id, access_token, test_event_code } = await req.json();
+    const { waba_id, access_token, wa_channel_token, test_event_code } = await req.json();
 
-    if (!waba_id || !access_token) {
-      throw new Error('WABA_ID y Access Token son requeridos.');
+    if (!waba_id || (!access_token && !wa_channel_token)) {
+      throw new Error('WABA_ID y al menos un Access Token son requeridos.');
     }
+
+    // Intentar primero con el token del canal WA (tiene whatsapp_business_management),
+    // fallback al token CAPI
+    const tokenForWaba = wa_channel_token || access_token;
 
     const results: any = { steps: [] };
 
     // STEP 1: Obtener DATASET_ID del WABA
-    const datasetUrl = `https://graph.facebook.com/v21.0/${waba_id}/dataset?access_token=${access_token}`;
+    const datasetUrl = `https://graph.facebook.com/v21.0/${waba_id}/dataset?access_token=${tokenForWaba}`;
     const datasetRes = await fetch(datasetUrl);
     const datasetData = await datasetRes.json();
 
@@ -29,7 +33,7 @@ serve(async (req) => {
       results.steps.push({ step: 'GET dataset', status: 'warning', detail: `No hay dataset existente: ${datasetData.error.message}. Intentando crear...` });
 
       // Intentar obtener el page_id del WABA
-      const wabaInfoUrl = `https://graph.facebook.com/v21.0/${waba_id}?fields=on_behalf_of_business_info&access_token=${access_token}`;
+      const wabaInfoUrl = `https://graph.facebook.com/v21.0/${waba_id}?fields=on_behalf_of_business_info&access_token=${tokenForWaba}`;
       const wabaInfoRes = await fetch(wabaInfoUrl);
       const wabaInfo = await wabaInfoRes.json();
       results.steps.push({ step: 'GET waba_info', status: wabaInfo.error ? 'error' : 'ok', detail: JSON.stringify(wabaInfo).substring(0, 200) });
@@ -63,7 +67,7 @@ serve(async (req) => {
         ...(test_event_code && { test_event_code })
       };
 
-      const eventUrl = `https://graph.facebook.com/v21.0/${datasetId}/events?access_token=${access_token}`;
+      const eventUrl = `https://graph.facebook.com/v21.0/${datasetId}/events?access_token=${tokenForWaba}`;
       const eventRes = await fetch(eventUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
