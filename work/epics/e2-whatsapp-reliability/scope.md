@@ -85,10 +85,10 @@ S2.1 es independiente y se puede hacer primero. S2.4 se bundlea con S2.2 porque 
 
 | Story | Status | Branch | Notes |
 |-------|--------|--------|-------|
-| S2.1 | pending | — | — |
-| S2.2 | pending | — | — |
-| S2.4 | pending | — | — |
-| S2.3 | pending | — | — |
+| S2.1 | DONE | merged | Consolidated IA insert, -23 LOC |
+| S2.2 | DONE | merged | wamid dedup + 2 bonus fixes (emisor constraint, provider default) |
+| S2.4 | DONE | bundled w/ S2.2 | v21.0 |
+| S2.3 | DONE | merged | Status webhooks, E2E validated |
 
 ### Sequencing Risks
 

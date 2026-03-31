@@ -1,7 +1,7 @@
 ---
 epic: E2
 name: whatsapp-reliability
-status: in_progress
+status: complete
 created: 2026-03-30
 ---
 
