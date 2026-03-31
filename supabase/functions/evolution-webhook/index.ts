@@ -29,6 +29,7 @@ serve(async (req) => {
     let actualChannelId = channelIdParam;
     let isFromMe = false;
     let audioMediaId = null; // S4.1: media_id para transcripcion async
+    let imageMediaId = null; // S6.1: media_id para analisis de comprobante
 
     if (payload.object === 'whatsapp_business_account') {
         const change = payload.entry?.[0]?.changes?.[0]?.value;
@@ -72,6 +73,7 @@ serve(async (req) => {
             text = msg.text?.body || '';
         } else if (msg.type === 'image') {
             text = msg.image?.caption || '[Imagen]';
+            imageMediaId = msg.image?.id || null; // S6.1: extraer media_id para Ojo de Halcón
         } else if (msg.type === 'video') {
             text = msg.video?.caption || '[Video]';
         } else if (msg.type === 'audio') {
@@ -166,6 +168,20 @@ serve(async (req) => {
         console.error('Insert conversacion error:', insertError2.message);
     }
     await supabase.from('activity_logs').insert({ action: 'CHAT', resource: 'SYSTEM', description: `Mensaje de ${lead.nombre}: "${text.substring(0, 30)}..."`, status: 'OK' });
+
+    // S6.1: Ojo de Halcón — analizar comprobante si contexto indica pago
+    if (imageMediaId) {
+        const caption = (msg?.image?.caption || '').toLowerCase();
+        const textLower = text.toLowerCase();
+        const paymentPhrases = ['pagué', 'pague', 'transferí', 'transferi', 'comprobante', 'deposité', 'deposite', 'ya pagué', 'aqui va', 'aquí va', 'envio comprobante', 'ficha', 'boucher', 'voucher'];
+        const hasPaymentContext = paymentPhrases.some(p => caption.includes(p) || textLower.includes(p));
+
+        if (hasPaymentContext || lead.buying_intent === 'ALTO') {
+            supabase.functions.invoke('analyze-receipt', {
+                body: { image_id: imageMediaId, lead_id: lead.id, channel_id: actualChannelId, caption: text }
+            }).catch(err => console.error('analyze-receipt fire error:', err));
+        }
+    }
 
     const { data: config } = await supabase.from('app_config').select('value').eq('key', 'global_ai_status').maybeSingle();
 
