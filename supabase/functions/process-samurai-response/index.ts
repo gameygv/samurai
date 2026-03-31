@@ -125,36 +125,47 @@ serve(async (req) => {
     const aiText = aiData.choices?.[0]?.message?.content || '';
 
     if (aiText) {
-        // Guardar respuesta IA en conversaciones (único punto de insert para mensajes IA)
-        const { error: convError } = await supabase.from('conversaciones').insert({
-            lead_id: lead.id, emisor: 'IA', mensaje: aiText, platform: 'WHATSAPP'
-        });
-        if (convError) {
-            await supabase.from('activity_logs').insert({
-                action: 'ERROR', resource: 'BRAIN',
-                description: `INSERT conversaciones FALLO: ${convError.message?.substring(0, 200)}`,
-                status: 'ERROR'
-            });
-        }
-
-        // Enviar a WhatsApp
+        // ENVIAR A WHATSAPP PRIMERO — obtener wamid antes de insertar (S2.2-D2)
+        let wamid = null;
+        let sendFailed = false;
         try {
             const { data: sendData, error: sendErr } = await supabase.functions.invoke('send-message-v3', {
                 body: { channel_id: lead.channel_id, phone: lead.telefono, message: aiText, lead_id: lead.id }
             });
             if (sendErr || (sendData && !sendData.success)) {
+                sendFailed = true;
                 await supabase.from('activity_logs').insert({
                     action: 'ERROR', resource: 'SYSTEM',
                     description: `ERROR WHATSAPP (${lead.telefono}): ${sendErr?.message || JSON.stringify(sendData?.error || 'unknown')}`,
                     status: 'ERROR'
                 });
+            } else {
+                wamid = sendData?.wamid || null;
             }
         } catch (sendError: any) {
+            sendFailed = true;
             await supabase.from('activity_logs').insert({
                 action: 'ERROR', resource: 'SYSTEM',
                 description: `ERROR ENVIO WA (${lead.telefono}): ${sendError.message}`,
                 status: 'ERROR'
             });
+        }
+
+        // LUEGO INSERTAR EN CONVERSACIONES — solo si el envío fue exitoso
+        if (!sendFailed) {
+            const insertPayload: any = {
+                lead_id: lead.id, emisor: 'IA', mensaje: aiText, platform: 'WHATSAPP'
+            };
+            if (wamid) insertPayload.message_id = wamid;
+
+            const { error: convError } = await supabase.from('conversaciones').insert(insertPayload);
+            if (convError) {
+                await supabase.from('activity_logs').insert({
+                    action: 'ERROR', resource: 'BRAIN',
+                    description: `INSERT conversaciones FALLO: ${convError.message?.substring(0, 200)}`,
+                    status: 'ERROR'
+                });
+            }
         }
     } else {
         await supabase.from('activity_logs').insert({

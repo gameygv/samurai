@@ -51,8 +51,7 @@ serve(async (req) => {
     let bodyContent: any;
 
     if (provider === 'meta') {
-      // USAMOS v20.0 ESTABLE EN VEZ DE v22.0 EXPERIMENTAL
-      endpoint = `https://graph.facebook.com/v20.0/${channel.instance_id}/messages`;
+      endpoint = `https://graph.facebook.com/v21.0/${channel.instance_id}/messages`;
       headers['Authorization'] = `Bearer ${channel.api_key}`;
       
       if (mediaData?.url) {
@@ -107,7 +106,16 @@ serve(async (req) => {
        return new Response(JSON.stringify({ success: false, error: resText, status: response.status }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    return new Response(JSON.stringify({ success: true, data: resText }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    // Extract wamid from Meta response (only for meta provider)
+    let wamid = null;
+    if (provider === 'meta') {
+        try {
+            const metaRes = JSON.parse(resText);
+            wamid = metaRes?.messages?.[0]?.id || null;
+        } catch (_) { /* non-JSON response, wamid stays null */ }
+    }
+
+    return new Response(JSON.stringify({ success: true, data: resText, wamid }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
   } catch (error: any) {
     return new Response(JSON.stringify({ success: false, error: error.message }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });

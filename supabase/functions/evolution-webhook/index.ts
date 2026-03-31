@@ -128,7 +128,17 @@ serve(async (req) => {
 
     if (isFromMe) return new Response('ok', { status: 200 });
 
-    await supabase.from('conversaciones').insert({ lead_id: lead.id, emisor: 'CLIENTE', mensaje: text, platform: 'WHATSAPP' });
+    // Insertar mensaje del cliente con wamid para deduplicación (S2.2)
+    const clientInsert: any = { lead_id: lead.id, emisor: 'CLIENTE', mensaje: text, platform: 'WHATSAPP' };
+    if (messageId) clientInsert.message_id = messageId;
+    const { error: insertError2 } = await supabase.from('conversaciones').insert(clientInsert);
+    if (insertError2) {
+        if (insertError2.code === '23505') {
+            // Duplicate wamid — webhook retry de Meta, ignorar
+            return new Response('ok', { status: 200, headers: corsHeaders });
+        }
+        console.error('Insert conversacion error:', insertError2.message);
+    }
     await supabase.from('activity_logs').insert({ action: 'CHAT', resource: 'SYSTEM', description: `Mensaje de ${lead.nombre}: "${text.substring(0, 30)}..."`, status: 'OK' });
 
     const { data: config } = await supabase.from('app_config').select('value').eq('key', 'global_ai_status').maybeSingle();
