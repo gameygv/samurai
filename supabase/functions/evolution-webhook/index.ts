@@ -28,6 +28,7 @@ serve(async (req) => {
     let phone, text = '', pushName = 'Cliente WA', messageId = null;
     let actualChannelId = channelIdParam;
     let isFromMe = false;
+    let audioMediaId = null; // S4.1: media_id para transcripcion async
 
     if (payload.object === 'whatsapp_business_account') {
         const change = payload.entry?.[0]?.changes?.[0]?.value;
@@ -75,6 +76,7 @@ serve(async (req) => {
             text = msg.video?.caption || '[Video]';
         } else if (msg.type === 'audio') {
             text = '[Nota de Voz]';
+            audioMediaId = msg.audio?.id || null; // S4.1: extraer media_id para Whisper
         } else if (msg.type === 'document') {
             text = msg.document?.caption || `[Documento: ${msg.document?.filename || 'archivo'}]`;
         } else if (msg.type === 'sticker') {
@@ -166,23 +168,31 @@ serve(async (req) => {
     await supabase.from('activity_logs').insert({ action: 'CHAT', resource: 'SYSTEM', description: `Mensaje de ${lead.nombre}: "${text.substring(0, 30)}..."`, status: 'OK' });
 
     const { data: config } = await supabase.from('app_config').select('value').eq('key', 'global_ai_status').maybeSingle();
-    
+
     if (config?.value !== 'paused' && !lead.ai_paused) {
-        // Llamar al procesador IA con fetch directo (no supabase.functions.invoke)
-        try {
-            const fnUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/process-samurai-response`;
-            const fnRes = await fetch(fnUrl, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${Deno.env.get('SUPABASE_ANON_KEY') || Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`
-                },
-                body: JSON.stringify({ lead_id: lead.id, client_message: text })
-            });
-            // process-samurai-response se encarga de guardar la respuesta IA en conversaciones (S2.1)
-            await fnRes.json().catch(() => ({}));
-        } catch (invokeErr) {
-            console.error('Error calling process-samurai-response:', invokeErr);
+        if (audioMediaId) {
+            // S4.1: Audio detectado — fire-and-forget a transcribe-audio
+            // transcribe-audio se encarga de transcribir y llamar a process-samurai-response
+            supabase.functions.invoke('transcribe-audio', {
+                body: { media_id: audioMediaId, lead_id: lead.id, message_id: messageId, channel_id: actualChannelId }
+            }).catch((err) => console.error('transcribe-audio fire error:', err));
+        } else {
+            // Llamar al procesador IA con fetch directo (no supabase.functions.invoke)
+            try {
+                const fnUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/process-samurai-response`;
+                const fnRes = await fetch(fnUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${Deno.env.get('SUPABASE_ANON_KEY') || Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`
+                    },
+                    body: JSON.stringify({ lead_id: lead.id, client_message: text })
+                });
+                // process-samurai-response se encarga de guardar la respuesta IA en conversaciones (S2.1)
+                await fnRes.json().catch(() => ({}));
+            } catch (invokeErr) {
+                console.error('Error calling process-samurai-response:', invokeErr);
+            }
         }
 
         // Fire-and-forget: analyze-leads corre en background
