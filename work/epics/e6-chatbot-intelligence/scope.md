@@ -134,8 +134,8 @@ sin depender del Laboratorio IA.
 
 | Story | Status | Started | Completed | Notes |
 |-------|--------|---------|-----------|-------|
-| S6.2: Cron Verdad Maestra | pending | — | — | |
-| S6.5: Editor Analista CAPI | pending | — | — | |
-| S6.4: OCR en contexto AI | pending | — | — | |
+| S6.2: Cron Verdad Maestra | complete | 2026-03-31 | 2026-03-31 | Cron job 17, daily 3am UTC |
+| S6.5: Editor Analista CAPI | complete | — | 2026-03-31 | Ya existia en AgentBrain tab "analista" |
+| S6.4: OCR en contexto AI | complete | 2026-03-31 | 2026-03-31 | ocr_content inyectado en media context |
 | S6.3: CAPI automatico | pending | — | — | |
 | S6.1: Ojo de Halcon automatico | pending | — | — | |
