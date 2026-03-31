@@ -230,7 +230,8 @@ export const MemoryPanel = ({
           title: '',
           datetime: new Date(new Date().getTime() + 24 * 60 * 60 * 1000).toISOString().slice(0, 16),
           notify_minutes: 15,
-          notify_wa: true
+          notify_wa: true,
+          target: 'agent'
       };
       const currentRems = Array.isArray(memoryForm.reminders) ? memoryForm.reminders : [];
       setMemoryForm({ ...memoryForm, reminders: [...currentRems, newReminder] });

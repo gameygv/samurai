@@ -44,40 +44,59 @@ serve(async (req) => {
 
         if (now < triggerTime) continue; // Aun no es hora
 
-        // Buscar telefono del agente
-        const { data: agent } = await supabase
-          .from('profiles')
-          .select('phone, full_name')
-          .eq('id', lead.assigned_to)
-          .single();
+        // S7.5: Enviar al cliente o al agente según target
+        const target = rem.target || 'agent';
 
-        if (!agent?.phone) {
-          console.warn(`[lead-reminders] Agente ${lead.assigned_to} sin telefono, skip reminder para lead ${lead.nombre}`);
-          await supabase.from('activity_logs').insert({
-            action: 'ERROR', resource: 'SYSTEM',
-            description: `📋 Recordatorio "${rem.title}" para ${lead.nombre}: agente sin telefono configurado`,
-            status: 'ERROR'
-          });
-          rem.sent = true;
-          rem.sent_at = now.toISOString();
-          rem.error = 'agent_no_phone';
-          updated = true;
-          skipped++;
-          continue;
-        }
-
-        // Enviar al agente por canal de notificaciones (sin lead_id = usa default_notification_channel)
-        const msg = `📋 Recordatorio: ${rem.title}\n👤 Lead: ${lead.nombre}\n⏰ Programado: ${rem.datetime}`;
         try {
-          await supabase.functions.invoke('send-message-v3', {
-            body: { phone: agent.phone, message: msg }
-          });
-          sent++;
+          if (target === 'client') {
+            // Enviar al cliente por el canal del lead
+            const { data: leadFull } = await supabase.from('leads').select('telefono').eq('id', lead.id).single();
+            if (leadFull?.telefono) {
+              await supabase.functions.invoke('send-message-v3', {
+                body: { lead_id: lead.id, phone: leadFull.telefono, message: rem.title }
+              });
+              // Registrar en conversaciones como mensaje del sistema
+              await supabase.from('conversaciones').insert({
+                lead_id: lead.id, emisor: 'SISTEMA', mensaje: rem.title, platform: 'CAMPAÑA_AUTO'
+              });
+              sent++;
+            } else {
+              skipped++;
+            }
+          } else {
+            // Enviar al agente por canal de notificaciones
+            const { data: agent } = await supabase
+              .from('profiles')
+              .select('phone, full_name')
+              .eq('id', lead.assigned_to)
+              .single();
+
+            if (!agent?.phone) {
+              console.warn(`[lead-reminders] Agente ${lead.assigned_to} sin telefono, skip reminder para lead ${lead.nombre}`);
+              await supabase.from('activity_logs').insert({
+                action: 'ERROR', resource: 'SYSTEM',
+                description: `📋 Recordatorio "${rem.title}" para ${lead.nombre}: agente sin telefono configurado`,
+                status: 'ERROR'
+              });
+              rem.sent = true;
+              rem.sent_at = now.toISOString();
+              rem.error = 'agent_no_phone';
+              updated = true;
+              skipped++;
+              continue;
+            }
+
+            const msg = `📋 Recordatorio: ${rem.title}\n👤 Lead: ${lead.nombre}\n⏰ Programado: ${rem.datetime}`;
+            await supabase.functions.invoke('send-message-v3', {
+              body: { phone: agent.phone, message: msg }
+            });
+            sent++;
+          }
         } catch (sendErr) {
-          console.error(`[lead-reminders] Error enviando a ${agent.full_name}:`, sendErr);
+          console.error(`[lead-reminders] Error enviando recordatorio:`, sendErr);
           await supabase.from('activity_logs').insert({
             action: 'ERROR', resource: 'SYSTEM',
-            description: `📋 Recordatorio fallido para ${agent.full_name}: ${sendErr.message?.substring(0, 150)}`,
+            description: `📋 Recordatorio fallido (${target}): ${sendErr.message?.substring(0, 150)}`,
             status: 'ERROR'
           });
         }
