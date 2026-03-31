@@ -28,22 +28,22 @@ serve(async (req) => {
     if (datasetData.data && datasetData.data.length > 0) {
       datasetId = datasetData.data[0].id;
       results.steps.push({ step: 'GET dataset', status: 'ok', detail: `Dataset encontrado: ${datasetId}` });
-    } else if (datasetData.error) {
-      // Si no existe dataset, intentar crearlo via PAGE_ID
-      results.steps.push({ step: 'GET dataset', status: 'warning', detail: `No hay dataset existente: ${datasetData.error.message}. Intentando crear...` });
-
-      // Intentar obtener el page_id del WABA
-      const wabaInfoUrl = `https://graph.facebook.com/v21.0/${waba_id}?fields=on_behalf_of_business_info&access_token=${tokenForWaba}`;
-      const wabaInfoRes = await fetch(wabaInfoUrl);
-      const wabaInfo = await wabaInfoRes.json();
-      results.steps.push({ step: 'GET waba_info', status: wabaInfo.error ? 'error' : 'ok', detail: JSON.stringify(wabaInfo).substring(0, 200) });
-
-      // Si no podemos obtener dataset, reportar
-      if (!datasetId) {
-        results.steps.push({ step: 'dataset_resolution', status: 'error', detail: 'No se pudo obtener ni crear un DATASET_ID. Puede que necesites crear uno manualmente en Events Manager.' });
-      }
     } else {
-      results.steps.push({ step: 'GET dataset', status: 'warning', detail: `Respuesta inesperada: ${JSON.stringify(datasetData).substring(0, 200)}` });
+      // No hay dataset — crear uno
+      results.steps.push({ step: 'GET dataset', status: 'warning', detail: 'No hay dataset. Creando uno nuevo...' });
+
+      const createUrl = `https://graph.facebook.com/v21.0/${waba_id}/dataset?access_token=${tokenForWaba}`;
+      const createRes = await fetch(createUrl, { method: 'POST' });
+      const createData = await createRes.json();
+
+      if (createData.id) {
+        datasetId = createData.id;
+        results.steps.push({ step: 'CREATE dataset', status: 'ok', detail: `Dataset creado: ${datasetId}` });
+      } else if (createData.error) {
+        results.steps.push({ step: 'CREATE dataset', status: 'error', detail: `Error creando dataset: ${createData.error.message} (code: ${createData.error.code})` });
+      } else {
+        results.steps.push({ step: 'CREATE dataset', status: 'warning', detail: `Respuesta: ${JSON.stringify(createData).substring(0, 200)}` });
+      }
     }
 
     // STEP 2: Enviar evento de prueba al DATASET (si tenemos ID)
