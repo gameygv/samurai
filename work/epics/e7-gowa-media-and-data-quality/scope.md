@@ -1,7 +1,7 @@
 ---
 epic: E7
 name: gowa-media-and-data-quality
-status: in-progress
+status: complete
 ---
 
 # E7 Scope: Gowa Media Support & Data Quality

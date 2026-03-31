@@ -1,7 +1,7 @@
 ---
 epic: E7
 name: gowa-media-and-data-quality
-status: in-progress
+status: complete
 created: 2026-03-31
 predecessor: E6
 ---
