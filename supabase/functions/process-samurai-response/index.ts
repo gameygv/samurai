@@ -125,22 +125,68 @@ serve(async (req) => {
     const aiText = aiData.choices?.[0]?.message?.content || '';
 
     if (aiText) {
+        // S4.2: Extraer media tags de la respuesta IA
+        const mediaRegex = /<<MEDIA:(https?:\/\/[^>]+)>>/;
+        const mediaMatch = aiText.match(mediaRegex);
+        const cleanText = aiText.replace(/<<MEDIA:https?:\/\/[^>]+>>/g, '').trim();
+
         // ENVIAR A WHATSAPP PRIMERO — obtener wamid antes de insertar (S2.2-D2)
         let wamid = null;
         let sendFailed = false;
         try {
-            const { data: sendData, error: sendErr } = await supabase.functions.invoke('send-message-v3', {
-                body: { channel_id: lead.channel_id, phone: lead.telefono, message: aiText, lead_id: lead.id }
-            });
-            if (sendErr || (sendData && !sendData.success)) {
-                sendFailed = true;
-                await supabase.from('activity_logs').insert({
-                    action: 'ERROR', resource: 'SYSTEM',
-                    description: `ERROR WHATSAPP (${lead.telefono}): ${sendErr?.message || JSON.stringify(sendData?.error || 'unknown')}`,
-                    status: 'ERROR'
-                });
+            if (mediaMatch) {
+                const mediaUrl = mediaMatch[1];
+                if (cleanText && cleanText.length <= 1024) {
+                    // Caption mode: imagen con texto como caption
+                    const { data: sendData, error: sendErr } = await supabase.functions.invoke('send-message-v3', {
+                        body: { channel_id: lead.channel_id, phone: lead.telefono, message: cleanText, mediaData: { url: mediaUrl, type: 'image' }, lead_id: lead.id }
+                    });
+                    if (sendErr || (sendData && !sendData.success)) {
+                        sendFailed = true;
+                        await supabase.from('activity_logs').insert({ action: 'ERROR', resource: 'SYSTEM', description: `ERROR WHATSAPP MEDIA (${lead.telefono}): ${sendErr?.message || JSON.stringify(sendData?.error || 'unknown')}`, status: 'ERROR' });
+                    } else {
+                        wamid = sendData?.wamid || null;
+                    }
+                } else if (cleanText && cleanText.length > 1024) {
+                    // Split mode: imagen sola + texto aparte
+                    const { data: imgData, error: imgErr } = await supabase.functions.invoke('send-message-v3', {
+                        body: { channel_id: lead.channel_id, phone: lead.telefono, message: '', mediaData: { url: mediaUrl, type: 'image' }, lead_id: lead.id }
+                    });
+                    if (imgErr || (imgData && !imgData.success)) {
+                        sendFailed = true;
+                        await supabase.from('activity_logs').insert({ action: 'ERROR', resource: 'SYSTEM', description: `ERROR WHATSAPP MEDIA (${lead.telefono}): ${imgErr?.message || JSON.stringify(imgData?.error || 'unknown')}`, status: 'ERROR' });
+                    } else {
+                        const { data: txtData, error: txtErr } = await supabase.functions.invoke('send-message-v3', {
+                            body: { channel_id: lead.channel_id, phone: lead.telefono, message: cleanText, lead_id: lead.id }
+                        });
+                        if (txtErr || (txtData && !txtData.success)) {
+                            await supabase.from('activity_logs').insert({ action: 'ERROR', resource: 'SYSTEM', description: `ERROR WHATSAPP TEXTO (${lead.telefono}): ${txtErr?.message || JSON.stringify(txtData?.error || 'unknown')}`, status: 'ERROR' });
+                        }
+                        wamid = txtData?.wamid || imgData?.wamid || null;
+                    }
+                } else {
+                    // Solo imagen, sin texto
+                    const { data: sendData, error: sendErr } = await supabase.functions.invoke('send-message-v3', {
+                        body: { channel_id: lead.channel_id, phone: lead.telefono, message: '', mediaData: { url: mediaUrl, type: 'image' }, lead_id: lead.id }
+                    });
+                    if (sendErr || (sendData && !sendData.success)) {
+                        sendFailed = true;
+                        await supabase.from('activity_logs').insert({ action: 'ERROR', resource: 'SYSTEM', description: `ERROR WHATSAPP MEDIA (${lead.telefono}): ${sendErr?.message || JSON.stringify(sendData?.error || 'unknown')}`, status: 'ERROR' });
+                    } else {
+                        wamid = sendData?.wamid || null;
+                    }
+                }
             } else {
-                wamid = sendData?.wamid || null;
+                // Sin media tag: flujo original sin cambios
+                const { data: sendData, error: sendErr } = await supabase.functions.invoke('send-message-v3', {
+                    body: { channel_id: lead.channel_id, phone: lead.telefono, message: aiText, lead_id: lead.id }
+                });
+                if (sendErr || (sendData && !sendData.success)) {
+                    sendFailed = true;
+                    await supabase.from('activity_logs').insert({ action: 'ERROR', resource: 'SYSTEM', description: `ERROR WHATSAPP (${lead.telefono}): ${sendErr?.message || JSON.stringify(sendData?.error || 'unknown')}`, status: 'ERROR' });
+                } else {
+                    wamid = sendData?.wamid || null;
+                }
             }
         } catch (sendError: any) {
             sendFailed = true;
@@ -151,10 +197,10 @@ serve(async (req) => {
             });
         }
 
-        // LUEGO INSERTAR EN CONVERSACIONES — solo si el envío fue exitoso
+        // LUEGO INSERTAR EN CONVERSACIONES — guardar texto limpio (sin tags)
         if (!sendFailed) {
             const insertPayload: any = {
-                lead_id: lead.id, emisor: 'IA', mensaje: aiText, platform: 'WHATSAPP'
+                lead_id: lead.id, emisor: 'IA', mensaje: cleanText || aiText, platform: 'WHATSAPP'
             };
             if (wamid) insertPayload.message_id = wamid;
 

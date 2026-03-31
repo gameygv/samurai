@@ -1,0 +1,80 @@
+artifact: design
+story: S4.2
+epic: E4
+name: media-tag-parser
+complexity: simple
+created: "2026-03-30"
+
+problem: |
+  AI responses containing <<MEDIA:url>> tags are sent as literal text to WhatsApp.
+  Customers see raw tags instead of images.
+
+value: |
+  Bot can send promotional posters and images to customers inline in chat.
+  The media_assets infrastructure and send-message-v3 media support already exist
+  but are not connected to the AI response flow.
+
+approach:
+  strategy: inline-regex-parser
+  description: |
+    After receiving aiText from OpenAI (line 125 of process-samurai-response),
+    add regex parser to extract <<MEDIA:url>> tags, clean the text, and route
+    through send-message-v3 with mediaData payload.
+  pattern: "<<MEDIA:(https?://[^>]+)>>"
+  caption_threshold: 1024
+
+components:
+  - path: supabase/functions/process-samurai-response/index.ts
+    action: modify
+    location: "after line 125 (aiText assignment)"
+    description: "Add media tag extraction, text cleaning, and conditional send routing"
+
+decisions:
+  - id: D4
+    summary: "Inline parser in process-samurai-response using regex"
+    source: epic-design
+  - id: D5
+    summary: "Caption with fallback to separate messages when >1024 chars"
+    source: epic-design
+
+acceptance_criteria:
+  - id: AC1
+    scenario: "AI response contains media tag, clean text <= 1024 chars"
+    then: "Image sent with caption via send-message-v3 mediaData"
+  - id: AC2
+    scenario: "AI response contains media tag, clean text > 1024 chars"
+    then: "Image sent without caption, then separate text message"
+  - id: AC3
+    scenario: "AI response has no media tag"
+    then: "Current message flow unchanged (zero regression)"
+  - id: AC4
+    scenario: "AI response has media tag but empty remaining text"
+    then: "Image sent with empty caption, no separate text message"
+  - id: AC5
+    scenario: "Media tag extraction"
+    then: "Regex extracts URL correctly from <<MEDIA:https://example.com/img.jpg>>"
+
+examples:
+  - name: "Caption mode"
+    input: "Mira este poster <<MEDIA:https://cdn.example.com/poster.jpg>> Te encantara!"
+    mediaUrl: "https://cdn.example.com/poster.jpg"
+    cleanText: "Mira este poster  Te encantara!"
+    behavior: "send-message-v3 called with mediaData + caption"
+
+  - name: "Split mode (long text)"
+    input: "<<MEDIA:https://cdn.example.com/menu.jpg>> [1200+ chars of menu description]"
+    mediaUrl: "https://cdn.example.com/menu.jpg"
+    cleanText: "[1200+ chars]"
+    behavior: "send-message-v3 called twice: image only, then text only"
+
+  - name: "No media tag"
+    input: "Hola! Como te puedo ayudar?"
+    mediaUrl: null
+    cleanText: "Hola! Como te puedo ayudar?"
+    behavior: "Existing flow, no change"
+
+  - name: "Media tag, empty remaining text"
+    input: "<<MEDIA:https://cdn.example.com/promo.jpg>>"
+    mediaUrl: "https://cdn.example.com/promo.jpg"
+    cleanText: ""
+    behavior: "Image sent with empty caption, no separate text"
