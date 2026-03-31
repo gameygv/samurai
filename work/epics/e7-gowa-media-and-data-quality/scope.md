@@ -47,11 +47,8 @@ campo valid_until a knowledge_documents (como media_assets).
 **Que:** Cambiar hourly_lead_reminders de '30 * * * *' a '*/15 * * * *'.
 Reduce delay maximo de 59 min a 14 min.
 
-### S7.4: Auto-Reactivar IA (S)
-**Donde:** `evolution-webhook/index.ts` o `process-followups/index.ts`
-**Que:** Si lead.ai_paused = true y han pasado mas de auto_restart_delay
-minutos desde que se pauso, reactivar automaticamente. El campo existe
-en followup_config pero no se verifica.
+### S7.4: Auto-Reactivar IA (S) — DESCOPED
+**Nota:** Diferida por decision del usuario. No implementar auto-reactivacion por ahora.
 
 ### S7.5: Recordatorios al Cliente (M)
 **Donde:** `process-lead-reminders/index.ts` + `ReminderItem.tsx`
@@ -74,4 +71,51 @@ de notificaciones como hoy.
 |------|-----------|--------|------------|
 | Payload Gowa diferente al esperado | Media | Media | Log payload completo para debugging |
 | URL de media Gowa expira rapido | Baja | Media | Descargar inmediatamente en fire-and-forget |
-| Auto-reactivar IA en momento inoportuno | Baja | Baja | Solo reactivar si no hay mensajes recientes del agente |
+
+## Decisions
+
+| # | Decision | Choice |
+|---|----------|--------|
+| D1 | Adaptar funciones para Gowa | Parametro dual: media_id O media_url |
+| D2 | Datos expirados en KB | Limpiar ahora + valid_until en knowledge_documents |
+| D3 | Recordatorios al cliente | Campo target 'agent' o 'client' con toggle UI |
+
+## Implementation Plan
+
+### Sequencing
+
+| Order | Story | Size | Strategy | Rationale |
+|-------|-------|------|----------|-----------|
+| 1 | S7.3: Cron 15 min | XS | Quick win | Un cambio SQL |
+| 2 | S7.2: Datos expirados | S | Quick win | Limpieza + migracion + filtro |
+| 3 | S7.1: Media Gowa | M | Risk-first | La mas compleja, payload desconocido |
+| 4 | S7.5: Recordatorios cliente | M | Feature | UI + backend, independiente |
+
+S7.4 (auto-reactivar IA) descoped por decision del usuario.
+
+### Milestones
+
+#### M1: Quick Wins (after S7.3 + S7.2)
+- [ ] Cron recordatorios cada 15 min
+- [ ] KB filtrado por valid_until
+- [ ] Datos expirados limpiados
+
+#### M2: Gowa Media (after S7.1)
+- [ ] Audio Gowa transcrito via Whisper
+- [ ] Imagen Gowa analizada por Ojo de Halcon
+- [ ] Zero regression en Meta
+
+#### M3: Epic Complete (after S7.5)
+- [ ] Recordatorios al cliente funcionando
+- [ ] Toggle target en UI
+- [ ] Retrospectiva completada
+
+### Progress Tracking
+
+| Story | Status | Started | Completed | Notes |
+|-------|--------|---------|-----------|-------|
+| S7.3: Cron 15 min | pending | — | — | |
+| S7.2: Datos expirados | pending | — | — | |
+| S7.1: Media Gowa | pending | — | — | |
+| S7.5: Recordatorios cliente | pending | — | — | |
+| S7.4: Auto-reactivar IA | descoped | — | — | Diferido por usuario |
