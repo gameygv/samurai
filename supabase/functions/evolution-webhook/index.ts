@@ -134,22 +134,27 @@ serve(async (req) => {
     const { data: config } = await supabase.from('app_config').select('value').eq('key', 'global_ai_status').maybeSingle();
     
     if (config?.value !== 'paused' && !lead.ai_paused) {
-        // Llamar al procesador IA y capturar la respuesta
+        // Llamar al procesador IA con fetch directo (no supabase.functions.invoke)
         try {
-            const { data: aiResult, error: aiErr } = await supabase.functions.invoke('process-samurai-response', {
-                body: { lead_id: lead.id, client_message: text }
+            const fnUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/process-samurai-response`;
+            const fnRes = await fetch(fnUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${Deno.env.get('SUPABASE_ANON_KEY') || Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`
+                },
+                body: JSON.stringify({ lead_id: lead.id, client_message: text })
             });
+            const fnData = await fnRes.json().catch(() => ({}));
 
-            // DOBLE SEGURIDAD: si process-samurai-response retorna el texto IA,
-            // guardarlo desde AQUÍ (mismo cliente que ya guarda mensajes del cliente exitosamente)
-            const aiText = aiResult?.aiText;
-            if (aiText && !aiErr) {
+            // Guardar respuesta IA en conversaciones desde AQUÍ
+            if (fnData.aiText) {
                 await supabase.from('conversaciones').insert({
-                    lead_id: lead.id, emisor: 'IA', mensaje: aiText, platform: 'WHATSAPP'
+                    lead_id: lead.id, emisor: 'IA', mensaje: fnData.aiText, platform: 'WHATSAPP'
                 });
             }
         } catch (invokeErr) {
-            console.error('Error invoking process-samurai-response:', invokeErr);
+            console.error('Error calling process-samurai-response:', invokeErr);
         }
 
         // Fire-and-forget: analyze-leads corre en background
