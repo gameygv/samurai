@@ -28,6 +28,7 @@ import Inbox from "./pages/Inbox";
 import WebhookDiag from "./pages/WebhookDiag";
 import AgentTools from "./pages/AgentTools";
 import AcademicCatalog from "./pages/AcademicCatalog";
+import MetaVerify from "./pages/MetaVerify";
 import { Loader2 } from "lucide-react";
 
 const queryClient = new QueryClient();
@@ -100,6 +101,7 @@ const App = () => (
             <Route path="/settings" element={<PrivateRoute><AdminRoute><Settings /></AdminRoute></PrivateRoute>} />
             <Route path="/meta-capi" element={<PrivateRoute><AdminRoute><MetaCapi /></AdminRoute></PrivateRoute>} />
             <Route path="/webhook-diag" element={<PrivateRoute><AdminRoute><WebhookDiag /></AdminRoute></PrivateRoute>} />
+            <Route path="/meta-verify" element={<PrivateRoute><AdminRoute><MetaVerify /></AdminRoute></PrivateRoute>} />
             
             <Route path="*" element={<NotFound />} />
           </Routes>
