@@ -1,7 +1,7 @@
 ---
 epic: E4
 name: multimedia-pipeline
-status: in-progress
+status: complete
 created: 2026-03-30
 ---
 

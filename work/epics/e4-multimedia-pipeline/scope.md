@@ -1,7 +1,7 @@
 ---
 epic: E4
 name: multimedia-pipeline
-status: in-progress
+status: complete
 ---
 
 # E4 Scope: Multimedia Pipeline
@@ -75,12 +75,12 @@ invocar process-samurai-response para que bot pida repetir, log en activity_logs
 
 ## Done Criteria
 
-- [ ] Nota de voz recibida -> transcrita -> IA responde al contenido real
-- [ ] Respuesta IA con <<MEDIA:url>> -> cliente recibe imagen como media WA
-- [ ] Caption en imagen cuando texto <= 1024 chars
-- [ ] Fallos de transcripcion: bot pide repetir + log para operador
-- [ ] URLs de media invalidas: solo texto enviado + log
-- [ ] Zero regression en mensajes de texto normales
+- [x] Nota de voz recibida -> transcrita -> IA responde al contenido real
+- [x] Respuesta IA con <<MEDIA:url>> -> cliente recibe imagen como media WA
+- [x] Caption en imagen cuando texto <= 1024 chars
+- [x] Fallos de transcripcion: bot pide repetir + log para operador
+- [x] URLs de media invalidas: solo texto enviado + log
+- [x] Zero regression en mensajes de texto normales
 
 ## Risks
 
@@ -107,25 +107,25 @@ pero como es un solo desarrollador, se ejecutan secuencialmente. S4.2 primero po
 
 ### Milestones
 
-#### M1: Imagenes Funcionando (after S4.2)
-- [ ] Enviar mensaje que dispare <<MEDIA:url>> en respuesta IA
-- [ ] Cliente recibe imagen real en WhatsApp (no texto literal)
-- [ ] Caption visible en la imagen
-- [ ] Mensajes sin media siguen funcionando igual
+#### M1: Imagenes Funcionando (after S4.2) — ALCANZADO
+- [x] Enviar mensaje que dispare <<MEDIA:url>> en respuesta IA
+- [x] Cliente recibe imagen real en WhatsApp (no texto literal)
+- [x] Caption visible en la imagen
+- [x] Mensajes sin media siguen funcionando igual
 - **Demo:** Preguntar al bot algo que dispare un poster → verificar en WhatsApp
 
-#### M2: Audio Funcionando (after S4.1)
-- [ ] Enviar nota de voz al bot
-- [ ] Transcripcion aparece en conversaciones como `[TRANSCRIPCION DE NOTA DE VOZ]: "..."`
-- [ ] Bot responde al contenido real del audio
-- [ ] Fallback funciona cuando Whisper falla
+#### M2: Audio Funcionando (after S4.1) — ALCANZADO
+- [x] Enviar nota de voz al bot
+- [x] Transcripcion aparece en conversaciones como `[TRANSCRIPCION DE NOTA DE VOZ]: "..."`
+- [x] Bot responde al contenido real del audio
+- [x] Fallback funciona cuando Whisper falla
 - **Demo:** Enviar audio preguntando por un producto → bot responde con info del producto
 
-#### M3: Epic Complete (after S4.3)
-- [ ] Logging completo en activity_logs para ambos flujos
-- [ ] Edge cases manejados (audio grande, URL invalida)
-- [ ] Zero regression en mensajes de texto normales
-- [ ] Retrospectiva completada
+#### M3: Epic Complete (after S4.3) — ALCANZADO
+- [x] Logging completo en activity_logs para ambos flujos
+- [x] Edge cases manejados (audio grande, URL invalida)
+- [x] Zero regression en mensajes de texto normales
+- [x] Retrospectiva completada
 - **Gate:** `/rai-epic-close`
 
 ### Progress Tracking
