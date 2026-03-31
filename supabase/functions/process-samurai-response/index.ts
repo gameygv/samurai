@@ -125,31 +125,14 @@ serve(async (req) => {
     const aiText = aiData.choices?.[0]?.message?.content || '';
 
     if (aiText) {
-        // GUARDAR EN CONVERSACIONES - fetch directo a PostgREST (bypass del cliente JS)
-        try {
-            const restUrl = `${Deno.env.get('SUPABASE_URL')}/rest/v1/conversaciones`;
-            const insertRes = await fetch(restUrl, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'apikey': Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '',
-                    'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''}`,
-                    'Prefer': 'return=minimal'
-                },
-                body: JSON.stringify({ lead_id: lead.id, emisor: 'IA', mensaje: aiText, platform: 'WHATSAPP' })
-            });
-            if (!insertRes.ok) {
-                const errBody = await insertRes.text();
-                await supabase.from('activity_logs').insert({
-                    action: 'ERROR', resource: 'BRAIN',
-                    description: `INSERT conversaciones FALLO (${insertRes.status}): ${errBody.substring(0, 200)}`,
-                    status: 'ERROR'
-                });
-            }
-        } catch (dbErr: any) {
+        // Guardar respuesta IA en conversaciones (único punto de insert para mensajes IA)
+        const { error: convError } = await supabase.from('conversaciones').insert({
+            lead_id: lead.id, emisor: 'IA', mensaje: aiText, platform: 'WHATSAPP'
+        });
+        if (convError) {
             await supabase.from('activity_logs').insert({
                 action: 'ERROR', resource: 'BRAIN',
-                description: `CRASH INSERT conversaciones: ${dbErr.message}`,
+                description: `INSERT conversaciones FALLO: ${convError.message?.substring(0, 200)}`,
                 status: 'ERROR'
             });
         }
