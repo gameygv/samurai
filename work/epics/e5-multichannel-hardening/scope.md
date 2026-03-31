@@ -1,7 +1,7 @@
 ---
 epic: E5
 name: multichannel-hardening
-status: in-progress
+status: complete
 ---
 
 # E5 Scope: Multi-Channel Hardening
@@ -86,13 +86,13 @@ Cerrar con retrospectiva.
 
 ## Done Criteria
 
-- [ ] Recordatorios por lead enviados automaticamente al agente por WhatsApp
-- [ ] Leads asignados a agente cuando analyze-leads detecta ciudad (modo auto)
-- [ ] Matching exacto + fallback IA para ciudades ambiguas
-- [ ] Transcripcion no crashea en canales Gowa
-- [ ] Telefono normalizado para todos los providers
-- [ ] Fallback de canal con ORDER BY
-- [ ] E3 cerrada con retrospectiva
+- [x] Recordatorios por lead enviados automaticamente al agente por WhatsApp
+- [x] Leads asignados a agente cuando analyze-leads detecta ciudad (modo auto)
+- [x] Matching exacto + fallback IA para ciudades ambiguas
+- [x] Transcripcion no crashea en canales Gowa
+- [x] Telefono normalizado para todos los providers
+- [x] Fallback de canal con ORDER BY
+- [x] E3 cerrada con retrospectiva
 
 ## Risks
 
@@ -123,27 +123,27 @@ Ejecutamos secuencialmente por ser un solo desarrollador. Quick wins primero par
 ### Milestones
 
 #### M1: Fixes + Transcripcion (after S5.4 + S5.3)
-- [ ] Telefono normalizado para todos los providers
-- [ ] Fallback canal con ORDER BY
-- [ ] Audio Gowa no crashea
+- [x] Telefono normalizado para todos los providers
+- [x] Fallback canal con ORDER BY
+- [x] Audio Gowa no crashea
 - **Demo:** Enviar mensaje por Gowa sin error de formato
 
 #### M2: Recordatorios Funcionando (after S5.1)
-- [ ] Crear recordatorio en chat con notify_wa=true
-- [ ] Cron ejecuta y envia WhatsApp al agente
-- [ ] Recordatorio marcado como sent (no se repite)
+- [x] Crear recordatorio en chat con notify_wa=true
+- [x] Cron ejecuta y envia WhatsApp al agente
+- [x] Recordatorio marcado como sent (no se repite)
 - **Demo:** Crear recordatorio para dentro de 1h, verificar que llega al agente
 
 #### M3: Auto-Routing Funcionando (after S5.2)
-- [ ] Lead menciona ciudad en chat
-- [ ] analyze-leads extrae ciudad
-- [ ] Matching exacto asigna al agente correcto
-- [ ] Fallback IA asigna cuando no hay match exacto
+- [x] Lead menciona ciudad en chat
+- [x] analyze-leads extrae ciudad
+- [x] Matching exacto asigna al agente correcto
+- [x] Fallback IA asigna cuando no hay match exacto
 - **Demo:** Escribir "soy de Monterrey" → lead asignado al agente de Monterrey
 
 #### M4: Epic Complete (after S5.5)
-- [ ] E3 cerrada con retrospectiva
-- [ ] Todos los done criteria verificados
+- [x] E3 cerrada con retrospectiva
+- [x] Todos los done criteria verificados
 - **Gate:** `/rai-epic-close`
 
 ### Progress Tracking

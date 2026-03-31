@@ -1,7 +1,7 @@
 ---
 epic: E5
 name: multichannel-hardening
-status: in-progress
+status: complete
 created: 2026-03-30
 predecessor: E4
 ---
