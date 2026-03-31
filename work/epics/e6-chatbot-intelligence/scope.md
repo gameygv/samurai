@@ -1,7 +1,7 @@
 ---
 epic: E6
 name: chatbot-intelligence
-status: in-progress
+status: complete
 ---
 
 # E6 Scope: Chatbot Intelligence

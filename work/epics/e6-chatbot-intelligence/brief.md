@@ -1,7 +1,7 @@
 ---
 epic: E6
 name: chatbot-intelligence
-status: in-progress
+status: complete
 created: 2026-03-31
 predecessor: E5
 ---
