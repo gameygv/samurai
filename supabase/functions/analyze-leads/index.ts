@@ -94,6 +94,44 @@ serve(async (req) => {
 
       await supabase.from('leads').update(updates).eq('id', lead.id);
 
+      // S6.3: CAPI automático — disparar evento Lead cuando intent sube
+      const intentOrder: any = { 'BAJO': 0, 'MEDIO': 1, 'ALTO': 2 };
+      const oldIntentLevel = intentOrder[lead.buying_intent] ?? 0;
+      const newIntentLevel = intentOrder[updates.buying_intent] ?? 0;
+
+      if (newIntentLevel > oldIntentLevel && configMap.meta_pixel_id && configMap.meta_access_token) {
+        try {
+          await supabase.functions.invoke('meta-capi-sender', {
+            body: {
+              config: {
+                pixel_id: configMap.meta_pixel_id,
+                access_token: configMap.meta_access_token,
+                test_event_code: configMap.meta_test_event_code || undefined
+              },
+              eventData: {
+                event_name: 'Lead',
+                event_id: `samurai_lead_${lead.id}_${updates.buying_intent}`,
+                lead_id: lead.id,
+                user_data: {
+                  ph: lead.telefono,
+                  fn: lead.nombre?.split(' ')[0],
+                  ln: lead.nombre?.split(' ').slice(1).join(' ') || undefined,
+                  em: updates.email || lead.email || undefined,
+                  ct: updates.ciudad || lead.ciudad || undefined,
+                  country: 'mx'
+                },
+                custom_data: {
+                  source: 'samurai_auto',
+                  content_name: `intent_${lead.buying_intent}_to_${updates.buying_intent}`
+                }
+              }
+            }
+          });
+        } catch (capiErr) {
+          console.error('CAPI auto error:', capiErr);
+        }
+      }
+
       // S5.2: Auto-routing por ciudad cuando se detecta una nueva
       if (updates.ciudad && !lead.assigned_to) {
         try {
