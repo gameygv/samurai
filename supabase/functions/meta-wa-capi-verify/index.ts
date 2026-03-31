@@ -48,44 +48,87 @@ serve(async (req) => {
 
     // STEP 2: Enviar evento de prueba al DATASET (si tenemos ID)
     if (datasetId) {
-      const eventPayload = {
-        data: [{
-          event_name: 'Lead',
-          event_time: Math.floor(Date.now() / 1000),
-          event_id: `wa_verify_${Date.now()}`,
-          action_source: 'business_messaging',
-          messaging_channel: 'whatsapp',
-          user_data: {
-            whatsapp_business_account_id: waba_id
-          },
-          custom_data: {
-            currency: 'MXN',
-            value: 0,
-            content_name: 'SAMURAI WA CAPI Verification Test'
+      // Intentar múltiples combinaciones hasta que una funcione
+      const attempts = [
+        {
+          name: 'LeadSubmitted + ctwa_clid ficticio',
+          payload: {
+            data: [{
+              event_name: 'LeadSubmitted',
+              event_time: Math.floor(Date.now() / 1000),
+              event_id: `wa_verify_${Date.now()}_1`,
+              action_source: 'business_messaging',
+              messaging_channel: 'whatsapp',
+              user_data: {
+                whatsapp_business_account_id: waba_id,
+                ctwa_clid: 'samurai_test_verification_click_id'
+              },
+              custom_data: { currency: 'MXN', value: 0 }
+            }],
+            ...(test_event_code && { test_event_code })
           }
-        }],
-        ...(test_event_code && { test_event_code })
-      };
+        },
+        {
+          name: 'Purchase + solo waba_id',
+          payload: {
+            data: [{
+              event_name: 'Purchase',
+              event_time: Math.floor(Date.now() / 1000),
+              event_id: `wa_verify_${Date.now()}_2`,
+              action_source: 'business_messaging',
+              messaging_channel: 'whatsapp',
+              user_data: {
+                whatsapp_business_account_id: waba_id
+              },
+              custom_data: { currency: 'MXN', value: 100 }
+            }],
+            ...(test_event_code && { test_event_code })
+          }
+        },
+        {
+          name: 'LeadSubmitted + solo waba_id',
+          payload: {
+            data: [{
+              event_name: 'LeadSubmitted',
+              event_time: Math.floor(Date.now() / 1000),
+              event_id: `wa_verify_${Date.now()}_3`,
+              action_source: 'business_messaging',
+              messaging_channel: 'whatsapp',
+              user_data: {
+                whatsapp_business_account_id: waba_id
+              },
+              custom_data: { currency: 'MXN', value: 0 }
+            }],
+            ...(test_event_code && { test_event_code })
+          }
+        }
+      ];
 
-      const eventUrl = `https://graph.facebook.com/v21.0/${datasetId}/events?access_token=${tokenForWaba}`;
-      const eventRes = await fetch(eventUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(eventPayload)
-      });
-      const eventData = await eventRes.json();
+      let eventPayload = null;
+      for (const attempt of attempts) {
+        const eventUrl = `https://graph.facebook.com/v21.0/${datasetId}/events?access_token=${tokenForWaba}`;
+        const eventRes = await fetch(eventUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(attempt.payload)
+        });
+        const eventData = await eventRes.json();
 
-      if (eventData.events_received) {
-        results.steps.push({ step: 'POST event (WA CAPI)', status: 'ok', detail: `events_received: ${eventData.events_received}, dataset: ${datasetId}` });
-        results.success = true;
-      } else if (eventData.error) {
-        results.steps.push({ step: 'POST event (WA CAPI)', status: 'error', detail: `${eventData.error.message} (code: ${eventData.error.code})` });
-      } else {
-        results.steps.push({ step: 'POST event (WA CAPI)', status: 'warning', detail: JSON.stringify(eventData).substring(0, 200) });
+        if (eventData.events_received) {
+          results.steps.push({ step: `POST event (${attempt.name})`, status: 'ok', detail: `events_received: ${eventData.events_received}` });
+          results.success = true;
+          eventPayload = attempt.payload;
+          break;
+        } else {
+          const errMsg = eventData.error?.message || JSON.stringify(eventData).substring(0, 150);
+          results.steps.push({ step: `POST event (${attempt.name})`, status: 'error', detail: errMsg });
+        }
       }
 
       results.dataset_id = datasetId;
-      results.event_payload = eventPayload;
+      if (eventPayload) results.event_payload = eventPayload;
+
+      // (resultados ya registrados en el loop de attempts)
     }
 
     // STEP 3: También enviar al Pixel estándar como fallback
