@@ -27,7 +27,7 @@ serve(async (req) => {
     }
 
     if (!actualChannelId) {
-       const { data: first } = await supabaseClient.from('whatsapp_channels').select('id').eq('is_active', true).limit(1).maybeSingle();
+       const { data: first } = await supabaseClient.from('whatsapp_channels').select('id').eq('is_active', true).order('created_at', { ascending: true }).limit(1).maybeSingle();
        if (first?.id) actualChannelId = first.id;
     }
 
@@ -39,8 +39,8 @@ serve(async (req) => {
     const provider = channel.provider || 'meta';
     let cleanPhone = phone.replace(/\D/g, '');
     
-    // CORRECCIÓN CRÍTICA MÉXICO PARA META CLOUD API
-    if (provider === 'meta' && cleanPhone.startsWith('521') && cleanPhone.length === 13) {
+    // CORRECCIÓN CRÍTICA MÉXICO — aplica para todos los providers (S5.4)
+    if (cleanPhone.startsWith('521') && cleanPhone.length === 13) {
         cleanPhone = '52' + cleanPhone.substring(3);
     }
 
