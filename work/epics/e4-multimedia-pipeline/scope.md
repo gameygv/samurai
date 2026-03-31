@@ -89,3 +89,49 @@ invocar process-samurai-response para que bot pida repetir, log en activity_logs
 | Whisper timeout/latencia alta | Media | Media | Fire-and-forget, fallback con respuesta generica |
 | Token Meta expirado (no puede descargar audio) | Alta | Alta | Reutilizar api_key del canal, misma renovacion que send-message |
 | AI genera tags <<MEDIA:>> con URLs invalidas | Baja | Baja | Validar URL antes de enviar, fallback a solo texto |
+
+## Implementation Plan
+
+### Sequencing
+
+| Order | Story | Size | Strategy | Rationale |
+|-------|-------|------|----------|-----------|
+| 1 | S4.2: Media Tag Parser | S | Quick win | Valor visible inmediato, bajo riesgo, independiente |
+| 2 | S4.1: Audio Transcription | M | Risk-first (de los restantes) | Componente nuevo, latencia Whisper es la incognita principal |
+| 3 | S4.3: Edge Cases | S | Dependency-driven | Requiere S4.1 y S4.2 completas para hardening |
+
+**Parallelismo:** S4.1 y S4.2 podrian correr en paralelo (archivos diferentes, sin dependencia mutua),
+pero como es un solo desarrollador, se ejecutan secuencialmente. S4.2 primero por quick-win.
+
+**Critical path:** S4.1 → S4.3 (S4.1 es la story mas compleja y bloquea el hardening de audio).
+
+### Milestones
+
+#### M1: Imagenes Funcionando (after S4.2)
+- [ ] Enviar mensaje que dispare <<MEDIA:url>> en respuesta IA
+- [ ] Cliente recibe imagen real en WhatsApp (no texto literal)
+- [ ] Caption visible en la imagen
+- [ ] Mensajes sin media siguen funcionando igual
+- **Demo:** Preguntar al bot algo que dispare un poster → verificar en WhatsApp
+
+#### M2: Audio Funcionando (after S4.1)
+- [ ] Enviar nota de voz al bot
+- [ ] Transcripcion aparece en conversaciones como `[TRANSCRIPCION DE NOTA DE VOZ]: "..."`
+- [ ] Bot responde al contenido real del audio
+- [ ] Fallback funciona cuando Whisper falla
+- **Demo:** Enviar audio preguntando por un producto → bot responde con info del producto
+
+#### M3: Epic Complete (after S4.3)
+- [ ] Logging completo en activity_logs para ambos flujos
+- [ ] Edge cases manejados (audio grande, URL invalida)
+- [ ] Zero regression en mensajes de texto normales
+- [ ] Retrospectiva completada
+- **Gate:** `/rai-epic-close`
+
+### Progress Tracking
+
+| Story | Status | Started | Completed | Notes |
+|-------|--------|---------|-----------|-------|
+| S4.2: Media Tag Parser | pending | — | — | |
+| S4.1: Audio Transcription | pending | — | — | |
+| S4.3: Edge Cases | pending | — | — | |
