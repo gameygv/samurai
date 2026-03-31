@@ -114,8 +114,8 @@ S7.4 (auto-reactivar IA) descoped por decision del usuario.
 
 | Story | Status | Started | Completed | Notes |
 |-------|--------|---------|-----------|-------|
-| S7.3: Cron 15 min | pending | — | — | |
-| S7.2: Datos expirados | pending | — | — | |
+| S7.3: Cron 15 min | complete | 2026-03-31 | 2026-03-31 | Job 18, */15 * * * * |
+| S7.2: Datos expirados | complete | 2026-03-31 | 2026-03-31 | valid_until KB + fecha en Verdad Maestra |
 | S7.1: Media Gowa | pending | — | — | |
 | S7.5: Recordatorios cliente | pending | — | — | |
 | S7.4: Auto-reactivar IA | descoped | — | — | Diferido por usuario |
