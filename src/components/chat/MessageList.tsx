@@ -1,5 +1,5 @@
 import React, { useRef, useEffect } from 'react';
-import { Loader2, StickyNote, FileText, Mic } from 'lucide-react';
+import { Loader2, StickyNote, FileText, Mic, Check, CheckCheck } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface MessageListProps {
@@ -166,8 +166,14 @@ export const MessageList = ({ messages, loading }: MessageListProps) => {
                    )}>
                       {renderMessageContent(msg)}
                    </div>
-                   <span className="text-[9px] font-bold uppercase tracking-widest text-slate-600 mt-2 px-2">
+                   <span className="text-[9px] font-bold uppercase tracking-widest text-slate-600 mt-2 px-2 flex items-center gap-1">
                       {isClient ? 'CLIENTE' : isAI ? 'SAMURAI AI' : 'VENDEDOR'} • {formatMessageTime(msg.created_at)}
+                      {!isClient && msg.delivery_status && (
+                        msg.delivery_status === 'read' ? <CheckCheck className="w-3 h-3 text-blue-400" /> :
+                        msg.delivery_status === 'delivered' ? <CheckCheck className="w-3 h-3 text-slate-400" /> :
+                        msg.delivery_status === 'sent' ? <Check className="w-3 h-3 text-slate-400" /> :
+                        msg.delivery_status === 'failed' ? <span className="text-red-400 text-[9px]">ERROR</span> : null
+                      )}
                    </span>
                 </div>
               </div>

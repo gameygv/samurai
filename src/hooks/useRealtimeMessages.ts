@@ -46,6 +46,9 @@ export const useRealtimeMessages = (leadId: string | null, open: boolean = true)
     const channel = supabase.channel(`live-${leadId}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'conversaciones', filter: `lead_id=eq.${leadId}` }, (payload) => {
         setMessages(prev => prev.some(m => m.id === payload.new.id) ? prev : [...prev, payload.new]);
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'conversaciones', filter: `lead_id=eq.${leadId}` }, (payload) => {
+        setMessages(prev => prev.map(m => m.id === payload.new.id ? { ...m, ...payload.new } : m));
       }).subscribe();
 
     return () => {
