@@ -140,54 +140,68 @@ serve(async (req) => {
             const { data: agents } = await supabase
               .from('profiles')
               .select('id, full_name, territories')
-              .eq('is_active', true)
-              .not('territories', 'eq', '{}');
+              .eq('is_active', true);
 
             if (agents && agents.length > 0) {
               const cityLower = updates.ciudad.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-
-              // Paso 1: matching exacto (case-insensitive, sin acentos)
-              const matched = agents.filter(a =>
-                a.territories?.some((t: string) =>
-                  t.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '') === cityLower
-                )
-              );
+              const specialists = agents.filter(a => a.territories && a.territories.length > 0);
+              const multiTerritory = agents.filter(a => !a.territories || a.territories.length === 0);
 
               let assignedAgent = null;
+              let routeType = '';
 
-              if (matched.length > 0) {
-                assignedAgent = matched[Math.floor(Math.random() * matched.length)];
-              } else {
-                // Paso 2: fallback IA — ciudad mas cercana
-                const territoriesMap = agents.map(a =>
-                  `${a.full_name} (${a.id}): ${a.territories?.join(', ')}`
-                ).join('\n');
+              // Paso 1: matching exacto entre especialistas
+              if (specialists.length > 0) {
+                const matched = specialists.filter(a =>
+                  a.territories.some((t: string) =>
+                    t.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '') === cityLower
+                  )
+                );
 
-                const routingRes = await fetch("https://api.openai.com/v1/chat/completions", {
-                  method: 'POST',
-                  headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                    model: "gpt-4o-mini",
-                    messages: [{ role: 'user', content:
-                      `El lead esta en "${updates.ciudad}". Estos son los agentes y sus territorios:\n${territoriesMap}\n\nResponde SOLO con el UUID del agente cuyo territorio es geograficamente mas cercano a "${updates.ciudad}". Si ninguno es cercano, responde "NONE".`
-                    }],
-                    temperature: 0
-                  })
-                });
-                const routingData = await routingRes.json();
-                const aiAnswer = routingData.choices?.[0]?.message?.content?.trim() || 'NONE';
+                if (matched.length > 0) {
+                  assignedAgent = matched[Math.floor(Math.random() * matched.length)];
+                  routeType = 'match exacto';
+                } else {
+                  // Paso 2: fallback IA — ciudad mas cercana entre especialistas
+                  const territoriesMap = specialists.map(a =>
+                    `${a.full_name} (${a.id}): ${a.territories.join(', ')}`
+                  ).join('\n');
 
-                if (aiAnswer !== 'NONE') {
-                  const matchedAgent = agents.find(a => aiAnswer.includes(a.id));
-                  if (matchedAgent) assignedAgent = matchedAgent;
+                  const routingRes = await fetch("https://api.openai.com/v1/chat/completions", {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      model: "gpt-4o-mini",
+                      messages: [{ role: 'user', content:
+                        `El lead esta en "${updates.ciudad}". Estos son los agentes y sus territorios:\n${territoriesMap}\n\nResponde SOLO con el UUID del agente cuyo territorio es geograficamente mas cercano a "${updates.ciudad}". Si ninguno es cercano, responde "NONE".`
+                      }],
+                      temperature: 0
+                    })
+                  });
+                  const routingData = await routingRes.json();
+                  const aiAnswer = routingData.choices?.[0]?.message?.content?.trim() || 'NONE';
+
+                  if (aiAnswer !== 'NONE') {
+                    const matchedAgent = specialists.find(a => aiAnswer.includes(a.id));
+                    if (matchedAgent) {
+                      assignedAgent = matchedAgent;
+                      routeType = 'IA: ciudad cercana';
+                    }
+                  }
                 }
+              }
+
+              // Paso 3: si no hay especialista, asignar round-robin entre multi-territorio
+              if (!assignedAgent && multiTerritory.length > 0) {
+                assignedAgent = multiTerritory[Math.floor(Math.random() * multiTerritory.length)];
+                routeType = 'multi-territorio';
               }
 
               if (assignedAgent) {
                 await supabase.from('leads').update({ assigned_to: assignedAgent.id }).eq('id', lead.id);
                 await supabase.from('activity_logs').insert({
                   action: 'UPDATE', resource: 'LEADS',
-                  description: `🗺️ Auto-routing: ${lead.nombre} (${updates.ciudad}) → ${assignedAgent.full_name}${matched.length > 0 ? ' (match exacto)' : ' (IA: ciudad cercana)'}`,
+                  description: `🗺️ Auto-routing: ${lead.nombre} (${updates.ciudad}) → ${assignedAgent.full_name} (${routeType})`,
                   status: 'OK'
                 });
               }

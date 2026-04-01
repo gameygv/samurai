@@ -25,12 +25,19 @@ serve(async (req) => {
     let kbContext = "\n=== CONOCIMIENTO TÉCNICO (PDFs/NOTAS) ===\n";
     kbDocs?.forEach(d => { if(d.content) kbContext += `\n[RECURSO: ${d.title}]\n${d.content.substring(0, 1000)}\n`; });
 
-    // --- CARGAR BÓVEDA VISUAL (POSTERS) — filtrar expirados por valid_until ---
+    // --- CARGAR BÓVEDA VISUAL (POSTERS) — filtrar expirados por valid_until o presale_ends_at ---
     const today = new Date().toISOString().split('T')[0];
-    const { data: mediaAssets } = await supabaseClient.from('media_assets').select('title, url, ai_instructions, ocr_content').eq('category', 'POSTER').or(`valid_until.is.null,valid_until.gte.${today}`);
+    const { data: mediaAssets } = await supabaseClient.from('media_assets').select('title, url, ai_instructions, ocr_content, presale_price, presale_ends_at, normal_price, nivel, profesor, sede, friday_concert, category').neq('category', 'PAYMENT').or(`valid_until.is.null,valid_until.gte.${today}`);
     let mediaContext = "\n=== BÓVEDA VISUAL (POSTERS) ===\nINSTRUCCIÓN CRÍTICA: Para enviar un poster usa EXACTAMENTE este formato en tu respuesta: <<MEDIA:url_del_poster>>\n";
     mediaAssets?.forEach(m => {
-      mediaContext += `- ${m.title}: ${m.ai_instructions} -> <<MEDIA:${m.url}>>\n`;
+      let meta = `- ${m.title}: ${m.ai_instructions} -> <<MEDIA:${m.url}>>`;
+      if (m.sede) meta += ` | Sede: ${m.sede}`;
+      if (m.nivel) meta += ` | Nivel: ${m.nivel}`;
+      if (m.profesor) meta += ` | Profesor: ${m.profesor}`;
+      if (m.presale_price && m.presale_ends_at && m.presale_ends_at >= today) meta += ` | PREVENTA: $${m.presale_price} (hasta ${m.presale_ends_at})`;
+      else if (m.normal_price) meta += ` | Precio: $${m.normal_price}`;
+      if (m.friday_concert) meta += ` | Incluye concierto del viernes`;
+      mediaContext += meta + '\n';
       if (m.ocr_content) mediaContext += `  DETALLE DEL POSTER: ${m.ocr_content.substring(0, 500)}\n`;
     });
 
@@ -129,6 +136,9 @@ REGLAS ESTRICTAS DE MEMORIA Y VENTAS:
 ${voiceInstruction}
 ${activeLeadMemory}
 ${handoffRule}
+
+### REGLA TEMPORAL ESTRICTA:
+La fecha de hoy es ${today}. NUNCA menciones, ofrezcas ni recomiendes talleres, cursos o eventos cuya fecha ya pasó. Si el cliente pregunta por un evento pasado, responde que ese ya ocurrió y ofrécele las próximas fechas disponibles. Si no hay próximas fechas, invítalo a dejar sus datos para avisarle cuando se abran nuevas fechas.
 
 ${getConfig('prompt_alma_samurai')}
 ${getConfig('prompt_adn_core')}
