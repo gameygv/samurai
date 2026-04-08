@@ -109,22 +109,14 @@ export const ChannelsTab = () => {
   };
 
   const handleAddChannel = () => {
-    if (showUnofficial) {
-      const existingGowa = channels.find(c => c.provider === 'gowa' && c.api_key && !c.is_new);
-      setChannels([...channels, {
-        id: `new-${Date.now()}`, name: '', provider: 'gowa',
-        api_url: existingGowa ? existingGowa.api_url : '',
-        api_key: existingGowa ? existingGowa.api_key : '',
-        instance_id: '', verify_token: 'samurai_v3', is_new: true, is_active: true
-      }]);
-      if (existingGowa) toast.info("Se ha copiado la URL y API Key de Gowa automáticamente.");
-    } else {
-      setChannels([...channels, {
-        id: `new-${Date.now()}`, name: '', provider: 'meta',
-        api_url: 'https://graph.facebook.com', api_key: '',
-        instance_id: '', verify_token: 'samurai_v3', is_new: true, is_active: true
-      }]);
-    }
+    const existingGowa = channels.find(c => c.provider === 'gowa' && c.api_key && !c.is_new);
+    setChannels([...channels, {
+      id: `new-${Date.now()}`, name: '', provider: 'gowa',
+      api_url: existingGowa ? existingGowa.api_url : '',
+      api_key: existingGowa ? existingGowa.api_key : '',
+      instance_id: '', verify_token: 'samurai_v3', is_new: true, is_active: true
+    }]);
+    if (existingGowa) toast.info("URL y API Key copiadas del canal Gowa existente.");
   };
 
   const handleSaveChannel = async (ch: any) => {
@@ -222,13 +214,7 @@ export const ChannelsTab = () => {
            <h2 className="text-lg font-bold text-white flex items-center gap-2"><Smartphone className="w-5 h-5 text-indigo-400"/> Flota Multicanal</h2>
            <p className="text-xs text-slate-500">Configura tus instancias de WhatsApp para enviar y recibir mensajes.</p>
         </div>
-        <div className="flex items-center gap-4">
-           <div className="flex items-center gap-2 bg-slate-950/50 px-3 py-1.5 rounded-lg border border-slate-800">
-             <Switch checked={showUnofficial} onCheckedChange={handleToggleUnofficial} />
-             <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Gowa / Evolution</span>
-           </div>
-           <Button onClick={handleAddChannel} className="bg-indigo-900 hover:bg-indigo-800 text-amber-500 font-bold"><Plus className="w-4 h-4 mr-2"/> AÑADIR NÚMERO</Button>
-        </div>
+        <Button onClick={handleAddChannel} className="bg-indigo-900 hover:bg-indigo-800 text-amber-500 font-bold"><Plus className="w-4 h-4 mr-2"/> AÑADIR NÚMERO</Button>
       </div>
 
       <div className="grid grid-cols-1 gap-6">
@@ -297,8 +283,8 @@ export const ChannelsTab = () => {
                         <SelectTrigger className="bg-slate-950 border-slate-800 h-11"><SelectValue /></SelectTrigger>
                         <SelectContent className="bg-slate-900 border-slate-800 text-white">
                            <SelectItem value="meta">Meta Cloud API Oficial</SelectItem>
-                           {showUnofficial && <SelectItem value="gowa">GOWA</SelectItem>}
-                           {showUnofficial && <SelectItem value="evolution">Evolution API</SelectItem>}
+                           <SelectItem value="gowa">GOWA</SelectItem>
+                           <SelectItem value="evolution">Evolution API</SelectItem>
                         </SelectContent>
                      </Select>
                   </div>
