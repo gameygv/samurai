@@ -15,7 +15,9 @@ import { RetargetingRadar } from './memory/RetargetingRadar';
 import { PaymentAudit } from './memory/PaymentAudit';
 import { IdentityCrm } from './memory/IdentityCrm';
 import { RemindersBlock } from './memory/RemindersBlock';
+import { StudentProfile } from './memory/StudentProfile';
 import { AcademicRecord } from './memory/AcademicRecord';
+import { CreditHistory } from './memory/CreditHistory';
 import { InternalNotes } from './memory/InternalNotes';
 import { TagsManager } from './memory/TagsManager';
 
@@ -345,7 +347,16 @@ export const MemoryPanel = ({
             onSaveReminders={handleSaveReminders} 
          />
 
+         <StudentProfile
+            dieta={contactData?.dieta}
+            alimentacion={contactData?.alimentacion}
+            alergias={contactData?.alergias}
+            motivoCurso={contactData?.motivo_curso}
+         />
+
          <AcademicRecord academicArray={academicArray} />
+
+         <CreditHistory contactId={contactData?.id || null} />
 
          <InternalNotes 
             internalNotes={internalNotes} 
