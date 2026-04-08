@@ -1,9 +1,8 @@
-// @ts-nocheck
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0'
 import { corsHeaders } from '../_shared/cors.ts'
 
-serve(async (req) => {
+serve(async (req: Request): Promise<Response> => {
   const url = new URL(req.url);
   const channelIdParam = url.searchParams.get('channel_id');
   const supabase = createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '');
@@ -18,16 +17,17 @@ serve(async (req) => {
 
   try {
     const payloadText = await req.text();
-    let payload;
-    try { payload = JSON.parse(payloadText); } catch (e) { return new Response("Invalid JSON", { status: 400 }); }
+    // deno-lint-ignore no-explicit-any
+    let payload: any;
+    try { payload = JSON.parse(payloadText); } catch (_e) { return new Response("Invalid JSON", { status: 400 }); }
     
-    let phone, text = '', pushName = 'Cliente WA', messageId = null;
+    let phone: string | undefined, text = '', pushName = 'Cliente WA', messageId: string | null = null;
     let actualChannelId = channelIdParam;
     let isFromMe = false;
-    let audioMediaId = null; // S4.1: media_id para transcripcion async (Meta)
-    let audioMediaUrl = null; // S7.1: URL directa para audio (Gowa)
-    let imageMediaId = null; // S6.1: media_id para analisis de comprobante (Meta)
-    let imageMediaUrl = null; // S7.1: URL directa para imagen (Gowa)
+    let audioMediaId: string | null = null; // S4.1: media_id para transcripcion async (Meta)
+    let audioMediaUrl: string | null = null; // S7.1: URL directa para audio (Gowa)
+    let imageMediaId: string | null = null; // S6.1: media_id para analisis de comprobante (Meta)
+    let imageMediaUrl: string | null = null; // S7.1: URL directa para imagen (Gowa)
 
     if (payload.object === 'whatsapp_business_account') {
         const change = payload.entry?.[0]?.changes?.[0]?.value;
@@ -152,7 +152,7 @@ serve(async (req) => {
         // Mensajes salientes (isFromMe) no deben mutar el lead
         if (isFromMe) return new Response('ok', { status: 200 });
 
-        const updates: any = { last_message_at: new Date().toISOString(), followup_stage: 0 };
+        const updates: Record<string, unknown> = { last_message_at: new Date().toISOString(), followup_stage: 0 };
         if (actualChannelId) updates.channel_id = actualChannelId;
 
         if (lead.buying_intent === 'PERDIDO') {
@@ -167,7 +167,7 @@ serve(async (req) => {
     }
 
     // Insertar mensaje del cliente con wamid para deduplicación (S2.2)
-    const clientInsert: any = { lead_id: lead.id, emisor: 'CLIENTE', mensaje: text, platform: 'WHATSAPP' };
+    const clientInsert: Record<string, string> = { lead_id: lead.id, emisor: 'CLIENTE', mensaje: text, platform: 'WHATSAPP' };
     if (messageId) clientInsert.message_id = messageId;
     const { error: insertError2 } = await supabase.from('conversaciones').insert(clientInsert);
     if (insertError2) {
