@@ -33,9 +33,9 @@ export async function requireRole(req: Request, allowedRoles: string[]): Promise
   const auth = await requireAuth(req);
   if (auth.error) return auth;
 
-  const role = auth.data?.profile?.role?.toLowerCase() || 'agent';
+  const role = auth.data?.profile?.role?.toLowerCase() || 'unknown';
   if (!allowedRoles.includes(role)) {
-    return { data: null, error: new Response(JSON.stringify({ error: 'Insufficient permissions', required: allowedRoles, current: role }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }) };
+    return { data: null, error: new Response(JSON.stringify({ error: 'Insufficient permissions' }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }) };
   }
 
   return auth;
