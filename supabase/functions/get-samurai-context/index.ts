@@ -3,6 +3,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0'
 import { corsHeaders } from '../_shared/cors.ts'
 
 interface LeadData {
+  id?: string | number;
   nombre?: string;
   email?: string;
   ciudad?: string;
@@ -125,6 +126,43 @@ CUANDO EL CLIENTE MUESTRE INTENCIÓN DE COMPRA, PREGUNTE POR PRECIOS FINALES, M�
 `;
     }
 
+    // --- CARGAR HISTORIAL ACADÉMICO DEL CONTACTO ---
+    let academicContext = '';
+    let profileContext = '';
+    const leadId = lead.id ?? (lead as Record<string, unknown>).lead_id;
+    if (leadId) {
+      const { data: contactData } = await supabaseClient
+        .from('contacts')
+        .select('academic_record, dieta, alergias, motivo_curso')
+        .eq('lead_id', leadId)
+        .maybeSingle();
+
+      if (contactData?.academic_record) {
+        const records = Array.isArray(contactData.academic_record)
+          ? contactData.academic_record
+          : JSON.parse(contactData.academic_record as string);
+
+        if (records.length > 0) {
+          academicContext = '\n=== HISTORIAL ACADÉMICO DEL CLIENTE ===\n';
+          academicContext += 'IMPORTANTE: Este cliente YA tomó estos cursos. NO los vuelvas a ofrecer. Sugiere el siguiente nivel o cursos complementarios.\n';
+          (records as Array<{ course?: string; nivel?: string; location?: string; date?: string }>).forEach((r) => {
+            academicContext += `- ${r.course || 'Curso desconocido'}`;
+            if (r.nivel) academicContext += ` (${r.nivel})`;
+            if (r.location) academicContext += ` en ${r.location}`;
+            if (r.date) academicContext += ` — ${r.date}`;
+            academicContext += '\n';
+          });
+        }
+      }
+
+      if (contactData?.dieta || contactData?.alergias || contactData?.motivo_curso) {
+        profileContext = '\n=== PERFIL DEL ALUMNO ===\n';
+        if (contactData.dieta) profileContext += `Dieta: ${contactData.dieta}\n`;
+        if (contactData.alergias) profileContext += `Alergias: ${contactData.alergias}\n`;
+        if (contactData.motivo_curso) profileContext += `Motivación: ${contactData.motivo_curso}\n`;
+      }
+    }
+
     // AQUI ESTÁ LA PROTECCIÓN CRÍTICA PARA DATOS Y PAGOS
     const activeLeadMemory = `
 === ESTADO ACTUAL DEL PROSPECTO (MEMORIA) ===
@@ -166,7 +204,7 @@ ${wcContext}
 
 === DATOS DE PAGO BANCARIO ===
 ${bankInfo}
-`;
+${academicContext}${profileContext}`;
 
     return new Response(JSON.stringify({ system_prompt: systemPrompt }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   } catch (error: unknown) {
