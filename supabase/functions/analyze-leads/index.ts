@@ -45,12 +45,13 @@ serve(async (req: Request): Promise<Response> => {
     const analysisPrompt = `Analiza este mensaje de cliente y extrae:
     1. Ciudad (si la menciona)
     2. Email (si lo menciona)
-    3. Intención de compra: Responde ESTRICTAMENTE con una de estas tres palabras: "BAJO", "MEDIO" o "ALTO". (Nunca respondas PERDIDO).
+    3. Código postal (cp): si el cliente menciona un código postal (5 dígitos numéricos, ej. "06600", "45050"). Si no lo menciona, null.
+    4. Intención de compra: Responde ESTRICTAMENTE con una de estas tres palabras: "BAJO", "MEDIO" o "ALTO". (Nunca respondas PERDIDO).
 
     Mensaje:
     ${clientMessages}
 
-    Responde en JSON exacto: {"ciudad": "", "email": "", "intent": "BAJO"}`;
+    Responde en JSON exacto: {"ciudad": "", "email": "", "cp": null, "intent": "BAJO"}`;
 
     const aiRes = await fetch("https://api.openai.com/v1/chat/completions", {
       method: 'POST',
@@ -84,6 +85,7 @@ serve(async (req: Request): Promise<Response> => {
       
       if (parsed.ciudad && parsed.ciudad.length > 2) updates.ciudad = parsed.ciudad;
       if (parsed.email && parsed.email.includes('@')) updates.email = parsed.email;
+      if (parsed.cp && /^\d{5}$/.test(String(parsed.cp))) updates.cp = String(parsed.cp);
 
       // Doble validación final
       if (updates.buying_intent === 'PERDIDO') updates.buying_intent = 'BAJO';
