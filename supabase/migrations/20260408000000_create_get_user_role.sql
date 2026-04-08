@@ -8,7 +8,7 @@
 
 BEGIN;
 
-CREATE OR REPLACE FUNCTION auth.get_user_role()
+CREATE OR REPLACE FUNCTION public.get_user_role()
 RETURNS TEXT
 LANGUAGE sql
 STABLE
@@ -22,6 +22,6 @@ AS $$
 $$;
 
 -- Grant execute to authenticated and anon (anon gets 'unknown', denied by policies)
-GRANT EXECUTE ON FUNCTION auth.get_user_role() TO authenticated, anon;
+GRANT EXECUTE ON FUNCTION public.get_user_role() TO authenticated, anon;
 
 COMMIT;

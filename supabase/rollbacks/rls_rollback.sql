@@ -115,7 +115,7 @@ DROP POLICY IF EXISTS "evaluations_agent_insert" ON public.agent_evaluations;
 -- PHASE 2: Drop helper function
 -- =================================================================
 
-DROP FUNCTION IF EXISTS auth.get_user_role();
+DROP FUNCTION IF EXISTS public.get_user_role();
 
 -- =================================================================
 -- PHASE 3: Recreate original permissive USING(true) policies
