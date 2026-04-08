@@ -110,8 +110,9 @@ serve(async (req) => {
         body: JSON.stringify({ model: "gpt-4o", messages: msgs, temperature: 0.4 })
     });
 
+    if (!aiRes.ok) throw new Error(`OpenAI HTTP ${aiRes.status}: ${await aiRes.text()}`);
     const aiData = await aiRes.json();
-    
+
     // DETECTOR DE ERRORES OPENAI
     if (aiData.error) {
         await supabase.from('activity_logs').insert({ 

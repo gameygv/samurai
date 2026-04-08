@@ -74,8 +74,9 @@ RESPONDE SOLO EN JSON:
       })
     });
 
+    if (!response.ok) throw new Error(`OpenAI HTTP ${response.status}: ${await response.text()}`);
     const aiData = await response.json();
-    return new Response(aiData.choices[0].message.content, { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    return new Response(aiData.choices?.[0]?.message?.content || '{}', { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
   } catch (error: any) {
     return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: corsHeaders })

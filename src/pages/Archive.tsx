@@ -12,7 +12,6 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import ChatViewer from '@/components/ChatViewer';
-import { AuditAgentDialog } from '@/components/archive/AuditAgentDialog';
 import { useAuth } from '@/context/AuthContext';
 import { cn } from '@/lib/utils';
 
@@ -25,9 +24,6 @@ const Archive = () => {
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [agentsMap, setAgentsMap] = useState<Record<string, string>>({});
   
-  const [auditLeadId, setAuditLeadId] = useState<string | null>(null);
-  const [auditAgentName, setAuditAgentName] = useState('');
-  const [isAuditOpen, setIsAuditOpen] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -114,7 +110,6 @@ const Archive = () => {
           </CardContent>
         </Card>
         {selectedLead && <ChatViewer lead={selectedLead} open={isChatOpen} onOpenChange={setIsChatOpen} />}
-        <AuditAgentDialog open={isAuditOpen} onOpenChange={setIsAuditOpen} leadId={auditLeadId} agentName={auditAgentName} />
       </div>
     </Layout>
   );

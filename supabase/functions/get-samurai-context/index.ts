@@ -7,13 +7,16 @@ serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
   try {
-    const supabaseClient = createClient(Deno.env.get('SUPABASE_URL'), Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'));
+    const supabaseClient = createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '');
     const body = await req.json().catch(() => ({}));
     const lead = body.lead || {};
     const platform = body.platform || 'WHATSAPP';
 
     const { data: configs } = await supabaseClient.from('app_config').select('key, value');
     const getConfig = (key: string, def = "") => configs?.find((c: any) => c.key === key)?.value || def;
+
+    // --- FECHA DE HOY (usada en filtros y prompt) ---
+    const today = new Date().toISOString().split('T')[0];
 
     // --- CARGAR VERDAD MAESTRA ---
     const { data: webPages } = await supabaseClient.from('main_website_content').select('title, content').eq('scrape_status', 'success');
@@ -26,7 +29,6 @@ serve(async (req) => {
     kbDocs?.forEach(d => { if(d.content) kbContext += `\n[RECURSO: ${d.title}]\n${d.content.substring(0, 1000)}\n`; });
 
     // --- CARGAR BÓVEDA VISUAL (POSTERS) — filtrar expirados por valid_until o presale_ends_at ---
-    const today = new Date().toISOString().split('T')[0];
     const { data: mediaAssets } = await supabaseClient.from('media_assets').select('title, url, ai_instructions, ocr_content, presale_price, presale_ends_at, normal_price, nivel, profesor, sede, friday_concert, category').neq('category', 'PAYMENT').or(`valid_until.is.null,valid_until.gte.${today}`);
     let mediaContext = "\n=== BÓVEDA VISUAL (POSTERS) ===\nINSTRUCCIÓN CRÍTICA: Para enviar un poster usa EXACTAMENTE este formato en tu respuesta: <<MEDIA:url_del_poster>>\n";
     mediaAssets?.forEach(m => {

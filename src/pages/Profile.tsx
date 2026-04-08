@@ -60,7 +60,7 @@ const Profile = () => {
         if (bankData) {
             try { 
                 const parsed = JSON.parse(bankData); 
-                setBank({ ...bank, ...parsed, enabled: Boolean(parsed.enabled) }); 
+                setBank(prev => ({ ...prev, ...parsed, enabled: Boolean(parsed.enabled) }));
             } catch(e){}
         }
         if (closingData) {

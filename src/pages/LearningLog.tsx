@@ -275,7 +275,7 @@ const LearningLog = () => {
                         <TableRow><TableCell colSpan={6} className="text-center h-32 text-slate-500 italic uppercase text-[10px] tracking-widest">No hay reportes que coincidan</TableCell></TableRow>
                      ) : (
                         filteredErrors.map(err => (
-                           <TableRow key={err.error_id || Math.random()} className="border-slate-800 hover:bg-slate-800/30 transition-colors">
+                           <TableRow key={err.error_id || `err-${err.created_at}`} className="border-slate-800 hover:bg-slate-800/30 transition-colors">
                               <TableCell className="text-[10px] text-slate-500 font-mono">
                                  {err.reported_at ? new Date(err.reported_at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : 'N/A'}
                               </TableCell>
@@ -393,7 +393,7 @@ const LearningLog = () => {
                 {(versions || []).length === 0 ? (
                    <div className="col-span-full py-20 text-center text-slate-500 italic text-sm tracking-widest uppercase">No hay historial de versiones consolidado.</div>
                 ) : versions.map(v => (
-                   <Card key={v.version_id || Math.random()} className="bg-slate-900 border-slate-800 hover:border-indigo-500/50 transition-colors rounded-2xl shadow-lg">
+                   <Card key={v.version_id || `ver-${v.created_at}`} className="bg-slate-900 border-slate-800 hover:border-indigo-500/50 transition-colors rounded-2xl shadow-lg">
                       <CardHeader className="pb-3 border-b border-slate-800/50">
                          <div className="flex justify-between items-start">
                             <Badge className="bg-indigo-900/50 text-indigo-300 border-indigo-500/30">{v.version_numero || 'N/V'}</Badge>

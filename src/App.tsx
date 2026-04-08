@@ -54,14 +54,14 @@ const PrivateRoute = ({ children }: { children: React.ReactNode }) => {
 
 const AdminRoute = ({ children }: { children: React.ReactNode }) => {
     const { isAdmin, loading } = useAuth();
-    if (loading) return null;
+    if (loading) return <div className="min-h-screen bg-slate-950 flex items-center justify-center"><Loader2 className="w-8 h-8 text-amber-600 animate-spin" /></div>;
     if (!isAdmin) return <Navigate to="/" replace />;
     return <>{children}</>;
 };
 
 const ManagerRoute = ({ children }: { children: React.ReactNode }) => {
     const { isManager, loading } = useAuth();
-    if (loading) return null;
+    if (loading) return <div className="min-h-screen bg-slate-950 flex items-center justify-center"><Loader2 className="w-8 h-8 text-amber-600 animate-spin" /></div>;
     if (!isManager) return <Navigate to="/" replace />;
     return <>{children}</>;
 };

@@ -62,8 +62,9 @@ ${pQaAuditor}
       })
     });
 
+    if (!response.ok) throw new Error(`OpenAI HTTP ${response.status}: ${await response.text()}`);
     const aiData = await response.json();
-    const result = JSON.parse(aiData.choices[0].message.content);
+    const result = JSON.parse(aiData.choices?.[0]?.message?.content || '{}');
 
     await supabaseClient.from('agent_evaluations').insert({
         agent_id, lead_id, message_text,

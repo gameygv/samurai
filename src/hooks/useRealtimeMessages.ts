@@ -37,7 +37,12 @@ export const useRealtimeMessages = (leadId: string | null, open: boolean = true)
           .eq('lead_id', leadIdRef.current).order('created_at', { ascending: true })
           .then(({ data }) => {
             if (data) {
-              setMessages(prev => (prev.length !== data.length ? data : prev));
+              setMessages(prev => {
+                if (prev.length !== data.length) return data;
+                // Detectar cambios en delivery_status u otros campos actualizados
+                const changed = data.some((msg: any, i: number) => prev[i]?.delivery_status !== msg.delivery_status || prev[i]?.mensaje !== msg.mensaje);
+                return changed ? data : prev;
+              });
             }
           });
       }

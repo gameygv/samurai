@@ -64,11 +64,11 @@ serve(async (req) => {
                   }
 
                   contact.status = 'sent';
+                  messagesSentCount++;
               } catch(e) {
                   console.error(`Error sending to ${contact.telefono}:`, e.message);
                   contact.status = 'error';
               }
-              messagesSentCount++;
               updated = true;
           }
           

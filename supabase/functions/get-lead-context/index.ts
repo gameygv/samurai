@@ -32,7 +32,7 @@ serve(async (req) => {
       .select('*')
       .or(`telefono.ilike.%${cleanPhone}%`)
       .limit(1)
-      .single();
+      .maybeSingle();
 
     if (leadError || !lead) {
       return new Response(JSON.stringify({ history: "Nuevo prospecto.", profile: "Sin datos previos." }), {

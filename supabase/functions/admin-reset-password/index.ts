@@ -17,11 +17,16 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
-    // Find user by email
-    const { data: { users }, error: listError } = await supabaseAdmin.auth.admin.listUsers();
-    if (listError) throw listError;
-
-    const userToReset = users.find(u => u.email === email);
+    // Find user by email (paginated to handle >50 users)
+    let userToReset = null;
+    let page = 1;
+    while (!userToReset) {
+      const { data: { users }, error: listError } = await supabaseAdmin.auth.admin.listUsers({ page, perPage: 100 });
+      if (listError) throw listError;
+      if (!users || users.length === 0) break;
+      userToReset = users.find(u => u.email === email);
+      page++;
+    }
     if (!userToReset) {
       throw new Error(`No se encontró un usuario con el email: ${email}`);
     }

@@ -30,7 +30,9 @@ const Index = () => {
   }, [user, isManager]);
 
   const fetchData = async () => {
-    const { data: leads } = await supabase.from('leads').select('*');
+    let leadsQuery = supabase.from('leads').select('id, created_at, reminders, nombre, telefono, buying_intent, email, assigned_to');
+    if (!isManager) leadsQuery = leadsQuery.eq('assigned_to', user?.id);
+    const { data: leads } = await leadsQuery;
     const { data: logs } = await supabase.from('activity_logs').select('*').order('created_at', { ascending: false }).limit(20);
     
     // Buscar cobros vencidos o para hoy para el Radar

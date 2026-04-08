@@ -11,7 +11,7 @@ serve(async (req) => {
         throw new Error("Datos del canal incompletos.");
     }
 
-    const webhookUrl = `https://giwoovmvwlddaizorizk.supabase.co/functions/v1/evolution-webhook?channel_id=${channel.id}`;
+    const webhookUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/evolution-webhook?channel_id=${channel.id}`;
     
     let endpoint = channel.api_url;
     if (endpoint.endsWith('/')) endpoint = endpoint.slice(0, -1);

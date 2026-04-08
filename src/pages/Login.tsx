@@ -17,6 +17,9 @@ const Login = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) navigate('/', { replace: true });
+    });
     checkDbConnection();
     supabase.from('app_config').select('value').eq('key', 'brand_name').maybeSingle().then(({ data }) => {
        if (data?.value) setBrandName(data.value);

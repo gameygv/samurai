@@ -14,7 +14,7 @@ serve(async (req) => {
     const { data: installments, error: fetchErr } = await supabaseClient
       .from('credit_installments')
       .select(`
-         id, amount, due_date, status, 
+         id, amount, due_date, status, reminder_sent_at,
          sale:credit_sales(id, concept, seq_pre_days, seq_post1_days, seq_post2_days, seq_abandon_days, msg_pre, msg_post1, msg_post2, msg_abandon_agent, responsible_id, contact:contacts(id, nombre, telefono, lead_id, financial_status))
       `)
       .in('status', ['PENDING', 'LATE']);
@@ -32,6 +32,9 @@ serve(async (req) => {
     for (const inst of installments) {
        const sale = inst.sale;
        if (!sale || !sale.contact) continue;
+
+       // Dedup: si ya se envió recordatorio hoy, saltar
+       if (inst.reminder_sent_at && inst.reminder_sent_at.startsWith(todayStr)) continue;
 
        const dueDate = new Date(inst.due_date);
        const diffTime = todayDate.getTime() - dueDate.getTime();

@@ -58,7 +58,10 @@ serve(async (req) => {
       return new Response('no_media', { headers: corsHeaders });
     }
     const imageBuffer = await imageBlob.arrayBuffer();
-    const base64 = btoa(String.fromCharCode(...new Uint8Array(imageBuffer)));
+    const bytes = new Uint8Array(imageBuffer);
+    let binary = '';
+    for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+    const base64 = btoa(binary);
     const mimeType = imageBlob.type || 'image/jpeg';
     const dataUrl = `data:${mimeType};base64,${base64}`;
 
@@ -140,6 +143,6 @@ serve(async (req) => {
       description: `🔍 Ojo de Halcón CRASH: ${err.message?.substring(0, 150)}`,
       status: 'ERROR'
     }).catch(() => {});
-    return new Response(err.message, { status: 200, headers: corsHeaders });
+    return new Response(JSON.stringify({ error: err.message }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   }
 })

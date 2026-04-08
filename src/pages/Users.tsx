@@ -32,6 +32,7 @@ const UsersPage = () => {
   const [creating, setCreating] = useState(false);
 
   const [selectedUser, setSelectedUser] = useState<any>(null);
+  const [originalEmail, setOriginalEmail] = useState('');
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [updating, setUpdating] = useState(false);
   const [newPassword, setNewPassword] = useState('');
@@ -111,9 +112,10 @@ const UsersPage = () => {
             throw new Error("La nueva contraseña debe tener al menos 6 caracteres.");
         }
 
-        if (selectedUser.email || newPassword) {
+        const emailChanged = selectedUser.email && selectedUser.email !== originalEmail;
+        if (emailChanged || newPassword) {
            const payload: any = { action: 'UPDATE', userId: selectedUser.id };
-           if (selectedUser.email) payload.email = selectedUser.email;
+           if (emailChanged) payload.email = selectedUser.email;
            if (newPassword) payload.password = newPassword;
 
            const { data, error: authError } = await supabase.functions.invoke('manage-auth-users', { body: payload });
@@ -257,7 +259,7 @@ const UsersPage = () => {
                          )}
                      </TableCell>
                      <TableCell className="text-right pr-6">
-                        <Button variant="outline" size="sm" className="bg-[#121214] border-[#333336] text-amber-500 hover:bg-amber-500 hover:text-slate-950 h-9 px-4 text-[10px] font-bold uppercase tracking-widest transition-colors rounded-xl" onClick={() => { setSelectedUser({...u, auto_assign: Array.isArray(autoRoutingAgents) && autoRoutingAgents.includes(u.id)}); setNewPassword(''); setIsEditOpen(true); }}>
+                        <Button variant="outline" size="sm" className="bg-[#121214] border-[#333336] text-amber-500 hover:bg-amber-500 hover:text-slate-950 h-9 px-4 text-[10px] font-bold uppercase tracking-widest transition-colors rounded-xl" onClick={() => { setSelectedUser({...u, auto_assign: Array.isArray(autoRoutingAgents) && autoRoutingAgents.includes(u.id)}); setOriginalEmail(u.email || ''); setNewPassword(''); setIsEditOpen(true); }}>
                            <Edit3 className="w-3.5 h-3.5 mr-1.5" /> Gestionar
                         </Button>
                      </TableCell>

@@ -12,8 +12,10 @@ serve(async (req) => {
 
   const supabase = createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '');
 
+  let _lead_id = null, _message_id = null;
   try {
     const { media_id, media_url, lead_id, message_id, channel_id } = await req.json();
+    _lead_id = lead_id; _message_id = message_id;
     if ((!media_id && !media_url) || !lead_id || !message_id || !channel_id) {
       return new Response('missing_params', { headers: corsHeaders });
     }
@@ -128,11 +130,10 @@ serve(async (req) => {
     });
 
   } catch (err) {
-    // Crash total: intentar fallback
+    // Crash total: usar variables capturadas al inicio (req.clone() no funciona aquí porque body ya fue consumido)
     try {
-      const { lead_id, message_id } = await req.clone().json().catch(() => ({}));
-      if (lead_id && message_id) {
-        await logAndFallback(supabase, lead_id, message_id, `CRASH transcribe-audio: ${err.message}`);
+      if (_lead_id && _message_id) {
+        await logAndFallback(supabase, _lead_id, _message_id, `CRASH transcribe-audio: ${err.message}`);
       }
     } catch (_) {}
     return new Response(err.message, { status: 200, headers: corsHeaders });

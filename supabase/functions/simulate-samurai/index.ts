@@ -31,7 +31,7 @@ serve(async (req) => {
     let kbContext = "\n=== CONOCIMIENTO TÉCNICO (PDFs/NOTAS) ===\n";
     kbDocs?.forEach(d => { if(d.content) kbContext += `\n[RECURSO: ${d.title}]\n${d.content.substring(0, 1000)}\n`; });
 
-    const { data: mediaAssets } = await supabaseClient.from('media_assets').select('title, url, ai_instructions').eq('category', 'POSTER');
+    const { data: mediaAssets } = await supabaseClient.from('media_assets').select('title, url, ai_instructions').neq('category', 'PAYMENT');
     let mediaContext = "\n=== BÓVEDA VISUAL (POSTERS) ===\nUsa <<MEDIA:URL>> para enviar posters.\n";
     mediaAssets?.forEach(m => { mediaContext += `- ${m.title}: ${m.ai_instructions} -> <<MEDIA:${m.url}>>\n`; });
 
@@ -70,13 +70,18 @@ serve(async (req) => {
       body: JSON.stringify({ model: "gpt-4o", messages: messages, temperature: 0.5 })
     });
 
+    if (!response.ok) throw new Error(`OpenAI HTTP ${response.status}: ${await response.text()}`);
     const aiData = await response.json();
-    const rawText = aiData.choices[0].message.content;
+    const rawText = aiData.choices?.[0]?.message?.content || '';
     const parts = rawText.split('---JSON---');
     
-    return new Response(JSON.stringify({ 
-        answer: parts[0].trim(), 
-        explanation: parts[1] ? JSON.parse(parts[1].trim().replace(/```json/g, '').replace(/```/g, '')) : { layers_used: ["ADN CORE"], reasoning: "Respuesta generada por personalidad base." }
+    let explanation = { layers_used: ["ADN CORE"], reasoning: "Respuesta generada por personalidad base." };
+    if (parts[1]) {
+      try { explanation = JSON.parse(parts[1].trim().replace(/```json/g, '').replace(/```/g, '')); } catch (_) {}
+    }
+    return new Response(JSON.stringify({
+        answer: parts[0].trim(),
+        explanation
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
   } catch (error: any) {

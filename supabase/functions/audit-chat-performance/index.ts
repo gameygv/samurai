@@ -77,8 +77,9 @@ ${transcript}
       })
     });
 
+    if (!aiRes.ok) throw new Error(`OpenAI HTTP ${aiRes.status}: ${await aiRes.text()}`);
     const aiData = await aiRes.json();
-    const result = aiData.choices[0].message.content;
+    const result = aiData.choices?.[0]?.message?.content;
 
     return new Response(result, { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 

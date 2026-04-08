@@ -12,7 +12,7 @@ serve(async (req) => {
 
   try {
     const { channel_id, phone, message, mediaData, lead_id } = await req.json();
-    const supabaseClient = createClient(Deno.env.get('SUPABASE_URL'), Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'));
+    const supabaseClient = createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '');
 
     let actualChannelId = channel_id;
 
@@ -81,6 +81,9 @@ serve(async (req) => {
         if (message) formData.append('caption', message);
         let suffix = 'file';
         if (mediaData.type === 'image') { suffix = 'image'; formData.append('image', fileBlob, 'img.jpg'); }
+        else if (mediaData.type === 'video') { suffix = 'file'; formData.append('file', fileBlob, mediaData.name || 'video.mp4'); }
+        else if (mediaData.type === 'audio') { suffix = 'file'; formData.append('file', fileBlob, mediaData.name || 'audio.ogg'); }
+        else { suffix = 'file'; formData.append('file', fileBlob, mediaData.name || 'document.pdf'); }
         endpoint = `${endpoint}/send/${suffix}`;
         bodyContent = formData;
       } else {

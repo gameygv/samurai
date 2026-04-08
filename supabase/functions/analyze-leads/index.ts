@@ -68,6 +68,7 @@ serve(async (req) => {
       })
     });
 
+    if (!aiRes.ok) throw new Error(`OpenAI HTTP ${aiRes.status}: ${await aiRes.text()}`);
     const aiData = await aiRes.json();
     const content = aiData.choices?.[0]?.message?.content || '{}';
 
@@ -178,6 +179,7 @@ serve(async (req) => {
                       temperature: 0
                     })
                   });
+                  if (!routingRes.ok) throw new Error(`OpenAI routing HTTP ${routingRes.status}`);
                   const routingData = await routingRes.json();
                   const aiAnswer = routingData.choices?.[0]?.message?.content?.trim() || 'NONE';
 

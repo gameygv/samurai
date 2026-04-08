@@ -95,10 +95,13 @@ const Contacts = () => {
   const fetchContacts = async () => {
     setLoading(true);
     
-    // FILTRO DE PRIVACIDAD
+    // FILTRO DE PRIVACIDAD — inner join solo cuando se filtra por agente
+    const leadsJoin = isManager
+      ? 'leads(id, assigned_to, buying_intent, payment_status, lead_score, ai_paused, summary)'
+      : 'leads!inner(id, assigned_to, buying_intent, payment_status, lead_score, ai_paused, summary)';
     let query = supabase
       .from('contacts')
-      .select('*, leads!inner(id, assigned_to, buying_intent, payment_status, lead_score, ai_paused, summary), credit_sales(status, total_amount)');
+      .select(`*, ${leadsJoin}, credit_sales(status, total_amount)`);
 
     if (!isManager) {
         query = query.eq('leads.assigned_to', user?.id);
@@ -122,8 +125,9 @@ const Contacts = () => {
   };
 
   const handleOpenChat = (contact: any) => {
-    if (contact.leads) {
-       setSelectedLead(contact.leads);
+    const lead = Array.isArray(contact.leads) ? contact.leads[0] : contact.leads;
+    if (lead) {
+       setSelectedLead(lead);
        setIsChatOpen(true);
     }
   };
@@ -147,11 +151,14 @@ const Contacts = () => {
           const leadIds = contactsToDelete?.map(c => c.lead_id).filter(Boolean) || [];
 
           if (leadIds.length > 0) {
-              await supabase.from('conversaciones').delete().in('lead_id', leadIds);
-              await supabase.from('leads').delete().in('id', leadIds);
+              const { error: convErr } = await supabase.from('conversaciones').delete().in('lead_id', leadIds);
+              if (convErr) throw new Error(`Error borrando conversaciones: ${convErr.message}`);
+              const { error: leadErr } = await supabase.from('leads').delete().in('id', leadIds);
+              if (leadErr) throw new Error(`Error borrando leads: ${leadErr.message}`);
           }
 
-          await supabase.from('contacts').delete().in('id', selectedIds);
+          const { error: contactErr } = await supabase.from('contacts').delete().in('id', selectedIds);
+          if (contactErr) throw new Error(`Error borrando contactos: ${contactErr.message}`);
 
           toast.success(`${selectedIds.length} contactos eliminados permanentemente.`, { id: tid });
           setSelectedIds([]);

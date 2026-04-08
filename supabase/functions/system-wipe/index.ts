@@ -23,16 +23,21 @@ serve(async (req) => {
         throw new Error("Confirmación de seguridad denegada.");
     }
 
-    // 1. OBTENER Y BORRAR USUARIOS (EXCEPTO gameygv@gmail.com)
-    const { data: { users }, error: usersError } = await supabaseAdmin.auth.admin.listUsers();
-    if (usersError) throw usersError;
-
+    // 1. OBTENER Y BORRAR USUARIOS (EXCEPTO gameygv@gmail.com) — paginado
     let deletedUsers = 0;
-    for (const user of users) {
-      if (user.email !== 'gameygv@gmail.com') {
-        await supabaseAdmin.auth.admin.deleteUser(user.id);
-        deletedUsers++;
+    let page = 1;
+    let hasMore = true;
+    while (hasMore) {
+      const { data: { users }, error: usersError } = await supabaseAdmin.auth.admin.listUsers({ page, perPage: 100 });
+      if (usersError) throw usersError;
+      if (!users || users.length === 0) { hasMore = false; break; }
+      for (const user of users) {
+        if (user.email !== 'gameygv@gmail.com') {
+          await supabaseAdmin.auth.admin.deleteUser(user.id);
+          deletedUsers++;
+        }
       }
+      page++;
     }
     console.log(`[system-wipe] Usuarios eliminados: ${deletedUsers}`);
 

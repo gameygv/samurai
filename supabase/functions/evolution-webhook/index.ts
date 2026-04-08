@@ -153,21 +153,22 @@ serve(async (req) => {
             action: 'CREATE', resource: 'LEADS', description: `Lead entrante (${pushName}). Asignado a etapa BAJO (Hunting).`, status: 'OK' 
         });
     } else {
+        // Mensajes salientes (isFromMe) no deben mutar el lead
+        if (isFromMe) return new Response('ok', { status: 200 });
+
         const updates: any = { last_message_at: new Date().toISOString(), followup_stage: 0 };
         if (actualChannelId) updates.channel_id = actualChannelId;
-        
+
         if (lead.buying_intent === 'PERDIDO') {
             updates.buying_intent = 'BAJO';
-            await supabase.from('activity_logs').insert({ 
-                action: 'UPDATE', resource: 'LEADS', description: `Rescate Automático: El lead ${lead.nombre} estaba en PERDIDO pero escribió. Regresa a etapa BAJO.`, status: 'OK' 
+            await supabase.from('activity_logs').insert({
+                action: 'UPDATE', resource: 'LEADS', description: `Rescate Automático: El lead ${lead.nombre} estaba en PERDIDO pero escribió. Regresa a etapa BAJO.`, status: 'OK'
             });
         }
-        
+
         await supabase.from('leads').update(updates).eq('id', lead.id);
         lead = { ...lead, ...updates };
     }
-
-    if (isFromMe) return new Response('ok', { status: 200 });
 
     // Insertar mensaje del cliente con wamid para deduplicación (S2.2)
     const clientInsert: any = { lead_id: lead.id, emisor: 'CLIENTE', mensaje: text, platform: 'WHATSAPP' };
@@ -228,7 +229,7 @@ serve(async (req) => {
 
     return new Response('ok', { status: 200, headers: corsHeaders });
   } catch (err) {
-    console.error(err);
-    return new Response('error', { status: 200 });
+    console.error('[evolution-webhook] CRASH:', err);
+    return new Response(JSON.stringify({ error: 'internal_error' }), { status: 500, headers: corsHeaders });
   }
 });

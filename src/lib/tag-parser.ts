@@ -25,11 +25,11 @@ export function parseTagsSafe(jsonString: any) {
   
   if (!Array.isArray(parsed)) return [];
   
-  return parsed.map((t: any) => {
+  return parsed.map((t: any, idx: number) => {
     if (typeof t === 'string') return { id: t, text: t, color: '#475569' };
     if (typeof t === 'object' && t !== null) {
       return {
-        id: String(t.id || t.text || Math.random()),
+        id: String(t.id || t.text || `tag-${idx}`),
         text: extractTagText(t),
         color: String(t.color || '#475569')
       };

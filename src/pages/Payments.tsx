@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/alert-dialog";
 
 const Payments = () => {
-  const { isManager } = useAuth();
+  const { user, isManager } = useAuth();
   const [activeTab, setActiveTab] = useState(isManager ? 'cobranza' : 'ocr');
 
   const [paymentAssets, setPaymentAssets] = useState<any[]>([]);
@@ -51,8 +51,15 @@ const Payments = () => {
     setLoading(true);
     try {
       const { data: media } = await supabase.from('media_assets').select('*').eq('category', 'PAYMENT').order('created_at', { ascending: false });
-      const { data: highIntents } = await supabase.from('leads').select('*').eq('buying_intent', 'ALTO').order('last_message_at', { ascending: false });
-      const { data: allLeads } = await supabase.from('leads').select('id, nombre, telefono, email, ciudad, estado, cp, pais, apellido').limit(100);
+      let intentsQuery = supabase.from('leads').select('*').eq('buying_intent', 'ALTO').order('last_message_at', { ascending: false });
+      let leadsQuery = supabase.from('leads').select('id, nombre, telefono, email, ciudad, estado, cp, pais, apellido').limit(100);
+      // FILTRO DE PRIVACIDAD
+      if (!isManager) {
+        intentsQuery = intentsQuery.eq('assigned_to', user?.id);
+        leadsQuery = leadsQuery.eq('assigned_to', user?.id);
+      }
+      const { data: highIntents } = await intentsQuery;
+      const { data: allLeads } = await leadsQuery;
         
       if (isManager) {
         const { data: salesData } = await supabase

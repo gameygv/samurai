@@ -21,12 +21,16 @@ serve(async (req) => {
 
     console.log(`[Rescate] Buscando usuario para: ${email}`);
 
-    // 1. Listar usuarios para encontrar el ID
-    const { data: { users }, error: listError } = await supabaseAdmin.auth.admin.listUsers();
-    if (listError) throw listError;
-
-    // Buscamos coincidencia exacta o por metadatos si el email cambió pero no se confirmó
-    const userToFix = users.find(u => u.email === email || u.new_email === email);
+    // 1. Buscar usuario por email (paginated to handle >50 users)
+    let userToFix = null;
+    let page = 1;
+    while (!userToFix) {
+      const { data: { users }, error: listError } = await supabaseAdmin.auth.admin.listUsers({ page, perPage: 100 });
+      if (listError) throw listError;
+      if (!users || users.length === 0) break;
+      userToFix = users.find(u => u.email === email || u.new_email === email);
+      page++;
+    }
 
     if (!userToFix) {
       throw new Error("No se encontró ninguna cuenta asociada a este correo.");

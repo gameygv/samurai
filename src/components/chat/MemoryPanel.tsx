@@ -134,7 +134,7 @@ export const MemoryPanel = ({
   };
 
   const fetchGroups = async () => {
-     const { data } = await supabase.from('contacts').select('grupo').not('grupo', 'is', null);
+     const { data } = await supabase.from('contacts').select('grupo').not('grupo', 'is', null).limit(500);
      if (data) setGroups(Array.from(new Set(data.map(d => d.grupo).filter(Boolean))) as string[]);
   };
 
