@@ -13,7 +13,7 @@ serve(async (req) => {
     if (!lead_id) throw new Error("Falta el ID del lead para auditar.");
 
     const { data: configs } = await supabaseClient.from('app_config').select('key, value').eq('key', 'openai_api_key').single();
-    const apiKey = configs?.value;
+    const apiKey = Deno.env.get('OPENAI_API_KEY') || configs?.value;
 
     if (!apiKey) throw new Error("API Key de OpenAI no configurada.");
 

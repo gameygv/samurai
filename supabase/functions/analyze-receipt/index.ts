@@ -67,7 +67,7 @@ serve(async (req) => {
 
     // 4. Analizar con GPT-4o Vision usando prompt_vision_instrucciones
     const { data: configs } = await supabase.from('app_config').select('key, value');
-    const openaiKey = configs?.find(c => c.key === 'openai_api_key')?.value;
+    const openaiKey = Deno.env.get('OPENAI_API_KEY') || configs?.find(c => c.key === 'openai_api_key')?.value;
     const visionPrompt = configs?.find(c => c.key === 'prompt_vision_instrucciones')?.value
       || 'Analiza esta imagen con extremo detalle y precisión. Si es un COMPROBANTE DE PAGO: Extrae Banco, Monto transferido, Fecha y Referencia. Responde en texto plano.';
 

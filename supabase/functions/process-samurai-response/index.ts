@@ -52,7 +52,7 @@ serve(async (req) => {
 
     const { data: configs } = await supabase.from('app_config').select('key, value');
     const configMap = configs?.reduce((acc: any, item) => ({...acc, [item.key]: item.value}), {});
-    const apiKey = configMap['openai_api_key'];
+    const apiKey = Deno.env.get('OPENAI_API_KEY') || configMap['openai_api_key'];
 
     if (!apiKey) {
         await supabase.from('activity_logs').insert({ 

@@ -18,7 +18,7 @@ serve(async (req) => {
     const { data: configs } = await supabaseClient.from('app_config').select('key, value');
     const getConfig = (key: string) => configs?.find((c: any) => c.key === key)?.value || "";
     
-    const apiKey = getConfig('openai_api_key');
+    const apiKey = Deno.env.get('OPENAI_API_KEY') || getConfig('openai_api_key');
     if (!apiKey) throw new Error("OpenAI API Key no encontrada.");
 
     const bankInfo = `Banco: ${getConfig('bank_name')}\nCuenta: ${getConfig('bank_account')}\nCLABE: ${getConfig('bank_clabe')}\nTitular: ${getConfig('bank_holder')}`;

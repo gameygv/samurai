@@ -99,22 +99,20 @@ const Payments = () => {
            description: `Venta CERRADA: ${lead.nombre} (Comprobante: ${selectedAsset.title})`, status: 'OK'
         });
 
-        const { data: configs } = await supabase.from('app_config').select('key, value').in('key', ['meta_pixel_id', 'meta_access_token', 'meta_test_mode', 'meta_test_event_code']);
+        const { data: configs } = await supabase.from('app_config').select('key, value').in('key', ['meta_pixel_id', 'meta_test_mode', 'meta_test_event_code']);
         if (configs && configs.length > 0) {
            const configObj = configs.reduce((acc, c) => ({...acc, [c.key]: c.value}), {} as Record<string, string>);
-           if (configObj.meta_pixel_id && configObj.meta_access_token) {
-              const eventData = {
-                  event_name: 'Purchase', lead_id: lead.id, value: 1500, currency: 'MXN',
-                  user_data: {
-                      em: lead.email, ph: lead.telefono, fn: lead.nombre, ln: lead.apellido,
-                      ct: lead.ciudad, st: lead.estado, zp: lead.cp, country: lead.pais || 'mx', external_id: lead.id
-                  },
-                  custom_data: { source: 'payment_validation_panel' }
-              };
-              await supabase.functions.invoke('meta-capi-sender', {
-                  body: { eventData, config: { pixel_id: configObj.meta_pixel_id, access_token: configObj.meta_access_token, test_mode: configObj.meta_test_mode === 'true', test_event_code: configObj.meta_test_event_code } }
-              });
-           }
+           const eventData = {
+               event_name: 'Purchase', lead_id: lead.id, value: 1500, currency: 'MXN',
+               user_data: {
+                   em: lead.email, ph: lead.telefono, fn: lead.nombre, ln: lead.apellido,
+                   ct: lead.ciudad, st: lead.estado, zp: lead.cp, country: lead.pais || 'mx', external_id: lead.id
+               },
+               custom_data: { source: 'payment_validation_panel' }
+           };
+           await supabase.functions.invoke('meta-capi-sender', {
+               body: { eventData, config: { pixel_id: configObj.meta_pixel_id, test_mode: configObj.meta_test_mode === 'true', test_event_code: configObj.meta_test_event_code } }
+           });
         }
 
         toast.success("Venta comprobada y marcada como GANADO.", { id: tid });

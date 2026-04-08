@@ -21,7 +21,9 @@ serve(async (req) => {
 
   try {
     const { eventData, config } = await req.json();
-    const { pixel_id, access_token, test_event_code } = config;
+    const pixel_id = Deno.env.get('META_PIXEL_ID') || config?.pixel_id;
+    const access_token = Deno.env.get('META_ACCESS_TOKEN') || config?.access_token;
+    const test_event_code = config?.test_event_code;
 
     if (!pixel_id || !access_token) {
       throw new Error("Pixel ID y Access Token son requeridos en Configuración.");

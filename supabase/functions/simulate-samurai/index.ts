@@ -19,7 +19,7 @@ serve(async (req) => {
     const { data: configs } = await supabaseClient.from('app_config').select('key, value');
     const getConfig = (key: string) => configs?.find(c => c.key === key)?.value || "";
     
-    const apiKey = getConfig('openai_api_key');
+    const apiKey = Deno.env.get('OPENAI_API_KEY') || getConfig('openai_api_key');
     if (!apiKey) throw new Error("OpenAI API Key no encontrada.");
 
     // CARGAR TODO EL CONTEXTO PARA UNA SIMULACIÓN REAL
