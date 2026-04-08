@@ -26,3 +26,7 @@ dist-ssr
 
 # RaiSE personal directory (per-developer, not shared)
 .raise/rai/personal/
+.env.test
+e2e/.auth/
+playwright-report/
+test-results/
