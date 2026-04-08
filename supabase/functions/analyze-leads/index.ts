@@ -1,9 +1,8 @@
-// @ts-nocheck
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0'
 import { corsHeaders } from '../_shared/cors.ts'
 
-serve(async (req) => {
+serve(async (req: Request): Promise<Response> => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
   const supabase = createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '');
@@ -29,7 +28,7 @@ serve(async (req) => {
     }
 
     const { data: configs } = await supabase.from('app_config').select('key, value');
-    const configMap = configs?.reduce((acc: any, c) => ({ ...acc, [c.key]: c.value }), {}) || {};
+    const configMap: Record<string, unknown> = configs?.reduce((acc: Record<string, unknown>, c: { key: string; value: unknown }) => ({ ...acc, [c.key]: c.value }), {} as Record<string, unknown>) || {};
     const apiKey = Deno.env.get('OPENAI_API_KEY') || configMap.openai_api_key;
 
     if (!apiKey) return new Response(JSON.stringify({ message: 'No API key' }), { headers: corsHeaders });
@@ -70,7 +69,7 @@ serve(async (req) => {
 
     try {
       const parsed = JSON.parse(content);
-      const updates: any = {};
+      const updates: Record<string, string> = {};
       
       // BLINDAJE 3 DE HIERRO: Solo permitimos que la IA asigne estados positivos.
       const allowedIntents = ['BAJO', 'MEDIO', 'ALTO'];
@@ -92,7 +91,7 @@ serve(async (req) => {
       await supabase.from('leads').update(updates).eq('id', lead.id);
 
       // S6.3: CAPI automático — disparar evento Lead cuando intent sube
-      const intentOrder: any = { 'BAJO': 0, 'MEDIO': 1, 'ALTO': 2 };
+      const intentOrder: Record<string, number> = { 'BAJO': 0, 'MEDIO': 1, 'ALTO': 2 };
       const oldIntentLevel = intentOrder[lead.buying_intent] ?? 0;
       const newIntentLevel = intentOrder[updates.buying_intent] ?? 0;
 
@@ -147,7 +146,7 @@ serve(async (req) => {
               const specialists = agents.filter(a => a.territories && a.territories.length > 0);
               const multiTerritory = agents.filter(a => !a.territories || a.territories.length === 0);
 
-              let assignedAgent = null;
+              let assignedAgent: { id: string; full_name: string | null; territories: string[] | null } | null = null;
               let routeType = '';
 
               // Paso 1: matching exacto entre especialistas
@@ -219,7 +218,8 @@ serve(async (req) => {
       return new Response(JSON.stringify({ message: 'Parse error' }), { headers: corsHeaders });
     }
 
-  } catch (err: any) {
-    return new Response(JSON.stringify({ error: err.message }), { status: 200, headers: corsHeaders });
+  } catch (err: unknown) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    return new Response(JSON.stringify({ error: errMsg }), { status: 200, headers: corsHeaders });
   }
 });

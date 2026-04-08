@@ -1,19 +1,29 @@
-// @ts-nocheck
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0'
 import { corsHeaders } from '../_shared/cors.ts'
 
-serve(async (req) => {
+interface LeadData {
+  nombre?: string;
+  email?: string;
+  ciudad?: string;
+  assigned_to?: string;
+  [key: string]: unknown;
+}
+
+serve(async (req: Request): Promise<Response> => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
   try {
     const supabaseClient = createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '');
-    const body = await req.json().catch(() => ({}));
-    const lead = body.lead || {};
-    const platform = body.platform || 'WHATSAPP';
+    const body = await req.json().catch(() => ({} as Record<string, unknown>));
+    const lead: LeadData = (body.lead as LeadData) || {};
+    const platform: string = (body.platform as string) || 'WHATSAPP';
 
     const { data: configs } = await supabaseClient.from('app_config').select('key, value');
-    const getConfig = (key: string, def = "") => configs?.find((c: any) => c.key === key)?.value || def;
+    const getConfig = (key: string, def = ""): string => {
+      const found = configs?.find((c: { key: string; value: unknown }) => c.key === key);
+      return (found?.value as string) || def;
+    };
 
     // --- FECHA DE HOY (usada en filtros y prompt) ---
     const today = new Date().toISOString().split('T')[0];
@@ -78,7 +88,7 @@ serve(async (req) => {
 
                 if (wcProducts.length > 0) {
                     wcContext = "\n=== CATÁLOGO DE PRODUCTOS (TIENDA ONLINE WOOCOMMERCE) ===\n";
-                    wcProducts.forEach(p => {
+                    (wcProducts as Array<{ wc_id: string; title: string; price: string; prompt: string }>).forEach(p => {
                         const link = `${wcUrl}${wcCheckout}?add-to-cart=${p.wc_id}`;
                         wcContext += `- PRODUCTO: ${p.title}\n  PRECIO: $${p.price}\n  LINK DE COMPRA: ${link}\n  REGLA DE VENTA E INSTRUCCIÓN IA: ${p.prompt}\n\n`;
                     });
@@ -159,7 +169,8 @@ ${bankInfo}
 `;
 
     return new Response(JSON.stringify({ system_prompt: systemPrompt }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-  } catch (error: any) {
-    return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: corsHeaders })
+  } catch (error: unknown) {
+    const errMsg = error instanceof Error ? error.message : String(error);
+    return new Response(JSON.stringify({ error: errMsg }), { status: 500, headers: corsHeaders })
   }
 })
