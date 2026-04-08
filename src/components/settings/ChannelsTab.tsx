@@ -412,7 +412,17 @@ export const ChannelsTab = () => {
                         <code className="text-[10px] text-emerald-300 bg-black p-2.5 rounded-lg border border-slate-800 block truncate select-all font-mono shadow-inner mb-2">
                            {`https://giwoovmvwlddaizorizk.supabase.co/functions/v1/evolution-webhook?channel_id=${ch.id}`}
                         </code>
-                        
+
+                        {ch.provider === 'gowa' && (
+                           <div className="bg-indigo-900/10 border border-indigo-500/20 p-3 rounded-lg text-[10px] text-indigo-300 mt-2 mb-2 space-y-1.5">
+                              <p className="font-bold text-indigo-400 uppercase tracking-widest flex items-center gap-1"><Info className="w-3 h-3"/> Guía Rápida para Gowa</p>
+                              <p className="leading-relaxed"><strong>Instance ID:</strong> Es el nombre de la instancia en tu panel de Gowa (ej: "edith", "principal"). Cada número de WhatsApp tiene su propio Instance ID.</p>
+                              <p className="leading-relaxed"><strong>API Key:</strong> Token de seguridad de Gowa. En tu panel: Configuración → API Key. Si tienes 2 números en el mismo VPS, ambos comparten la misma URL y API Key, pero cada uno tiene su propio Instance ID.</p>
+                              <p className="leading-relaxed"><strong>URL del Servidor:</strong> La dirección de tu VPS con Gowa (ej: https://gowa.tudominio.com). Si tienes múltiples números, todos usan la misma URL.</p>
+                              <p className="leading-relaxed"><strong>Webhook:</strong> Haz clic en "Auto-Inyectar" o copia la URL de arriba y pégala en la configuración de Webhook de Gowa para esta instancia.</p>
+                           </div>
+                        )}
+
                         {ch.provider !== 'meta' ? (
                            <Button 
                               variant="secondary" 
