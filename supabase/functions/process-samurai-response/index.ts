@@ -1,9 +1,8 @@
-// @ts-nocheck
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0'
 import { corsHeaders } from '../_shared/cors.ts'
 
-serve(async (req) => {
+serve(async (req: Request): Promise<Response> => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
   // FIX: Supabase env variable read fix.
@@ -47,7 +46,7 @@ serve(async (req) => {
     }
 
     const { data: configs } = await supabase.from('app_config').select('key, value');
-    const configMap = configs?.reduce((acc: any, item) => ({...acc, [item.key]: item.value}), {});
+    const configMap: Record<string, unknown> = configs?.reduce((acc: Record<string, unknown>, item: { key: string; value: unknown }) => ({...acc, [item.key]: item.value}), {} as Record<string, unknown>) ?? {};
     const apiKey = Deno.env.get('OPENAI_API_KEY') || configMap['openai_api_key'];
 
     if (!apiKey) {
@@ -79,10 +78,11 @@ serve(async (req) => {
         } else if (kernel?.system_prompt) {
             systemPrompt = kernel.system_prompt;
         }
-    } catch (ctxErr: any) {
+    } catch (ctxErr: unknown) {
+        const ctxErrMsg = ctxErr instanceof Error ? ctxErr.message : String(ctxErr);
         await supabase.from('activity_logs').insert({
             action: 'ERROR', resource: 'BRAIN',
-            description: `CRASH get-samurai-context: ${ctxErr.message}`,
+            description: `CRASH get-samurai-context: ${ctxErrMsg}`,
             status: 'ERROR'
         });
     }
@@ -201,18 +201,19 @@ serve(async (req) => {
                     wamid = sendData?.wamid || null;
                 }
             }
-        } catch (sendError: any) {
+        } catch (sendError: unknown) {
             sendFailed = true;
+            const sendErrMsg = sendError instanceof Error ? sendError.message : String(sendError);
             await supabase.from('activity_logs').insert({
                 action: 'ERROR', resource: 'SYSTEM',
-                description: `ERROR ENVIO WA (${lead.telefono}): ${sendError.message}`,
+                description: `ERROR ENVIO WA (${lead.telefono}): ${sendErrMsg}`,
                 status: 'ERROR'
             });
         }
 
         // LUEGO INSERTAR EN CONVERSACIONES — guardar texto limpio (sin tags)
         if (!sendFailed) {
-            const insertPayload: any = {
+            const insertPayload: Record<string, string> = {
                 lead_id: lead.id, emisor: 'IA', mensaje: cleanText || aiText, platform: 'WHATSAPP'
             };
             if (wamid) insertPayload.message_id = wamid;
@@ -237,12 +238,13 @@ serve(async (req) => {
     return new Response(JSON.stringify({ aiText: aiText || '' }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
-  } catch (err: any) {
-    await supabase.from('activity_logs').insert({ 
-        action: 'ERROR', resource: 'SYSTEM', 
-        description: `🚨 CRASH en IA: ${err.message}`, 
-        status: 'ERROR' 
+  } catch (err: unknown) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    await supabase.from('activity_logs').insert({
+        action: 'ERROR', resource: 'SYSTEM',
+        description: `🚨 CRASH en IA: ${errMsg}`,
+        status: 'ERROR'
     });
-    return new Response(err.message, { status: 200, headers: corsHeaders });
+    return new Response(errMsg, { status: 200, headers: corsHeaders });
   }
 });
