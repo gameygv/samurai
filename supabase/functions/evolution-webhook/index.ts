@@ -192,16 +192,32 @@ serve(async (req: Request): Promise<Response> => {
         }
     }
 
-    const { data: config } = await supabase.from('app_config').select('value').eq('key', 'global_ai_status').maybeSingle();
+    // Determine AI mode: per-channel > per-lead > global
+    const { data: channelConfig } = actualChannelId
+      ? await supabase.from('whatsapp_channels').select('ai_mode').eq('id', actualChannelId).maybeSingle()
+      : { data: null };
+    const channelAiMode = channelConfig?.ai_mode || 'on'; // 'on' | 'monitor' | 'off'
 
-    if (config?.value !== 'paused' && !lead.ai_paused) {
+    // If channel is OFF, stop here (lead + message already saved above)
+    if (channelAiMode === 'off') {
+        return new Response('ok', { status: 200, headers: corsHeaders });
+    }
+
+    // ALWAYS run analyze-leads in 'on' and 'monitor' modes (extracts data + sends CAPI)
+    supabase.functions.invoke('analyze-leads', { body: { lead_id: lead.id } }).catch(() => {});
+
+    // AI response only in 'on' mode + global not paused + lead not paused
+    const { data: globalConfig } = await supabase.from('app_config').select('value').eq('key', 'global_ai_status').maybeSingle();
+    const aiEnabled = channelAiMode === 'on' && globalConfig?.value !== 'paused' && !lead.ai_paused;
+
+    if (aiEnabled) {
         if (audioMediaId || audioMediaUrl) {
             // S4.1 + S7.1: Audio detectado — fire-and-forget a transcribe-audio
             supabase.functions.invoke('transcribe-audio', {
                 body: { media_id: audioMediaId || null, media_url: audioMediaUrl || null, lead_id: lead.id, message_id: messageId, channel_id: actualChannelId }
             }).catch((err) => console.error('transcribe-audio fire error:', err));
         } else {
-            // Llamar al procesador IA con fetch directo (no supabase.functions.invoke)
+            // Llamar al procesador IA con fetch directo
             try {
                 const fnUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/process-samurai-response`;
                 const fnRes = await fetch(fnUrl, {
@@ -212,15 +228,11 @@ serve(async (req: Request): Promise<Response> => {
                     },
                     body: JSON.stringify({ lead_id: lead.id, client_message: text })
                 });
-                // process-samurai-response se encarga de guardar la respuesta IA en conversaciones (S2.1)
                 await fnRes.json().catch(() => ({}));
             } catch (invokeErr) {
                 console.error('Error calling process-samurai-response:', invokeErr);
             }
         }
-
-        // Fire-and-forget: analyze-leads corre en background
-        supabase.functions.invoke('analyze-leads', { body: { lead_id: lead.id } }).catch(() => {});
     }
 
     return new Response('ok', { status: 200, headers: corsHeaders });

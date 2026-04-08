@@ -1,3 +1,4 @@
+Initialising login role...
 export type Json =
   | string
   | number
@@ -1077,6 +1078,7 @@ export type Database = {
       }
       whatsapp_channels: {
         Row: {
+          ai_mode: string | null
           api_key: string
           api_url: string
           created_at: string | null
@@ -1090,6 +1092,7 @@ export type Database = {
           verify_token: string | null
         }
         Insert: {
+          ai_mode?: string | null
           api_key: string
           api_url: string
           created_at?: string | null
@@ -1103,6 +1106,7 @@ export type Database = {
           verify_token?: string | null
         }
         Update: {
+          ai_mode?: string | null
           api_key?: string
           api_url?: string
           created_at?: string | null

@@ -96,6 +96,19 @@ export const ChannelsTab = () => {
     }
   };
 
+  const handleChangeAiMode = async (channelId: string, mode: string) => {
+    const labels: Record<string, string> = { on: 'IA Activa', monitor: 'Solo Monitoreo', off: 'Canal Apagado' };
+    const tid = toast.loading(`Cambiando a ${labels[mode]}...`);
+    try {
+      const { error } = await supabase.from('whatsapp_channels').update({ ai_mode: mode }).eq('id', channelId);
+      if (error) throw error;
+      setChannels(channels.map(c => c.id === channelId ? { ...c, ai_mode: mode } : c));
+      toast.success(`Modo: ${labels[mode]}`, { id: tid });
+    } catch (err: any) {
+      toast.error("Error: " + err.message, { id: tid });
+    }
+  };
+
   const handleAddChannel = () => {
     if (showUnofficial) {
       const existingGowa = channels.find(c => c.provider === 'gowa' && c.api_key && !c.is_new);
@@ -230,11 +243,27 @@ export const ChannelsTab = () => {
             <CardHeader className="py-4 border-b border-slate-800/50 flex flex-col sm:flex-row items-start sm:items-center justify-between bg-slate-950/20 gap-4">
                <div className="flex items-center gap-4 flex-1 w-full">
                   {!ch.is_new && (
-                     <div className="flex items-center gap-2 bg-slate-950/50 px-3 py-1.5 rounded-lg border border-slate-800 shrink-0">
-                       <Switch checked={ch.is_active !== false} onCheckedChange={() => handleToggleActive(ch)} />
-                       <span className={cn("text-[10px] font-bold uppercase tracking-widest", ch.is_active !== false ? "text-emerald-500" : "text-red-500")}>
-                         {ch.is_active !== false ? "ON" : "OFF"}
-                       </span>
+                     <div className="flex flex-col items-center gap-1.5 shrink-0">
+                       <div className="flex items-center gap-2 bg-slate-950/50 px-3 py-1.5 rounded-lg border border-slate-800">
+                         <Switch checked={ch.is_active !== false} onCheckedChange={() => handleToggleActive(ch)} />
+                         <span className={cn("text-[10px] font-bold uppercase tracking-widest", ch.is_active !== false ? "text-emerald-500" : "text-red-500")}>
+                           {ch.is_active !== false ? "ON" : "OFF"}
+                         </span>
+                       </div>
+                       {ch.is_active !== false && (
+                         <Select value={ch.ai_mode || 'on'} onValueChange={v => handleChangeAiMode(ch.id, v)}>
+                           <SelectTrigger className={cn("h-7 text-[9px] font-bold uppercase tracking-widest border rounded-lg px-2 w-full",
+                             (ch.ai_mode || 'on') === 'on' ? "bg-emerald-950/50 border-emerald-500/30 text-emerald-400" :
+                             ch.ai_mode === 'monitor' ? "bg-amber-950/50 border-amber-500/30 text-amber-400" :
+                             "bg-red-950/50 border-red-500/30 text-red-400"
+                           )}><SelectValue /></SelectTrigger>
+                           <SelectContent className="bg-slate-900 border-slate-800 text-white">
+                             <SelectItem value="on"><span className="flex items-center gap-1.5"><Zap className="w-3 h-3 text-emerald-400"/>IA Activa</span></SelectItem>
+                             <SelectItem value="monitor"><span className="flex items-center gap-1.5"><Network className="w-3 h-3 text-amber-400"/>Solo Monitoreo</span></SelectItem>
+                             <SelectItem value="off"><span className="flex items-center gap-1.5"><AlertTriangle className="w-3 h-3 text-red-400"/>Apagado</span></SelectItem>
+                           </SelectContent>
+                         </Select>
+                       )}
                      </div>
                   )}
                   
