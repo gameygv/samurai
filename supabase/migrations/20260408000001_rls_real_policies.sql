@@ -257,6 +257,18 @@ USING (
   AND id = auth.uid()
 );
 
+-- Agent: update own profile (name, phone — needed by Profile.tsx)
+CREATE POLICY "profiles_agent_update" ON public.profiles
+FOR UPDATE TO authenticated
+USING (
+  auth.get_user_role() IN ('agent', 'sales_agent', 'sales')
+  AND id = auth.uid()
+)
+WITH CHECK (
+  auth.get_user_role() IN ('agent', 'sales_agent', 'sales')
+  AND id = auth.uid()
+);
+
 -- -----------------------------------------------------------------
 -- MEDIA_ASSETS (reference data: all authenticated read, admin/gerente write)
 -- -----------------------------------------------------------------
