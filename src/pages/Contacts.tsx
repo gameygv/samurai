@@ -12,9 +12,10 @@ import { Badge } from '@/components/ui/badge';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { 
-  Search, Loader2, MapPin, Phone, Trash2, 
+  Search, Loader2, MapPin, Phone, Trash2,
   Users, FileSpreadsheet, X, Mail, Edit3, MessageCircle, Wallet,
-  UserPlus, Filter, DollarSign, CheckSquare, Download, GraduationCap, Globe, User as UserIcon, Sparkles, Settings
+  UserPlus, Filter, DollarSign, CheckSquare, Download, GraduationCap, Globe, User as UserIcon, Sparkles, Settings,
+  CalendarDays, BookOpen, MapPinned, UserCheck
 } from 'lucide-react';
 import { toast } from 'sonner';
 import Papa from 'papaparse';
@@ -33,6 +34,20 @@ import {
   AlertDialogHeader, AlertDialogTitle, AlertDialogFooter, AlertDialogDescription
 } from "@/components/ui/alert-dialog";
 
+interface AcademicEntry {
+  course?: string;
+  location?: string;
+  teacher?: string;
+  date?: string;
+}
+
+const parseAcademicRecord = (raw: unknown): AcademicEntry[] => {
+  try {
+    const arr = Array.isArray(raw) ? raw : JSON.parse(String(raw || '[]'));
+    return Array.isArray(arr) ? arr : [];
+  } catch { return []; }
+};
+
 const Contacts = () => {
   const { user, isManager } = useAuth();
   const [contacts, setContacts] = useState<any[]>([]);
@@ -47,7 +62,12 @@ const Contacts = () => {
   const [selectedCity, setSelectedCity] = useState<string>('ALL'); 
   const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>('ALL');
   const [debtFilter, setDebtFilter] = useState<string>('ALL'); 
-  const [selectedTags, setSelectedTags] = useState<string[]>([]); 
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [selectedCourses, setSelectedCourses] = useState<string[]>([]);
+  const [selectedSedes, setSelectedSedes] = useState<string[]>([]);
+  const [selectedProfesores, setSelectedProfesores] = useState<string[]>([]);
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
   
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [selectedLead, setSelectedLead] = useState<any>(null);
@@ -225,11 +245,41 @@ const Contacts = () => {
     
     const matchesTag = selectedTags.length === 0 || selectedTags.every(t => contactTags.includes(t));
 
-    return matchesSearch && matchesGroup && matchesCity && matchesStatus && matchesTag && matchesDebt;
+    const ar = parseAcademicRecord(c.academic_record);
+    const matchesCourse = selectedCourses.length === 0 || ar.some(r => selectedCourses.includes(r.course || ''));
+    const matchesSede = selectedSedes.length === 0 || ar.some(r => selectedSedes.includes(r.location || ''));
+    const matchesProfesor = selectedProfesores.length === 0 || ar.some(r => selectedProfesores.includes(r.teacher || ''));
+    const matchesDate = (dateFrom === '' && dateTo === '') || ar.some(r => {
+      if (!r.date) return false;
+      if (dateFrom && r.date < dateFrom) return false;
+      if (dateTo && r.date > dateTo) return false;
+      return true;
+    });
+
+    return matchesSearch && matchesGroup && matchesCity && matchesStatus && matchesTag && matchesDebt && matchesCourse && matchesSede && matchesProfesor && matchesDate;
   });
 
   const allTags = [...globalTags, ...localTags];
-  const hasActiveFilters = searchTerm !== '' || selectedGroup !== 'ALL' || selectedCity !== 'ALL' || selectedTags.length > 0 || selectedStatusFilter !== 'ALL' || debtFilter !== 'ALL';
+
+  const { allCourses, allSedes, allProfesores } = React.useMemo(() => {
+    const courses = new Set<string>();
+    const sedes = new Set<string>();
+    const profesores = new Set<string>();
+    for (const c of contacts) {
+      for (const ar of parseAcademicRecord(c.academic_record)) {
+        if (ar.course) courses.add(ar.course);
+        if (ar.location) sedes.add(ar.location);
+        if (ar.teacher) profesores.add(ar.teacher);
+      }
+    }
+    return {
+      allCourses: Array.from(courses).sort(),
+      allSedes: Array.from(sedes).sort(),
+      allProfesores: Array.from(profesores).sort(),
+    };
+  }, [contacts]);
+
+  const hasActiveFilters = searchTerm !== '' || selectedGroup !== 'ALL' || selectedCity !== 'ALL' || selectedTags.length > 0 || selectedStatusFilter !== 'ALL' || debtFilter !== 'ALL' || selectedCourses.length > 0 || selectedSedes.length > 0 || selectedProfesores.length > 0 || dateFrom !== '' || dateTo !== '';
 
   return (
     <Layout>
@@ -343,6 +393,129 @@ const Contacts = () => {
               </Command>
             </PopoverContent>
           </Popover>
+
+          {/* CURSO multi-select */}
+          {allCourses.length > 0 && (
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" className={cn("w-[150px] h-10 bg-[#161618] border-[#222225] justify-start text-xs rounded-xl", selectedCourses.length > 0 ? "text-indigo-400" : "text-slate-300")}>
+                  <BookOpen className="w-3.5 h-3.5 mr-2 shrink-0" />
+                  {selectedCourses.length > 0 ? `${selectedCourses.length} Cursos` : 'Curso...'}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-[260px] p-0 bg-[#121214] border-[#222225] text-white rounded-xl shadow-2xl">
+                <Command className="bg-transparent">
+                  <CommandInput placeholder="Buscar curso..." className="text-xs h-10" />
+                  <CommandList className="max-h-[300px] overflow-y-auto custom-scrollbar">
+                    <CommandEmpty className="py-6 text-center text-xs text-slate-500">No encontrado.</CommandEmpty>
+                    <CommandGroup>
+                      {selectedCourses.length > 0 && (
+                        <CommandItem onSelect={() => setSelectedCourses([])} className="text-xs focus:bg-[#161618] focus:text-white cursor-pointer border-b border-[#222225] pb-2 mb-2">
+                          <X className="w-3 h-3 mr-2 text-red-400" /> Borrar selección
+                        </CommandItem>
+                      )}
+                      {allCourses.map(course => (
+                        <CommandItem key={course} onSelect={() => setSelectedCourses(prev => prev.includes(course) ? prev.filter(c => c !== course) : [...prev, course])} className="text-xs focus:bg-[#161618] focus:text-white cursor-pointer py-2">
+                          <div className="flex items-center gap-3">
+                            <Checkbox checked={selectedCourses.includes(course)} className="border-slate-600 rounded" />
+                            <span className="truncate">{course}</span>
+                          </div>
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
+          )}
+
+          {/* SEDE multi-select */}
+          {allSedes.length > 0 && (
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" className={cn("w-[150px] h-10 bg-[#161618] border-[#222225] justify-start text-xs rounded-xl", selectedSedes.length > 0 ? "text-indigo-400" : "text-slate-300")}>
+                  <MapPinned className="w-3.5 h-3.5 mr-2 shrink-0" />
+                  {selectedSedes.length > 0 ? `${selectedSedes.length} Sedes` : 'Sede...'}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-[240px] p-0 bg-[#121214] border-[#222225] text-white rounded-xl shadow-2xl">
+                <Command className="bg-transparent">
+                  <CommandInput placeholder="Buscar sede..." className="text-xs h-10" />
+                  <CommandList className="max-h-[300px] overflow-y-auto custom-scrollbar">
+                    <CommandEmpty className="py-6 text-center text-xs text-slate-500">No encontrada.</CommandEmpty>
+                    <CommandGroup>
+                      {selectedSedes.length > 0 && (
+                        <CommandItem onSelect={() => setSelectedSedes([])} className="text-xs focus:bg-[#161618] focus:text-white cursor-pointer border-b border-[#222225] pb-2 mb-2">
+                          <X className="w-3 h-3 mr-2 text-red-400" /> Borrar selección
+                        </CommandItem>
+                      )}
+                      {allSedes.map(sede => (
+                        <CommandItem key={sede} onSelect={() => setSelectedSedes(prev => prev.includes(sede) ? prev.filter(s => s !== sede) : [...prev, sede])} className="text-xs focus:bg-[#161618] focus:text-white cursor-pointer py-2">
+                          <div className="flex items-center gap-3">
+                            <Checkbox checked={selectedSedes.includes(sede)} className="border-slate-600 rounded" />
+                            <span className="truncate">{sede}</span>
+                          </div>
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
+          )}
+
+          {/* PROFESOR multi-select */}
+          {allProfesores.length > 0 && (
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" className={cn("w-[150px] h-10 bg-[#161618] border-[#222225] justify-start text-xs rounded-xl", selectedProfesores.length > 0 ? "text-indigo-400" : "text-slate-300")}>
+                  <UserCheck className="w-3.5 h-3.5 mr-2 shrink-0" />
+                  {selectedProfesores.length > 0 ? `${selectedProfesores.length} Profes` : 'Profesor...'}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-[240px] p-0 bg-[#121214] border-[#222225] text-white rounded-xl shadow-2xl">
+                <Command className="bg-transparent">
+                  <CommandInput placeholder="Buscar profesor..." className="text-xs h-10" />
+                  <CommandList className="max-h-[300px] overflow-y-auto custom-scrollbar">
+                    <CommandEmpty className="py-6 text-center text-xs text-slate-500">No encontrado.</CommandEmpty>
+                    <CommandGroup>
+                      {selectedProfesores.length > 0 && (
+                        <CommandItem onSelect={() => setSelectedProfesores([])} className="text-xs focus:bg-[#161618] focus:text-white cursor-pointer border-b border-[#222225] pb-2 mb-2">
+                          <X className="w-3 h-3 mr-2 text-red-400" /> Borrar selección
+                        </CommandItem>
+                      )}
+                      {allProfesores.map(prof => (
+                        <CommandItem key={prof} onSelect={() => setSelectedProfesores(prev => prev.includes(prof) ? prev.filter(p => p !== prof) : [...prev, prof])} className="text-xs focus:bg-[#161618] focus:text-white cursor-pointer py-2">
+                          <div className="flex items-center gap-3">
+                            <Checkbox checked={selectedProfesores.includes(prof)} className="border-slate-600 rounded" />
+                            <span className="truncate">{prof}</span>
+                          </div>
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
+          )}
+
+          {/* DATE RANGE filter */}
+          <div className="flex items-center gap-1">
+            <CalendarDays className="w-3.5 h-3.5 text-slate-500 mr-1" />
+            <Input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="w-[130px] h-10 bg-[#161618] border-[#222225] rounded-xl text-xs text-slate-300" placeholder="Desde" />
+            <span className="text-slate-600 text-xs">—</span>
+            <Input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="w-[130px] h-10 bg-[#161618] border-[#222225] rounded-xl text-xs text-slate-300" placeholder="Hasta" />
+          </div>
+
+          {/* SALDO filter */}
+          <Select value={debtFilter} onValueChange={setDebtFilter}>
+            <SelectTrigger className="w-[160px] h-10 bg-[#161618] border-[#222225] rounded-xl text-xs text-slate-300"><SelectValue placeholder="Saldo" /></SelectTrigger>
+            <SelectContent className="bg-[#121214] border-[#222225] text-white rounded-xl">
+              <SelectItem value="ALL">Cualquier Saldo</SelectItem>
+              <SelectItem value="CON_DEUDA">Con Deuda Activa</SelectItem>
+              <SelectItem value="SIN_DEUDA">Sin Deuda</SelectItem>
+            </SelectContent>
+          </Select>
 
           {isManager && (
             <Select value={selectedStatusFilter} onValueChange={setSelectedStatusFilter}>
