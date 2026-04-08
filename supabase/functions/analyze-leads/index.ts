@@ -133,11 +133,33 @@ serve(async (req: Request): Promise<Response> => {
         }
       }
 
-      // S5.2: Auto-routing por ciudad cuando se detecta una nueva
-      if (updates.ciudad && !lead.assigned_to) {
+      // S5.2: Routing — assign agent to lead if not yet assigned
+      if (!lead.assigned_to) {
         try {
           const routingMode = configMap.channel_routing_mode;
-          if (routingMode === 'auto') {
+
+          // Mode: channel — assign based on channel→agent map
+          if (routingMode === 'channel' && lead.channel_id) {
+            const agentMapRaw = configMap.channel_agent_map;
+            if (agentMapRaw) {
+              try {
+                const agentMap = JSON.parse(agentMapRaw);
+                const agentId = agentMap[lead.channel_id];
+                if (agentId) {
+                  await supabase.from('leads').update({ assigned_to: agentId }).eq('id', lead.id);
+                  const { data: agentProfile } = await supabase.from('profiles').select('full_name').eq('id', agentId).maybeSingle();
+                  await supabase.from('activity_logs').insert({
+                    action: 'UPDATE', resource: 'LEADS',
+                    description: `🔗 Vínculo Directo: ${lead.nombre} → ${agentProfile?.full_name || 'Agente'} (canal vinculado)`,
+                    status: 'OK'
+                  });
+                }
+              } catch (_) {}
+            }
+          }
+
+          // Mode: auto — assign based on city/territory match
+          if (routingMode === 'auto' && updates.ciudad) {
             const { data: agents } = await supabase
               .from('profiles')
               .select('id, full_name, territories')

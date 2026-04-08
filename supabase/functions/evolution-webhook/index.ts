@@ -132,21 +132,36 @@ serve(async (req: Request): Promise<Response> => {
     if (!lead) {
         if (isFromMe) return new Response('ok', { status: 200 });
         
-        const { data: nl, error: insertError } = await supabase.from('leads').insert({ 
-           nombre: pushName, 
-           telefono: senderPhone, 
-           channel_id: actualChannelId, 
+        // Check if this channel has a direct agent assignment
+        let assignedAgent: string | null = null;
+        if (actualChannelId) {
+            const { data: routingCfg } = await supabase.from('app_config').select('key, value').in('key', ['channel_routing_mode', 'channel_agent_map']);
+            const cfgMap = routingCfg?.reduce((acc: Record<string, string>, c: { key: string; value: string }) => ({...acc, [c.key]: c.value}), {}) || {};
+            if (cfgMap.channel_routing_mode === 'channel' && cfgMap.channel_agent_map) {
+                try {
+                    const agentMap = JSON.parse(cfgMap.channel_agent_map);
+                    if (agentMap[actualChannelId]) assignedAgent = agentMap[actualChannelId];
+                } catch (_) {}
+            }
+        }
+
+        const { data: nl, error: insertError } = await supabase.from('leads').insert({
+           nombre: pushName,
+           telefono: senderPhone,
+           channel_id: actualChannelId,
+           assigned_to: assignedAgent,
            ai_paused: false,
-           buying_intent: 'BAJO', // ESTRICTO
+           buying_intent: 'BAJO',
            last_message_at: new Date().toISOString(),
            followup_stage: 0
         }).select().single();
-        
+
         if (insertError) console.error(insertError);
         lead = nl;
-        
-        await supabase.from('activity_logs').insert({ 
-            action: 'CREATE', resource: 'LEADS', description: `Lead entrante (${pushName}). Asignado a etapa BAJO (Hunting).`, status: 'OK' 
+
+        const routeInfo = assignedAgent ? ` Asignado directo a agente (canal vinculado).` : '';
+        await supabase.from('activity_logs').insert({
+            action: 'CREATE', resource: 'LEADS', description: `Lead entrante (${pushName}). Etapa BAJO.${routeInfo}`, status: 'OK'
         });
     } else {
         // Mensajes salientes (isFromMe) no deben mutar el lead
