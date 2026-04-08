@@ -2,38 +2,39 @@
 
 ## Objective
 
-Cerrar los gaps de seguridad críticos identificados en la auditoría del 2026-04-07: autenticación en Edge Functions, RLS real, protección de secrets y CORS restrictivo.
+Cerrar los gaps de seguridad críticos: autenticación en Edge Functions, RLS real por roles, protección de secrets y CORS restrictivo.
 
 ## Value
 
 Hoy cualquier persona en internet puede invocar `system-wipe` y borrar toda la base de datos. Cualquier agente de ventas puede leer las API keys de OpenAI y Meta. Después de E9:
 - Solo admins pueden ejecutar operaciones destructivas
 - Agentes solo ven y modifican sus propios datos
-- Secrets protegidos por rol
+- Secrets inaccesibles desde el frontend
 - CORS limita requests al dominio de producción
 
 ## In Scope (MUST)
 
-- Auth middleware compartido para Edge Functions (`_shared/auth.ts`)
-- Integrar auth en funciones admin: system-wipe, admin-create-user, admin-reset-password, manage-auth-users, update-user-email
-- RLS policies reales basadas en roles para: leads, conversaciones, contacts, app_config, whatsapp_channels
-- Mover secrets de app_config a Deno.env.get() en Edge Functions
-- CORS restrictivo (dominio de producción, no wildcard)
+- Auth middleware compartido (`_shared/auth.ts`) con `requireAuth()` y `requireRole()`
+- Proteger 6 funciones admin con auth + rol admin
+- RLS policies reales para: leads, conversaciones, contacts, profiles, media_assets, whatsapp_channels, app_config, credit_sales, credit_installments
+- Secrets de app_config a Supabase Secrets (env vars)
+- CORS con allowlist de dominios (no wildcard)
+- Revocar `GRANT ALL` del rol `anon`
 
 ## In Scope (SHOULD)
 
-- Proteger app_config por categoría (secrets vs config pública)
-- Rate limiting básico en funciones públicas (webhooks)
+- app_config filtrado por category (secrets invisibles para no-admins)
+- Unificar corsHeaders inline de 8 funciones al shared module
 
 ## Out of Scope
 
-- Supabase Vault (complejidad innecesaria si env vars funcionan)
-- Sistema de permisos granular (roles simples son suficientes)
-- Rotación automática de keys
-- CI/CD security scanning (Epic 10)
-- Auditoría de acceso / logging de auth events
+- Supabase Vault → env vars son suficientes
+- Permisos granulares → roles simples (admin, gerente, agent)
+- Rotación de keys → futuro
+- CI/CD security scanning → Epic 10
+- Rate limiting → nice-to-have, no bloquea
 
-## Planned Stories
+## Stories
 
 | ID | Name | Size | Dependencies |
 |----|------|------|-------------|
@@ -44,9 +45,9 @@ Hoy cualquier persona en internet puede invocar `system-wipe` y borrar toda la b
 
 ## Done Criteria
 
-1. `system-wipe` retorna 401 sin JWT válido de admin
-2. Un agente no puede leer `openai_api_key` de app_config
-3. Un agente solo ve leads/contacts asignados a él (verificado via Supabase)
-4. CORS rechaza requests desde dominios no autorizados
-5. `evolution-webhook` sigue funcionando sin JWT (es llamado por servicios externos)
+1. `system-wipe` retorna 401 sin JWT, 403 sin rol admin
+2. `app_config` secrets invisibles para rol agent
+3. Agent solo ve leads/contacts con `assigned_to = auth.uid()`
+4. `evolution-webhook` sigue funcionando sin JWT
+5. CORS rechaza requests de dominios no autorizados
 6. Todas las funciones admin requieren rol admin/dev
