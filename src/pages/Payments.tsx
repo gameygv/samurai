@@ -220,22 +220,24 @@ const Payments = () => {
                                <TableHead className="text-slate-400 uppercase text-[10px] tracking-widest font-bold pl-6">Cliente y Concepto</TableHead>
                                <TableHead className="text-slate-400 uppercase text-[10px] tracking-widest font-bold">Deuda Total</TableHead>
                                <TableHead className="text-slate-400 uppercase text-[10px] tracking-widest font-bold">Pagado</TableHead>
+                               <TableHead className="text-slate-400 uppercase text-[10px] tracking-widest font-bold">Por Liquidar</TableHead>
                                <TableHead className="text-slate-400 uppercase text-[10px] tracking-widest font-bold">Estado General</TableHead>
                                <TableHead className="text-right uppercase text-[10px] tracking-widest font-bold pr-6">Acciones</TableHead>
                             </TableRow>
                          </TableHeader>
                          <TableBody>
                             {loading ? (
-                               <TableRow><TableCell colSpan={5} className="text-center h-48"><Loader2 className="animate-spin text-amber-500 mx-auto" /></TableCell></TableRow>
+                               <TableRow><TableCell colSpan={6} className="text-center h-48"><Loader2 className="animate-spin text-amber-500 mx-auto" /></TableCell></TableRow>
                             ) : creditSales.length === 0 ? (
-                               <TableRow><TableCell colSpan={5} className="text-center h-48 text-slate-500 text-xs font-bold uppercase tracking-widest italic">No hay créditos activos.</TableCell></TableRow>
+                               <TableRow><TableCell colSpan={6} className="text-center h-48 text-slate-500 text-xs font-bold uppercase tracking-widest italic">No hay créditos activos.</TableCell></TableRow>
                             ) : creditSales.map(sale => {
                                const contactName = `${sale.contact?.nombre || ''} ${sale.contact?.apellido || ''}`.trim() || 'Cliente';
                                const totalAmount = parseFloat(sale.total_amount) || 0;
                                const downPayment = parseFloat(sale.down_payment) || 0;
                                const paidInst = (sale.installments || []).filter((i:any) => i.status === 'PAID').reduce((sum: number, i: any) => sum + parseFloat(i.amount), 0);
                                const totalPaid = downPayment + paidInst;
-                               
+                               const porLiquidar = Math.max(0, totalAmount - totalPaid);
+
                                return (
                                <TableRow key={sale.id} className="border-[#222225] hover:bg-[#121214] transition-colors">
                                   <TableCell className="pl-6">
@@ -243,6 +245,16 @@ const Payments = () => {
                                         <span className="text-sm font-bold text-white">{contactName}</span>
                                         <span className="text-[10px] text-slate-500 font-mono mt-0.5">{sale.contact?.telefono}</span>
                                         <span className="text-[10px] text-indigo-400 mt-1 truncate max-w-[200px]" title={sale.concept}>{sale.concept}</span>
+                                        {sale.precio_tipo && (
+                                           <Badge variant="outline" className={cn(
+                                              "text-[8px] uppercase font-bold tracking-widest h-4 px-1.5 mt-1 w-fit",
+                                              sale.precio_tipo === 'preventa'
+                                                 ? "border-amber-500/50 text-amber-400 bg-amber-500/10"
+                                                 : "border-slate-500/50 text-slate-400 bg-slate-500/10"
+                                           )}>
+                                              {sale.precio_tipo === 'preventa' ? 'PREVENTA' : 'NORMAL'}
+                                           </Badge>
+                                        )}
                                      </div>
                                   </TableCell>
                                   <TableCell>
@@ -259,6 +271,14 @@ const Payments = () => {
                                            <div className="h-full bg-emerald-500" style={{ width: `${Math.min(100, (totalPaid / totalAmount) * 100)}%` }} />
                                         </div>
                                      </div>
+                                  </TableCell>
+                                  <TableCell>
+                                     <span className={cn(
+                                        "font-mono text-sm font-bold",
+                                        porLiquidar <= 0 ? "text-emerald-400" : "text-amber-400"
+                                     )}>
+                                        ${porLiquidar.toLocaleString()}
+                                     </span>
                                   </TableCell>
                                   <TableCell>
                                      <Badge variant="outline" className={cn(
