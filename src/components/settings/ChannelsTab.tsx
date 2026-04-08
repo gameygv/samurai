@@ -1,12 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { 
   Plus, Trash2, Smartphone, Globe, Key, 
   Loader2, BellRing, Send, ShieldCheck, Network, User, AlertTriangle, Zap, CheckCircle2, Info
@@ -195,36 +194,6 @@ export const ChannelsTab = () => {
   return (
     <div className="space-y-8">
 
-      {/* SECCIÓN DE ENRUTAMIENTO GLOBAL */}
-      <Card className="bg-slate-900 border-slate-800 shadow-xl overflow-hidden border-l-4 border-l-amber-500 animate-in fade-in slide-in-from-top-4">
-         <CardHeader className="bg-slate-950/40 border-b border-slate-800 pb-4">
-            <CardTitle className="text-white text-base flex items-center gap-2"><Network className="w-5 h-5 text-amber-500"/> Estrategia Global de Asignación (Routing)</CardTitle>
-            <CardDescription className="text-xs text-slate-400">Define cómo se asignan los nuevos chats que entran al sistema.</CardDescription>
-         </CardHeader>
-         <CardContent className="p-6 space-y-6">
-            <RadioGroup value={routingMode} onValueChange={(v: 'auto' | 'channel') => {
-               setRoutingMode(v);
-               handleSaveRoutingImmediate(v, agentMap);
-            }} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-               <div className={cn("flex flex-col p-4 rounded-xl border-2 transition-all cursor-pointer", routingMode === 'auto' ? "border-amber-500 bg-amber-500/10" : "border-slate-800 bg-slate-950 hover:border-slate-700")} onClick={() => { setRoutingMode('auto'); handleSaveRoutingImmediate('auto', agentMap); }}>
-                  <div className="flex items-center gap-2 mb-2">
-                     <RadioGroupItem value="auto" id="auto" className="border-slate-600 text-amber-500" />
-                     <Label htmlFor="auto" className="font-bold text-sm text-white cursor-pointer">Auto-Routing (Por Territorio)</Label>
-                  </div>
-                  <p className="text-[10px] text-slate-400 leading-relaxed pl-6">Samurai atiende a todos los leads. Cuando descubre de qué ciudad son, se los asigna automáticamente al Asesor encargado de esa zona.</p>
-               </div>
-               
-               <div className={cn("flex flex-col p-4 rounded-xl border-2 transition-all cursor-pointer", routingMode === 'channel' ? "border-amber-500 bg-amber-500/10" : "border-slate-800 bg-slate-950 hover:border-slate-700")} onClick={() => { setRoutingMode('channel'); handleSaveRoutingImmediate('channel', agentMap); }}>
-                  <div className="flex items-center gap-2 mb-2">
-                     <RadioGroupItem value="channel" id="channel" className="border-slate-600 text-amber-500" />
-                     <Label htmlFor="channel" className="font-bold text-sm text-white cursor-pointer">Vínculo Directo (Canal = Asesor)</Label>
-                  </div>
-                  <p className="text-[10px] text-slate-400 leading-relaxed pl-6">Todo mensaje que entre por un Canal de WhatsApp específico, se asignará inmediatamente a un Asesor fijo, ignorando la ciudad.</p>
-               </div>
-            </RadioGroup>
-         </CardContent>
-      </Card>
-
       <div className="flex justify-between items-center bg-slate-900/50 p-4 rounded-2xl border border-slate-800">
         <div>
            <h2 className="text-lg font-bold text-white flex items-center gap-2"><Smartphone className="w-5 h-5 text-indigo-400"/> Flota Multicanal</h2>
@@ -388,12 +357,12 @@ export const ChannelsTab = () => {
                       
                       {ch.is_new && (
                          <p className="text-[10px] text-amber-500/80 italic md:max-w-[250px] leading-relaxed">
-                            <strong className="font-bold">Aviso:</strong> Guarda este canal primero en el botón de abajo para habilitar la vinculación con el asesor.
+                            <strong className="font-bold">Aviso:</strong> Guarda este canal primero para habilitar la vinculación.
                          </p>
                       )}
-                      {!ch.is_new && routingMode === 'auto' && (
-                         <p className="text-[10px] text-amber-500/80 italic md:max-w-[250px] leading-relaxed">
-                            <strong className="font-bold">Nota:</strong> La estrategia global está en "Auto-Routing". Esta asignación manual no tomará efecto a menos que cambies la estrategia arriba.
+                      {!ch.is_new && !agentMap[ch.id] && (
+                         <p className="text-[10px] text-slate-500 italic md:max-w-[280px] leading-relaxed">
+                            Sin asesor asignado → los leads se asignarán automáticamente por ciudad/territorio.
                          </p>
                       )}
                    </div>

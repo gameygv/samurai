@@ -132,14 +132,13 @@ serve(async (req: Request): Promise<Response> => {
     if (!lead) {
         if (isFromMe) return new Response('ok', { status: 200 });
         
-        // Check if this channel has a direct agent assignment
+        // Check if this channel has a direct agent assignment (per-channel, no global toggle needed)
         let assignedAgent: string | null = null;
         if (actualChannelId) {
-            const { data: routingCfg } = await supabase.from('app_config').select('key, value').in('key', ['channel_routing_mode', 'channel_agent_map']);
-            const cfgMap = routingCfg?.reduce((acc: Record<string, string>, c: { key: string; value: string }) => ({...acc, [c.key]: c.value}), {}) || {};
-            if (cfgMap.channel_routing_mode === 'channel' && cfgMap.channel_agent_map) {
+            const { data: agentMapCfg } = await supabase.from('app_config').select('value').eq('key', 'channel_agent_map').maybeSingle();
+            if (agentMapCfg?.value) {
                 try {
-                    const agentMap = JSON.parse(cfgMap.channel_agent_map);
+                    const agentMap = JSON.parse(agentMapCfg.value);
                     if (agentMap[actualChannelId]) assignedAgent = agentMap[actualChannelId];
                 } catch (_) {}
             }

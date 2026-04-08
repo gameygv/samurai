@@ -134,12 +134,13 @@ serve(async (req: Request): Promise<Response> => {
       }
 
       // S5.2: Routing — assign agent to lead if not yet assigned
+      // Priority: 1) channel→agent direct link, 2) auto-routing by city/territory
       if (!lead.assigned_to) {
         try {
-          const routingMode = configMap.channel_routing_mode;
+          let wasAssignedByChannel = false;
 
-          // Mode: channel — assign based on channel→agent map
-          if (routingMode === 'channel' && lead.channel_id) {
+          // Step 1: Check if channel has a direct agent assignment
+          if (lead.channel_id) {
             const agentMapRaw = configMap.channel_agent_map;
             if (agentMapRaw) {
               try {
@@ -153,13 +154,14 @@ serve(async (req: Request): Promise<Response> => {
                     description: `🔗 Vínculo Directo: ${lead.nombre} → ${agentProfile?.full_name || 'Agente'} (canal vinculado)`,
                     status: 'OK'
                   });
+                  wasAssignedByChannel = true;
                 }
               } catch (_) {}
             }
           }
 
-          // Mode: auto — assign based on city/territory match
-          if (routingMode === 'auto' && updates.ciudad) {
+          // Step 2: If not assigned by channel, try auto-routing by city
+          if (!wasAssignedByChannel && updates.ciudad) {
             const { data: agents } = await supabase
               .from('profiles')
               .select('id, full_name, territories')
