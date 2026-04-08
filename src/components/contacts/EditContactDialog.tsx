@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Textarea } from '@/components/ui/textarea';
-import { Loader2, User, Users, Save, Mail, MapPin, Phone, Tag, X, Plus, GraduationCap, FileText, Calendar, Send, UserCheck, Trash2, Globe, Sparkles } from 'lucide-react';
+import { Loader2, User, Users, Save, Mail, MapPin, Phone, Tag, X, Plus, GraduationCap, FileText, Calendar, Send, UserCheck, Trash2, Globe, Sparkles, CheckCircle, Clock, Heart } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useAuth } from '@/context/AuthContext';
@@ -30,11 +30,12 @@ export const EditContactDialog = ({ open, onOpenChange, contact, existingGroups,
   
   const [formData, setFormData] = useState({
     nombre: '', apellido: '', telefono: '', email: '', ciudad: '', estado: '', cp: '', grupo: 'none', tags: [] as string[],
-    academicRecord: [] as any[], internalNotes: [] as any[]
+    academicRecord: [] as any[], internalNotes: [] as any[],
+    dieta: '', alimentacion: '', alergias: '', motivoCurso: ''
   });
 
   const [catalog, setCatalog] = useState({ courses: [] as any[], locations: [] as any[], teachers: [] as any[] });
-  const [newCourse, setNewCourse] = useState({ course: '', location: '', teacher: '', date: '' });
+  const [newCourse, setNewCourse] = useState({ course: '', location: '', teacher: '', date: '', nivel: '' });
   const [newNote, setNewNote] = useState('');
 
   useEffect(() => {
@@ -54,9 +55,11 @@ export const EditContactDialog = ({ open, onOpenChange, contact, existingGroups,
         nombre: contact.nombre || '', apellido: contact.apellido || '', telefono: contact.telefono || '',
         email: contact.email || '', ciudad: contact.ciudad || '', estado: contact.estado || '',
         cp: contact.cp || '', grupo: contact.grupo || 'none', tags: contact.tags || [],
-        academicRecord: ar, internalNotes: inn
+        academicRecord: ar, internalNotes: inn,
+        dieta: contact.dieta || '', alimentacion: contact.alimentacion || '',
+        alergias: contact.alergias || '', motivoCurso: contact.motivo_curso || ''
       });
-      setNewCourse({ course: '', location: '', teacher: '', date: new Date().toISOString().split('T')[0] });
+      setNewCourse({ course: '', location: '', teacher: '', date: new Date().toISOString().split('T')[0], nivel: '' });
       setNewNote('');
     }
   }, [contact, open]);
@@ -100,9 +103,9 @@ export const EditContactDialog = ({ open, onOpenChange, contact, existingGroups,
 
   const handleAddCourse = () => {
      if (!newCourse.course || !newCourse.date) return toast.error("El curso y la fecha son obligatorios.");
-     const record = { id: Date.now().toString(), ...newCourse };
+     const record = { id: Date.now().toString(), ...newCourse, attendance: false };
      setFormData({ ...formData, academicRecord: [...formData.academicRecord, record] });
-     setNewCourse({ course: '', location: '', teacher: '', date: new Date().toISOString().split('T')[0] });
+     setNewCourse({ course: '', location: '', teacher: '', date: new Date().toISOString().split('T')[0], nivel: '' });
   };
 
   const handleAddNote = () => {
@@ -120,7 +123,9 @@ export const EditContactDialog = ({ open, onOpenChange, contact, existingGroups,
       const { error: contactError } = await supabase.from('contacts').update({
           nombre: formData.nombre, apellido: formData.apellido, telefono: formData.telefono,
           email: formData.email, ciudad: formData.ciudad, estado: formData.estado, cp: formData.cp,
-          grupo: finalGroup, tags: formData.tags, academic_record: formData.academicRecord, internal_notes: formData.internalNotes
+          grupo: finalGroup, tags: formData.tags, academic_record: formData.academicRecord, internal_notes: formData.internalNotes,
+          dieta: formData.dieta || null, alimentacion: formData.alimentacion || null,
+          alergias: formData.alergias || null, motivo_curso: formData.motivoCurso || null
       }).eq('id', contact.id);
 
       if (contactError) throw contactError;
@@ -241,7 +246,7 @@ export const EditContactDialog = ({ open, onOpenChange, contact, existingGroups,
                 <TabsContent value="academia" className="m-0 p-6 space-y-6 animate-in fade-in duration-300">
                    <div className="bg-[#161618] p-5 rounded-2xl border border-[#222225] shadow-inner space-y-4">
                       <h4 className="text-[10px] uppercase tracking-widest font-bold text-indigo-400 flex items-center gap-2"><Plus className="w-3.5 h-3.5"/> Registrar Nuevo Curso</h4>
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                          <div className="space-y-1.5"><Label className="text-[9px] text-slate-500 uppercase tracking-widest">Curso / Taller</Label>
                             <Select value={newCourse.course || undefined} onValueChange={v => setNewCourse({...newCourse, course: v})}>
                                <SelectTrigger className="h-10 text-xs bg-[#0a0a0c] border-[#222225]"><SelectValue placeholder="Seleccionar..."/></SelectTrigger>
@@ -266,6 +271,16 @@ export const EditContactDialog = ({ open, onOpenChange, contact, existingGroups,
                                </SelectContent>
                             </Select>
                          </div>
+                         <div className="space-y-1.5"><Label className="text-[9px] text-slate-500 uppercase tracking-widest">Nivel</Label>
+                            <Select value={newCourse.nivel || undefined} onValueChange={v => setNewCourse({...newCourse, nivel: v})}>
+                               <SelectTrigger className="h-10 text-xs bg-[#0a0a0c] border-[#222225]"><SelectValue placeholder="Opcional..."/></SelectTrigger>
+                               <SelectContent className="bg-[#121214] border-[#222225] text-white max-h-[200px]">
+                                 <SelectItem value="Basico">Basico</SelectItem>
+                                 <SelectItem value="Intermedio">Intermedio</SelectItem>
+                                 <SelectItem value="Avanzado">Avanzado</SelectItem>
+                               </SelectContent>
+                            </Select>
+                         </div>
                          <div className="space-y-1.5"><Label className="text-[9px] text-slate-500 uppercase tracking-widest">Fecha</Label>
                             <Input type="date" value={newCourse.date} onChange={e => setNewCourse({...newCourse, date: e.target.value})} className="h-10 text-xs bg-[#0a0a0c] border-[#222225] text-slate-300" />
                          </div>
@@ -284,14 +299,22 @@ export const EditContactDialog = ({ open, onOpenChange, contact, existingGroups,
                             {formData.academicRecord.map((ar, idx) => (
                                <div key={idx} className="p-4 bg-[#161618] border border-[#222225] rounded-xl flex items-center justify-between group">
                                   <div>
-                                     <h5 className="font-bold text-indigo-300 text-sm">{ar.course}</h5>
+                                     <div className="flex items-center gap-2">
+                                        <h5 className="font-bold text-indigo-300 text-sm">{ar.course}</h5>
+                                        {ar.nivel && <Badge className="text-[8px] bg-indigo-500/15 text-indigo-400 border-indigo-500/30 px-1.5 py-0">{ar.nivel}</Badge>}
+                                     </div>
                                      <div className="flex items-center gap-3 mt-1.5 text-[10px] text-slate-500 font-mono">
                                         <span className="flex items-center gap-1"><Calendar className="w-3 h-3"/> {ar.date ? new Date(ar.date).toLocaleDateString() : 'Sin fecha'}</span>
                                         {ar.location && <span className="flex items-center gap-1"><MapPin className="w-3 h-3"/> {ar.location}</span>}
                                         {ar.teacher && <span className="flex items-center gap-1"><UserCheck className="w-3 h-3"/> {ar.teacher}</span>}
                                      </div>
                                   </div>
-                                  <Button variant="ghost" size="icon" onClick={() => setFormData({...formData, academicRecord: formData.academicRecord.filter(r => r.id !== ar.id)})} className="text-slate-600 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 className="w-4 h-4"/></Button>
+                                  <div className="flex items-center gap-2">
+                                     <Button type="button" variant="ghost" size="sm" onClick={() => { const updated = formData.academicRecord.map((r, i) => i === idx ? { ...r, attendance: !r.attendance } : r); setFormData({...formData, academicRecord: updated}); }} className={`h-7 text-[9px] font-bold uppercase tracking-widest rounded-lg px-3 ${ar.attendance ? 'text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20' : 'text-slate-500 bg-[#0a0a0c] hover:bg-[#222225]'}`}>
+                                        {ar.attendance ? <><CheckCircle className="w-3 h-3 mr-1"/> Asistio</> : <><Clock className="w-3 h-3 mr-1"/> Pendiente</>}
+                                     </Button>
+                                     <Button variant="ghost" size="icon" onClick={() => setFormData({...formData, academicRecord: formData.academicRecord.filter(r => r.id !== ar.id)})} className="text-slate-600 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 className="w-4 h-4"/></Button>
+                                  </div>
                                </div>
                             ))}
                          </div>
@@ -300,6 +323,29 @@ export const EditContactDialog = ({ open, onOpenChange, contact, existingGroups,
                 </TabsContent>
 
                 <TabsContent value="notas" className="m-0 p-6 space-y-6 animate-in fade-in duration-300">
+                   {/* PERFIL DEL ALUMNO */}
+                   <div className="space-y-3">
+                      <h3 className="text-[10px] font-bold text-amber-400 uppercase tracking-widest flex items-center gap-2"><Heart className="w-3.5 h-3.5"/> Perfil del Alumno</h3>
+                      <div className="grid grid-cols-2 gap-3">
+                         <div className="space-y-1">
+                            <Label className="text-[10px] text-slate-400 uppercase font-bold">Dieta</Label>
+                            <Textarea value={formData.dieta} onChange={e => setFormData({...formData, dieta: e.target.value})} placeholder="Ej: Vegetariana, Vegana, Sin restricciones..." className="bg-[#161618] border-[#222225] min-h-[60px] text-xs text-slate-200 focus-visible:ring-amber-500/50" />
+                         </div>
+                         <div className="space-y-1">
+                            <Label className="text-[10px] text-slate-400 uppercase font-bold">Alimentacion</Label>
+                            <Textarea value={formData.alimentacion} onChange={e => setFormData({...formData, alimentacion: e.target.value})} placeholder="Notas sobre alimentacion..." className="bg-[#161618] border-[#222225] min-h-[60px] text-xs text-slate-200 focus-visible:ring-amber-500/50" />
+                         </div>
+                         <div className="space-y-1">
+                            <Label className="text-[10px] text-slate-400 uppercase font-bold">Alergias</Label>
+                            <Textarea value={formData.alergias} onChange={e => setFormData({...formData, alergias: e.target.value})} placeholder="Ej: Ninguna, Lacteos, Gluten..." className="bg-[#161618] border-[#222225] min-h-[60px] text-xs text-slate-200 focus-visible:ring-amber-500/50" />
+                         </div>
+                         <div className="space-y-1">
+                            <Label className="text-[10px] text-slate-400 uppercase font-bold">Por que va al curso?</Label>
+                            <Textarea value={formData.motivoCurso} onChange={e => setFormData({...formData, motivoCurso: e.target.value})} placeholder="Motivacion, objetivos, contexto..." className="bg-[#161618] border-[#222225] min-h-[60px] text-xs text-slate-200 focus-visible:ring-amber-500/50" />
+                         </div>
+                      </div>
+                   </div>
+
                    <div className="flex gap-2 items-end bg-[#161618] p-4 rounded-2xl border border-[#222225] shadow-inner">
                       <div className="flex-1 space-y-2">
                          <Label className="text-[10px] uppercase text-amber-500 font-bold tracking-widest flex items-center gap-2"><FileText className="w-3.5 h-3.5"/> Redactar Nota de Perfil</Label>
@@ -331,8 +377,8 @@ export const EditContactDialog = ({ open, onOpenChange, contact, existingGroups,
 
             <div className="p-6 bg-[#161618] border-t border-[#222225] shrink-0 flex justify-between">
               <Button type="button" variant="ghost" onClick={() => onOpenChange(false)} className="rounded-xl h-11 uppercase font-bold text-[10px] tracking-widest text-slate-400 hover:text-white hover:bg-[#222225]">Cerrar</Button>
-              <Button type="button" onClick={handleSubmit} disabled={loading} className="bg-indigo-600 hover:bg-indigo-500 font-bold px-8 h-11 rounded-xl shadow-lg uppercase tracking-widest text-[10px]">
-                {loading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />} Guardar Expediente
+              <Button type="button" onClick={handleSubmit} disabled={loading} className="bg-amber-600 hover:bg-amber-700 text-white font-bold px-8 h-11 rounded-xl shadow-lg uppercase tracking-widest text-[10px]">
+                {loading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />} GUARDAR EXPEDIENTE
               </Button>
             </div>
         </Tabs>
