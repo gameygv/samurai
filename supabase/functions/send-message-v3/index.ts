@@ -1,13 +1,26 @@
-// @ts-nocheck
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0'
 import { corsHeaders } from '../_shared/cors.ts'
 
-serve(async (req) => {
+interface MediaData {
+  url?: string;
+  type?: string;
+  name?: string;
+}
+
+interface SendMessagePayload {
+  channel_id?: string;
+  phone: string;
+  message?: string;
+  mediaData?: MediaData;
+  lead_id?: string;
+}
+
+serve(async (req: Request): Promise<Response> => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
   try {
-    const { channel_id, phone, message, mediaData, lead_id } = await req.json();
+    const { channel_id, phone, message, mediaData, lead_id }: SendMessagePayload = await req.json();
     const supabaseClient = createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '');
 
     let actualChannelId = channel_id;
@@ -19,7 +32,7 @@ serve(async (req) => {
 
     if (!actualChannelId) {
        const { data: cfg } = await supabaseClient.from('app_config').select('value').eq('key', 'default_notification_channel').maybeSingle();
-       if (cfg?.value) actualChannelId = cfg.value;
+       if (cfg?.value) actualChannelId = cfg.value as string;
     }
 
     if (!actualChannelId) {
@@ -34,7 +47,7 @@ serve(async (req) => {
 
     const provider = channel.provider || 'meta';
     let cleanPhone = phone.replace(/\D/g, '');
-    
+
     // CORRECCIÓN CRÍTICA MÉXICO — aplica para todos los providers (S5.4)
     if (cleanPhone.startsWith('521') && cleanPhone.length === 13) {
         cleanPhone = '52' + cleanPhone.substring(3);
@@ -43,16 +56,16 @@ serve(async (req) => {
     let endpoint = channel.api_url;
     if (endpoint?.endsWith('/')) endpoint = endpoint.slice(0, -1);
 
-    let headers = { 'Content-Type': 'application/json' };
-    let bodyContent: any;
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    let bodyContent: string | FormData | undefined;
 
     if (provider === 'meta') {
       endpoint = `https://graph.facebook.com/v21.0/${channel.instance_id}/messages`;
       headers['Authorization'] = `Bearer ${channel.api_key}`;
-      
+
       if (mediaData?.url) {
-         const typeMap = { image: 'image', video: 'video', audio: 'audio', document: 'document' };
-         const metaType = typeMap[mediaData.type] || 'document';
+         const typeMap: Record<string, string> = { image: 'image', video: 'video', audio: 'audio', document: 'document' };
+         const metaType = typeMap[mediaData.type ?? ''] || 'document';
          bodyContent = JSON.stringify({
             messaging_product: "whatsapp", to: cleanPhone, type: metaType,
             [metaType]: { link: mediaData.url, caption: message || '' }
@@ -63,13 +76,13 @@ serve(async (req) => {
             text: { body: message }
          });
       }
-    } 
+    }
     else if (provider === 'gowa') {
-      headers['Authorization'] = channel.api_key.startsWith('Basic ') ? channel.api_key : `Basic ${channel.api_key}`;
-      headers['X-Device-Id'] = channel.instance_id;
-      
+      headers['Authorization'] = channel.api_key?.startsWith('Basic ') ? channel.api_key : `Basic ${channel.api_key}`;
+      headers['X-Device-Id'] = channel.instance_id ?? '';
+
       if (mediaData?.url) {
-        delete headers['Content-Type']; 
+        delete headers['Content-Type'];
         const fileRes = await fetch(mediaData.url);
         const fileBlob = await fileRes.blob();
         const formData = new FormData();
@@ -86,9 +99,9 @@ serve(async (req) => {
         endpoint = `${endpoint}/send/message`;
         bodyContent = JSON.stringify({ phone: cleanPhone, message: message });
       }
-    } 
+    }
     else {
-      headers['apikey'] = channel.api_key;
+      headers['apikey'] = channel.api_key ?? '';
       if (mediaData?.url) {
          endpoint = `${endpoint}/message/sendMedia/${channel.instance_id}`;
          bodyContent = JSON.stringify({ number: cleanPhone, mediatype: mediaData.type || 'image', media: mediaData.url, caption: message || '' });
@@ -98,7 +111,7 @@ serve(async (req) => {
       }
     }
 
-    const response = await fetch(endpoint, { method: 'POST', headers, body: bodyContent });
+    const response = await fetch(endpoint!, { method: 'POST', headers, body: bodyContent });
     const resText = await response.text();
 
     if (!response.ok) {
@@ -106,7 +119,7 @@ serve(async (req) => {
     }
 
     // Extract wamid from Meta response (only for meta provider)
-    let wamid = null;
+    let wamid: string | null = null;
     if (provider === 'meta') {
         try {
             const metaRes = JSON.parse(resText);
@@ -116,7 +129,8 @@ serve(async (req) => {
 
     return new Response(JSON.stringify({ success: true, data: resText, wamid }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
-  } catch (error: any) {
-    return new Response(JSON.stringify({ success: false, error: error.message }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  } catch (error: unknown) {
+    const errMsg = error instanceof Error ? error.message : String(error);
+    return new Response(JSON.stringify({ success: false, error: errMsg }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   }
 })
