@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Textarea } from '@/components/ui/textarea';
-import { Loader2, User, Users, Save, Mail, MapPin, Phone, Tag, X, Plus, GraduationCap, FileText, Calendar, Send, UserCheck, Trash2, Globe, Sparkles, CheckCircle, Clock, Heart } from 'lucide-react';
+import { Loader2, User, Users, Save, Mail, MapPin, Phone, Tag, X, Plus, GraduationCap, FileText, Calendar, Send, UserCheck, Trash2, Globe, Sparkles, CheckCircle, Clock, Heart, DollarSign, Image } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useAuth } from '@/context/AuthContext';
@@ -35,12 +35,15 @@ export const EditContactDialog = ({ open, onOpenChange, contact, existingGroups,
   });
 
   const [catalog, setCatalog] = useState({ courses: [] as any[], locations: [] as any[], teachers: [] as any[] });
-  const [newCourse, setNewCourse] = useState({ course: '', location: '', teacher: '', date: '', nivel: '' });
+  const [mediaAssets, setMediaAssets] = useState<any[]>([]);
+  const [newCourse, setNewCourse] = useState({ course: '', location: '', teacher: '', date: '', nivel: '', asset_id: '' as string, precio_dado: '' as string, tipo_precio: '' as string });
+  const [manualMode, setManualMode] = useState(false);
   const [newNote, setNewNote] = useState('');
 
   useEffect(() => {
     if (open) {
        fetchCatalog();
+       fetchMediaAssets();
     }
   }, [open]);
 
@@ -59,7 +62,8 @@ export const EditContactDialog = ({ open, onOpenChange, contact, existingGroups,
         dieta: contact.dieta || '', alimentacion: contact.alimentacion || '',
         alergias: contact.alergias || '', motivoCurso: contact.motivo_curso || ''
       });
-      setNewCourse({ course: '', location: '', teacher: '', date: new Date().toISOString().split('T')[0], nivel: '' });
+      setNewCourse({ course: '', location: '', teacher: '', date: new Date().toISOString().split('T')[0], nivel: '', asset_id: '', precio_dado: '', tipo_precio: '' });
+      setManualMode(false);
       setNewNote('');
     }
   }, [contact, open]);
@@ -76,6 +80,55 @@ export const EditContactDialog = ({ open, onOpenChange, contact, existingGroups,
         };
         setCatalog({ courses: parseSafe(c), locations: parseSafe(l), teachers: parseSafe(t) });
     }
+  };
+
+  const fetchMediaAssets = async () => {
+    const { data } = await supabase.from('media_assets').select('id, title, url, nivel, profesor, sede, presale_price, presale_ends_at, normal_price, category, valid_until').neq('category', 'PAYMENT');
+    if (data) {
+      const now = new Date().toISOString();
+      const active = data.filter(a => !a.valid_until || a.valid_until > now);
+      setMediaAssets(active);
+    }
+  };
+
+  const handleAssetSelect = (assetId: string) => {
+    if (assetId === '__manual__') {
+      setManualMode(true);
+      setNewCourse(prev => ({ ...prev, course: '', location: '', teacher: '', nivel: '', asset_id: '', precio_dado: '', tipo_precio: '' }));
+      return;
+    }
+    setManualMode(false);
+    const asset = mediaAssets.find(a => a.id === assetId);
+    if (!asset) return;
+    const now = new Date();
+    const presaleActive = asset.presale_ends_at && new Date(asset.presale_ends_at) > now && asset.presale_price;
+    const tipoPrecio = presaleActive ? 'preventa' : 'normal';
+    const precioDado = presaleActive ? asset.presale_price : (asset.normal_price || '');
+    setNewCourse(prev => ({
+      ...prev,
+      course: asset.title || '',
+      location: asset.sede || '',
+      teacher: asset.profesor || '',
+      nivel: asset.nivel || '',
+      asset_id: asset.id,
+      precio_dado: precioDado ? String(precioDado) : '',
+      tipo_precio: tipoPrecio
+    }));
+  };
+
+  const groupedAssets = mediaAssets.reduce<Record<string, any[]>>((acc, a) => {
+    const cat = a.category || 'OTROS';
+    if (!acc[cat]) acc[cat] = [];
+    acc[cat].push(a);
+    return acc;
+  }, {});
+
+  const CATEGORY_LABELS: Record<string, string> = {
+    POSTER_PROMO: 'Poster Promocional',
+    CARTEL_GENERAL: 'Cartel General',
+    PROMO_ESPECIAL: 'Promocion Especial',
+    AVISO: 'Aviso',
+    OTROS: 'Otros'
   };
 
   const handleForceAnalysis = async () => {
@@ -103,9 +156,21 @@ export const EditContactDialog = ({ open, onOpenChange, contact, existingGroups,
 
   const handleAddCourse = () => {
      if (!newCourse.course || !newCourse.date) return toast.error("El curso y la fecha son obligatorios.");
-     const record = { id: Date.now().toString(), ...newCourse, attendance: false };
+     const record: any = {
+       id: Date.now().toString(),
+       course: newCourse.course,
+       date: newCourse.date,
+       location: newCourse.location,
+       teacher: newCourse.teacher,
+       nivel: newCourse.nivel,
+       attendance: false,
+       ...(newCourse.asset_id ? { asset_id: newCourse.asset_id } : {}),
+       ...(newCourse.precio_dado ? { precio_dado: parseFloat(newCourse.precio_dado) } : {}),
+       ...(newCourse.tipo_precio ? { tipo_precio: newCourse.tipo_precio } : {})
+     };
      setFormData({ ...formData, academicRecord: [...formData.academicRecord, record] });
-     setNewCourse({ course: '', location: '', teacher: '', date: new Date().toISOString().split('T')[0], nivel: '' });
+     setNewCourse({ course: '', location: '', teacher: '', date: new Date().toISOString().split('T')[0], nivel: '', asset_id: '', precio_dado: '', tipo_precio: '' });
+     setManualMode(false);
   };
 
   const handleAddNote = () => {
@@ -246,31 +311,60 @@ export const EditContactDialog = ({ open, onOpenChange, contact, existingGroups,
                 <TabsContent value="academia" className="m-0 p-6 space-y-6 animate-in fade-in duration-300">
                    <div className="bg-[#161618] p-5 rounded-2xl border border-[#222225] shadow-inner space-y-4">
                       <h4 className="text-[10px] uppercase tracking-widest font-bold text-indigo-400 flex items-center gap-2"><Plus className="w-3.5 h-3.5"/> Registrar Nuevo Curso</h4>
-                      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-                         <div className="space-y-1.5"><Label className="text-[9px] text-slate-500 uppercase tracking-widest">Curso / Taller</Label>
-                            <Select value={newCourse.course || undefined} onValueChange={v => setNewCourse({...newCourse, course: v})}>
-                               <SelectTrigger className="h-10 text-xs bg-[#0a0a0c] border-[#222225]"><SelectValue placeholder="Seleccionar..."/></SelectTrigger>
-                               <SelectContent className="bg-[#121214] border-[#222225] text-white max-h-[200px]">
-                                 {catalog.courses.filter(c => c.name && c.name.trim() !== '').map(c => <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>)}
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                         <div className="space-y-1.5 col-span-2 md:col-span-1"><Label className="text-[9px] text-slate-500 uppercase tracking-widest">Curso / Taller (Media Manager)</Label>
+                            <Select value={newCourse.asset_id || (manualMode ? '__manual__' : undefined)} onValueChange={handleAssetSelect}>
+                               <SelectTrigger className="h-10 text-xs bg-[#0a0a0c] border-[#222225]"><SelectValue placeholder="Seleccionar curso..."/></SelectTrigger>
+                               <SelectContent className="bg-[#121214] border-[#222225] text-white max-h-[300px]">
+                                 {Object.entries(groupedAssets).map(([cat, assets]) => (
+                                   <React.Fragment key={cat}>
+                                     <div className="px-2 py-1.5 text-[8px] uppercase tracking-widest text-slate-500 font-bold border-t border-[#222225] mt-1">{CATEGORY_LABELS[cat] || cat}</div>
+                                     {assets.map((a: any) => <SelectItem key={a.id} value={a.id}>{a.title}{a.nivel ? ` (${a.nivel})` : ''}</SelectItem>)}
+                                   </React.Fragment>
+                                 ))}
+                                 <div className="px-2 py-1.5 text-[8px] uppercase tracking-widest text-slate-500 font-bold border-t border-[#222225] mt-1">Manual</div>
+                                 <SelectItem value="__manual__">Otro (manual)</SelectItem>
                                </SelectContent>
                             </Select>
                          </div>
+
+                         {manualMode && (
+                            <div className="space-y-1.5"><Label className="text-[9px] text-slate-500 uppercase tracking-widest">Nombre del Curso</Label>
+                               <Select value={newCourse.course || undefined} onValueChange={v => setNewCourse({...newCourse, course: v})}>
+                                  <SelectTrigger className="h-10 text-xs bg-[#0a0a0c] border-[#222225]"><SelectValue placeholder="Seleccionar..."/></SelectTrigger>
+                                  <SelectContent className="bg-[#121214] border-[#222225] text-white max-h-[200px]">
+                                    {catalog.courses.filter(c => c.name && c.name.trim() !== '').map(c => <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>)}
+                                  </SelectContent>
+                               </Select>
+                            </div>
+                         )}
+
                          <div className="space-y-1.5"><Label className="text-[9px] text-slate-500 uppercase tracking-widest">Sede</Label>
-                            <Select value={newCourse.location || undefined} onValueChange={v => setNewCourse({...newCourse, location: v})}>
-                               <SelectTrigger className="h-10 text-xs bg-[#0a0a0c] border-[#222225]"><SelectValue placeholder="Opcional..."/></SelectTrigger>
-                               <SelectContent className="bg-[#121214] border-[#222225] text-white max-h-[200px]">
-                                 {catalog.locations.filter(c => c.name && c.name.trim() !== '').map(c => <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>)}
-                               </SelectContent>
-                            </Select>
+                            {manualMode ? (
+                               <Select value={newCourse.location || undefined} onValueChange={v => setNewCourse({...newCourse, location: v})}>
+                                  <SelectTrigger className="h-10 text-xs bg-[#0a0a0c] border-[#222225]"><SelectValue placeholder="Opcional..."/></SelectTrigger>
+                                  <SelectContent className="bg-[#121214] border-[#222225] text-white max-h-[200px]">
+                                    {catalog.locations.filter(c => c.name && c.name.trim() !== '').map(c => <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>)}
+                                  </SelectContent>
+                               </Select>
+                            ) : (
+                               <Input value={newCourse.location} onChange={e => setNewCourse({...newCourse, location: e.target.value})} placeholder="Auto-llenado" className="h-10 text-xs bg-[#0a0a0c] border-[#222225] text-slate-300" />
+                            )}
                          </div>
                          <div className="space-y-1.5"><Label className="text-[9px] text-slate-500 uppercase tracking-widest">Profesor</Label>
-                            <Select value={newCourse.teacher || undefined} onValueChange={v => setNewCourse({...newCourse, teacher: v})}>
-                               <SelectTrigger className="h-10 text-xs bg-[#0a0a0c] border-[#222225]"><SelectValue placeholder="Opcional..."/></SelectTrigger>
-                               <SelectContent className="bg-[#121214] border-[#222225] text-white max-h-[200px]">
-                                 {catalog.teachers.filter(c => c.name && c.name.trim() !== '').map(c => <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>)}
-                               </SelectContent>
-                            </Select>
+                            {manualMode ? (
+                               <Select value={newCourse.teacher || undefined} onValueChange={v => setNewCourse({...newCourse, teacher: v})}>
+                                  <SelectTrigger className="h-10 text-xs bg-[#0a0a0c] border-[#222225]"><SelectValue placeholder="Opcional..."/></SelectTrigger>
+                                  <SelectContent className="bg-[#121214] border-[#222225] text-white max-h-[200px]">
+                                    {catalog.teachers.filter(c => c.name && c.name.trim() !== '').map(c => <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>)}
+                                  </SelectContent>
+                               </Select>
+                            ) : (
+                               <Input value={newCourse.teacher} onChange={e => setNewCourse({...newCourse, teacher: e.target.value})} placeholder="Auto-llenado" className="h-10 text-xs bg-[#0a0a0c] border-[#222225] text-slate-300" />
+                            )}
                          </div>
+                      </div>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                          <div className="space-y-1.5"><Label className="text-[9px] text-slate-500 uppercase tracking-widest">Nivel</Label>
                             <Select value={newCourse.nivel || undefined} onValueChange={v => setNewCourse({...newCourse, nivel: v})}>
                                <SelectTrigger className="h-10 text-xs bg-[#0a0a0c] border-[#222225]"><SelectValue placeholder="Opcional..."/></SelectTrigger>
@@ -284,6 +378,14 @@ export const EditContactDialog = ({ open, onOpenChange, contact, existingGroups,
                          <div className="space-y-1.5"><Label className="text-[9px] text-slate-500 uppercase tracking-widest">Fecha</Label>
                             <Input type="date" value={newCourse.date} onChange={e => setNewCourse({...newCourse, date: e.target.value})} className="h-10 text-xs bg-[#0a0a0c] border-[#222225] text-slate-300" />
                          </div>
+                         <div className="space-y-1.5"><Label className="text-[9px] text-slate-500 uppercase tracking-widest flex items-center gap-1"><DollarSign className="w-3 h-3"/> Precio Dado</Label>
+                            <Input type="number" step="0.01" value={newCourse.precio_dado} onChange={e => setNewCourse({...newCourse, precio_dado: e.target.value})} placeholder="0.00" className="h-10 text-xs bg-[#0a0a0c] border-[#222225] text-slate-300 font-mono" />
+                         </div>
+                         <div className="space-y-1.5"><Label className="text-[9px] text-slate-500 uppercase tracking-widest">Tipo Precio</Label>
+                            <div className="h-10 flex items-center px-3 bg-[#0a0a0c] border border-[#222225] rounded-md text-xs">
+                               {newCourse.tipo_precio === 'preventa' ? <Badge className="text-[8px] bg-amber-500/15 text-amber-400 border-amber-500/30 px-1.5 py-0">PREVENTA</Badge> : newCourse.tipo_precio === 'normal' ? <Badge className="text-[8px] bg-slate-500/15 text-slate-400 border-slate-500/30 px-1.5 py-0">NORMAL</Badge> : <span className="text-slate-600">Auto</span>}
+                            </div>
+                         </div>
                       </div>
                       <div className="flex justify-end pt-2">
                          <Button type="button" onClick={handleAddCourse} className="bg-indigo-600 hover:bg-indigo-500 text-white h-9 px-6 rounded-xl text-[10px] font-bold uppercase tracking-widest">Añadir a Historial</Button>
@@ -296,27 +398,41 @@ export const EditContactDialog = ({ open, onOpenChange, contact, existingGroups,
                          <div className="p-8 border-2 border-dashed border-[#222225] rounded-2xl text-center text-slate-600 italic text-xs">Aún no tiene cursos registrados.</div>
                       ) : (
                          <div className="space-y-2">
-                            {formData.academicRecord.map((ar, idx) => (
+                            {formData.academicRecord.map((ar, idx) => {
+                               const linkedAsset = ar.asset_id ? mediaAssets.find(a => a.id === ar.asset_id) : null;
+                               return (
                                <div key={idx} className="p-4 bg-[#161618] border border-[#222225] rounded-xl flex items-center justify-between group">
-                                  <div>
-                                     <div className="flex items-center gap-2">
-                                        <h5 className="font-bold text-indigo-300 text-sm">{ar.course}</h5>
-                                        {ar.nivel && <Badge className="text-[8px] bg-indigo-500/15 text-indigo-400 border-indigo-500/30 px-1.5 py-0">{ar.nivel}</Badge>}
-                                     </div>
-                                     <div className="flex items-center gap-3 mt-1.5 text-[10px] text-slate-500 font-mono">
-                                        <span className="flex items-center gap-1"><Calendar className="w-3 h-3"/> {ar.date ? new Date(ar.date).toLocaleDateString() : 'Sin fecha'}</span>
-                                        {ar.location && <span className="flex items-center gap-1"><MapPin className="w-3 h-3"/> {ar.location}</span>}
-                                        {ar.teacher && <span className="flex items-center gap-1"><UserCheck className="w-3 h-3"/> {ar.teacher}</span>}
+                                  <div className="flex items-start gap-3">
+                                     {linkedAsset?.url && (
+                                        <img src={linkedAsset.url} alt="" className="w-10 h-10 rounded-lg object-cover border border-[#222225] shrink-0" />
+                                     )}
+                                     <div>
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                           <h5 className="font-bold text-indigo-300 text-sm">{ar.course}</h5>
+                                           {ar.nivel && <Badge className="text-[8px] bg-indigo-500/15 text-indigo-400 border-indigo-500/30 px-1.5 py-0">{ar.nivel}</Badge>}
+                                           {ar.tipo_precio && (
+                                              <Badge className={`text-[8px] px-1.5 py-0 ${ar.tipo_precio === 'preventa' ? 'bg-amber-500/15 text-amber-400 border-amber-500/30' : 'bg-slate-500/15 text-slate-400 border-slate-500/30'}`}>
+                                                 {ar.tipo_precio === 'preventa' ? 'PREVENTA' : 'NORMAL'}
+                                              </Badge>
+                                           )}
+                                        </div>
+                                        <div className="flex items-center gap-3 mt-1.5 text-[10px] text-slate-500 font-mono flex-wrap">
+                                           <span className="flex items-center gap-1"><Calendar className="w-3 h-3"/> {ar.date ? new Date(ar.date).toLocaleDateString() : 'Sin fecha'}</span>
+                                           {ar.location && <span className="flex items-center gap-1"><MapPin className="w-3 h-3"/> {ar.location}</span>}
+                                           {ar.teacher && <span className="flex items-center gap-1"><UserCheck className="w-3 h-3"/> {ar.teacher}</span>}
+                                           {ar.precio_dado != null && <span className="flex items-center gap-1 text-emerald-400"><DollarSign className="w-3 h-3"/> ${ar.precio_dado}</span>}
+                                        </div>
                                      </div>
                                   </div>
-                                  <div className="flex items-center gap-2">
+                                  <div className="flex items-center gap-2 shrink-0">
                                      <Button type="button" variant="ghost" size="sm" onClick={() => { const updated = formData.academicRecord.map((r, i) => i === idx ? { ...r, attendance: !r.attendance } : r); setFormData({...formData, academicRecord: updated}); }} className={`h-7 text-[9px] font-bold uppercase tracking-widest rounded-lg px-3 ${ar.attendance ? 'text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20' : 'text-slate-500 bg-[#0a0a0c] hover:bg-[#222225]'}`}>
                                         {ar.attendance ? <><CheckCircle className="w-3 h-3 mr-1"/> Asistio</> : <><Clock className="w-3 h-3 mr-1"/> Pendiente</>}
                                      </Button>
                                      <Button variant="ghost" size="icon" onClick={() => setFormData({...formData, academicRecord: formData.academicRecord.filter(r => r.id !== ar.id)})} className="text-slate-600 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 className="w-4 h-4"/></Button>
                                   </div>
                                </div>
-                            ))}
+                               );
+                            })}
                          </div>
                       )}
                    </div>
