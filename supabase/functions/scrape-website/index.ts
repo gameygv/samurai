@@ -23,7 +23,7 @@ serve(async (req) => {
        if (!url) throw new Error("No se proporcionó una URL de imagen válida.");
 
        const { data: configs } = await supabaseClient.from('app_config').select('key, value');
-       const apiKey = configs?.find(c => c.key === 'openai_api_key')?.value;
+       const apiKey = Deno.env.get('OPENAI_API_KEY') || configs?.find(c => c.key === 'openai_api_key')?.value;
        
        let customVisionPrompt = "";
 

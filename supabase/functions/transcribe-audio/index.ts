@@ -29,7 +29,7 @@ serve(async (req) => {
 
     // 2. Obtener OpenAI api_key
     const { data: configs } = await supabase.from('app_config').select('key, value');
-    const openaiKey = configs?.find(c => c.key === 'openai_api_key')?.value;
+    const openaiKey = Deno.env.get('OPENAI_API_KEY') || configs?.find(c => c.key === 'openai_api_key')?.value;
     if (!openaiKey) {
       await logAndFallback(supabase, lead_id, message_id, 'OpenAI API Key no configurada');
       return new Response('no_openai_key', { headers: corsHeaders });

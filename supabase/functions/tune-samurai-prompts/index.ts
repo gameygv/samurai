@@ -12,7 +12,8 @@ serve(async (req) => {
     const { messages, currentPrompts } = await req.json();
 
     const { data: config } = await supabaseClient.from('app_config').select('value').eq('key', 'openai_api_key').single();
-    if (!config?.value) throw new Error("OpenAI API Key no configurada.");
+    const openaiApiKey = Deno.env.get('OPENAI_API_KEY') || config?.value;
+    if (!openaiApiKey) throw new Error("OpenAI API Key no configurada.");
 
     const { data: webContent } = await supabaseClient.from('main_website_content').select('title, content').eq('scrape_status', 'success');
     const masterTruth = webContent?.map(w => `[DATA WEB: ${w.title}]: ${w.content.substring(0, 500)}...`).join('\n') || "No hay datos web indexados.";
@@ -63,7 +64,7 @@ RESPONDE SOLO JSON:
 
     const response = await fetch("https://api.openai.com/v1/chat/completions", {
       method: 'POST',
-      headers: { 'Authorization': `Bearer ${config.value}`, 'Content-Type': 'application/json' },
+      headers: { 'Authorization': `Bearer ${openaiApiKey}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ model: "gpt-4o", messages: formattedMessages, response_format: { type: "json_object" }, temperature: 0.2 })
     });
 

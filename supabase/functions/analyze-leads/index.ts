@@ -34,7 +34,7 @@ serve(async (req) => {
 
     const { data: configs } = await supabase.from('app_config').select('key, value');
     const configMap = configs?.reduce((acc: any, c) => ({ ...acc, [c.key]: c.value }), {}) || {};
-    const apiKey = configMap.openai_api_key;
+    const apiKey = Deno.env.get('OPENAI_API_KEY') || configMap.openai_api_key;
 
     if (!apiKey) return new Response(JSON.stringify({ message: 'No API key' }), { headers: corsHeaders });
 
@@ -100,13 +100,16 @@ serve(async (req) => {
       const oldIntentLevel = intentOrder[lead.buying_intent] ?? 0;
       const newIntentLevel = intentOrder[updates.buying_intent] ?? 0;
 
-      if (newIntentLevel > oldIntentLevel && configMap.meta_pixel_id && configMap.meta_access_token) {
+      const metaPixelId = Deno.env.get('META_PIXEL_ID') || configMap.meta_pixel_id;
+      const metaAccessToken = Deno.env.get('META_ACCESS_TOKEN') || configMap.meta_access_token;
+
+      if (newIntentLevel > oldIntentLevel && metaPixelId && metaAccessToken) {
         try {
           await supabase.functions.invoke('meta-capi-sender', {
             body: {
               config: {
-                pixel_id: configMap.meta_pixel_id,
-                access_token: configMap.meta_access_token,
+                pixel_id: metaPixelId,
+                access_token: metaAccessToken,
                 test_event_code: configMap.meta_test_event_code || undefined
               },
               eventData: {
