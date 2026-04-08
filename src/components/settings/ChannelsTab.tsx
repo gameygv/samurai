@@ -188,7 +188,7 @@ export const ChannelsTab = () => {
     await supabase.from('app_config').upsert({ key: 'show_unofficial_providers', value: String(val), category: 'SYSTEM' }, { onConflict: 'key' });
   };
 
-  const visibleChannels = showUnofficial ? channels : channels.filter(ch => ch.provider === 'meta' || ch.is_new);
+  const visibleChannels = channels; // Show all channels regardless of provider
 
   if (loading) return <div className="flex justify-center py-20"><Loader2 className="animate-spin text-indigo-500" /></div>;
 
@@ -231,7 +231,10 @@ export const ChannelsTab = () => {
            <p className="text-xs text-slate-500">Configura tus instancias de WhatsApp para enviar y recibir mensajes.</p>
         </div>
         <div className="flex items-center gap-4">
-           <Switch checked={showUnofficial} onCheckedChange={handleToggleUnofficial} />
+           <div className="flex items-center gap-2 bg-slate-950/50 px-3 py-1.5 rounded-lg border border-slate-800">
+             <Switch checked={showUnofficial} onCheckedChange={handleToggleUnofficial} />
+             <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Gowa / Evolution</span>
+           </div>
            <Button onClick={handleAddChannel} className="bg-indigo-900 hover:bg-indigo-800 text-amber-500 font-bold"><Plus className="w-4 h-4 mr-2"/> AÑADIR NÚMERO</Button>
         </div>
       </div>
