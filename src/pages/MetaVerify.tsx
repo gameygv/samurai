@@ -17,7 +17,7 @@ const MetaVerify = () => {
 
   const loadConfig = async () => {
     const { data: configs } = await supabase.from('app_config').select('key, value').in('key', [
-      'meta_pixel_id', 'meta_access_token', 'meta_test_mode', 'meta_test_event_code'
+      'meta_pixel_id', 'meta_test_mode', 'meta_test_event_code'
     ]);
     const cfgMap: any = {};
     configs?.forEach(c => { cfgMap[c.key] = c.value; });
@@ -56,11 +56,8 @@ const MetaVerify = () => {
     // === 2. whatsapp_business_manage_events (0 calls — NUEVO: WA CAPI endpoint) ===
     addResult('whatsapp_business_manage_events', 'running', 'Obteniendo Dataset ID y enviando evento WA CAPI...');
     try {
-      const accessToken = config.meta_access_token;
-      if (!accessToken) throw new Error('Access Token CAPI no configurado. Ve a /meta-capi');
-
       const { data, error } = await supabase.functions.invoke('meta-wa-capi-verify', {
-        body: { waba_id: WABA_ID, access_token: accessToken, wa_channel_token: channel?.api_key || null, test_event_code: config.meta_test_event_code || undefined }
+        body: { waba_id: WABA_ID, wa_channel_token: channel?.api_key || null, test_event_code: config.meta_test_event_code || undefined }
       });
       if (error) throw error;
 
@@ -81,12 +78,11 @@ const MetaVerify = () => {
     addResult('pixel_capi_standard', 'running', 'Enviando evento Lead al Pixel estándar...');
     try {
       const pixelId = config.meta_pixel_id;
-      const accessToken = config.meta_access_token;
-      if (!pixelId || !accessToken) throw new Error('Pixel ID o Access Token no configurados');
+      if (!pixelId) throw new Error('Pixel ID no configurado');
 
       const { data, error } = await supabase.functions.invoke('meta-capi-sender', {
         body: {
-          config: { pixel_id: pixelId, access_token: accessToken, test_event_code: config.meta_test_event_code || undefined },
+          config: { pixel_id: pixelId, test_event_code: config.meta_test_event_code || undefined },
           eventData: {
             event_name: 'Lead', event_id: `verify_pixel_${Date.now()}`, value: 0,
             user_data: { ph: '5215646605824', fn: 'Verificacion', ln: 'SAMURAI', ct: 'Mexico', country: 'mx', external_id: 'samurai_verify' },
@@ -144,7 +140,7 @@ const MetaVerify = () => {
           </div>
           <div className="flex justify-between p-3 bg-[#161618] border border-[#222225] rounded-xl">
             <span className="text-slate-400">Access Token CAPI</span>
-            <span className={config.meta_access_token ? "text-emerald-400" : "text-red-400"}>{config.meta_access_token ? '••••••' + config.meta_access_token.slice(-6) : 'No configurado'}</span>
+            <span className="text-emerald-400">Gestionado via env var (META_ACCESS_TOKEN)</span>
           </div>
         </div>
 
