@@ -191,8 +191,31 @@ export const ChannelsTab = () => {
 
   if (loading) return <div className="flex justify-center py-20"><Loader2 className="animate-spin text-indigo-500" /></div>;
 
+  const gowaChannels = channels.filter(c => c.provider === 'gowa' && !c.is_new);
+  const hasGowaAlerts = gowaChannels.some(c => c.id === defaultNotifyId);
+
   return (
     <div className="space-y-8">
+
+      {gowaChannels.length === 0 && (
+        <div className="p-4 bg-red-900/20 border border-red-500/30 rounded-2xl flex items-start gap-3">
+          <AlertTriangle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-bold text-red-400">Sin canal Gowa configurado</p>
+            <p className="text-xs text-red-300/70 mt-1">Necesitas al menos un canal Gowa para enviar alertas y recibir mensajes de WhatsApp. Activa el switch "Gowa / Evolution" y añade un número.</p>
+          </div>
+        </div>
+      )}
+
+      {gowaChannels.length > 0 && !hasGowaAlerts && (
+        <div className="p-4 bg-amber-900/20 border border-amber-500/30 rounded-2xl flex items-start gap-3">
+          <BellRing className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-bold text-amber-400">Sin canal de alertas configurado</p>
+            <p className="text-xs text-amber-300/70 mt-1">Ningún canal Gowa tiene activada la opción "Usar para Alertas". Las notificaciones al equipo no se enviarán. Selecciona un canal Gowa como canal de alertas.</p>
+          </div>
+        </div>
+      )}
 
       <div className="flex justify-between items-center bg-slate-900/50 p-4 rounded-2xl border border-slate-800">
         <div>
@@ -255,10 +278,10 @@ export const ChannelsTab = () => {
                </div>
                
                <div className="flex gap-2 shrink-0 self-end sm:self-auto">
-                  {!ch.is_new && defaultNotifyId === ch.id && (
+                  {!ch.is_new && ch.provider === 'gowa' && defaultNotifyId === ch.id && (
                      <Button variant="outline" size="sm" onClick={() => handleSetDefault(ch.id)} className="text-[10px] border-amber-500/50 text-amber-500 hover:bg-amber-900/20 uppercase font-bold">Desactivar Alertas</Button>
                   )}
-                  {!ch.is_new && defaultNotifyId !== ch.id && (
+                  {!ch.is_new && ch.provider === 'gowa' && defaultNotifyId !== ch.id && (
                      <Button variant="ghost" size="sm" onClick={() => handleSetDefault(ch.id)} className="text-[10px] text-slate-400 hover:text-amber-500 uppercase font-bold">Usar para Alertas</Button>
                   )}
                   <Button variant="ghost" size="icon" onClick={async () => { if(confirm("¿Eliminar este canal?")) { await supabase.from('whatsapp_channels').delete().eq('id', ch.id); fetchAll(); } }} className="text-slate-500 hover:text-red-500"><Trash2 className="w-4 h-4" /></Button>
@@ -327,6 +350,25 @@ export const ChannelsTab = () => {
                       </div>
                   )}
                </div>
+
+               {/* GUÍA DE CONFIGURACIÓN GOWA */}
+               {ch.provider === 'gowa' && ch.is_new && (
+                 <div className="mt-4 p-4 rounded-xl border border-emerald-500/20 bg-emerald-950/10 space-y-2">
+                   <p className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest flex items-center gap-1"><Info className="w-3.5 h-3.5"/> Guía de Configuración Gowa</p>
+                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-[10px] text-emerald-300/80 leading-relaxed">
+                     <div className="space-y-1.5">
+                       <p><strong className="text-emerald-400">1. Nombre:</strong> Un nombre descriptivo para identificar este número (ej: "WA Ventas", "WA Soporte").</p>
+                       <p><strong className="text-emerald-400">2. Instance ID:</strong> El nombre de la instancia en tu panel de Gowa. Cada número de WhatsApp tiene su propio Instance ID. Encuéntralo en: <span className="font-mono bg-black/30 px-1 rounded">Panel Gowa → Instancias → Nombre</span></p>
+                       <p><strong className="text-emerald-400">3. API Key:</strong> Token de seguridad de Gowa. Encuéntralo en: <span className="font-mono bg-black/30 px-1 rounded">Panel Gowa → Configuración → API Key</span>. Si tienes 2 números en el mismo servidor, ambos comparten la misma API Key.</p>
+                     </div>
+                     <div className="space-y-1.5">
+                       <p><strong className="text-emerald-400">4. URL del Servidor:</strong> La dirección de tu VPS con Gowa (ej: https://gowa.tudominio.com). Si tienes múltiples números, todos usan la misma URL.</p>
+                       <p><strong className="text-emerald-400">5. Verify Token:</strong> Déjalo como <span className="font-mono bg-black/30 px-1 rounded">samurai_v3</span> (ya viene configurado).</p>
+                       <p><strong className="text-emerald-400">6. Después de guardar:</strong> Haz clic en "Auto-Inyectar Webhook en Gowa" para que Samurai empiece a recibir mensajes de este número.</p>
+                     </div>
+                   </div>
+                 </div>
+               )}
 
                {/* SECCIÓN VINCULACIÓN DE ASESOR */}
                <div className="mt-6 p-4 rounded-xl border border-indigo-500/30 bg-indigo-950/10">
