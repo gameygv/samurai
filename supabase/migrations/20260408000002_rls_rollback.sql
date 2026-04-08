@@ -34,6 +34,7 @@ DROP POLICY IF EXISTS "contacts_agent_update" ON public.contacts;
 DROP POLICY IF EXISTS "profiles_admin_all" ON public.profiles;
 DROP POLICY IF EXISTS "profiles_gerente_select" ON public.profiles;
 DROP POLICY IF EXISTS "profiles_agent_select" ON public.profiles;
+DROP POLICY IF EXISTS "profiles_agent_update" ON public.profiles;
 
 -- media_assets
 DROP POLICY IF EXISTS "media_admin_gerente_all" ON public.media_assets;
