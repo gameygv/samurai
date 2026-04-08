@@ -149,10 +149,13 @@ export type Database = {
       contacts: {
         Row: {
           academic_record: Json | null
+          alergias: string | null
+          alimentacion: string | null
           apellido: string | null
           ciudad: string | null
           cp: string | null
           created_at: string | null
+          dieta: string | null
           email: string | null
           estado: string | null
           financial_status: string | null
@@ -160,6 +163,7 @@ export type Database = {
           id: string
           internal_notes: Json | null
           lead_id: string | null
+          motivo_curso: string | null
           nombre: string | null
           origen_contacto: string | null
           pais: string | null
@@ -169,10 +173,13 @@ export type Database = {
         }
         Insert: {
           academic_record?: Json | null
+          alergias?: string | null
+          alimentacion?: string | null
           apellido?: string | null
           ciudad?: string | null
           cp?: string | null
           created_at?: string | null
+          dieta?: string | null
           email?: string | null
           estado?: string | null
           financial_status?: string | null
@@ -180,6 +187,7 @@ export type Database = {
           id?: string
           internal_notes?: Json | null
           lead_id?: string | null
+          motivo_curso?: string | null
           nombre?: string | null
           origen_contacto?: string | null
           pais?: string | null
@@ -189,10 +197,13 @@ export type Database = {
         }
         Update: {
           academic_record?: Json | null
+          alergias?: string | null
+          alimentacion?: string | null
           apellido?: string | null
           ciudad?: string | null
           cp?: string | null
           created_at?: string | null
+          dieta?: string | null
           email?: string | null
           estado?: string | null
           financial_status?: string | null
@@ -200,6 +211,7 @@ export type Database = {
           id?: string
           internal_notes?: Json | null
           lead_id?: string | null
+          motivo_curso?: string | null
           nombre?: string | null
           origen_contacto?: string | null
           pais?: string | null
@@ -320,6 +332,8 @@ export type Database = {
           msg_post1: string | null
           msg_post2: string | null
           msg_pre: string | null
+          precio_original: number | null
+          precio_tipo: string | null
           responsible_id: string | null
           seq_abandon_days: number | null
           seq_post1_days: number | null
@@ -340,6 +354,8 @@ export type Database = {
           msg_post1?: string | null
           msg_post2?: string | null
           msg_pre?: string | null
+          precio_original?: number | null
+          precio_tipo?: string | null
           responsible_id?: string | null
           seq_abandon_days?: number | null
           seq_post1_days?: number | null
@@ -360,6 +376,8 @@ export type Database = {
           msg_post1?: string | null
           msg_post2?: string | null
           msg_pre?: string | null
+          precio_original?: number | null
+          precio_tipo?: string | null
           responsible_id?: string | null
           seq_abandon_days?: number | null
           seq_post1_days?: number | null
