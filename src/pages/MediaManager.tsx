@@ -252,30 +252,30 @@ const MediaManager = () => {
       <div className="grid grid-cols-3 gap-3">
         <div className="space-y-2">
           <Label className="text-[10px] uppercase font-bold text-slate-400 tracking-widest flex items-center gap-1"><GraduationCap className="w-3 h-3 text-amber-400"/> Nivel</Label>
-          <Select value={nivel} onValueChange={setNivel}>
+          <Select value={nivel || '_none_'} onValueChange={v => setNivel(v === '_none_' ? '' : v)}>
             <SelectTrigger className="bg-slate-950 border-slate-800 rounded-xl h-10 text-xs"><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
             <SelectContent className="bg-slate-900 text-slate-100 rounded-xl border-slate-800">
-              <SelectItem value="">Sin nivel</SelectItem>
+              <SelectItem value="_none_">Sin nivel</SelectItem>
               {niveles.map((n: any) => <SelectItem key={n.id} value={n.name}>{n.name}</SelectItem>)}
             </SelectContent>
           </Select>
         </div>
         <div className="space-y-2">
           <Label className="text-[10px] uppercase font-bold text-slate-400 tracking-widest flex items-center gap-1"><User className="w-3 h-3 text-blue-400"/> Profesor</Label>
-          <Select value={profesor} onValueChange={setProfesor}>
+          <Select value={profesor || '_none_'} onValueChange={v => setProfesor(v === '_none_' ? '' : v)}>
             <SelectTrigger className="bg-slate-950 border-slate-800 rounded-xl h-10 text-xs"><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
             <SelectContent className="bg-slate-900 text-slate-100 rounded-xl border-slate-800">
-              <SelectItem value="">Sin profesor</SelectItem>
+              <SelectItem value="_none_">Sin profesor</SelectItem>
               {profesores.filter((p: any) => p.name?.trim()).map((p: any) => <SelectItem key={p.id} value={p.name}>{p.name}</SelectItem>)}
             </SelectContent>
           </Select>
         </div>
         <div className="space-y-2">
           <Label className="text-[10px] uppercase font-bold text-slate-400 tracking-widest flex items-center gap-1"><MapPin className="w-3 h-3 text-red-400"/> Sede</Label>
-          <Select value={sede} onValueChange={setSede}>
+          <Select value={sede || '_none_'} onValueChange={v => setSede(v === '_none_' ? '' : v)}>
             <SelectTrigger className="bg-slate-950 border-slate-800 rounded-xl h-10 text-xs"><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
             <SelectContent className="bg-slate-900 text-slate-100 rounded-xl border-slate-800">
-              <SelectItem value="">Sin sede</SelectItem>
+              <SelectItem value="_none_">Sin sede</SelectItem>
               {sedes.map((s: any) => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}
             </SelectContent>
           </Select>
