@@ -62,7 +62,14 @@ serve(async (req: Request): Promise<Response> => {
    MEDIO: Si el cliente ya mostro interes, dijo su ciudad y pregunta por precios, horarios, fechas, ubicacion, requisitos, disponibilidad.
    ALTO: Si el cliente ya dio su correo, pidio datos bancarios, quiere inscribirse, apartar lugar, pregunta por descuentos o envio comprobante.
 
-Responde ESTRICTAMENTE con "BAJO", "MEDIO" o "ALTO" en intent. NUNCA respondas "PERDIDO" ni "GANADO".`;
+Responde ESTRICTAMENTE con "BAJO", "MEDIO" o "ALTO" en intent. NUNCA respondas "PERDIDO" ni "GANADO".
+
+3. Lead Score (lead_score): numero de 0 a 100 que representa la probabilidad de que este cliente compre.
+   0-20: Solo saludo, sin interes claro.
+   21-40: Pidio informacion general.
+   41-60: Pregunto precios o detalles especificos.
+   61-80: Mostro intencion de compra, dio datos personales.
+   81-100: Quiere pagar, envio comprobante, pidio datos bancarios.`;
 
     const analysisPrompt = `${basePrompt}
 
@@ -70,7 +77,7 @@ CONVERSACION:
 ${chatContext}
 
 Responde UNICAMENTE con este JSON exacto (sin acentos en las claves):
-{"nombre": null, "apellido": null, "email": null, "ciudad": null, "estado": null, "cp": null, "servicio_interes": null, "intent": "BAJO"}`;
+{"nombre": null, "apellido": null, "email": null, "ciudad": null, "estado": null, "cp": null, "servicio_interes": null, "intent": "BAJO", "lead_score": 10}`;
 
     const aiRes = await fetch("https://api.openai.com/v1/chat/completions", {
       method: 'POST',
@@ -109,6 +116,8 @@ Responde UNICAMENTE con este JSON exacto (sin acentos en las claves):
       if (parsed.email && parsed.email.includes('@')) updates.email = parsed.email;
       if (parsed.cp && /^\d{5}$/.test(String(parsed.cp))) updates.cp = String(parsed.cp);
       if (parsed.servicio_interes && parsed.servicio_interes.length > 2) updates.servicio_interes = parsed.servicio_interes;
+      const parsedScore = Number(parsed.lead_score);
+      if (!isNaN(parsedScore) && parsedScore >= 0 && parsedScore <= 100) updates.lead_score = parsedScore;
 
       // Doble validación final
       if (updates.buying_intent === 'PERDIDO') updates.buying_intent = 'BAJO';

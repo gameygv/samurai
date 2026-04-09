@@ -172,6 +172,8 @@ serve(async (req: Request): Promise<Response> => {
     }
 
     if (!phone) return new Response('ok', { status: 200 });
+    // Ignorar mensajes de grupos (JID @g.us) — solo procesar chats individuales
+    if (String(phone).includes('@g.us')) return new Response('ok', { status: 200 });
     let senderPhone = String(phone).split('@')[0].replace(/\D/g, '');
 
     let { data: lead } = await supabase.from('leads').select('*').or(`telefono.ilike.%${senderPhone.slice(-10)}%`).limit(1).maybeSingle();
@@ -212,10 +214,12 @@ serve(async (req: Request): Promise<Response> => {
     } else if (isFromMe) {
         // Mensaje saliente del asesor desde teléfono: guardar como HUMANO sin mutar lead ni activar IA
         // deno-lint-ignore no-explicit-any
-        const asesorInsert: Record<string, any> = { lead_id: lead.id, emisor: 'HUMANO', mensaje: text, platform: 'WHATSAPP' };
+        const asesorMeta: Record<string, any> = { raw: payloadText.length <= 4000 ? payloadText : payloadText.substring(0, 4000) };
+        if (audioMediaUrl) { asesorMeta.mediaUrl = audioMediaUrl; asesorMeta.mediaType = 'audio'; }
+        else if (imageMediaUrl) { asesorMeta.mediaUrl = imageMediaUrl; asesorMeta.mediaType = 'image'; }
+        // deno-lint-ignore no-explicit-any
+        const asesorInsert: Record<string, any> = { lead_id: lead.id, emisor: 'HUMANO', mensaje: text, platform: 'WHATSAPP', metadata: asesorMeta };
         if (messageId) asesorInsert.message_id = messageId;
-        if (audioMediaUrl) asesorInsert.metadata = { mediaUrl: audioMediaUrl, mediaType: 'audio' };
-        else if (imageMediaUrl) asesorInsert.metadata = { mediaUrl: imageMediaUrl, mediaType: 'image' };
         await supabase.from('conversaciones').insert(asesorInsert);
         return new Response('ok', { status: 200, headers: corsHeaders });
     } else {
@@ -237,12 +241,14 @@ serve(async (req: Request): Promise<Response> => {
     // deno-lint-ignore no-explicit-any
     const clientInsert: Record<string, any> = { lead_id: lead.id, emisor: 'CLIENTE', mensaje: text, platform: 'WHATSAPP' };
     if (messageId) clientInsert.message_id = messageId;
-    // Guardar media URLs en metadata para que el chatview pueda renderizar audio/imagen
-    if (audioMediaUrl || audioMediaId) {
-        clientInsert.metadata = { mediaUrl: audioMediaUrl || null, mediaId: audioMediaId || null, mediaType: 'audio' };
-    } else if (imageMediaUrl || imageMediaId) {
-        clientInsert.metadata = { mediaUrl: imageMediaUrl || null, mediaId: imageMediaId || null, mediaType: 'image' };
-    }
+    // Construir metadata: media URLs + raw_payload para reprocesamiento futuro
+    // deno-lint-ignore no-explicit-any
+    const msgMetadata: Record<string, any> = {};
+    if (audioMediaUrl || audioMediaId) { msgMetadata.mediaUrl = audioMediaUrl || null; msgMetadata.mediaId = audioMediaId || null; msgMetadata.mediaType = 'audio'; }
+    else if (imageMediaUrl || imageMediaId) { msgMetadata.mediaUrl = imageMediaUrl || null; msgMetadata.mediaId = imageMediaId || null; msgMetadata.mediaType = 'image'; }
+    // Raw payload: guardar para poder reprocesar si cambia formato de GoWA/Meta
+    msgMetadata.raw = payloadText.length <= 4000 ? payloadText : payloadText.substring(0, 4000);
+    clientInsert.metadata = msgMetadata;
     const { error: insertError2 } = await supabase.from('conversaciones').insert(clientInsert);
     if (insertError2) {
         if (insertError2.code === '23505') {
@@ -278,7 +284,11 @@ serve(async (req: Request): Promise<Response> => {
     }
 
     // ALWAYS run analyze-leads in 'on' and 'monitor' modes (extracts data + sends CAPI)
-    supabase.functions.invoke('analyze-leads', { body: { lead_id: lead.id } }).catch(() => {});
+    // Skip analysis for empty/placeholder messages (no value for OpenAI tokens)
+    const skipAnalysis = !text || text === '[Mensaje]' || text === '[Sticker]';
+    if (!skipAnalysis) {
+        supabase.functions.invoke('analyze-leads', { body: { lead_id: lead.id } }).catch(() => {});
+    }
 
     // ALWAYS transcribe audio in 'on' and 'monitor' modes (so conversations are readable)
     if (audioMediaId || audioMediaUrl) {

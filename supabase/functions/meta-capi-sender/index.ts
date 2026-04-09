@@ -7,6 +7,7 @@ import { corsHeaders } from '../_shared/cors.ts'
 async function normalizeAndHash(value: string | undefined | null): Promise<string | null> {
   if (!value || value === 'null') return null;
   let clean = String(value).toLowerCase().trim();
+  clean = clean.normalize('NFD').replace(/[\u0300-\u036f]/g, ''); // Quitar acentos (Meta requirement)
   clean = clean.replace(/\+/g, '').replace(/\s/g, ''); 
   
   const encoder = new TextEncoder();
@@ -47,17 +48,15 @@ serve(async (req) => {
         event_id: eventData.event_id || `samurai_ev_${Date.now()}`,
         user_data: userData,
         custom_data: {
+           source: 'samurai_auto',
            ...eventData.custom_data,
-           currency: eventData.currency || 'MXN',
-           value: eventData.value || 0,
-           source: 'samurai_kernel'
         },
         action_source: 'chat',
       }],
       ...(test_event_code && { test_event_code }),
     };
 
-    const url = `https://graph.facebook.com/v19.0/${pixel_id}/events?access_token=${access_token}`;
+    const url = `https://graph.facebook.com/v21.0/${pixel_id}/events?access_token=${access_token}`;
     const response = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
