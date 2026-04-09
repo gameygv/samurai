@@ -20,7 +20,7 @@ serve(async (req: Request): Promise<Response> => {
     // deno-lint-ignore no-explicit-any
     let payload: any;
     try { payload = JSON.parse(payloadText); } catch (_e) { return new Response("Invalid JSON", { status: 400 }); }
-    
+
     let phone: string | undefined, text = '', pushName = 'Cliente WA', messageId: string | null = null;
     let actualChannelId = channelIdParam;
     let isFromMe = false;
@@ -105,21 +105,68 @@ serve(async (req: Request): Promise<Response> => {
             if (ch) actualChannelId = ch.id;
         }
     } else {
+        // Gowa: solo procesar eventos de mensaje (entrante y saliente)
+        const gowaEvent = payload.event;
+        if (gowaEvent && gowaEvent !== 'message' && gowaEvent !== 'send_message') return new Response('ok', { status: 200 });
+
         const p = payload.payload || payload.data || payload;
         isFromMe = p.is_from_me || p.fromMe || p.key?.fromMe || false;
-        phone = p.remoteJid || p.key?.remoteJid || p.from;
+        // Gowa isFromMe: from=dispositivo propio, chat_id=cliente. Usar chat_id para buscar lead.
+        phone = isFromMe ? (p.chat_id || p.from) : (p.remoteJid || p.key?.remoteJid || p.from);
         if (!phone) return new Response('ok', { status: 200 });
         const msgContent = p.message || {};
 
-        // S7.1: Detectar tipo de media en Gowa/Evolution
-        if (msgContent.audioMessage) {
+        // Gowa: extraer nombre del contacto (campo from_name en payload Gowa)
+        pushName = p.from_name || p.pushName || p.push_name || 'Lead WhatsApp';
+
+        // Gowa multi-device: rutear por device_id (JID) → buscar canal por phone_number
+        // device_id viene como "5214771172736@s.whatsapp.net", phone_number se guarda como "5214771172736"
+        const deviceId = payload.device_id || p.device_id;
+        if (deviceId && !actualChannelId) {
+            const devicePhone = String(deviceId).split('@')[0];
+            const { data: ch } = await supabase.from('whatsapp_channels')
+                .select('id').eq('phone_number', devicePhone).maybeSingle();
+            if (ch) actualChannelId = ch.id;
+        }
+
+        // Resolver URL base del canal Gowa para media relativas
+        const resolveGowaMedia = async (relativePath: string): Promise<string> => {
+            // Quitar "; codecs=opus" u otros sufijos del path
+            const cleanPath = relativePath.split(';')[0].trim();
+            if (cleanPath.startsWith('http')) return cleanPath;
+            // Buscar api_url del canal para construir URL completa
+            if (actualChannelId) {
+                const { data: chUrl } = await supabase.from('whatsapp_channels')
+                    .select('api_url').eq('id', actualChannelId).maybeSingle();
+                if (chUrl?.api_url) {
+                    let base = chUrl.api_url;
+                    if (base.endsWith('/')) base = base.slice(0, -1);
+                    return `${base}/${cleanPath}`;
+                }
+            }
+            return cleanPath;
+        };
+
+        // S7.1: Detectar tipo de media — Gowa nativo (p.audio, p.image, p.video, p.document)
+        // y fallback Evolution API (msgContent.audioMessage, msgContent.imageMessage)
+        if (p.audio) {
+            text = '[Nota de Voz]';
+            audioMediaUrl = await resolveGowaMedia(p.audio);
+        } else if (msgContent.audioMessage) {
             text = '[Nota de Voz]';
             audioMediaUrl = msgContent.audioMessage.url || null;
+        } else if (p.image) {
+            text = p.body || '[Imagen]';
+            imageMediaUrl = await resolveGowaMedia(p.image);
         } else if (msgContent.imageMessage) {
             text = msgContent.imageMessage.caption || '[Imagen]';
             imageMediaUrl = msgContent.imageMessage.url || null;
+        } else if (p.video) {
+            text = p.body || '[Video]';
+        } else if (p.document) {
+            text = p.body || '[Documento]';
         } else {
-            text = p.body || msgContent.conversation || msgContent.extendedTextMessage?.text || msgContent.videoMessage?.caption || msgContent.documentMessage?.caption || msgContent.buttonsResponseMessage?.selectedDisplayText || '[Mensaje]';
+            text = p.body || p.text || msgContent.conversation || msgContent.extendedTextMessage?.text || msgContent.videoMessage?.caption || msgContent.documentMessage?.caption || msgContent.buttonsResponseMessage?.selectedDisplayText || '[Mensaje]';
         }
         messageId = p.id || p.key?.id;
     }
@@ -162,10 +209,16 @@ serve(async (req: Request): Promise<Response> => {
         await supabase.from('activity_logs').insert({
             action: 'CREATE', resource: 'LEADS', description: `Lead entrante (${pushName}). Etapa BAJO.${routeInfo}`, status: 'OK'
         });
+    } else if (isFromMe) {
+        // Mensaje saliente del asesor desde teléfono: guardar como HUMANO sin mutar lead ni activar IA
+        // deno-lint-ignore no-explicit-any
+        const asesorInsert: Record<string, any> = { lead_id: lead.id, emisor: 'HUMANO', mensaje: text, platform: 'WHATSAPP' };
+        if (messageId) asesorInsert.message_id = messageId;
+        if (audioMediaUrl) asesorInsert.metadata = { mediaUrl: audioMediaUrl, mediaType: 'audio' };
+        else if (imageMediaUrl) asesorInsert.metadata = { mediaUrl: imageMediaUrl, mediaType: 'image' };
+        await supabase.from('conversaciones').insert(asesorInsert);
+        return new Response('ok', { status: 200, headers: corsHeaders });
     } else {
-        // Mensajes salientes (isFromMe) no deben mutar el lead
-        if (isFromMe) return new Response('ok', { status: 200 });
-
         const updates: Record<string, unknown> = { last_message_at: new Date().toISOString(), followup_stage: 0 };
         if (actualChannelId) updates.channel_id = actualChannelId;
 
@@ -181,8 +234,15 @@ serve(async (req: Request): Promise<Response> => {
     }
 
     // Insertar mensaje del cliente con wamid para deduplicación (S2.2)
-    const clientInsert: Record<string, string> = { lead_id: lead.id, emisor: 'CLIENTE', mensaje: text, platform: 'WHATSAPP' };
+    // deno-lint-ignore no-explicit-any
+    const clientInsert: Record<string, any> = { lead_id: lead.id, emisor: 'CLIENTE', mensaje: text, platform: 'WHATSAPP' };
     if (messageId) clientInsert.message_id = messageId;
+    // Guardar media URLs en metadata para que el chatview pueda renderizar audio/imagen
+    if (audioMediaUrl || audioMediaId) {
+        clientInsert.metadata = { mediaUrl: audioMediaUrl || null, mediaId: audioMediaId || null, mediaType: 'audio' };
+    } else if (imageMediaUrl || imageMediaId) {
+        clientInsert.metadata = { mediaUrl: imageMediaUrl || null, mediaId: imageMediaId || null, mediaType: 'image' };
+    }
     const { error: insertError2 } = await supabase.from('conversaciones').insert(clientInsert);
     if (insertError2) {
         if (insertError2.code === '23505') {
@@ -220,16 +280,21 @@ serve(async (req: Request): Promise<Response> => {
     // ALWAYS run analyze-leads in 'on' and 'monitor' modes (extracts data + sends CAPI)
     supabase.functions.invoke('analyze-leads', { body: { lead_id: lead.id } }).catch(() => {});
 
+    // ALWAYS transcribe audio in 'on' and 'monitor' modes (so conversations are readable)
+    if (audioMediaId || audioMediaUrl) {
+        supabase.functions.invoke('transcribe-audio', {
+            body: { media_id: audioMediaId || null, media_url: audioMediaUrl || null, lead_id: lead.id, message_id: messageId, channel_id: actualChannelId, sender_phone: senderPhone }
+        }).catch((err) => console.error('transcribe-audio fire error:', err));
+    }
+
     // AI response only in 'on' mode + global not paused + lead not paused
     const { data: globalConfig } = await supabase.from('app_config').select('value').eq('key', 'global_ai_status').maybeSingle();
     const aiEnabled = channelAiMode === 'on' && globalConfig?.value !== 'paused' && !lead.ai_paused;
 
     if (aiEnabled) {
         if (audioMediaId || audioMediaUrl) {
-            // S4.1 + S7.1: Audio detectado — fire-and-forget a transcribe-audio
-            supabase.functions.invoke('transcribe-audio', {
-                body: { media_id: audioMediaId || null, media_url: audioMediaUrl || null, lead_id: lead.id, message_id: messageId, channel_id: actualChannelId }
-            }).catch((err) => console.error('transcribe-audio fire error:', err));
+            // Audio ya se envió a transcribir arriba, no invocar process-samurai-response aquí
+            // transcribe-audio lo invoca después de transcribir
         } else {
             // Llamar al procesador IA con fetch directo
             try {

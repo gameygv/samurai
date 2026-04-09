@@ -38,10 +38,16 @@ const Archive = () => {
             });
         }
     }
+    // Realtime: refrescar archivo cuando llegan mensajes nuevos o leads cambian
+    const archiveChannel = supabase.channel('archive-watch')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'leads' }, () => fetchArchive(false))
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'conversaciones' }, () => fetchArchive(false))
+      .subscribe();
+    return () => { supabase.removeChannel(archiveChannel); };
   }, [user, isManager]);
 
-  const fetchArchive = async () => {
-    setLoading(true);
+  const fetchArchive = async (showLoader = true) => {
+    if (showLoader) setLoading(true);
     try {
       let query = supabase.from('leads').select('*, conversaciones(id)').order('last_message_at', { ascending: false });
       
@@ -54,7 +60,7 @@ const Archive = () => {
       if (error) throw error;
       setConversations(data || []);
     } finally {
-      setLoading(false);
+      if (showLoader) setLoading(false);
     }
   };
 

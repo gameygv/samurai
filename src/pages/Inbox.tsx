@@ -60,8 +60,14 @@ const Inbox = () => {
     fetchQuickActions();
     if (user) fetchTags();
     
-    const channel = supabase.channel('inbox-leads-watch').on('postgres_changes', { event: '*', schema: 'public', table: 'leads' }, () => fetchLeads(false)).subscribe();
-    return () => { supabase.removeChannel(channel); };
+    const leadsChannel = supabase.channel('inbox-leads-watch')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'leads' }, () => fetchLeads(false))
+      .subscribe();
+    // Suscripción a conversaciones: refrescar lista cuando llega cualquier mensaje nuevo
+    const convoChannel = supabase.channel('inbox-convos-watch')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'conversaciones' }, () => fetchLeads(false))
+      .subscribe();
+    return () => { supabase.removeChannel(leadsChannel); supabase.removeChannel(convoChannel); };
   }, [user]);
 
   useEffect(() => {

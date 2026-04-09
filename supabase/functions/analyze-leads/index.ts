@@ -33,25 +33,42 @@ serve(async (req: Request): Promise<Response> => {
 
     if (!apiKey) return new Response(JSON.stringify({ message: 'No API key' }), { headers: corsHeaders });
 
+    // Obtener últimos 10 mensajes (cliente + asesor) para contexto completo de la conversación
     const { data: lastMessages } = await supabase.from('conversaciones')
       .select('mensaje, emisor')
       .eq('lead_id', lead.id)
       .order('created_at', { ascending: false })
-      .limit(3);
+      .limit(10);
 
-    const clientMessages = (lastMessages || []).filter(m => m.emisor === 'CLIENTE').map(m => m.mensaje).join('\n');
-    if (!clientMessages) return new Response(JSON.stringify({ message: 'No client messages' }), { headers: corsHeaders });
+    if (!lastMessages || lastMessages.length === 0) return new Response(JSON.stringify({ message: 'No messages' }), { headers: corsHeaders });
 
-    const analysisPrompt = `Analiza este mensaje de cliente y extrae:
-    1. Ciudad (si la menciona)
-    2. Email (si lo menciona)
-    3. Código postal (cp): si el cliente menciona un código postal (5 dígitos numéricos, ej. "06600", "45050"). Si no lo menciona, null.
-    4. Intención de compra: Responde ESTRICTAMENTE con una de estas tres palabras: "BAJO", "MEDIO" o "ALTO". (Nunca respondas PERDIDO).
+    // Construir conversación con roles para que la IA entienda el contexto completo
+    const chatContext = lastMessages.reverse().map(m => {
+      const role = m.emisor === 'CLIENTE' ? 'CLIENTE' : 'ASESOR';
+      return `${role}: ${m.mensaje}`;
+    }).join('\n');
 
-    Mensaje:
-    ${clientMessages}
+    const analysisPrompt = `Eres un analista de ventas. Analiza esta conversación de WhatsApp entre un CLIENTE y un ASESOR de una escuela de talleres de cuencoterapia.
 
-    Responde en JSON exacto: {"ciudad": "", "email": "", "cp": null, "intent": "BAJO"}`;
+CONVERSACIÓN:
+${chatContext}
+
+EXTRAE esta información del CLIENTE (no del asesor):
+1. ciudad: Ciudad donde vive el cliente (si la menciona). null si no.
+2. estado: Estado/provincia (si lo menciona, ej. "Jalisco", "CDMX", "Querétaro"). null si no.
+3. email: Email del cliente. null si no.
+4. cp: Código postal (5 dígitos). null si no.
+5. servicio_interes: Qué servicio/producto le interesa (ej: "taller de cuencoterapia", "curso nivel 1", "retiro"). null si no se identifica.
+6. intent: Clasifica la intención de compra del cliente según estas SEÑALES ESPECÍFICAS:
+
+   BAJO — Señales: primer contacto genérico, "info por favor", "qué ofrecen", solo saluda, pregunta sin compromiso.
+   MEDIO — Señales: pregunta por PRECIOS, horarios, fechas, ubicación del taller, disponibilidad, requisitos, "cuánto cuesta", "cuándo es el próximo".
+   ALTO — Señales: quiere PAGAR o INSCRIBIRSE, pide datos bancarios/cuenta, menciona apartar lugar, pregunta por descuentos/promociones, "quiero inscribirme", "cómo pago", "me aparto", envía comprobante.
+
+   Responde ESTRICTAMENTE: "BAJO", "MEDIO" o "ALTO". NUNCA respondas "PERDIDO" ni "GANADO".
+
+Responde en JSON exacto:
+{"ciudad": null, "estado": null, "email": null, "cp": null, "servicio_interes": null, "intent": "BAJO"}`;
 
     const aiRes = await fetch("https://api.openai.com/v1/chat/completions", {
       method: 'POST',
@@ -84,8 +101,10 @@ serve(async (req: Request): Promise<Response> => {
       }
       
       if (parsed.ciudad && parsed.ciudad.length > 2) updates.ciudad = parsed.ciudad;
+      if (parsed.estado && parsed.estado.length > 2) updates.estado = parsed.estado;
       if (parsed.email && parsed.email.includes('@')) updates.email = parsed.email;
       if (parsed.cp && /^\d{5}$/.test(String(parsed.cp))) updates.cp = String(parsed.cp);
+      if (parsed.servicio_interes && parsed.servicio_interes.length > 2) updates.servicio_interes = parsed.servicio_interes;
 
       // Doble validación final
       if (updates.buying_intent === 'PERDIDO') updates.buying_intent = 'BAJO';
@@ -100,7 +119,26 @@ serve(async (req: Request): Promise<Response> => {
       const metaPixelId = Deno.env.get('META_PIXEL_ID') || configMap.meta_pixel_id;
       const metaAccessToken = Deno.env.get('META_ACCESS_TOKEN') || configMap.meta_access_token;
 
-      if (newIntentLevel > oldIntentLevel && metaPixelId && metaAccessToken) {
+      // Per-channel CAPI toggle: skip CAPI for test/dev channels
+      let capiEnabled = true;
+      if (lead.channel_id) {
+          const { data: chCapi } = await supabase.from('whatsapp_channels')
+              .select('capi_enabled').eq('id', lead.channel_id).maybeSingle();
+          if (chCapi?.capi_enabled === false) capiEnabled = false;
+      }
+
+      if (newIntentLevel > oldIntentLevel && metaPixelId && metaAccessToken && capiEnabled) {
+        // Mapear transición de embudo → evento CAPI estándar de Meta
+        // BAJO→MEDIO: ViewContent (muestra interés real en producto)
+        // →ALTO: InitiateCheckout (intención de compra clara)
+        // Nuevo lead (BAJO): Lead (primer contacto)
+        const capiEventMap: Record<string, string> = {
+          'MEDIO': 'ViewContent',
+          'ALTO': 'InitiateCheckout'
+        };
+        const capiEventName = capiEventMap[updates.buying_intent] || 'Lead';
+        const eventTimestamp = Math.floor(Date.now() / 1000);
+
         try {
           await supabase.functions.invoke('meta-capi-sender', {
             body: {
@@ -110,8 +148,8 @@ serve(async (req: Request): Promise<Response> => {
                 test_event_code: configMap.meta_test_event_code || undefined
               },
               eventData: {
-                event_name: 'Lead',
-                event_id: `samurai_lead_${lead.id}_${updates.buying_intent}`,
+                event_name: capiEventName,
+                event_id: `samurai_${lead.id}_${capiEventName}_${eventTimestamp}`,
                 lead_id: lead.id,
                 user_data: {
                   ph: lead.telefono,
@@ -119,18 +157,68 @@ serve(async (req: Request): Promise<Response> => {
                   ln: lead.nombre?.split(' ').slice(1).join(' ') || undefined,
                   em: updates.email || lead.email || undefined,
                   ct: updates.ciudad || lead.ciudad || undefined,
-                  country: 'mx'
+                  st: updates.estado || lead.estado || undefined,
+                  zp: updates.cp || lead.cp || undefined,
+                  country: 'mx',
+                  external_id: lead.id
                 },
                 custom_data: {
                   source: 'samurai_auto',
-                  content_name: `intent_${lead.buying_intent}_to_${updates.buying_intent}`
+                  content_name: updates.servicio_interes || lead.servicio_interes || undefined,
+                  content_category: 'talleres_cuencoterapia',
+                  funnel_stage: updates.buying_intent,
+                  lead_score: lead.lead_score || lead.confidence_score || undefined,
+                  agent_id: lead.assigned_to || undefined,
+                  origin_channel: 'whatsapp_gowa',
+                  psychographic_segment: lead.perfil_psicologico || undefined,
+                  main_pain: lead.main_pain || undefined
                 }
               }
             }
           });
+
+          await supabase.from('activity_logs').insert({
+            action: 'CAPI', resource: 'SYSTEM',
+            description: `📡 CAPI ${capiEventName}: ${lead.nombre} (${lead.buying_intent}→${updates.buying_intent})`,
+            status: 'OK'
+          });
         } catch (capiErr) {
           console.error('CAPI auto error:', capiErr);
         }
+      }
+
+      // Enviar evento Lead para leads NUEVOS (primera vez que se analiza, intent = BAJO)
+      if (oldIntentLevel === 0 && newIntentLevel === 0 && !lead.capi_lead_event_sent_at && metaPixelId && metaAccessToken && capiEnabled) {
+        try {
+          const eventTimestamp = Math.floor(Date.now() / 1000);
+          await supabase.functions.invoke('meta-capi-sender', {
+            body: {
+              config: { pixel_id: metaPixelId, access_token: metaAccessToken, test_event_code: configMap.meta_test_event_code || undefined },
+              eventData: {
+                event_name: 'Lead',
+                event_id: `samurai_${lead.id}_Lead_${eventTimestamp}`,
+                lead_id: lead.id,
+                user_data: {
+                  ph: lead.telefono,
+                  fn: lead.nombre?.split(' ')[0],
+                  ln: lead.nombre?.split(' ').slice(1).join(' ') || undefined,
+                  ct: updates.ciudad || lead.ciudad || undefined,
+                  country: 'mx',
+                  external_id: lead.id
+                },
+                custom_data: {
+                  source: 'samurai_auto',
+                  content_name: updates.servicio_interes || lead.servicio_interes || 'new_lead',
+                  content_category: 'talleres_cuencoterapia',
+                  funnel_stage: 'BAJO',
+                  origin_channel: 'whatsapp_gowa',
+                  agent_id: lead.assigned_to || undefined
+                }
+              }
+            }
+          });
+          await supabase.from('leads').update({ capi_lead_event_sent_at: new Date().toISOString() }).eq('id', lead.id);
+        } catch (_) {}
       }
 
       // S5.2: Routing — assign agent to lead if not yet assigned

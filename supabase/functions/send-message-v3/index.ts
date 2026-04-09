@@ -48,8 +48,8 @@ serve(async (req: Request): Promise<Response> => {
     const provider = channel.provider || 'meta';
     let cleanPhone = phone.replace(/\D/g, '');
 
-    // CORRECCIÓN CRÍTICA MÉXICO — aplica para todos los providers (S5.4)
-    if (cleanPhone.startsWith('521') && cleanPhone.length === 13) {
+    // CORRECCIÓN MÉXICO — solo para Meta Cloud API (Gowa usa formato WhatsApp nativo con 521)
+    if (provider === 'meta' && cleanPhone.startsWith('521') && cleanPhone.length === 13) {
         cleanPhone = '52' + cleanPhone.substring(3);
     }
 

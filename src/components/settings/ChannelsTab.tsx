@@ -108,6 +108,19 @@ export const ChannelsTab = () => {
     }
   };
 
+  const handleToggleCapi = async (channelId: string, currentValue: boolean) => {
+    const newVal = !currentValue;
+    const tid = toast.loading(newVal ? "Activando CAPI..." : "Desactivando CAPI...");
+    try {
+      const { error } = await supabase.from('whatsapp_channels').update({ capi_enabled: newVal } as any).eq('id', channelId);
+      if (error) throw error;
+      setChannels(channels.map(c => c.id === channelId ? { ...c, capi_enabled: newVal } : c));
+      toast.success(newVal ? "Meta CAPI activado para este canal." : "Meta CAPI desactivado — no enviará eventos.", { id: tid });
+    } catch (err: any) {
+      toast.error("Error: " + err.message, { id: tid });
+    }
+  };
+
   const handleAddChannel = () => {
     const existingGowa = channels.find(c => c.provider === 'gowa' && c.api_key && !c.is_new);
     setChannels([...channels, {
@@ -245,9 +258,17 @@ export const ChannelsTab = () => {
                            </SelectContent>
                          </Select>
                        )}
+                       {ch.is_active !== false && (
+                         <div className="flex items-center gap-1.5 bg-slate-950/50 px-2 py-1 rounded-lg border border-slate-800">
+                           <Switch checked={ch.capi_enabled !== false} onCheckedChange={() => handleToggleCapi(ch.id, ch.capi_enabled !== false)} />
+                           <span className={cn("text-[9px] font-bold uppercase tracking-widest", ch.capi_enabled !== false ? "text-blue-400" : "text-slate-500")}>
+                             CAPI
+                           </span>
+                         </div>
+                       )}
                      </div>
                   )}
-                  
+
                   <div className="flex-1 min-w-0 flex flex-col">
                      <Label className={cn("text-[10px] font-bold uppercase tracking-widest mb-1", !ch.name ? "text-red-400 animate-pulse" : "text-slate-500")}>
                         {ch.is_new ? "🚨 Ponle un nombre aquí abajo ⬇️" : "Nombre Identificador"}

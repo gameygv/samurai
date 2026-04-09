@@ -83,6 +83,10 @@ const Pipeline = () => {
      const tid = toast.loading("Actualizando etapa...");
      try {
         await supabase.from('leads').update({ buying_intent: targetIntent }).eq('id', draggedLeadId);
+        // Si se movió a COMPRADO o PERDIDO, procesar evento CAPI (el trigger de DB lo encola)
+        if (targetIntent === 'COMPRADO' || targetIntent === 'PERDIDO') {
+           supabase.functions.invoke('process-capi-purchase').catch(() => {});
+        }
         toast.success("Lead movido exitosamente.", { id: tid });
         fetchLeads();
      } catch (err) { toast.error("Error al mover lead.", { id: tid }); }
