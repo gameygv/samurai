@@ -48,27 +48,29 @@ serve(async (req: Request): Promise<Response> => {
       return `${role}: ${m.mensaje}`;
     }).join('\n');
 
-    const analysisPrompt = `Eres un analista de ventas. Analiza esta conversación de WhatsApp entre un CLIENTE y un ASESOR de una escuela de talleres de cuencoterapia.
+    // Leer prompt desde Cerebro Core (editable en UI) con fallback hardcodeado
+    const customPrompt = configMap.prompt_analista_datos as string | undefined;
+    const basePrompt = customPrompt || `Eres el Analista de Datos de Samurai. Tu mision es leer el historial del chat y extraer informacion del cliente en JSON exacto para alimentar nuestro CRM y la Conversions API (CAPI) de Meta. NUNCA inventes lo que no sepas, usa null si no estas seguro.
 
-CONVERSACIÓN:
+1. Logica de Eventos de Meta (event_name):
+   Lead: El usuario acaba de escribir por primera vez pidiendo informacion.
+   ViewContent: El usuario ya dio su ciudad, mostro interes real y encaja en el perfil (pregunta precios, horarios, fechas, disponibilidad).
+   InitiateCheckout: El usuario esta en la fase de registro, dio su correo o pidio datos bancarios, quiere pagar o inscribirse.
+
+2. Logica de Pipeline de Ventas (pipeline_stage):
+   BAJO: Si el cliente acaba de escribir y aun faltan datos (nombre, ciudad). Senales: primer contacto generico, "info por favor", solo saluda.
+   MEDIO: Si el cliente ya mostro interes, dijo su ciudad y pregunta por precios, horarios, fechas, ubicacion, requisitos, disponibilidad.
+   ALTO: Si el cliente ya dio su correo, pidio datos bancarios, quiere inscribirse, apartar lugar, pregunta por descuentos o envio comprobante.
+
+Responde ESTRICTAMENTE con "BAJO", "MEDIO" o "ALTO" en intent. NUNCA respondas "PERDIDO" ni "GANADO".`;
+
+    const analysisPrompt = `${basePrompt}
+
+CONVERSACION:
 ${chatContext}
 
-EXTRAE esta información del CLIENTE (no del asesor):
-1. ciudad: Ciudad donde vive el cliente (si la menciona). null si no.
-2. estado: Estado/provincia (si lo menciona, ej. "Jalisco", "CDMX", "Querétaro"). null si no.
-3. email: Email del cliente. null si no.
-4. cp: Código postal (5 dígitos). null si no.
-5. servicio_interes: Qué servicio/producto le interesa (ej: "taller de cuencoterapia", "curso nivel 1", "retiro"). null si no se identifica.
-6. intent: Clasifica la intención de compra del cliente según estas SEÑALES ESPECÍFICAS:
-
-   BAJO — Señales: primer contacto genérico, "info por favor", "qué ofrecen", solo saluda, pregunta sin compromiso.
-   MEDIO — Señales: pregunta por PRECIOS, horarios, fechas, ubicación del taller, disponibilidad, requisitos, "cuánto cuesta", "cuándo es el próximo".
-   ALTO — Señales: quiere PAGAR o INSCRIBIRSE, pide datos bancarios/cuenta, menciona apartar lugar, pregunta por descuentos/promociones, "quiero inscribirme", "cómo pago", "me aparto", envía comprobante.
-
-   Responde ESTRICTAMENTE: "BAJO", "MEDIO" o "ALTO". NUNCA respondas "PERDIDO" ni "GANADO".
-
-Responde en JSON exacto:
-{"ciudad": null, "estado": null, "email": null, "cp": null, "servicio_interes": null, "intent": "BAJO"}`;
+Responde UNICAMENTE con este JSON exacto (sin acentos en las claves):
+{"nombre": null, "apellido": null, "email": null, "ciudad": null, "estado": null, "cp": null, "servicio_interes": null, "intent": "BAJO"}`;
 
     const aiRes = await fetch("https://api.openai.com/v1/chat/completions", {
       method: 'POST',
@@ -100,6 +102,8 @@ Responde en JSON exacto:
          updates.buying_intent = allowedIntents.includes(lead.buying_intent) ? lead.buying_intent : 'BAJO';
       }
       
+      // Extraer datos del cliente detectados por la IA
+      if (parsed.nombre && parsed.nombre.length > 1 && lead.nombre === 'Lead WhatsApp') updates.nombre = parsed.nombre + (parsed.apellido ? ` ${parsed.apellido}` : '');
       if (parsed.ciudad && parsed.ciudad.length > 2) updates.ciudad = parsed.ciudad;
       if (parsed.estado && parsed.estado.length > 2) updates.estado = parsed.estado;
       if (parsed.email && parsed.email.includes('@')) updates.email = parsed.email;
@@ -169,7 +173,7 @@ Responde en JSON exacto:
                   funnel_stage: updates.buying_intent,
                   lead_score: lead.lead_score || lead.confidence_score || undefined,
                   agent_id: lead.assigned_to || undefined,
-                  origin_channel: 'whatsapp_gowa',
+                  origin_channel: 'whatsapp',
                   psychographic_segment: lead.perfil_psicologico || undefined,
                   main_pain: lead.main_pain || undefined
                 }
@@ -211,7 +215,7 @@ Responde en JSON exacto:
                   content_name: updates.servicio_interes || lead.servicio_interes || 'new_lead',
                   content_category: 'talleres_cuencoterapia',
                   funnel_stage: 'BAJO',
-                  origin_channel: 'whatsapp_gowa',
+                  origin_channel: 'whatsapp',
                   agent_id: lead.assigned_to || undefined
                 }
               }

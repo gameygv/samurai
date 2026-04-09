@@ -64,7 +64,7 @@ serve(async (req: Request): Promise<Response> => {
                 value: isPurchase ? 0 : undefined,
                 funnel_stage: funnelStage,
                 previous_stage: data.previous_intent || undefined,
-                origin_channel: 'whatsapp_gowa',
+                origin_channel: 'whatsapp',
                 agent_id: data.assigned_to || undefined
               }
             }
