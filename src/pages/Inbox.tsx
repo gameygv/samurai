@@ -161,16 +161,22 @@ const Inbox = () => {
     setSending(true);
     try {
       const cmd = text.trim().toUpperCase();
-      if (cmd === '#STOP') {
+      if (cmd === '#STOP' || cmd === '#OFF') {
          await supabase.from('leads').update({ ai_paused: true }).eq('id', activeLead.id);
          await supabase.from('conversaciones').insert({ lead_id: activeLead.id, mensaje: `IA Pausada manualmente.`, emisor: 'HUMANO', platform: 'PANEL_INTERNO' });
+         if (user?.id) {
+           await supabase.from('app_config').upsert({ key: `agent_ai_status_${user.id}`, value: JSON.stringify({ enabled: false, updated_at: new Date().toISOString(), source: 'agent' }), category: 'AI_CONTROL' }, { onConflict: 'key' });
+         }
          toast.success(`Samurai Pausado ⏸`);
          refetchMessages();
          return;
       }
-      if (cmd === '#START') {
+      if (cmd === '#START' || cmd === '#ON') {
          await supabase.from('leads').update({ ai_paused: false }).eq('id', activeLead.id);
          await supabase.from('conversaciones').insert({ lead_id: activeLead.id, mensaje: `IA Activada manualmente.`, emisor: 'HUMANO', platform: 'PANEL_INTERNO' });
+         if (user?.id) {
+           await supabase.from('app_config').upsert({ key: `agent_ai_status_${user.id}`, value: JSON.stringify({ enabled: true, updated_at: new Date().toISOString(), source: 'agent' }), category: 'AI_CONTROL' }, { onConflict: 'key' });
+         }
          toast.success(`Samurai Activado ✅`);
          refetchMessages();
          return;

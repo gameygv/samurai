@@ -39,19 +39,46 @@ serve(async (req: Request): Promise<Response> => {
     let kbContext = "\n=== CONOCIMIENTO TÉCNICO (PDFs/NOTAS) ===\n";
     kbDocs?.forEach(d => { if(d.content) kbContext += `\n[RECURSO: ${d.title}]\n${d.content.substring(0, 1000)}\n`; });
 
-    // --- CARGAR BÓVEDA VISUAL (POSTERS) — filtrar expirados por valid_until o presale_ends_at ---
-    const { data: mediaAssets } = await supabaseClient.from('media_assets').select('title, url, ai_instructions, ocr_content, presale_price, presale_ends_at, normal_price, nivel, profesor, sede, friday_concert, category').neq('category', 'PAYMENT').or(`valid_until.is.null,valid_until.gte.${today}`);
-    let mediaContext = "\n=== BÓVEDA VISUAL (POSTERS) ===\nINSTRUCCIÓN CRÍTICA: Para enviar un poster usa EXACTAMENTE este formato en tu respuesta: <<MEDIA:url_del_poster>>\n";
+    // --- CARGAR BÓVEDA VISUAL (Media Manager: General, Promoción, Aviso) ---
+    const { data: mediaAssets } = await supabaseClient.from('media_assets').select('title, description, url, ai_instructions, ocr_content, start_date, valid_until, category').in('category', ['GENERAL', 'PROMOCION', 'AVISO']).or(`valid_until.is.null,valid_until.gte.${today}`);
+    let mediaContext = "\n=== BÓVEDA VISUAL (MEDIA) ===\nINSTRUCCIÓN CRÍTICA: Para enviar una imagen usa EXACTAMENTE este formato en tu respuesta: <<MEDIA:url_de_imagen>>\n";
     mediaAssets?.forEach(m => {
-      let meta = `- ${m.title}: ${m.ai_instructions} -> <<MEDIA:${m.url}>>`;
-      if (m.sede) meta += ` | Sede: ${m.sede}`;
-      if (m.nivel) meta += ` | Nivel: ${m.nivel}`;
-      if (m.profesor) meta += ` | Profesor: ${m.profesor}`;
-      if (m.presale_price && m.presale_ends_at && m.presale_ends_at >= today) meta += ` | PREVENTA: $${m.presale_price} (hasta ${m.presale_ends_at})`;
-      else if (m.normal_price) meta += ` | Precio: $${m.normal_price}`;
-      if (m.friday_concert) meta += ` | Incluye concierto del viernes`;
+      // Skip promotions that haven't started yet
+      if (m.category === 'PROMOCION' && m.start_date && m.start_date > today) return;
+      let meta = `- [${m.category}] ${m.title}: ${m.ai_instructions || 'Sin instrucciones'} -> <<MEDIA:${m.url}>>`;
+      if (m.description) meta += ` | Descripción: ${m.description.substring(0, 200)}`;
+      if (m.valid_until) meta += ` | Vigente hasta: ${m.valid_until}`;
+      if (m.start_date) meta += ` | Inicio: ${m.start_date}`;
       mediaContext += meta + '\n';
-      if (m.ocr_content) mediaContext += `  DETALLE DEL POSTER: ${m.ocr_content.substring(0, 500)}\n`;
+      if (m.ocr_content) mediaContext += `  DETALLE: ${m.ocr_content.substring(0, 500)}\n`;
+    });
+
+    // --- CARGAR CATÁLOGO DE CURSOS Y TALLERES ---
+    const { data: courses } = await supabaseClient.from('courses').select('*').eq('ai_enabled', true).or(`valid_until.is.null,valid_until.gte.${today}`);
+    let coursesContext = "\n=== CATÁLOGO DE CURSOS Y TALLERES ===\nINSTRUCCIÓN: Para enviar el poster de un curso usa <<MEDIA:url_del_poster>>. Ofrece cursos activos basándote en las fechas y precios. Si la preventa está vigente, menciona el precio de preventa y la urgencia. Si sale_closes_at ya pasó, NO ofrezcas ese curso.\n";
+    courses?.forEach(c => {
+      // Skip courses past their sale closing date
+      if (c.sale_closes_at && c.sale_closes_at < today) return;
+      let meta = `- CURSO: ${c.title}`;
+      if (c.description) meta += ` | ${c.description.substring(0, 200)}`;
+      meta += ` -> <<MEDIA:${c.poster_url}>>`;
+      if (c.sede) meta += ` | Sede: ${c.sede}`;
+      if (c.nivel) meta += ` | Nivel: ${c.nivel}`;
+      if (c.profesor) meta += ` | Profesor: ${c.profesor}`;
+      if (c.presale_price && c.presale_ends_at && c.presale_ends_at >= today) {
+        meta += ` | PREVENTA: $${c.presale_price} (hasta ${c.presale_ends_at}). Anticipo de $1500 disponible.`;
+      } else if (c.normal_price) {
+        meta += ` | Precio: $${c.normal_price}`;
+      }
+      if (c.sale_closes_at) meta += ` | Cierre de venta: ${c.sale_closes_at}`;
+      if (c.extras) meta += ` | Extras: ${c.extras}`;
+      if (c.session_dates && Array.isArray(c.session_dates) && c.session_dates.length > 0) {
+        const sessions = c.session_dates.map((s: any) => `${s.date} ${s.start_time || ''}-${s.end_time || ''}`).join(', ');
+        meta += ` | Fechas: ${sessions}`;
+      }
+      if (c.ai_instructions) meta += `\n  TRIGGER: ${c.ai_instructions}`;
+      coursesContext += meta + '\n';
+      if (c.ocr_content) coursesContext += `  DETALLE DEL POSTER: ${c.ocr_content.substring(0, 500)}\n`;
     });
 
     // --- EVALUAR CONFIGURACIÓN DE CIERRE Y AGENTE ---
@@ -155,8 +182,9 @@ CUANDO EL CLIENTE MUESTRE INTENCIÓN DE COMPRA, PREGUNTE POR PRECIOS FINALES, M�
         }
       }
 
-      if (contactData?.dieta || contactData?.alergias || contactData?.motivo_curso) {
+      if (contactData?.dieta || contactData?.alergias || contactData?.motivo_curso || contactData?.genero) {
         profileContext = '\n=== PERFIL DEL ALUMNO ===\n';
+        if (contactData.genero) profileContext += `Género: ${contactData.genero}\n`;
         if (contactData.dieta) profileContext += `Dieta: ${contactData.dieta}\n`;
         if (contactData.alergias) profileContext += `Alergias: ${contactData.alergias}\n`;
         if (contactData.motivo_curso) profileContext += `Motivación: ${contactData.motivo_curso}\n`;
@@ -173,6 +201,7 @@ Ciudad: ${lead.ciudad || 'NO PROPORCIONADA'}
 REGLAS ESTRICTAS DE MEMORIA Y VENTAS:
 1. SI EL EMAIL O LA CIUDAD YA ESTÁN CAPTURADOS, NO VUELVAS A PEDIRLOS BAJO NINGUNA CIRCUNSTANCIA.
 2. PAGOS: Si el cliente dice "ya pagué", "listo" o envía una imagen de comprobante, NUNCA le confirmes que el pago está validado o completo. Tu respuesta DEBE SER SIEMPRE: "¡Excelente! He recibido tu confirmación. En breve nuestro sistema automático o un asesor verificará el comprobante y validará tu acceso."
+3. RECOPILACIÓN DE DATOS PERSONALES: Cuando la conversación avance hacia la etapa de cierre (el cliente muestra interés alto o pregunta por precios/inscripción), además del email y ciudad, pregunta de forma natural: dieta (vegetariana, vegana, omnívora, etc.), alergias alimentarias, y con qué género se identifica (hombre, mujer, otro). Hazlo de forma cálida y natural, no como un formulario. Si alguno de estos datos ya está capturado, NO lo preguntes de nuevo.
 `;
 
     const voiceInstruction = `
@@ -200,6 +229,7 @@ ${getConfig('prompt_relearning')}
 ${masterTruth}
 ${kbContext}
 ${mediaContext}
+${coursesContext}
 ${wcContext}
 
 === DATOS DE PAGO BANCARIO ===

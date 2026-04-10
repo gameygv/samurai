@@ -31,7 +31,7 @@ export const EditContactDialog = ({ open, onOpenChange, contact, existingGroups,
   const [formData, setFormData] = useState({
     nombre: '', apellido: '', telefono: '', email: '', ciudad: '', estado: '', cp: '', grupo: 'none', tags: [] as string[],
     academicRecord: [] as any[], internalNotes: [] as any[],
-    dieta: '', alimentacion: '', alergias: '', motivoCurso: ''
+    dieta: '', alimentacion: '', alergias: '', motivoCurso: '', genero: ''
   });
 
   const [catalog, setCatalog] = useState({ courses: [] as any[], locations: [] as any[], teachers: [] as any[] });
@@ -60,7 +60,8 @@ export const EditContactDialog = ({ open, onOpenChange, contact, existingGroups,
         cp: contact.cp || '', grupo: contact.grupo || 'none', tags: contact.tags || [],
         academicRecord: ar, internalNotes: inn,
         dieta: contact.dieta || '', alimentacion: contact.alimentacion || '',
-        alergias: contact.alergias || '', motivoCurso: contact.motivo_curso || ''
+        alergias: contact.alergias || '', motivoCurso: contact.motivo_curso || '',
+        genero: contact.genero || ''
       });
       setNewCourse({ course: '', location: '', teacher: '', date: new Date().toISOString().split('T')[0], nivel: '', asset_id: '', precio_dado: '', tipo_precio: '' });
       setManualMode(false);
@@ -83,10 +84,12 @@ export const EditContactDialog = ({ open, onOpenChange, contact, existingGroups,
   };
 
   const fetchMediaAssets = async () => {
-    const { data } = await supabase.from('media_assets').select('id, title, url, nivel, profesor, sede, presale_price, presale_ends_at, normal_price, category, valid_until').neq('category', 'PAYMENT');
+    // Fetch from courses table (replaced media_assets for academic purposes)
+    const { data } = await supabase.from('courses').select('id, title, poster_url, nivel, profesor, sede, presale_price, presale_ends_at, normal_price, valid_until');
     if (data) {
       const now = new Date().toISOString();
-      const active = data.filter(a => !a.valid_until || a.valid_until > now);
+      const active = data.filter(a => !a.valid_until || a.valid_until > now)
+        .map(a => ({ ...a, url: a.poster_url, category: 'CURSO' }));
       setMediaAssets(active);
     }
   };
@@ -124,10 +127,7 @@ export const EditContactDialog = ({ open, onOpenChange, contact, existingGroups,
   }, {});
 
   const CATEGORY_LABELS: Record<string, string> = {
-    POSTER_PROMO: 'Poster Promocional',
-    CARTEL_GENERAL: 'Cartel General',
-    PROMO_ESPECIAL: 'Promocion Especial',
-    AVISO: 'Aviso',
+    CURSO: 'Curso / Taller',
     OTROS: 'Otros'
   };
 
@@ -190,7 +190,8 @@ export const EditContactDialog = ({ open, onOpenChange, contact, existingGroups,
           email: formData.email, ciudad: formData.ciudad, estado: formData.estado, cp: formData.cp,
           grupo: finalGroup, tags: formData.tags, academic_record: formData.academicRecord, internal_notes: formData.internalNotes,
           dieta: formData.dieta || null, alimentacion: formData.alimentacion || null,
-          alergias: formData.alergias || null, motivo_curso: formData.motivoCurso || null
+          alergias: formData.alergias || null, motivo_curso: formData.motivoCurso || null,
+          genero: formData.genero || null
       }).eq('id', contact.id);
 
       if (contactError) throw contactError;
@@ -442,6 +443,18 @@ export const EditContactDialog = ({ open, onOpenChange, contact, existingGroups,
                    {/* PERFIL DEL ALUMNO */}
                    <div className="space-y-3">
                       <h3 className="text-[10px] font-bold text-amber-400 uppercase tracking-widest flex items-center gap-2"><Heart className="w-3.5 h-3.5"/> Perfil del Alumno</h3>
+                      <div className="space-y-1 mb-3">
+                         <Label className="text-[10px] text-slate-400 uppercase font-bold">Género</Label>
+                         <Select value={formData.genero || '_none_'} onValueChange={v => setFormData({...formData, genero: v === '_none_' ? '' : v})}>
+                            <SelectTrigger className="bg-[#161618] border-[#222225] h-10 rounded-xl text-xs text-slate-200"><SelectValue placeholder="Seleccionar..."/></SelectTrigger>
+                            <SelectContent className="bg-[#121214] border-[#222225] text-white rounded-xl">
+                               <SelectItem value="_none_">Sin especificar</SelectItem>
+                               <SelectItem value="Hombre">Hombre</SelectItem>
+                               <SelectItem value="Mujer">Mujer</SelectItem>
+                               <SelectItem value="Otro">Otro</SelectItem>
+                            </SelectContent>
+                         </Select>
+                      </div>
                       <div className="grid grid-cols-2 gap-3">
                          <div className="space-y-1">
                             <Label className="text-[10px] text-slate-400 uppercase font-bold">Dieta</Label>

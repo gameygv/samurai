@@ -34,8 +34,9 @@ const Campaigns = () => {
   // FILTROS
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedGroup, setSelectedGroup] = useState<string>('ALL');
-  const [selectedCity, setSelectedCity] = useState<string>('ALL'); 
-  const [selectedTags, setSelectedTags] = useState<string[]>([]); 
+  const [selectedCity, setSelectedCity] = useState<string>('ALL');
+  const [selectedGender, setSelectedGender] = useState<string>('ALL');
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
   
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [isMassMessageOpen, setIsMassMessageOpen] = useState(false);
@@ -121,15 +122,16 @@ const Campaigns = () => {
     const matchesSearch = term === '' || nombre.includes(term) || apellido.includes(term) || telefono.includes(term) || email.includes(term);
     const matchesGroup = selectedGroup === 'ALL' || String(c.grupo) === selectedGroup;
     const matchesCity = selectedCity === 'ALL' || String(c.ciudad) === selectedCity;
+    const matchesGender = selectedGender === 'ALL' || String(c.genero || '') === selectedGender;
     const matchesTag = selectedTags.length === 0 || selectedTags.every(t => contactTags.includes(t));
 
-    return matchesSearch && matchesGroup && matchesCity && matchesTag;
+    return matchesSearch && matchesGroup && matchesCity && matchesGender && matchesTag;
   });
 
   const handleToggleSelectAll = () => setSelectedIds(selectedIds.length === filteredContacts.length ? [] : filteredContacts.map(c => c.id));
   const handleToggleSelect = (id: string) => setSelectedIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
 
-  const hasActiveFilters = searchTerm !== '' || selectedGroup !== 'ALL' || selectedCity !== 'ALL' || selectedTags.length > 0;
+  const hasActiveFilters = searchTerm !== '' || selectedGroup !== 'ALL' || selectedCity !== 'ALL' || selectedGender !== 'ALL' || selectedTags.length > 0;
 
   return (
     <Layout>
@@ -235,6 +237,16 @@ const Campaigns = () => {
             <SelectContent className="bg-slate-900 border-slate-800 text-white rounded-xl max-h-[300px]">
               <SelectItem value="ALL">Cualquier Ciudad</SelectItem>
               {cities.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+            </SelectContent>
+          </Select>
+
+          <Select value={selectedGender} onValueChange={setSelectedGender}>
+            <SelectTrigger className="w-[130px] h-10 bg-[#161618] border-[#222225] rounded-xl text-xs text-slate-300"><SelectValue placeholder="Género" /></SelectTrigger>
+            <SelectContent className="bg-slate-900 border-slate-800 text-white rounded-xl">
+              <SelectItem value="ALL">Cualquier Género</SelectItem>
+              <SelectItem value="Hombre">Hombre</SelectItem>
+              <SelectItem value="Mujer">Mujer</SelectItem>
+              <SelectItem value="Otro">Otro</SelectItem>
             </SelectContent>
           </Select>
 

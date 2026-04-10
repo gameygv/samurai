@@ -90,9 +90,9 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
         { icon: Trello, label: 'Pipeline Ventas', path: '/pipeline', roles: ['any'] },
         { icon: MessageCircle, label: 'Radar Leads', path: '/leads', roles: ['any'] },
         { icon: Contact, label: 'Contactos', path: '/contacts', roles: ['any'] },
-        { icon: Megaphone, label: 'Campañas', path: '/campaigns', roles: ['any'] },
         { icon: Tag, label: 'Mis Plantillas', path: '/tools', roles: ['any'] },
         { icon: GraduationCap, label: 'Academia', path: '/academic', roles: ['admin', 'dev', 'gerente'] },
+        { icon: Megaphone, label: 'Campañas', path: '/campaigns', roles: ['admin', 'dev', 'gerente'] },
         { icon: CreditCard, label: 'Pagos & Ventas', path: '/payments', roles: ['any'] },
         { icon: Globe, label: 'Archivo de Chats', path: '/archive', roles: ['any'] },
       ]

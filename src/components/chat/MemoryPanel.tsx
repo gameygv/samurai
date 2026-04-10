@@ -311,9 +311,10 @@ export const MemoryPanel = ({
             followupStage={currentAnalysis?.followup_stage} 
          />
 
-         <PaymentAudit 
-            paymentStatus={currentAnalysis?.payment_status} 
-            onUpdateStatus={handleUpdatePaymentStatus} 
+         <PaymentAudit
+            paymentStatus={currentAnalysis?.payment_status}
+            onUpdateStatus={handleUpdatePaymentStatus}
+            leadId={currentAnalysis?.id}
          />
 
          <IdentityCrm 

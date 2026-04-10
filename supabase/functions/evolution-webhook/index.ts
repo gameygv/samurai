@@ -193,12 +193,24 @@ serve(async (req: Request): Promise<Response> => {
             }
         }
 
+        // Determine initial ai_paused from agent's AI status config (if assigned)
+        let initialAiPaused = false;
+        if (assignedAgent) {
+            const { data: aiStatusCfg } = await supabase.from('app_config').select('value').eq('key', `agent_ai_status_${assignedAgent}`).maybeSingle();
+            if (aiStatusCfg?.value) {
+                try {
+                    const parsed = JSON.parse(aiStatusCfg.value);
+                    initialAiPaused = parsed.enabled === false;
+                } catch (_) {}
+            }
+        }
+
         const { data: nl, error: insertError } = await supabase.from('leads').insert({
            nombre: pushName,
            telefono: senderPhone,
            channel_id: actualChannelId,
            assigned_to: assignedAgent,
-           ai_paused: false,
+           ai_paused: initialAiPaused,
            buying_intent: 'BAJO',
            last_message_at: new Date().toISOString(),
            followup_stage: 0
@@ -297,9 +309,19 @@ serve(async (req: Request): Promise<Response> => {
         }).catch((err) => console.error('transcribe-audio fire error:', err));
     }
 
-    // AI response only in 'on' mode + global not paused + lead not paused
+    // AI response only in 'on' mode + global not paused + lead not paused + agent AI enabled
     const { data: globalConfig } = await supabase.from('app_config').select('value').eq('key', 'global_ai_status').maybeSingle();
-    const aiEnabled = channelAiMode === 'on' && globalConfig?.value !== 'paused' && !lead.ai_paused;
+    let agentAiDisabled = false;
+    if (lead.assigned_to) {
+        const { data: agentAiCfg } = await supabase.from('app_config').select('value').eq('key', `agent_ai_status_${lead.assigned_to}`).maybeSingle();
+        if (agentAiCfg?.value) {
+            try {
+                const parsed = JSON.parse(agentAiCfg.value);
+                if (parsed.enabled === false) agentAiDisabled = true;
+            } catch (_) {}
+        }
+    }
+    const aiEnabled = channelAiMode === 'on' && globalConfig?.value !== 'paused' && !lead.ai_paused && !agentAiDisabled;
 
     if (aiEnabled) {
         if (audioMediaId || audioMediaUrl) {

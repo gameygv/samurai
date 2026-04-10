@@ -6,9 +6,10 @@ import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
-import { 
-  Users as UsersIcon, UserPlus, Loader2, RefreshCw, Shield, Trash2, 
-  Edit3, Save, ArrowRight, UserCheck, Key, ShieldAlert, Network
+import {
+  Users as UsersIcon, UserPlus, Loader2, RefreshCw, Shield, Trash2,
+  Edit3, Save, ArrowRight, UserCheck, Key, ShieldAlert, Network,
+  Bot, BotOff, Clock, Plus, X as XIcon, CalendarDays
 } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription as DialogDesc } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -19,10 +20,21 @@ import { logActivity } from '@/utils/logger';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/context/AuthContext';
 
+const DAYS_OF_WEEK = [
+  { id: 1, name: 'Lunes' }, { id: 2, name: 'Martes' }, { id: 3, name: 'Miércoles' },
+  { id: 4, name: 'Jueves' }, { id: 5, name: 'Viernes' }, { id: 6, name: 'Sábado' }, { id: 0, name: 'Domingo' }
+];
+
+interface TimeRange { start: string; end: string; }
+interface DaySchedule { active: boolean; ranges: TimeRange[]; }
+interface AiSchedule { [dayId: string]: DaySchedule; }
+interface AiStatus { enabled: boolean; updated_at?: string; source?: string; }
+
 const UsersPage = () => {
-  const { user: currentUser } = useAuth();
+  const { user: currentUser, isManager } = useAuth();
   const [users, setUsers] = useState<any[]>([]);
   const [autoRoutingAgents, setAutoRoutingAgents] = useState<string[]>([]);
+  const [aiStatuses, setAiStatuses] = useState<Record<string, AiStatus>>({});
   const [loading, setLoading] = useState(true);
   
   const [createForm, setCreateForm] = useState({ 
@@ -41,6 +53,11 @@ const UsersPage = () => {
   const [transferToId, setTransferToId] = useState('');
   const [deleting, setDeleting] = useState(false);
 
+  // AI Control state for edit dialog
+  const [editAiEnabled, setEditAiEnabled] = useState(false);
+  const [editAiSchedule, setEditAiSchedule] = useState<AiSchedule>({});
+  const [savingAi, setSavingAi] = useState(false);
+
   useEffect(() => { fetchAll(); }, []);
 
   const fetchAll = async () => {
@@ -51,6 +68,17 @@ const UsersPage = () => {
     let routingList: string[] = [];
     if (config?.value) { try { routingList = JSON.parse(config.value); } catch(e){} }
     setAutoRoutingAgents(Array.isArray(routingList) ? routingList : []);
+
+    // Fetch AI status per agent
+    const { data: aiConfigs } = await supabase.from('app_config').select('key, value').like('key', 'agent_ai_status_%');
+    const statusMap: Record<string, AiStatus> = {};
+    if (aiConfigs) {
+      for (const cfg of aiConfigs) {
+        const userId = cfg.key.replace('agent_ai_status_', '');
+        try { statusMap[userId] = JSON.parse(cfg.value); } catch(e) {}
+      }
+    }
+    setAiStatuses(statusMap);
 
     const { data: authRes, error: authErr } = await supabase.functions.invoke('manage-auth-users', {
         body: { action: 'LIST' }
@@ -185,6 +213,76 @@ const UsersPage = () => {
      }
   };
 
+  const loadAiConfig = async (userId: string) => {
+    const { data } = await supabase.from('app_config').select('key, value').in('key', [
+      `agent_ai_status_${userId}`, `agent_ai_schedule_${userId}`
+    ]);
+    let status: AiStatus = { enabled: false };
+    let schedule: AiSchedule = {};
+    if (data) {
+      const statusData = data.find(d => d.key === `agent_ai_status_${userId}`)?.value;
+      const scheduleData = data.find(d => d.key === `agent_ai_schedule_${userId}`)?.value;
+      if (statusData) { try { status = JSON.parse(statusData); } catch(e) {} }
+      if (scheduleData) { try { schedule = JSON.parse(scheduleData); } catch(e) {} }
+    }
+    setEditAiEnabled(Boolean(status.enabled));
+    setEditAiSchedule(schedule);
+  };
+
+  const handleSaveAiConfig = async (userId: string) => {
+    setSavingAi(true);
+    try {
+      await supabase.from('app_config').upsert([
+        { key: `agent_ai_status_${userId}`, value: JSON.stringify({ enabled: editAiEnabled, updated_at: new Date().toISOString(), source: 'admin' }), category: 'AI_CONTROL' },
+        { key: `agent_ai_schedule_${userId}`, value: JSON.stringify(editAiSchedule), category: 'AI_CONTROL' }
+      ], { onConflict: 'key' });
+
+      // Update all leads assigned to this agent
+      await supabase.from('leads').update({ ai_paused: !editAiEnabled })
+        .eq('assigned_to', userId)
+        .not('buying_intent', 'in', '("COMPRADO","PERDIDO")');
+
+      setAiStatuses(prev => ({ ...prev, [userId]: { enabled: editAiEnabled, updated_at: new Date().toISOString(), source: 'admin' } }));
+      toast.success(editAiEnabled ? "IA activada para este agente." : "IA desactivada para este agente.");
+    } catch (err: any) {
+      toast.error("Error al guardar configuración IA: " + err.message);
+    } finally {
+      setSavingAi(false);
+    }
+  };
+
+  const updateDaySchedule = (dayId: number, field: string, value: any) => {
+    setEditAiSchedule(prev => {
+      const dayCfg = prev[dayId.toString()] || { active: false, ranges: [{ start: '09:00', end: '21:00' }] };
+      return { ...prev, [dayId.toString()]: { ...dayCfg, [field]: value } };
+    });
+  };
+
+  const addTimeRange = (dayId: number) => {
+    setEditAiSchedule(prev => {
+      const dayCfg = prev[dayId.toString()] || { active: true, ranges: [] };
+      return { ...prev, [dayId.toString()]: { ...dayCfg, ranges: [...dayCfg.ranges, { start: '14:00', end: '21:00' }] } };
+    });
+  };
+
+  const removeTimeRange = (dayId: number, rangeIdx: number) => {
+    setEditAiSchedule(prev => {
+      const dayCfg = prev[dayId.toString()];
+      if (!dayCfg) return prev;
+      const newRanges = dayCfg.ranges.filter((_, i) => i !== rangeIdx);
+      return { ...prev, [dayId.toString()]: { ...dayCfg, ranges: newRanges } };
+    });
+  };
+
+  const updateTimeRange = (dayId: number, rangeIdx: number, field: 'start' | 'end', value: string) => {
+    setEditAiSchedule(prev => {
+      const dayCfg = prev[dayId.toString()];
+      if (!dayCfg) return prev;
+      const newRanges = dayCfg.ranges.map((r, i) => i === rangeIdx ? { ...r, [field]: value } : r);
+      return { ...prev, [dayId.toString()]: { ...dayCfg, ranges: newRanges } };
+    });
+  };
+
   const getRoleLabel = (role: string) => {
       const r = role?.toLowerCase();
       if (r === 'sales_agent' || r === 'agent' || r === 'sales') return 'Agente de Ventas';
@@ -225,10 +323,11 @@ const UsersPage = () => {
                   <TableHead className="text-slate-400 text-[10px] font-bold tracking-widest">Rol</TableHead>
                   <TableHead className="text-slate-400 text-[10px] font-bold tracking-widest">Territorios</TableHead>
                   <TableHead className="text-slate-400 text-[10px] font-bold tracking-widest">Estado</TableHead>
+                  <TableHead className="text-slate-400 text-[10px] font-bold tracking-widest">Agente IA</TableHead>
                   <TableHead className="text-slate-400 text-[10px] font-bold text-right pr-6 tracking-widest">Acciones</TableHead>
                </TableRow></TableHeader>
                <TableBody>
-                 {loading ? (<TableRow><TableCell colSpan={5} className="text-center h-48"><Loader2 className="animate-spin mx-auto text-indigo-500" /></TableCell></TableRow>) : 
+                 {loading ? (<TableRow><TableCell colSpan={6} className="text-center h-48"><Loader2 className="animate-spin mx-auto text-indigo-500" /></TableCell></TableRow>) :
                    users.map((u) => (
                    <TableRow key={u.id} className="border-[#222225] hover:bg-[#161618] transition-colors">
                      <TableCell className="pl-6 py-4">
@@ -258,8 +357,22 @@ const UsersPage = () => {
                              </Badge>
                          )}
                      </TableCell>
+                     <TableCell>
+                        {(() => {
+                           const agentRole = u.role?.toLowerCase();
+                           const isAgent = agentRole === 'agent' || agentRole === 'sales_agent' || agentRole === 'sales';
+                           if (!isAgent) return <span className="text-[10px] text-slate-600 italic">N/A</span>;
+                           const aiStatus = aiStatuses[u.id];
+                           const isOn = aiStatus?.enabled === true;
+                           return (
+                              <span className={cn("text-[10px] flex items-center gap-1.5 font-bold uppercase", isOn ? "text-emerald-500" : "text-red-400")}>
+                                 {isOn ? <><Bot className="w-3.5 h-3.5" /> ACTIVO</> : <><BotOff className="w-3.5 h-3.5" /> INACTIVO</>}
+                              </span>
+                           );
+                        })()}
+                     </TableCell>
                      <TableCell className="text-right pr-6">
-                        <Button variant="outline" size="sm" className="bg-[#121214] border-[#333336] text-amber-500 hover:bg-amber-500 hover:text-slate-950 h-9 px-4 text-[10px] font-bold uppercase tracking-widest transition-colors rounded-xl" onClick={() => { setSelectedUser({...u, auto_assign: Array.isArray(autoRoutingAgents) && autoRoutingAgents.includes(u.id)}); setOriginalEmail(u.email || ''); setNewPassword(''); setIsEditOpen(true); }}>
+                        <Button variant="outline" size="sm" className="bg-[#121214] border-[#333336] text-amber-500 hover:bg-amber-500 hover:text-slate-950 h-9 px-4 text-[10px] font-bold uppercase tracking-widest transition-colors rounded-xl" onClick={() => { setSelectedUser({...u, auto_assign: Array.isArray(autoRoutingAgents) && autoRoutingAgents.includes(u.id)}); setOriginalEmail(u.email || ''); setNewPassword(''); loadAiConfig(u.id); setIsEditOpen(true); }}>
                            <Edit3 className="w-3.5 h-3.5 mr-1.5" /> Gestionar
                         </Button>
                      </TableCell>
@@ -299,7 +412,7 @@ const UsersPage = () => {
 
         {/* DIALOGO DE EDICIÓN */}
         <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
-           <DialogContent className="bg-[#0f0f11] border-[#222225] text-white max-w-lg rounded-3xl">
+           <DialogContent className="bg-[#0f0f11] border-[#222225] text-white max-w-lg rounded-3xl max-h-[90vh] overflow-y-auto">
               <DialogHeader><DialogTitle className="flex items-center gap-2 text-amber-500 text-sm uppercase font-bold"><Shield className="w-5 h-5" /> Perfil de Miembro</DialogTitle></DialogHeader>
               {selectedUser && (
                 <div className="space-y-5 py-4">
@@ -344,6 +457,67 @@ const UsersPage = () => {
                      <Switch checked={selectedUser.auto_assign === true} onCheckedChange={c => setSelectedUser({...selectedUser, auto_assign: c})} />
                   </div>
                   
+                  {/* SECCIÓN CONTROL IA — solo para agentes de ventas, visible por admins */}
+                  {isManager && (() => {
+                     const agentRole = selectedUser.role?.toLowerCase();
+                     const isAgent = agentRole === 'agent' || agentRole === 'sales_agent' || agentRole === 'sales';
+                     if (!isAgent) return null;
+                     return (
+                        <div className="space-y-4 pt-4 border-t border-[#222225]">
+                           <div className="flex items-center justify-between bg-[#161618] p-4 rounded-xl border border-[#222225]">
+                              <div className="space-y-1">
+                                 <Label className="text-white font-bold text-xs flex items-center gap-2"><Bot className="w-3.5 h-3.5 text-emerald-400"/> Agente IA</Label>
+                                 <p className="text-[10px] text-slate-400 max-w-[250px] leading-relaxed">Activa o desactiva la IA para todos los leads asignados a este agente.</p>
+                              </div>
+                              <Switch checked={editAiEnabled} onCheckedChange={setEditAiEnabled} />
+                           </div>
+
+                           {/* Horario de activación automática */}
+                           <div className="space-y-3">
+                              <Label className="text-[10px] text-amber-500 uppercase font-bold ml-1 flex items-center gap-1.5">
+                                 <CalendarDays className="w-3.5 h-3.5"/> Horario de Activación Automática IA
+                              </Label>
+                              <p className="text-[9px] text-slate-500 ml-1">Define los horarios en que la IA se activa automáticamente. Puedes agregar varios rangos por día.</p>
+                              <div className="space-y-2">
+                                 {DAYS_OF_WEEK.map((day) => {
+                                    const dayCfg = editAiSchedule[day.id.toString()] || { active: false, ranges: [{ start: '09:00', end: '21:00' }] };
+                                    return (
+                                       <div key={day.id} className="p-3 bg-[#121214] border border-[#222225] rounded-xl space-y-2">
+                                          <div className="flex items-center gap-3">
+                                             <Switch checked={Boolean(dayCfg.active)} onCheckedChange={(c) => updateDaySchedule(day.id, 'active', c)} />
+                                             <span className="text-xs font-bold w-16 text-slate-300">{day.name}</span>
+                                             {!dayCfg.active && <span className="text-[10px] text-slate-600 uppercase font-bold flex-1 text-center">SIN HORARIO</span>}
+                                             {dayCfg.active && (
+                                                <Button type="button" variant="ghost" size="sm" className="ml-auto h-6 px-2 text-[9px] text-emerald-500 hover:text-emerald-400" onClick={() => addTimeRange(day.id)}>
+                                                   <Plus className="w-3 h-3 mr-1" /> Rango
+                                                </Button>
+                                             )}
+                                          </div>
+                                          {dayCfg.active && dayCfg.ranges.map((range, idx) => (
+                                             <div key={idx} className="flex items-center gap-2 ml-9">
+                                                <Input type="time" value={range.start} onChange={e => updateTimeRange(day.id, idx, 'start', e.target.value)} className="h-7 bg-[#0a0a0c] text-xs w-28 border-[#333336]" />
+                                                <span className="text-slate-600 text-xs">-</span>
+                                                <Input type="time" value={range.end} onChange={e => updateTimeRange(day.id, idx, 'end', e.target.value)} className="h-7 bg-[#0a0a0c] text-xs w-28 border-[#333336]" />
+                                                {dayCfg.ranges.length > 1 && (
+                                                   <Button type="button" variant="ghost" size="sm" className="h-6 w-6 p-0 text-red-500 hover:text-red-400" onClick={() => removeTimeRange(day.id, idx)}>
+                                                      <XIcon className="w-3 h-3" />
+                                                   </Button>
+                                                )}
+                                             </div>
+                                          ))}
+                                       </div>
+                                    );
+                                 })}
+                              </div>
+                           </div>
+
+                           <Button onClick={() => handleSaveAiConfig(selectedUser.id)} disabled={savingAi} className="w-full bg-emerald-700 hover:bg-emerald-600 text-white h-10 uppercase text-[10px] font-bold rounded-xl">
+                              {savingAi ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Bot className="w-4 h-4 mr-2" />} Guardar Control IA
+                           </Button>
+                        </div>
+                     );
+                  })()}
+
                   {/* SECCIÓN CAMBIAR CONTRASEÑA */}
                   <div className="space-y-2 pt-4 border-t border-[#222225]">
                      <Label className="text-[10px] text-amber-500 uppercase font-bold ml-1 flex items-center gap-1.5"><Key className="w-3.5 h-3.5"/> Cambiar Contraseña (Opcional)</Label>

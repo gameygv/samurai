@@ -15,6 +15,7 @@ BEGIN
   PERFORM cron.unschedule(jobid) FROM cron.job WHERE jobname = 'scrape_master_truth';
   PERFORM cron.unschedule(jobid) FROM cron.job WHERE jobname = 'analyze_pending_leads';
   PERFORM cron.unschedule(jobid) FROM cron.job WHERE jobname = 'auto_followup_routine';
+  PERFORM cron.unschedule(jobid) FROM cron.job WHERE jobname = 'sync_knowledge_daily';
 EXCEPTION WHEN OTHERS THEN
   -- Ignorar si las tablas aún no existen
 END $$;
@@ -50,7 +51,16 @@ SELECT cron.schedule('scrape_master_truth', '0 3 * * *',
     ) $$
 );
 
--- D. Motor de Cobranza (Recordatorios de Crédito A/B/C/D) - 1 VEZ AL DÍA (09:00 AM UTC)
+-- D. Motor de Sincronización de Conocimiento (Fuentes Web) - 1 VEZ AL DÍA (04:00 AM UTC)
+SELECT cron.schedule('sync_knowledge_daily', '0 4 * * *',
+    $$ SELECT net.http_post(
+        url := 'https://giwoovmvwlddaizorizk.supabase.co/functions/v1/auto-sync-knowledge',
+        headers := '{"Content-Type": "application/json", "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imdpd29vdm12d2xkZGFpem9yaXprIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEwNDQzOTAsImV4cCI6MjA4NjYyMDM5MH0.5U_gkRRScbW8iOCk_3HC2V3ZcQVkWvl0n5ZLgccR1qo"}'::jsonb,
+        body := '{}'::jsonb
+    ) $$
+);
+
+-- E. Motor de Cobranza (Recordatorios de Crédito A/B/C/D) - 1 VEZ AL DÍA (09:00 AM UTC)
 SELECT cron.schedule('daily_credit_collections', '0 9 * * *',
     $$ SELECT net.http_post(
         url := 'https://giwoovmvwlddaizorizk.supabase.co/functions/v1/process-credit-reminders',

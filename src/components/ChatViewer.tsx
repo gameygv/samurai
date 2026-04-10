@@ -167,18 +167,26 @@ export default function ChatViewer({ lead, open, onOpenChange }: ChatViewerProps
 
     try {
       const cmd = text.trim().toUpperCase();
-      if (cmd === '#START') {
+      if (cmd === '#START' || cmd === '#ON') {
         await supabase.from('leads').update({ ai_paused: false }).eq('id', leadId);
         setLiveLead((prev: any) => ({...prev, ai_paused: false}));
         await supabase.from('conversaciones').insert({ lead_id: leadId, mensaje: 'IA Activada manualmente.', emisor: 'HUMANO', platform: 'PANEL_INTERNO' });
+        // Reflejar en panel Equipo: guardar estado manual del agente
+        if (user?.id) {
+          await supabase.from('app_config').upsert({ key: `agent_ai_status_${user.id}`, value: JSON.stringify({ enabled: true, updated_at: new Date().toISOString(), source: 'agent' }), category: 'AI_CONTROL' }, { onConflict: 'key' });
+        }
         toast.success('Samurai activado ✅');
         refetch();
         return;
       }
-      if (cmd === '#STOP') {
+      if (cmd === '#STOP' || cmd === '#OFF') {
         await supabase.from('leads').update({ ai_paused: true }).eq('id', leadId);
         setLiveLead((prev: any) => ({...prev, ai_paused: true}));
         await supabase.from('conversaciones').insert({ lead_id: leadId, mensaje: 'IA Pausada manualmente.', emisor: 'HUMANO', platform: 'PANEL_INTERNO' });
+        // Reflejar en panel Equipo: guardar estado manual del agente
+        if (user?.id) {
+          await supabase.from('app_config').upsert({ key: `agent_ai_status_${user.id}`, value: JSON.stringify({ enabled: false, updated_at: new Date().toISOString(), source: 'agent' }), category: 'AI_CONTROL' }, { onConflict: 'key' });
+        }
         toast.success('Samurai pausado ⏸');
         refetch();
         return;
@@ -375,7 +383,7 @@ export default function ChatViewer({ lead, open, onOpenChange }: ChatViewerProps
             onSave={saveMemory} 
             saving={sending} 
             onReset={() => {}} 
-            onToggleFollowup={() => handleSendMessage(liveLead.ai_paused ? '#START' : '#STOP')} 
+            onToggleFollowup={() => handleSendMessage(liveLead.ai_paused ? '#ON' : '#OFF')}
             onAnalysisComplete={() => { refreshLeadData(); refetch(); }} 
             onDeleteLead={handleDeleteLead}
           />

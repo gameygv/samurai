@@ -105,34 +105,102 @@ serve(async (req) => {
     // 5. Obtener datos del lead para la notificación
     const { data: lead } = await supabase.from('leads').select('nombre, assigned_to').eq('id', lead_id).single();
 
-    // 6. Insertar nota interna en conversaciones (amarilla en el chat)
-    await supabase.from('conversaciones').insert({
+    // 5b. Comparar con cuentas bancarias registradas
+    const bankKeys = ['bank_name', 'bank_account', 'bank_clabe', 'bank_holder'];
+    const { data: bankConfigs } = await supabase.from('app_config').select('key, value').or(
+      bankKeys.map(k => `key.eq.${k}`).join(',') + `,key.like.agent_bank_%`
+    );
+
+    let matchedAccount = '';
+    let verdict = 'INCONCLUSIVE';
+    const analysisLower = analysis.toLowerCase();
+
+    // Check main account
+    const mainBank = bankConfigs?.find(c => c.key === 'bank_name')?.value || '';
+    const mainAccount = bankConfigs?.find(c => c.key === 'bank_account')?.value || '';
+    const mainClabe = bankConfigs?.find(c => c.key === 'bank_clabe')?.value || '';
+
+    if (mainBank && analysisLower.includes(mainBank.toLowerCase())) { matchedAccount = 'Cuenta Principal'; verdict = 'PROBABLE_VALID'; }
+    else if (mainAccount && analysisLower.includes(mainAccount.slice(-4))) { matchedAccount = 'Cuenta Principal'; verdict = 'PROBABLE_VALID'; }
+    else if (mainClabe && analysisLower.includes(mainClabe.slice(-4))) { matchedAccount = 'Cuenta Principal'; verdict = 'PROBABLE_VALID'; }
+
+    // Check agent accounts
+    if (!matchedAccount) {
+      const agentBanks = bankConfigs?.filter(c => c.key.startsWith('agent_bank_')) || [];
+      for (const ab of agentBanks) {
+        try {
+          const parsed = JSON.parse(ab.value);
+          if (!parsed.enabled) continue;
+          if (parsed.bank_name && analysisLower.includes(parsed.bank_name.toLowerCase())) {
+            matchedAccount = `Cuenta de agente (${parsed.bank_name})`; verdict = 'PROBABLE_VALID'; break;
+          }
+          if (parsed.bank_account && analysisLower.includes(parsed.bank_account.slice(-4))) {
+            matchedAccount = `Cuenta de agente (${parsed.bank_name || 'sin nombre'})`; verdict = 'PROBABLE_VALID'; break;
+          }
+        } catch (_) {}
+      }
+    }
+
+    // Extract amounts/bank from analysis text for audit record
+    const amountMatch = analysis.match(/\$?([\d,]+\.?\d*)/);
+    const bankMatch = analysis.match(/(?:banco|bank)[:\s]*([^\n,]+)/i);
+    const refMatch = analysis.match(/(?:referencia|ref|folio)[:\s]*([^\n,]+)/i);
+    const dateMatch = analysis.match(/(?:fecha|date)[:\s]*([^\n,]+)/i);
+
+    // Build human-readable note with disclaimer
+    const aiNote = `Cuenta detectada: ${matchedAccount || 'No identificada'}\nVeredicto IA: ${verdict === 'PROBABLE_VALID' ? 'Probable depósito válido' : 'No concluyente'}\n\n⚠️ IMPORTANTE: Esta es una revisión automática de IA. El comprobante DEBE ser verificado manualmente por un humano antes de confirmar el pago.`;
+
+    // Store image URL for audit (use media_url or construct from image_id)
+    const auditImageUrl = media_url || `meta:${image_id}`;
+
+    // 6. Insert into receipt_audits table
+    const { data: auditRecord } = await supabase.from('receipt_audits').insert({
+      lead_id,
+      image_url: auditImageUrl,
+      ai_analysis: analysis,
+      ai_verdict: verdict,
+      matched_account: matchedAccount || 'No identificada',
+      bank_detected: bankMatch?.[1]?.trim() || '',
+      amount_detected: amountMatch ? parseFloat(amountMatch[1].replace(/,/g, '')) : 0,
+      reference_detected: refMatch?.[1]?.trim() || '',
+      date_detected: dateMatch?.[1]?.trim() || '',
+      ai_note: aiNote,
+      channel_id,
+    }).select('id').single();
+
+    // 7. Insertar nota interna en conversaciones (amarilla en el chat)
+    const { data: convRecord } = await supabase.from('conversaciones').insert({
       lead_id,
       emisor: 'SISTEMA',
-      mensaje: `🔍 Análisis Ojo de Halcón:\n${analysis}`,
+      mensaje: `🔍 Análisis Ojo de Halcón:\n${analysis}\n\n${aiNote}`,
       platform: 'PANEL_INTERNO',
-      metadata: { author: 'Ojo de Halcón', type: 'receipt_analysis' }
-    });
+      metadata: { author: 'Ojo de Halcón', type: 'receipt_analysis', audit_id: auditRecord?.id || null }
+    }).select('id').single();
 
-    // 7. Notificar al agente por WhatsApp (canal de notificaciones)
+    // Update audit with conversation link
+    if (auditRecord?.id && convRecord?.id) {
+      await supabase.from('receipt_audits').update({ conversation_id: convRecord.id }).eq('id', auditRecord.id);
+    }
+
+    // 8. Notificar al agente por WhatsApp
     if (lead?.assigned_to) {
       const { data: agent } = await supabase.from('profiles').select('phone, full_name').eq('id', lead.assigned_to).single();
       if (agent?.phone) {
-        const msg = `🔍 Comprobante recibido de ${lead?.nombre || 'lead'}:\n\n${analysis.substring(0, 500)}`;
+        const msg = `🔍 Comprobante recibido de ${lead?.nombre || 'lead'}:\n\n${analysis.substring(0, 300)}\n\n${aiNote}`;
         await supabase.functions.invoke('send-message-v3', {
           body: { phone: agent.phone, message: msg }
         });
       }
     }
 
-    // 8. Log de éxito
+    // 9. Log de éxito
     await supabase.from('activity_logs').insert({
       action: 'UPDATE', resource: 'BRAIN',
-      description: `🔍 Ojo de Halcón: comprobante analizado para ${lead?.nombre || lead_id}. ${analysis.substring(0, 100)}...`,
+      description: `🔍 Ojo de Halcón: comprobante analizado para ${lead?.nombre || lead_id}. Veredicto: ${verdict}. ${matchedAccount || 'Sin coincidencia'}`,
       status: 'OK'
     });
 
-    return new Response(JSON.stringify({ success: true, analysis }), {
+    return new Response(JSON.stringify({ success: true, analysis, verdict, matched_account: matchedAccount, audit_id: auditRecord?.id }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
 
