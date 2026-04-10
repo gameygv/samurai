@@ -52,7 +52,6 @@ export const CreateLeadDialog = ({ open, onOpenChange, onSuccess }: { open: bool
         summary: formData.nota || 'Registro manual.',
         buying_intent: 'BAJO',
         ai_paused: true,
-        platform: formData.platform,
         origen_contacto: formData.platform
       };
 
