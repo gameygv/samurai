@@ -260,13 +260,32 @@ const Inbox = () => {
   };
 
   const handleDeleteLead = async () => {
+    if (!activeLead) return;
     const tid = toast.loading("Eliminando prospecto...");
     try {
-       await supabase.from('conversaciones').delete().eq('lead_id', activeLead.id);
-       await supabase.from('leads').delete().eq('id', activeLead.id);
+       // 2026-04-10: borrar en orden de dependencia FK y revisar errores en cada paso.
+       // receipt_audits tiene ON DELETE CASCADE → se limpia solo con leads.
+       // contacts y conversaciones no tienen cascade confirmado → borrar explícito.
+       const delConv = await supabase.from('conversaciones').delete().eq('lead_id', activeLead.id).select('id');
+       if (delConv.error) throw new Error(`conversaciones: ${delConv.error.message}`);
+
+       const delContacts = await supabase.from('contacts').delete().eq('lead_id', activeLead.id).select('id');
+       if (delContacts.error && !/no rows|not found/i.test(delContacts.error.message)) {
+          throw new Error(`contacts: ${delContacts.error.message}`);
+       }
+
+       const delLead = await supabase.from('leads').delete().eq('id', activeLead.id).select('id');
+       if (delLead.error) throw new Error(`lead: ${delLead.error.message}`);
+       if (!delLead.data || delLead.data.length === 0) {
+          throw new Error('RLS bloqueó el borrado del lead. Verifica que esté asignado a ti.');
+       }
+
        toast.success("Prospecto eliminado correctamente.", { id: tid });
        setActiveLead(null);
-    } catch (err: any) { toast.error("Error al eliminar: " + err.message, { id: tid }); }
+       fetchLeads(false);
+    } catch (err: any) {
+       toast.error("Error al eliminar: " + err.message, { id: tid });
+    }
   };
 
   const allTags = [...globalTags, ...localTags];
