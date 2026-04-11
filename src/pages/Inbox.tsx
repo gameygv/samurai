@@ -75,7 +75,10 @@ const Inbox = () => {
        updateMemoryForm(activeLead);
        if (messages && messages.length > 0) fetchAiSuggestions(activeLead.id, messages);
     }
-  }, [activeLead?.id]);
+    // 2026-04-10: sincronizar memoryForm también cuando cambian campos realtime
+    // clave (buying_intent, payment_status) — antes solo reaccionaba al id, por lo
+    // que el FunnelStage se quedaba stale si analyze-leads movía la etapa.
+  }, [activeLead?.id, activeLead?.buying_intent, activeLead?.payment_status, activeLead?.lead_score, activeLead?.ciudad, activeLead?.email, activeLead?.estado]);
 
   useEffect(() => {
     const term = searchTerm.toLowerCase();
