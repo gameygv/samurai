@@ -164,6 +164,33 @@ serve(async (req: Request): Promise<Response> => {
             return cleanPath;
         };
 
+        // 2026-04-11: Atribución CTWA para Gowa — Baileys/Evolution embeben los datos
+        // del anuncio Click-to-WhatsApp en contextInfo.externalAdReply. Lo intentamos
+        // parsear desde todos los paths conocidos del formato (camelCase y snake_case).
+        // Si Gowa strippea el campo o usa otro formato, queda null y el log en
+        // activity_logs lo hará visible.
+        const adReply =
+          msgContent.extendedTextMessage?.contextInfo?.externalAdReply
+          || msgContent.imageMessage?.contextInfo?.externalAdReply
+          || msgContent.videoMessage?.contextInfo?.externalAdReply
+          || msgContent.audioMessage?.contextInfo?.externalAdReply
+          || p.contextInfo?.externalAdReply
+          || p.context_info?.external_ad_reply
+          || p.externalAdReply
+          || p.external_ad_reply
+          || null;
+        if (adReply && typeof adReply === 'object') {
+          ctwaReferral = {
+            source_url: adReply.sourceUrl || adReply.source_url || null,
+            source_id: adReply.sourceId || adReply.source_id || null,
+            source_type: adReply.sourceType || adReply.source_type || null,
+            headline: adReply.title || adReply.headline || null,
+            body: adReply.body || null,
+            thumbnail_url: adReply.thumbnailUrl || adReply.thumbnail_url || null,
+            ctwa_clid: adReply.ctwaClid || adReply.ctwa_clid || adReply.clid || null,
+          };
+        }
+
         // S7.1: Detectar tipo de media — Gowa nativo (p.audio, p.image, p.video, p.document)
         // y fallback Evolution API (msgContent.audioMessage, msgContent.imageMessage)
         if (p.audio) {
@@ -260,6 +287,14 @@ serve(async (req: Request): Promise<Response> => {
         await supabase.from('activity_logs').insert({
             action: 'CREATE', resource: 'LEADS', description: `Lead entrante (${pushName}). Etapa BAJO.${routeInfo}${attribInfo}`, status: 'OK'
         });
+        // 2026-04-11: log de diagnóstico explícito cuando un lead viene con atribución
+        if (ctwaReferral) {
+            await supabase.from('activity_logs').insert({
+                action: 'INFO', resource: 'SYSTEM',
+                description: `📢 Atribución CTWA capturada: clid=${ctwaReferral.ctwa_clid || 'null'} source_id=${ctwaReferral.source_id || 'null'} headline=${(ctwaReferral.headline || '').substring(0, 60)}`,
+                status: 'OK'
+            });
+        }
     } else if (isFromMe) {
         // Mensaje saliente del asesor desde teléfono: guardar como HUMANO sin mutar lead ni activar IA
         // deno-lint-ignore no-explicit-any
