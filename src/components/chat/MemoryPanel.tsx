@@ -20,6 +20,7 @@ import { AcademicRecord } from './memory/AcademicRecord';
 import { CreditHistory } from './memory/CreditHistory';
 import { InternalNotes } from './memory/InternalNotes';
 import { TagsManager } from './memory/TagsManager';
+import { MetaCapiDiagnosticDialog } from './memory/MetaCapiDiagnosticDialog';
 
 interface MemoryPanelProps {
   currentAnalysis: any;
@@ -59,6 +60,7 @@ export const MemoryPanel = ({
   const [internalNotes, setInternalNotes] = useState<any[]>([]);
   const [sendingNote, setSendingNote] = useState(false);
   const [savingReminders, setSavingReminders] = useState(false);
+  const [isCapiDialogOpen, setIsCapiDialogOpen] = useState(false);
 
   const emailVal = String(currentAnalysis?.email || '');
   const nombreVal = String(currentAnalysis?.nombre || '');
@@ -178,12 +180,10 @@ export const MemoryPanel = ({
       }
   };
 
-  const handleRunAnalysis = async () => {
-     setAnalyzing(true);
-     try {
-        await supabase.functions.invoke('analyze-leads', { body: { lead_id: currentAnalysis.id, force: true } });
-        if (onAnalysisComplete) onAnalysisComplete();
-     } catch (err: any) { toast.error("Error: " + err.message); } finally { setAnalyzing(false); }
+  const handleRunAnalysis = () => {
+     // 2026-04-10: abrir dialog de diagnóstico — el propio dialog dispara analyze-leads
+     // con force=true y luego get-capi-diagnostic, y muestra todos los datos recolectados.
+     setIsCapiDialogOpen(true);
   };
 
   const handleUpdatePaymentStatus = async (status: string) => {
@@ -192,9 +192,13 @@ export const MemoryPanel = ({
          if (status === 'VALID') { updates.buying_intent = 'COMPRADO'; updates.followup_stage = 100; }
          await supabase.from('leads').update(updates).eq('id', currentAnalysis.id);
          toast.success(status === 'VALID' ? "Comprobante aprobado." : "Comprobante denegado.");
+         // 2026-04-10: drenar cola CAPI — validación manual del comprobante debe mandar Purchase a Meta
+         if (status === 'VALID') {
+            supabase.functions.invoke('process-capi-purchase', { body: {} }).catch(() => {});
+         }
          if (onAnalysisComplete) onAnalysisComplete();
-     } catch (err: any) { 
-         toast.error("Error al actualizar estado del pago."); 
+     } catch (err: any) {
+         toast.error("Error al actualizar estado del pago.");
      }
   };
 
@@ -241,6 +245,14 @@ export const MemoryPanel = ({
              return;
           }
           toast.success(`Movido a: ${newIntent}`);
+
+          // 2026-04-10: drenar cola CAPI si el cambio fue a COMPRADO/PERDIDO
+          // El trigger DB encoló el evento en activity_logs, pero nada lo procesa
+          // automáticamente — solo Pipeline.tsx lo invocaba en drag&drop.
+          if (newIntent === 'COMPRADO' || newIntent === 'PERDIDO') {
+             supabase.functions.invoke('process-capi-purchase', { body: {} }).catch(() => {});
+          }
+
           if (onAnalysisComplete) onAnalysisComplete();
       } catch (err: any) {
           setMemoryForm((prev: any) => ({ ...prev, buying_intent: currentAnalysis.buying_intent }));
@@ -407,6 +419,7 @@ export const MemoryPanel = ({
 
       {isCiaDialogOpen && <CiaReportDialog open={isCiaDialogOpen} onOpenChange={setIsCiaDialogOpen} lead={currentAnalysis} messages={messages} />}
       {isFullEditOpen && contactData && <EditContactDialog open={isFullEditOpen} onOpenChange={setIsFullEditOpen} contact={contactData} existingGroups={groups} allTags={allAvailableTags} globalTags={globalTags} onSuccess={() => { fetchContactData(); if (onAnalysisComplete) onAnalysisComplete(); }} />}
+      <MetaCapiDiagnosticDialog open={isCapiDialogOpen} onOpenChange={setIsCapiDialogOpen} leadId={currentAnalysis?.id || null} />
     </div>
   );
 };

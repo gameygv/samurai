@@ -30,9 +30,9 @@ test('Inbox carga y contiene los componentes fixeados', async ({ page }) => {
   await expect(page.getByText(/ETAPA DEL EMBUDO/i)).toBeVisible({ timeout: 10000 });
   await expect(page.getByRole('button', { name: /HUNTING/i })).toBeVisible();
 
-  // Bug 2 — Ojo de Halcón con botón Re-analizar
+  // Bug 2 — Ojo de Halcón con botón Re-analizar (exact evita colisión con el tooltip del EmqHeader)
   await expect(page.getByText(/Ojo de Halcón/i)).toBeVisible();
-  await expect(page.getByRole('button', { name: /Re-analizar/i })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Re-analizar', exact: true })).toBeVisible();
 });
 
 test('media-proxy endpoint responde correctamente a requests inválidos', async ({ request }) => {

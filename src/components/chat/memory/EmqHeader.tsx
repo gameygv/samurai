@@ -1,7 +1,7 @@
 "use client";
 
 import React from 'react';
-import { BarChart3, Database, Loader2 } from 'lucide-react';
+import { BarChart3, FileSearch, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface EmqHeaderProps {
@@ -19,8 +19,13 @@ export const EmqHeader = ({ healthPercent, healthScore, capiSent, analyzing, onR
          <span className="text-[9px] font-bold text-[#7A8A9E] uppercase tracking-widest flex items-center gap-1.5">
             <BarChart3 className="w-3 h-3"/> Estatus de Inteligencia Meta
          </span>
-         <button onClick={onRunAnalysis} disabled={analyzing} className="p-1.5 rounded-md bg-[#161618] border border-[#222225] hover:bg-[#222225] transition-colors">
-            {analyzing ? <Loader2 className="w-3 h-3 text-[#7A8A9E] animate-spin" /> : <Database className="w-3 h-3 text-[#7A8A9E]" />}
+         <button
+            onClick={onRunAnalysis}
+            disabled={analyzing}
+            className="p-1.5 rounded-md bg-[#161618] border border-[#222225] hover:bg-[#222225] transition-colors"
+            title="Re-analizar lead y ver diagnóstico Meta CAPI"
+         >
+            {analyzing ? <Loader2 className="w-3 h-3 text-amber-500 animate-spin" /> : <FileSearch className="w-3 h-3 text-amber-500" />}
          </button>
       </div>
       <div className="flex items-center gap-3">

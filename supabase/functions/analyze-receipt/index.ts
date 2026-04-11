@@ -219,7 +219,38 @@ serve(async (req) => {
       status: 'OK'
     });
 
-    return new Response(JSON.stringify({ success: true, analysis, verdict, matched_account: matchedAccount, audit_id: auditRecord?.id }), {
+    // 10. 2026-04-10 AUTO-COMPRADO: si el veredicto es PROBABLE_VALID con match de cuenta
+    // Y el monto detectado es > 0, promover automáticamente el lead a COMPRADO.
+    // El trigger DB (on_lead_comprado) insertará CAPI_PURCHASE en activity_logs y
+    // llamamos process-capi-purchase para drenarlo inmediatamente a Meta.
+    const parsedAmount = amountMatch ? parseFloat(amountMatch[1].replace(/,/g, '')) : 0;
+    const shouldAutoMove = verdict === 'PROBABLE_VALID'
+       && parsedAmount > 0
+       && matchedAccount
+       && matchedAccount !== 'No identificada';
+
+    let autoMoved = false;
+    if (shouldAutoMove) {
+       const { data: currentLead } = await supabase.from('leads').select('buying_intent').eq('id', lead_id).single();
+       if (currentLead && currentLead.buying_intent !== 'COMPRADO') {
+          await supabase.from('leads').update({
+             buying_intent: 'COMPRADO',
+             payment_status: 'VALID',
+             followup_stage: 100
+          }).eq('id', lead_id);
+
+          await supabase.from('activity_logs').insert({
+             action: 'UPDATE', resource: 'LEADS',
+             description: `🚀 Auto-COMPRADO: ${lead?.nombre || lead_id} (Ojo de Halcón verdict=VALID, monto=$${parsedAmount}, cuenta=${matchedAccount})`,
+             status: 'OK'
+          });
+
+          supabase.functions.invoke('process-capi-purchase', { body: {} }).catch((e) => console.error('CAPI drain error:', e));
+          autoMoved = true;
+       }
+    }
+
+    return new Response(JSON.stringify({ success: true, analysis, verdict, matched_account: matchedAccount, audit_id: auditRecord?.id, auto_moved: autoMoved }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
 

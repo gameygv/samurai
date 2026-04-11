@@ -16,16 +16,27 @@ serve(async (req: Request): Promise<Response> => {
     const { data: lead } = await supabase.from('leads').select('*').eq('id', lead_id).single();
     if (!lead) return new Response(JSON.stringify({ error: 'Lead not found' }), { headers: corsHeaders });
 
-    // BLINDAJE 1: Nunca analizar ni cambiar leads que ya están en COMPRADO
-    if (lead.buying_intent === 'COMPRADO') {
-      return new Response(JSON.stringify({ message: 'Ignorado: Lead ya está ganado' }), { headers: corsHeaders });
-    }
+    // BLINDAJE 1: Leads ya en COMPRADO nunca bajan de etapa, pero sí extraemos datos
+    // adicionales del chat (email, ciudad, etc.) para mejorar matching en eventos CAPI futuros.
+    const lockIntent = lead.buying_intent === 'COMPRADO';
 
     // BLINDAJE 2: Si por alguna razón extraña llegó como PERDIDO, lo rescatamos a BAJO
     if (lead.buying_intent === 'PERDIDO') {
        await supabase.from('leads').update({ buying_intent: 'BAJO' }).eq('id', lead.id);
        lead.buying_intent = 'BAJO';
     }
+
+    // 2026-04-10: Verificar si hay comprobante válido registrado → permite auto-COMPRADO
+    // Regla: PROBABLE_VALID + monto > 0 + cuenta matcheada = señal fuerte de pago real
+    const { data: validReceipts } = await supabase
+       .from('receipt_audits')
+       .select('ai_verdict, amount_detected, matched_account, human_verified')
+       .eq('lead_id', lead_id)
+       .eq('ai_verdict', 'PROBABLE_VALID')
+       .gt('amount_detected', 0)
+       .neq('matched_account', 'No identificada')
+       .limit(1);
+    const hasValidReceipt = !!(validReceipts && validReceipts.length > 0);
 
     const { data: configs } = await supabase.from('app_config').select('key, value');
     const configMap: Record<string, unknown> = configs?.reduce((acc: Record<string, unknown>, c: { key: string; value: unknown }) => ({ ...acc, [c.key]: c.value }), {} as Record<string, unknown>) || {};
@@ -49,27 +60,50 @@ serve(async (req: Request): Promise<Response> => {
     }).join('\n');
 
     // Leer prompt desde Cerebro Core (editable en UI) con fallback hardcodeado
+    // 2026-04-10: fallback actualizado — más agresivo en escalamiento para no dejar leads
+    // estancados en BAJO cuando claramente están negociando. Si el humano editó el prompt
+    // en Cerebro Core, se respeta su versión (configMap.prompt_analista_datos).
     const customPrompt = configMap.prompt_analista_datos as string | undefined;
-    const basePrompt = customPrompt || `Eres el Analista de Datos de Samurai. Tu mision es leer el historial del chat y extraer informacion del cliente en JSON exacto para alimentar nuestro CRM y la Conversions API (CAPI) de Meta. NUNCA inventes lo que no sepas, usa null si no estas seguro.
+    const basePrompt = customPrompt || `Eres el Analista de Datos de Samurai. Tu mision es leer el historial completo del chat y clasificar al cliente en la etapa CORRECTA del embudo de ventas. El negocio pierde DINERO cuando un lead queda atorado en una etapa más baja de la que realmente corresponde, porque los eventos CAPI a Meta son la señal que optimiza nuestras campañas de Facebook. Sé AGRESIVO escalando cuando haya señales claras.
 
-1. Logica de Eventos de Meta (event_name):
-   Lead: El usuario acaba de escribir por primera vez pidiendo informacion.
-   ViewContent: El usuario ya dio su ciudad, mostro interes real y encaja en el perfil (pregunta precios, horarios, fechas, disponibilidad).
-   InitiateCheckout: El usuario esta en la fase de registro, dio su correo o pidio datos bancarios, quiere pagar o inscribirse.
+REGLAS DE ETAPA (pipeline_stage / intent) — PRIORIZA LA ETAPA MÁS ALTA QUE APLIQUE:
 
-2. Logica de Pipeline de Ventas (pipeline_stage):
-   BAJO: Si el cliente acaba de escribir y aun faltan datos (nombre, ciudad). Senales: primer contacto generico, "info por favor", solo saluda.
-   MEDIO: Si el cliente ya mostro interes, dijo su ciudad y pregunta por precios, horarios, fechas, ubicacion, requisitos, disponibilidad.
-   ALTO: Si el cliente ya dio su correo, pidio datos bancarios, quiere inscribirse, apartar lugar, pregunta por descuentos o envio comprobante.
+COMPRADO: Solo si el cliente explícitamente dice que YA pagó / ya hizo la transferencia / envió el comprobante reciente (imagen o referencia) y el contexto confirma pago real (monto, banco, referencia). Si solo dice "voy a pagar" todavía NO es COMPRADO.
 
-Responde ESTRICTAMENTE con "BAJO", "MEDIO" o "ALTO" en intent. NUNCA respondas "PERDIDO" ni "GANADO".
+ALTO (InitiateCheckout en CAPI): Señales fuertes de intención de compra en progreso:
+  - Pidió datos bancarios / CLABE / cuenta para transferir
+  - Dijo "quiero inscribirme / apartar lugar / reservar"
+  - Dio su correo electrónico voluntariamente
+  - Preguntó por descuentos, planes de pago, MSI
+  - Dijo "voy al banco", "te paso el comprobante", "¿a nombre de quién?"
+  - Negocia fechas concretas de pago
+  - Pidió link de compra / pasarela
 
-3. Lead Score (lead_score): numero de 0 a 100 que representa la probabilidad de que este cliente compre.
-   0-20: Solo saludo, sin interes claro.
-   21-40: Pidio informacion general.
-   41-60: Pregunto precios o detalles especificos.
-   61-80: Mostro intencion de compra, dio datos personales.
-   81-100: Quiere pagar, envio comprobante, pidio datos bancarios.`;
+MEDIO (ViewContent en CAPI): Interés real demostrado:
+  - Preguntó precio / costo / cuánto cuesta
+  - Preguntó fechas, horarios, ubicación, duración
+  - Preguntó por requisitos, qué incluye, qué materiales
+  - Preguntó por disponibilidad o cupos
+  - Dio su ciudad y sigue conversando
+  - Compara opciones, hace preguntas específicas del servicio
+  - Menciona interés en inscribirse sin haber pedido datos bancarios aún
+
+BAJO (Lead en CAPI): Sin interés claro aún:
+  - Solo saluda ("hola", "info por favor", "hola, me interesa")
+  - Primer contacto genérico sin contexto
+  - Pregunta qué vende el negocio
+  - Mensajes cortos sin información
+
+NUNCA respondas "PERDIDO" ni "GANADO". Solo "BAJO", "MEDIO", "ALTO" o "COMPRADO".
+
+IMPORTANTE: si el cliente YA estaba en una etapa alta en un mensaje anterior del historial, asume que sigue en esa etapa a menos que haya señales claras de que se enfrió. NO bajes de etapa sin razón explícita.
+
+Lead Score (lead_score): número 0-100 de probabilidad de compra.
+  0-20: Solo saludo, sin interés claro.
+  21-40: Pidió información general.
+  41-60: Preguntó precios o detalles específicos.
+  61-80: Mostró intención de compra, dio datos personales.
+  81-100: Quiere pagar, envió comprobante, pidió datos bancarios.`;
 
     const analysisPrompt = `${basePrompt}
 
@@ -96,19 +130,39 @@ Responde UNICAMENTE con este JSON exacto (sin acentos en las claves):
 
     try {
       const parsed = JSON.parse(content);
-      const updates: Record<string, string> = {};
-      
-      // BLINDAJE 3 DE HIERRO: Solo permitimos que la IA asigne estados positivos.
-      const allowedIntents = ['BAJO', 'MEDIO', 'ALTO'];
-      let newIntent = parsed.intent ? String(parsed.intent).toUpperCase() : '';
-      
-      if (allowedIntents.includes(newIntent)) {
-         updates.buying_intent = newIntent;
+      // deno-lint-ignore no-explicit-any
+      const updates: Record<string, any> = {};
+
+      // BLINDAJE 3 DE HIERRO: La IA solo puede asignar BAJO/MEDIO/ALTO/COMPRADO.
+      // COMPRADO solo se acepta si hay evidencia externa (comprobante válido).
+      const allowedIntents = ['BAJO', 'MEDIO', 'ALTO', 'COMPRADO'];
+      const intentOrder: Record<string, number> = { 'BAJO': 0, 'MEDIO': 1, 'ALTO': 2, 'COMPRADO': 3 };
+      const aiIntent = parsed.intent ? String(parsed.intent).toUpperCase() : '';
+
+      let finalIntent: string;
+      if (lockIntent) {
+        // Lead ya comprado → no mover
+        finalIntent = lead.buying_intent;
+      } else if (aiIntent === 'COMPRADO') {
+        // Solo aceptamos COMPRADO de la IA si hay un comprobante PROBABLE_VALID con match
+        finalIntent = hasValidReceipt ? 'COMPRADO' : 'ALTO';
+      } else if (allowedIntents.includes(aiIntent)) {
+        finalIntent = aiIntent;
       } else {
-         // Si la IA alucina y responde "PERDIDO" u otra cosa, forzamos BAJO.
-         updates.buying_intent = allowedIntents.includes(lead.buying_intent) ? lead.buying_intent : 'BAJO';
+        finalIntent = allowedIntents.includes(lead.buying_intent) ? lead.buying_intent : 'BAJO';
       }
-      
+
+      // REGLA ANTI-DOWNGRADE: si la IA quiere bajar de etapa, respeta la actual
+      // (ej. si el lead ya estaba en ALTO y el mensaje actual solo dice "ok gracias",
+      // no lo movemos a MEDIO — las transiciones hacia abajo solo son manuales).
+      const oldLevel = intentOrder[lead.buying_intent] ?? 0;
+      const newLevel = intentOrder[finalIntent] ?? 0;
+      if (newLevel < oldLevel && !lockIntent) {
+        finalIntent = lead.buying_intent;
+      }
+
+      updates.buying_intent = finalIntent;
+
       // Extraer datos del cliente detectados por la IA
       if (parsed.nombre && parsed.nombre.length > 1 && lead.nombre === 'Lead WhatsApp') updates.nombre = parsed.nombre + (parsed.apellido ? ` ${parsed.apellido}` : '');
       if (parsed.ciudad && parsed.ciudad.length > 2) updates.ciudad = parsed.ciudad;
@@ -119,13 +173,12 @@ Responde UNICAMENTE con este JSON exacto (sin acentos en las claves):
       const parsedScore = Number(parsed.lead_score);
       if (!isNaN(parsedScore) && parsedScore >= 0 && parsedScore <= 100) updates.lead_score = parsedScore;
 
-      // Doble validación final
+      // Doble validación final: PERDIDO nunca pasa
       if (updates.buying_intent === 'PERDIDO') updates.buying_intent = 'BAJO';
 
       await supabase.from('leads').update(updates).eq('id', lead.id);
 
-      // S6.3: CAPI automático — disparar evento Lead cuando intent sube
-      const intentOrder: Record<string, number> = { 'BAJO': 0, 'MEDIO': 1, 'ALTO': 2 };
+      // S6.3: CAPI automático — disparar evento cuando intent sube
       const oldIntentLevel = intentOrder[lead.buying_intent] ?? 0;
       const newIntentLevel = intentOrder[updates.buying_intent] ?? 0;
 
@@ -144,13 +197,21 @@ Responde UNICAMENTE con este JSON exacto (sin acentos en las claves):
         // Mapear transición de embudo → evento CAPI estándar de Meta
         // BAJO→MEDIO: ViewContent (muestra interés real en producto)
         // →ALTO: InitiateCheckout (intención de compra clara)
+        // →COMPRADO: Purchase (pago confirmado)
         // Nuevo lead (BAJO): Lead (primer contacto)
         const capiEventMap: Record<string, string> = {
           'MEDIO': 'ViewContent',
-          'ALTO': 'InitiateCheckout'
+          'ALTO': 'InitiateCheckout',
+          'COMPRADO': 'Purchase'
         };
         const capiEventName = capiEventMap[updates.buying_intent] || 'Lead';
         const eventTimestamp = Math.floor(Date.now() / 1000);
+
+        // Monto del Purchase: tomar del receipt válido más reciente si existe
+        let purchaseAmount: number | undefined;
+        if (capiEventName === 'Purchase' && validReceipts && validReceipts.length > 0) {
+          purchaseAmount = Number(validReceipts[0].amount_detected) || undefined;
+        }
 
         try {
           await supabase.functions.invoke('meta-capi-sender', {
@@ -173,18 +234,28 @@ Responde UNICAMENTE con este JSON exacto (sin acentos en las claves):
                   st: updates.estado || lead.estado || undefined,
                   zp: updates.cp || lead.cp || undefined,
                   country: 'mx',
-                  external_id: lead.id
+                  external_id: lead.id,
+                  // 2026-04-10: atribución CTWA para matching óptimo en Meta
+                  fbc: lead.fbc || undefined,
+                  fbp: lead.fbp || undefined,
+                  ctwa_clid: lead.ctwa_clid || undefined
                 },
                 custom_data: {
                   source: 'samurai_auto',
                   content_name: updates.servicio_interes || lead.servicio_interes || undefined,
                   content_category: 'talleres_cuencoterapia',
                   funnel_stage: updates.buying_intent,
-                  lead_score: lead.lead_score || lead.confidence_score || undefined,
+                  lead_score: updates.lead_score || lead.lead_score || undefined,
                   agent_id: lead.assigned_to || undefined,
                   origin_channel: 'whatsapp',
                   psychographic_segment: lead.perfil_psicologico || undefined,
-                  main_pain: lead.main_pain || undefined
+                  main_pain: lead.main_pain || undefined,
+                  // Campos adicionales Purchase
+                  currency: capiEventName === 'Purchase' ? 'MXN' : undefined,
+                  value: purchaseAmount,
+                  // Atribución del anuncio en custom_data (para dashboards)
+                  ad_source_id: lead.ad_source_id || undefined,
+                  ad_headline: lead.ad_headline || undefined
                 }
               }
             }
@@ -192,7 +263,7 @@ Responde UNICAMENTE con este JSON exacto (sin acentos en las claves):
 
           await supabase.from('activity_logs').insert({
             action: 'CAPI', resource: 'SYSTEM',
-            description: `📡 CAPI ${capiEventName}: ${lead.nombre} (${lead.buying_intent}→${updates.buying_intent})`,
+            description: `📡 CAPI ${capiEventName}: ${lead.nombre} (${lead.buying_intent}→${updates.buying_intent})${purchaseAmount ? ` $${purchaseAmount}` : ''}`,
             status: 'OK'
           });
         } catch (capiErr) {
@@ -217,7 +288,11 @@ Responde UNICAMENTE con este JSON exacto (sin acentos en las claves):
                   ln: lead.nombre?.split(' ').slice(1).join(' ') || undefined,
                   ct: updates.ciudad || lead.ciudad || undefined,
                   country: 'mx',
-                  external_id: lead.id
+                  external_id: lead.id,
+                  // 2026-04-10: atribución CTWA
+                  fbc: lead.fbc || undefined,
+                  fbp: lead.fbp || undefined,
+                  ctwa_clid: lead.ctwa_clid || undefined
                 },
                 custom_data: {
                   source: 'samurai_auto',
@@ -225,7 +300,9 @@ Responde UNICAMENTE con este JSON exacto (sin acentos en las claves):
                   content_category: 'talleres_cuencoterapia',
                   funnel_stage: 'BAJO',
                   origin_channel: 'whatsapp',
-                  agent_id: lead.assigned_to || undefined
+                  agent_id: lead.assigned_to || undefined,
+                  ad_source_id: lead.ad_source_id || undefined,
+                  ad_headline: lead.ad_headline || undefined
                 }
               }
             }

@@ -28,6 +28,9 @@ serve(async (req: Request): Promise<Response> => {
     let audioMediaUrl: string | null = null; // S7.1: URL directa para audio (Gowa)
     let imageMediaId: string | null = null; // S6.1: media_id para analisis de comprobante (Meta)
     let imageMediaUrl: string | null = null; // S7.1: URL directa para imagen (Gowa)
+    // 2026-04-10: Atribución CTWA — Meta Cloud API envía objeto referral en primer mensaje de un click-to-wa ad
+    // deno-lint-ignore no-explicit-any
+    let ctwaReferral: Record<string, any> | null = null;
 
     if (payload.object === 'whatsapp_business_account') {
         const change = payload.entry?.[0]?.changes?.[0]?.value;
@@ -65,6 +68,20 @@ serve(async (req: Request): Promise<Response> => {
         phone = msg.from;
         messageId = msg.id;
         pushName = change.contacts?.[0]?.profile?.name || 'Lead WhatsApp';
+
+        // 2026-04-10: capturar referral de anuncio Click-to-WhatsApp si existe
+        // Meta docs: https://developers.facebook.com/docs/whatsapp/cloud-api/webhooks/components#referral-object
+        if (msg.referral && typeof msg.referral === 'object') {
+            ctwaReferral = {
+                source_url: msg.referral.source_url || null,
+                source_id: msg.referral.source_id || null,   // Ad ID
+                source_type: msg.referral.source_type || null, // 'ad' | 'post'
+                headline: msg.referral.headline || null,
+                body: msg.referral.body || null,
+                thumbnail_url: msg.referral.thumbnail_url || null,
+                ctwa_clid: msg.referral.ctwa_clid || null,   // Click ID — crítico para CAPI matching
+            };
+        }
 
         // Parseo completo de TODOS los tipos de mensaje de Meta Cloud API
         if (msg.type === 'text') {
@@ -205,7 +222,9 @@ serve(async (req: Request): Promise<Response> => {
             }
         }
 
-        const { data: nl, error: insertError } = await supabase.from('leads').insert({
+        // 2026-04-10: Atribución de anuncio CTWA si vino de click-to-WhatsApp
+        // deno-lint-ignore no-explicit-any
+        const leadInsert: Record<string, any> = {
            nombre: pushName,
            telefono: senderPhone,
            channel_id: actualChannelId,
@@ -214,14 +233,32 @@ serve(async (req: Request): Promise<Response> => {
            buying_intent: 'BAJO',
            last_message_at: new Date().toISOString(),
            followup_stage: 0
-        }).select().single();
+        };
+        if (ctwaReferral) {
+           leadInsert.ctwa_clid = ctwaReferral.ctwa_clid;
+           leadInsert.ad_source_id = ctwaReferral.source_id;
+           leadInsert.ad_source_url = ctwaReferral.source_url;
+           leadInsert.ad_source_type = ctwaReferral.source_type;
+           leadInsert.ad_headline = ctwaReferral.headline;
+           leadInsert.ad_body = ctwaReferral.body;
+           leadInsert.ad_thumbnail_url = ctwaReferral.thumbnail_url;
+           leadInsert.referral_captured_at = new Date().toISOString();
+           // Construir fbc conforme a formato Meta: fb.<subdomain_index>.<timestamp_ms>.<click_id>
+           // subdomain_index=1 es el default para CTWA
+           if (ctwaReferral.ctwa_clid) {
+              leadInsert.fbc = `fb.1.${Date.now()}.${ctwaReferral.ctwa_clid}`;
+           }
+        }
+
+        const { data: nl, error: insertError } = await supabase.from('leads').insert(leadInsert).select().single();
 
         if (insertError) console.error(insertError);
         lead = nl;
 
         const routeInfo = assignedAgent ? ` Asignado directo a agente (canal vinculado).` : '';
+        const attribInfo = ctwaReferral ? ` 🎯 CTWA: ${ctwaReferral.headline || ctwaReferral.source_id || 'ad'}` : '';
         await supabase.from('activity_logs').insert({
-            action: 'CREATE', resource: 'LEADS', description: `Lead entrante (${pushName}). Etapa BAJO.${routeInfo}`, status: 'OK'
+            action: 'CREATE', resource: 'LEADS', description: `Lead entrante (${pushName}). Etapa BAJO.${routeInfo}${attribInfo}`, status: 'OK'
         });
     } else if (isFromMe) {
         // Mensaje saliente del asesor desde teléfono: guardar como HUMANO sin mutar lead ni activar IA
@@ -241,6 +278,15 @@ serve(async (req: Request): Promise<Response> => {
             supabase.functions.invoke('transcribe-audio', {
                 body: { media_id: audioMediaId || null, media_url: audioMediaUrl || null, lead_id: lead.id, message_id: messageId, channel_id: actualChannelId, sender_phone: senderPhone, skip_ai: true }
             }).catch((err) => console.error('transcribe-audio (outbound) fire error:', err));
+        }
+
+        // Bug-fix 2026-04-10: re-analizar intent cuando el vendedor escribe
+        // (su respuesta cambia el contexto de la conversación y puede mover de etapa)
+        const skipAnalysisOutbound = !text || text.length < 3 || text === '[Sticker]';
+        if (!skipAnalysisOutbound) {
+            supabase.functions.invoke('analyze-leads', {
+                body: { lead_id: lead.id, triggered_by: 'agent_message' }
+            }).catch(() => {});
         }
 
         return new Response('ok', { status: 200, headers: corsHeaders });
