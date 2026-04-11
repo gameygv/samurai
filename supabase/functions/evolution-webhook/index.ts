@@ -227,12 +227,22 @@ serve(async (req: Request): Promise<Response> => {
         // Mensaje saliente del asesor desde teléfono: guardar como HUMANO sin mutar lead ni activar IA
         // deno-lint-ignore no-explicit-any
         const asesorMeta: Record<string, any> = { raw: payloadText.length <= 4000 ? payloadText : payloadText.substring(0, 4000) };
-        if (audioMediaUrl) { asesorMeta.mediaUrl = audioMediaUrl; asesorMeta.mediaType = 'audio'; }
-        else if (imageMediaUrl) { asesorMeta.mediaUrl = imageMediaUrl; asesorMeta.mediaType = 'image'; }
+        if (audioMediaUrl || audioMediaId) { asesorMeta.mediaUrl = audioMediaUrl || null; asesorMeta.mediaId = audioMediaId || null; asesorMeta.mediaType = 'audio'; }
+        else if (imageMediaUrl || imageMediaId) { asesorMeta.mediaUrl = imageMediaUrl || null; asesorMeta.mediaId = imageMediaId || null; asesorMeta.mediaType = 'image'; }
         // deno-lint-ignore no-explicit-any
         const asesorInsert: Record<string, any> = { lead_id: lead.id, emisor: 'HUMANO', mensaje: text, platform: 'WHATSAPP', metadata: asesorMeta };
         if (messageId) asesorInsert.message_id = messageId;
         await supabase.from('conversaciones').insert(asesorInsert);
+
+        // Bug-fix 2026-04-10: transcribir TAMBIÉN las notas de voz salientes del vendedor
+        // para que queden legibles en el historial. skip_ai=true evita que la IA responda
+        // al cliente como si la nota del vendedor fuese del cliente.
+        if ((audioMediaId || audioMediaUrl) && messageId && actualChannelId) {
+            supabase.functions.invoke('transcribe-audio', {
+                body: { media_id: audioMediaId || null, media_url: audioMediaUrl || null, lead_id: lead.id, message_id: messageId, channel_id: actualChannelId, sender_phone: senderPhone, skip_ai: true }
+            }).catch((err) => console.error('transcribe-audio (outbound) fire error:', err));
+        }
+
         return new Response('ok', { status: 200, headers: corsHeaders });
     } else {
         const updates: Record<string, unknown> = { last_message_at: new Date().toISOString(), followup_stage: 0 };
@@ -271,17 +281,14 @@ serve(async (req: Request): Promise<Response> => {
     }
     await supabase.from('activity_logs').insert({ action: 'CHAT', resource: 'SYSTEM', description: `Mensaje de ${lead.nombre}: "${text.substring(0, 30)}..."`, status: 'OK' });
 
-    // S6.1 + S7.1: Ojo de Halcón — analizar comprobante si contexto indica pago
+    // S6.1 + S7.1: Ojo de Halcón — analizar TODA imagen entrante.
+    // analyze-receipt hace early-exit vía GPT-4o Vision si la imagen no es un comprobante.
+    // Bug-fix 2026-04-10: antes sólo se analizaba si el caption contenía palabras clave
+    // o el lead ya estaba en ALTO, lo que dejaba fuera los comprobantes sin caption.
     if (imageMediaId || imageMediaUrl) {
-        const textLower = text.toLowerCase();
-        const paymentPhrases = ['pagué', 'pague', 'transferí', 'transferi', 'comprobante', 'deposité', 'deposite', 'ya pagué', 'aqui va', 'aquí va', 'envio comprobante', 'ficha', 'boucher', 'voucher'];
-        const hasPaymentContext = paymentPhrases.some(p => textLower.includes(p));
-
-        if (hasPaymentContext || lead.buying_intent === 'ALTO') {
-            supabase.functions.invoke('analyze-receipt', {
-                body: { image_id: imageMediaId || null, media_url: imageMediaUrl || null, lead_id: lead.id, channel_id: actualChannelId, caption: text }
-            }).catch(err => console.error('analyze-receipt fire error:', err));
-        }
+        supabase.functions.invoke('analyze-receipt', {
+            body: { image_id: imageMediaId || null, media_url: imageMediaUrl || null, lead_id: lead.id, channel_id: actualChannelId, caption: text }
+        }).catch(err => console.error('analyze-receipt fire error:', err));
     }
 
     // Determine AI mode: per-channel > per-lead > global

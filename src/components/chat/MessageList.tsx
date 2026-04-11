@@ -2,6 +2,11 @@ import React, { useRef, useEffect } from 'react';
 import { Loader2, StickyNote, FileText, Mic, Check, CheckCheck } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
+// URL del edge function media-proxy (sirve media de WhatsApp con auth del canal)
+const SUPABASE_URL = "https://giwoovmvwlddaizorizk.supabase.co";
+const buildMediaProxyUrl = (messageId: string, leadId: string) =>
+  `${SUPABASE_URL}/functions/v1/media-proxy?message_id=${encodeURIComponent(messageId)}&lead_id=${encodeURIComponent(leadId)}`;
+
 interface MessageListProps {
   messages: any[];
   loading: boolean;
@@ -52,22 +57,33 @@ export const MessageList = ({ messages, loading }: MessageListProps) => {
 
     text = text.replace(/\[(Imagen|Video|Audio|Documento|Sticker)\]/gi, '').trim();
 
-    if (msg.metadata?.mediaUrl) {
+    // Preferir media-proxy cuando hay message_id + lead_id: evita problemas de
+    // auth (Gowa Basic, Meta tokens) haciendo que el backend descargue con
+    // las credenciales del canal. Fallback a la URL directa si no hay id.
+    const useProxy = !!(msg.message_id && msg.lead_id);
+    const resolvedMediaUrl = msg.metadata?.mediaUrl
+       ? (useProxy ? buildMediaProxyUrl(msg.message_id, msg.lead_id) : msg.metadata.mediaUrl)
+       : null;
+
+    if (msg.metadata?.mediaUrl || msg.metadata?.mediaId) {
       if (msg.metadata.mediaType === 'image' || msg.metadata.mediaType === 'sticker') {
-        imageUrl = msg.metadata.mediaUrl;
+        imageUrl = resolvedMediaUrl || (useProxy ? buildMediaProxyUrl(msg.message_id, msg.lead_id) : null);
       } else if (msg.metadata.mediaType === 'audio') {
-        audioUrl = msg.metadata.mediaUrl;
-      } else {
-        docUrl = msg.metadata.mediaUrl;
+        audioUrl = resolvedMediaUrl || (useProxy ? buildMediaProxyUrl(msg.message_id, msg.lead_id) : null);
+      } else if (msg.metadata.mediaUrl) {
+        docUrl = resolvedMediaUrl;
         docName = msg.metadata.fileName || 'Archivo adjunto';
       }
     }
 
     let isTranscription = false;
     let cleanText = text;
-    if (text.includes('[TRANSCRIPCIÓN DE NOTA DE VOZ]:')) {
+    // Aceptamos ambos: con acento (UI esperaba) y sin acento (transcribe-audio escribía).
+    // Tras el fix, ambos producen el mismo badge.
+    const transcriptionMatch = text.match(/\[TRANSCRIPCI[ÓO]N DE NOTA DE VOZ\]:/);
+    if (transcriptionMatch) {
        isTranscription = true;
-       cleanText = text.replace('[TRANSCRIPCIÓN DE NOTA DE VOZ]:', '').trim();
+       cleanText = text.replace(/\[TRANSCRIPCI[ÓO]N DE NOTA DE VOZ\]:/, '').trim();
        if (cleanText.startsWith('"') && cleanText.endsWith('"')) {
           cleanText = cleanText.substring(1, cleanText.length - 1);
        }

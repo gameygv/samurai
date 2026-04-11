@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { Wallet, CheckCircle2, XCircle, AlertTriangle, Loader2, ShieldCheck, User } from 'lucide-react';
+import { Wallet, CheckCircle2, XCircle, AlertTriangle, Loader2, ShieldCheck, User, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/context/AuthContext';
@@ -40,6 +40,7 @@ export const PaymentAudit = ({ paymentStatus, onUpdateStatus, leadId }: PaymentA
   const [confirmAction, setConfirmAction] = useState<'VALID' | 'INVALID'>('VALID');
   const [selectedReceipt, setSelectedReceipt] = useState<ReceiptAudit | null>(null);
   const [verifying, setVerifying] = useState(false);
+  const [reanalyzing, setReanalyzing] = useState(false);
 
   useEffect(() => {
     if (leadId) fetchReceipts();
@@ -67,6 +68,61 @@ export const PaymentAudit = ({ paymentStatus, onUpdateStatus, leadId }: PaymentA
       setReceipts([]);
     }
     setLoading(false);
+  };
+
+  const handleReanalyze = async () => {
+     if (!leadId) return;
+     setReanalyzing(true);
+     try {
+        // Traer el lead para obtener channel_id
+        const { data: lead } = await supabase.from('leads').select('channel_id').eq('id', leadId).single();
+        if (!lead?.channel_id) {
+           toast.error('El lead no tiene canal asociado.');
+           return;
+        }
+        // Buscar mensajes del cliente con imagen en metadata
+        const { data: msgs } = await supabase
+           .from('conversaciones')
+           .select('id, metadata, mensaje')
+           .eq('lead_id', leadId)
+           .eq('emisor', 'CLIENTE')
+           .order('created_at', { ascending: true });
+
+        const imageMsgs = (msgs || []).filter((m: any) => {
+           const meta = m.metadata || {};
+           return meta.mediaType === 'image' && (meta.mediaUrl || meta.mediaId);
+        });
+
+        if (imageMsgs.length === 0) {
+           toast.info('No hay imágenes en esta conversación para analizar.');
+           return;
+        }
+
+        // Disparar analyze-receipt en paralelo por cada imagen
+        let analyzed = 0;
+        for (const m of imageMsgs) {
+           const meta = m.metadata || {};
+           try {
+              const { data } = await supabase.functions.invoke('analyze-receipt', {
+                 body: {
+                    image_id: meta.mediaId || null,
+                    media_url: meta.mediaUrl || null,
+                    lead_id: leadId,
+                    channel_id: lead.channel_id,
+                    caption: m.mensaje || ''
+                 }
+              });
+              if (data && !data.skipped) analyzed++;
+           } catch (e) { console.error('reanalyze error:', e); }
+        }
+
+        toast.success(`Re-análisis completo: ${analyzed} comprobante(s) de ${imageMsgs.length} imagen(es).`);
+        await fetchReceipts();
+     } catch (err: any) {
+        toast.error('Error al re-analizar: ' + err.message);
+     } finally {
+        setReanalyzing(false);
+     }
   };
 
   const handleValidateClick = (receipt: ReceiptAudit, action: 'VALID' | 'INVALID') => {
@@ -117,9 +173,21 @@ export const PaymentAudit = ({ paymentStatus, onUpdateStatus, leadId }: PaymentA
 
   return (
     <div className="p-5 border-b border-[#1a1a1a] space-y-4">
-      <h4 className="text-[10px] font-bold text-[#7A8A9E] uppercase tracking-widest flex items-center gap-2">
-        <Wallet className="w-3.5 h-3.5 text-[#7A8A9E]" /> Auditoría de Pago — Ojo de Halcón
-      </h4>
+      <div className="flex items-center justify-between">
+        <h4 className="text-[10px] font-bold text-[#7A8A9E] uppercase tracking-widest flex items-center gap-2">
+          <Wallet className="w-3.5 h-3.5 text-[#7A8A9E]" /> Auditoría de Pago — Ojo de Halcón
+        </h4>
+        <Button
+          onClick={handleReanalyze}
+          disabled={reanalyzing || !leadId}
+          variant="ghost"
+          size="sm"
+          className="h-6 px-2 text-[9px] uppercase font-bold tracking-widest text-amber-500 hover:bg-amber-950/30"
+          title="Re-analizar todas las imágenes del chat"
+        >
+          {reanalyzing ? <Loader2 className="w-3 h-3 animate-spin" /> : <><RefreshCw className="w-3 h-3 mr-1" /> Re-analizar</>}
+        </Button>
+      </div>
 
       {/* Estado general */}
       <div className="bg-[#121214] border border-[#222225] rounded-xl p-4 space-y-3">

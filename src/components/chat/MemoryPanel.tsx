@@ -216,13 +216,35 @@ export const MemoryPanel = ({
 
   const handleIntentChange = async (newIntent: string) => {
       if (currentAnalysis?.buying_intent === newIntent) return;
+      // Optimistic UI: actualizar forma local inmediatamente (FunnelStage lee de memoryForm primero)
+      setMemoryForm((prev: any) => ({ ...prev, buying_intent: newIntent }));
       try {
-          await supabase.from('leads').update({ buying_intent: newIntent }).eq('id', currentAnalysis.id);
-          setMemoryForm(prev => ({ ...prev, buying_intent: newIntent })); // UPDATE LOCAL STATE
+          const { data, error } = await supabase
+             .from('leads')
+             .update({ buying_intent: newIntent })
+             .eq('id', currentAnalysis.id)
+             .select('id, buying_intent');
+
+          if (error) {
+             // RLS o constraint rechazó — revertir UI y mostrar causa
+             setMemoryForm((prev: any) => ({ ...prev, buying_intent: currentAnalysis.buying_intent }));
+             const msg = error.code === '42501' || /row-level security|permission/i.test(error.message)
+                ? 'No tienes permiso para cambiar la etapa de este lead.'
+                : `Error al actualizar etapa: ${error.message}`;
+             toast.error(msg);
+             return;
+          }
+          if (!data || data.length === 0) {
+             // Supabase regresa 0 rows cuando RLS filtra silenciosamente la fila
+             setMemoryForm((prev: any) => ({ ...prev, buying_intent: currentAnalysis.buying_intent }));
+             toast.error('No se pudo guardar: el lead no está asignado a ti o RLS bloquea el cambio.');
+             return;
+          }
           toast.success(`Movido a: ${newIntent}`);
           if (onAnalysisComplete) onAnalysisComplete();
       } catch (err: any) {
-          toast.error("Error al actualizar etapa");
+          setMemoryForm((prev: any) => ({ ...prev, buying_intent: currentAnalysis.buying_intent }));
+          toast.error('Error al actualizar etapa: ' + (err?.message || 'desconocido'));
       }
   };
 
@@ -299,9 +321,9 @@ export const MemoryPanel = ({
             onCia={() => setIsCiaDialogOpen(true)} 
          />
 
-         <FunnelStage 
-            buyingIntent={currentAnalysis?.buying_intent} 
-            onIntentChange={handleIntentChange} 
+         <FunnelStage
+            buyingIntent={memoryForm?.buying_intent ?? currentAnalysis?.buying_intent}
+            onIntentChange={handleIntentChange}
          />
 
          <RetargetingRadar 

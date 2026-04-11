@@ -66,10 +66,13 @@ serve(async (req) => {
     const dataUrl = `data:${mimeType};base64,${base64}`;
 
     // 4. Analizar con GPT-4o Vision usando prompt_vision_instrucciones
+    // Bug-fix 2026-04-10: prompt incluye un marcador IS_RECEIPT: YES/NO para hacer early-exit
+    // cuando la imagen no es un comprobante (evita llenar receipt_audits con fotos aleatorias).
     const { data: configs } = await supabase.from('app_config').select('key, value');
     const openaiKey = Deno.env.get('OPENAI_API_KEY') || configs?.find(c => c.key === 'openai_api_key')?.value;
-    const visionPrompt = configs?.find(c => c.key === 'prompt_vision_instrucciones')?.value
+    const basePrompt = configs?.find(c => c.key === 'prompt_vision_instrucciones')?.value
       || 'Analiza esta imagen con extremo detalle y precisión. Si es un COMPROBANTE DE PAGO: Extrae Banco, Monto transferido, Fecha y Referencia. Responde en texto plano.';
+    const visionPrompt = `PRIMERA LÍNEA OBLIGATORIA: escribe literalmente "IS_RECEIPT: YES" si la imagen es un comprobante bancario / ticket de transferencia / voucher de pago, o "IS_RECEIPT: NO" si es cualquier otra cosa (foto personal, screenshot de chat, meme, producto, captura aleatoria). Luego, en las siguientes líneas:\n\n${basePrompt}`;
 
     if (!openaiKey) {
       await supabase.from('activity_logs').insert({ action: 'ERROR', resource: 'BRAIN', description: '🔍 Ojo de Halcón: OpenAI API Key no configurada', status: 'ERROR' });
@@ -100,7 +103,23 @@ serve(async (req) => {
     }
 
     const aiData = await aiRes.json();
-    const analysis = aiData.choices?.[0]?.message?.content || 'No se pudo analizar la imagen.';
+    const rawAnalysis = aiData.choices?.[0]?.message?.content || 'No se pudo analizar la imagen.';
+
+    // Early-exit: si GPT-4o determina que la imagen NO es un comprobante, no registrar nada.
+    const firstLine = rawAnalysis.split('\n')[0].trim().toUpperCase();
+    if (firstLine.includes('IS_RECEIPT: NO') || firstLine.includes('IS_RECEIPT:NO')) {
+      await supabase.from('activity_logs').insert({
+        action: 'INFO', resource: 'BRAIN',
+        description: `🔍 Ojo de Halcón: imagen descartada (no es comprobante) lead=${lead_id}`,
+        status: 'OK'
+      }).catch(() => {});
+      return new Response(JSON.stringify({ success: true, skipped: true, reason: 'not_a_receipt' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
+    // Limpiar el marcador IS_RECEIPT de la salida antes de guardarla
+    const analysis = rawAnalysis.replace(/^IS_RECEIPT:\s*(YES|NO)\s*\n?/i, '').trim();
 
     // 5. Obtener datos del lead para la notificación
     const { data: lead } = await supabase.from('leads').select('nombre, assigned_to').eq('id', lead_id).single();

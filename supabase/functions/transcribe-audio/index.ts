@@ -10,7 +10,7 @@ serve(async (req) => {
 
   let _lead_id = null, _message_id = null;
   try {
-    const { media_id, media_url, lead_id, message_id, channel_id, sender_phone } = await req.json();
+    const { media_id, media_url, lead_id, message_id, channel_id, sender_phone, skip_ai } = await req.json();
     _lead_id = lead_id; _message_id = message_id;
     if ((!media_id && !media_url) || !lead_id || !message_id || !channel_id) {
       return new Response('missing_params', { headers: corsHeaders });
@@ -22,7 +22,8 @@ serve(async (req) => {
       await logAndFallback(supabase, lead_id, message_id, 'Canal no encontrado o sin api_key', false);
       return new Response('no_channel', { headers: corsHeaders });
     }
-    const shouldInvokeAI = channel.ai_mode === 'on';
+    // skip_ai=true se usa para transcribir audio SALIENTE (del vendedor) sin disparar respuesta IA al cliente
+    const shouldInvokeAI = channel.ai_mode === 'on' && !skip_ai;
 
     // 2. Obtener OpenAI api_key
     const { data: configs } = await supabase.from('app_config').select('key, value');
@@ -144,7 +145,8 @@ serve(async (req) => {
     }
 
     // 6. Actualizar conversacion con transcripcion real
-    const transcribedMessage = `[TRANSCRIPCION DE NOTA DE VOZ]: "${transcription}"`;
+    // Usar acento Ó para matchear el regex del UI (MessageList.tsx) — ambos variantes funcionan desde el fix 2026-04-10
+    const transcribedMessage = `[TRANSCRIPCIÓN DE NOTA DE VOZ]: "${transcription}"`;
     await supabase.from('conversaciones').update({ mensaje: transcribedMessage }).eq('message_id', message_id);
 
     // 7. Invocar process-samurai-response solo si canal tiene IA activa
