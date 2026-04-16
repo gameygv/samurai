@@ -6,6 +6,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
 import { corsHeaders } from '../_shared/cors.ts';
+import { inferGender } from '../_shared/mexico-geo.ts';
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
@@ -51,11 +52,13 @@ serve(async (req) => {
     }
 
     // 2. Identity matching (siempre funciona, es calculo local)
+    const gender = inferGender(lead.nombre);
     const identityFields = [
       { key: 'ph', label: 'Teléfono', value: lead.telefono, required: true },
       { key: 'em', label: 'Email', value: lead.email, required: true },
       { key: 'fn', label: 'Nombre', value: lead.nombre?.split(' ')[0], required: true },
       { key: 'ln', label: 'Apellido', value: lead.nombre?.split(' ').slice(1).join(' ') || null, required: false },
+      { key: 'ge', label: 'Género', value: gender ? (gender === 'f' ? 'Femenino' : 'Masculino') : null, required: false },
       { key: 'ct', label: 'Ciudad', value: lead.ciudad, required: false },
       { key: 'st', label: 'Estado', value: lead.estado, required: false },
       { key: 'zp', label: 'Código postal', value: lead.cp, required: false },
@@ -169,6 +172,56 @@ serve(async (req) => {
       errors.push(`config crash: ${e?.message || e}`);
     }
 
+    // 9. Primer mensaje crudo — para verificar si Gowa envió referral CTWA
+    let firstWebhookRaw: string | null = null;
+    let firstWebhookHasReferral = false;
+    try {
+      const { data: firstMsg } = await supabase.from('conversaciones')
+        .select('metadata, created_at')
+        .eq('lead_id', leadId)
+        .eq('emisor', 'CLIENTE')
+        .order('created_at', { ascending: true })
+        .limit(1)
+        .maybeSingle();
+      if (firstMsg?.metadata?.raw) {
+        const raw = String(firstMsg.metadata.raw);
+        firstWebhookRaw = raw.substring(0, 1200);
+        firstWebhookHasReferral = raw.includes('referral') || raw.includes('externalAdReply') || raw.includes('external_ad_reply');
+      }
+    } catch (e: any) {
+      errors.push(`first_webhook: ${e?.message || e}`);
+    }
+
+    // 10. Último evento CAPI enviado (con detalle del payload para auditoría)
+    let lastCapiEvent: any = null;
+    try {
+      const { data: lce } = await supabase.from('meta_capi_events')
+        .select('event_name, status, meta_response, unhashed_data, created_at')
+        .eq('lead_id', leadId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (lce) {
+        lastCapiEvent = {
+          event_name: lce.event_name,
+          status: lce.status,
+          has_fbc: !!(lce.unhashed_data?.user_data?.fbc),
+          has_fbp: !!(lce.unhashed_data?.user_data?.fbp),
+          has_ctwa_clid: !!(lce.unhashed_data?.user_data?.ctwa_clid),
+          has_ge: !!(lce.unhashed_data?.user_data?.ge),
+          has_zp: !!(lce.unhashed_data?.user_data?.zp),
+          has_ct: !!(lce.unhashed_data?.user_data?.ct),
+          has_em: !!(lce.unhashed_data?.user_data?.em),
+          source: lce.unhashed_data?.custom_data?.source || null,
+          meta_response_ok: !!(lce.meta_response?.events_received),
+          meta_error: lce.meta_response?.error?.error_user_title || null,
+          created_at: lce.created_at
+        };
+      }
+    } catch (e: any) {
+      errors.push(`last_capi_event: ${e?.message || e}`);
+    }
+
     const diagnostic = {
       lead: {
         id: lead.id,
@@ -228,6 +281,13 @@ serve(async (req) => {
         ready_to_send: hasPixelId && hasAccessToken && capiEnabledOnChannel,
       },
       last_analysis: lastAnalysis,
+      // Webhook crudo del primer mensaje — para verificar si Gowa envió referral
+      first_webhook: {
+        raw_snippet: firstWebhookRaw,
+        has_referral: firstWebhookHasReferral,
+      },
+      // Último evento CAPI enviado — qué datos incluyó
+      last_capi_event: lastCapiEvent,
       // Exposición de errores parciales para que el frontend pueda avisarlos
       diagnostic_errors: errors,
     };

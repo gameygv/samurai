@@ -38,8 +38,19 @@ serve(async (req) => {
     if (eventData.user_data?.ct) userData.ct = [await normalizeAndHash(eventData.user_data.ct)];
     if (eventData.user_data?.st) userData.st = [await normalizeAndHash(eventData.user_data.st)];
     if (eventData.user_data?.zp) userData.zp = [await normalizeAndHash(eventData.user_data.zp)];
-    userData.country = [await normalizeAndHash(eventData.user_data?.country || 'mx')]; 
+    if (eventData.user_data?.ge) userData.ge = [await normalizeAndHash(eventData.user_data.ge)];
+    userData.country = [await normalizeAndHash(eventData.user_data?.country || 'mx')];
     if (eventData.user_data?.external_id) userData.external_id = [await normalizeAndHash(eventData.user_data.external_id)];
+
+    // Campos de atribución: van SIN hashear per Meta CAPI spec
+    // https://developers.facebook.com/docs/marketing-api/conversions-api/parameters/customer-information-parameters
+    if (eventData.user_data?.fbc) userData.fbc = eventData.user_data.fbc;
+    if (eventData.user_data?.fbp) userData.fbp = eventData.user_data.fbp;
+    // ctwa_clid (Click-to-WhatsApp Click ID): va SIN hashear, mejora atribución CTWA ads
+    if (eventData.user_data?.ctwa_clid) userData.ctwa_clid = eventData.user_data.ctwa_clid;
+    // client_ip_address y client_user_agent mejoran match quality
+    if (eventData.user_data?.client_ip_address) userData.client_ip_address = eventData.user_data.client_ip_address;
+    if (eventData.user_data?.client_user_agent) userData.client_user_agent = eventData.user_data.client_user_agent;
 
     const payload = {
       data: [{

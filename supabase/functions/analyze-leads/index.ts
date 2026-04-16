@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0'
 import { corsHeaders } from '../_shared/cors.ts'
+import { lookupGeo, inferGender } from '../_shared/mexico-geo.ts'
 
 serve(async (req: Request): Promise<Response> => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
@@ -103,7 +104,19 @@ Lead Score (lead_score): número 0-100 de probabilidad de compra.
   21-40: Pidió información general.
   41-60: Preguntó precios o detalles específicos.
   61-80: Mostró intención de compra, dio datos personales.
-  81-100: Quiere pagar, envió comprobante, pidió datos bancarios.`;
+  81-100: Quiere pagar, envió comprobante, pidió datos bancarios.
+
+REGLAS DE DATOS GEOGRÁFICOS (CRÍTICO para Meta CAPI):
+- "ciudad": Si el cliente menciona de dónde es (ej: "soy de Guadalajara", "vivo en Monterrey", "estoy en Cancún"), extrae la ciudad.
+- "estado": Siempre que detectes ciudad, infiere el estado mexicano (ej: Guadalajara → Jalisco, Monterrey → Nuevo León).
+- "cp": SIEMPRE que detectes una ciudad, infiere el código postal del CENTRO de esa ciudad (ej: Guadalajara → 44100, Monterrey → 64000, CDMX → 06000). Si el cliente menciona una colonia específica, usa el CP de esa colonia. El CP debe ser exactamente 5 dígitos.
+- "genero": Infiere del nombre: "f" para femenino, "m" para masculino, null si no puedes determinarlo.
+
+DATOS FISCALES (extraer SOLO si el cliente los menciona explícitamente en el chat):
+- "rfc": RFC del cliente si lo menciona (13 caracteres persona física, 12 moral). Solo si aparece textualmente.
+- "direccion": Dirección completa si la menciona (calle, número, colonia).
+- "uso_cfdi": Código de uso CFDI si lo menciona (ej: G03, S01, D10). Solo el código.
+- "regimen_fiscal": Código de régimen fiscal si lo menciona (ej: 605, 612, 626). Solo el código.`;
 
     const analysisPrompt = `${basePrompt}
 
@@ -111,7 +124,7 @@ CONVERSACION:
 ${chatContext}
 
 Responde UNICAMENTE con este JSON exacto (sin acentos en las claves):
-{"nombre": null, "apellido": null, "email": null, "ciudad": null, "estado": null, "cp": null, "servicio_interes": null, "intent": "BAJO", "lead_score": 10}`;
+{"nombre": null, "apellido": null, "email": null, "ciudad": null, "estado": null, "cp": null, "genero": null, "direccion": null, "rfc": null, "uso_cfdi": null, "regimen_fiscal": null, "servicio_interes": null, "intent": "BAJO", "lead_score": 10}`;
 
     const aiRes = await fetch("https://api.openai.com/v1/chat/completions", {
       method: 'POST',
@@ -173,10 +186,70 @@ Responde UNICAMENTE con este JSON exacto (sin acentos en las claves):
       const parsedScore = Number(parsed.lead_score);
       if (!isNaN(parsedScore) && parsedScore >= 0 && parsedScore <= 100) updates.lead_score = parsedScore;
 
+      // Género: primero IA, luego inferencia determinística del nombre — guardar en DB
+      const aiGender = parsed.genero === 'f' || parsed.genero === 'm' ? parsed.genero : null;
+      const detGender = inferGender(updates.nombre || lead.nombre);
+      const finalGender = aiGender || detGender;
+      if (finalGender && !lead.genero) updates.genero = finalGender;
+
+      // Datos fiscales: solo si la IA los detectó explícitamente en el chat
+      if (parsed.rfc && /^[A-ZÑ&]{3,4}\d{6}[A-Z0-9]{3}$/i.test(String(parsed.rfc)) && !lead.rfc) updates.rfc = String(parsed.rfc).toUpperCase();
+      if (parsed.direccion && parsed.direccion.length > 5 && !lead.direccion) updates.direccion = parsed.direccion;
+      if (parsed.uso_cfdi && /^[A-Z]{1,2}\d{2}$/.test(String(parsed.uso_cfdi)) && !lead.uso_cfdi) updates.uso_cfdi = String(parsed.uso_cfdi).toUpperCase();
+      if (parsed.regimen_fiscal && /^\d{3}$/.test(String(parsed.regimen_fiscal)) && !lead.regimen_fiscal) updates.regimen_fiscal = String(parsed.regimen_fiscal);
+
+      // GEO FALLBACK: si tenemos ciudad pero falta CP o estado
+      // Nivel 1: mapa determinístico (instantáneo, sin costo)
+      // Nivel 2: si la ciudad no está en el mapa → segunda llamada IA para inferir CP
+      const effectiveCity = updates.ciudad || lead.ciudad;
+      if (effectiveCity && !updates.cp && !lead.cp) {
+        const geo = lookupGeo(effectiveCity);
+        if (geo) {
+          updates.cp = geo.cp;
+          if (!updates.estado && !lead.estado) updates.estado = geo.estado;
+        } else {
+          // Ciudad no está en el mapa → pedir a la IA que infiera el CP
+          try {
+            const cpRes = await fetch("https://api.openai.com/v1/chat/completions", {
+              method: 'POST',
+              headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                model: "gpt-4o-mini",
+                messages: [{ role: 'user', content:
+                  `¿Cuál es el código postal (5 dígitos) del centro de "${effectiveCity}", México? Responde SOLO con los 5 dígitos, nada más.`
+                }],
+                temperature: 0, max_tokens: 10
+              })
+            });
+            if (cpRes.ok) {
+              const cpData = await cpRes.json();
+              const cpAnswer = cpData.choices?.[0]?.message?.content?.trim() || '';
+              const cpMatch = cpAnswer.match(/\d{5}/);
+              if (cpMatch) updates.cp = cpMatch[0];
+            }
+          } catch (_) { /* silenciar error de CP lookup */ }
+        }
+        // Estado: si aún falta, intentar del mapa o dejar lo que la IA ya puso
+        if (effectiveCity && !updates.estado && !lead.estado) {
+          const geo2 = lookupGeo(effectiveCity);
+          if (geo2) updates.estado = geo2.estado;
+        }
+      }
+
       // Doble validación final: PERDIDO nunca pasa
       if (updates.buying_intent === 'PERDIDO') updates.buying_intent = 'BAJO';
 
       await supabase.from('leads').update(updates).eq('id', lead.id);
+
+      // CAPI ENRIQUECIMIENTO: cuando se completa data nueva (ciudad/cp/email/estado)
+      // sin cambio de intent, re-enviar evento CAPI con la data enriquecida
+      // para mejorar matching en Meta. Solo si ya se envió al menos un evento antes.
+      const dataEnriched = (
+        (updates.ciudad && !lead.ciudad) ||
+        (updates.cp && !lead.cp) ||
+        (updates.email && !lead.email) ||
+        (updates.estado && !lead.estado)
+      );
 
       // S6.3: CAPI automático — disparar evento cuando intent sube
       const oldIntentLevel = intentOrder[lead.buying_intent] ?? 0;
@@ -227,15 +300,15 @@ Responde UNICAMENTE con este JSON exacto (sin acentos en las claves):
                 lead_id: lead.id,
                 user_data: {
                   ph: lead.telefono,
-                  fn: lead.nombre?.split(' ')[0],
-                  ln: lead.nombre?.split(' ').slice(1).join(' ') || undefined,
+                  fn: (updates.nombre || lead.nombre)?.split(' ')[0],
+                  ln: (updates.nombre || lead.nombre)?.split(' ').slice(1).join(' ') || undefined,
                   em: updates.email || lead.email || undefined,
                   ct: updates.ciudad || lead.ciudad || undefined,
                   st: updates.estado || lead.estado || undefined,
                   zp: updates.cp || lead.cp || undefined,
+                  ge: finalGender || undefined,
                   country: 'mx',
                   external_id: lead.id,
-                  // 2026-04-10: atribución CTWA para matching óptimo en Meta
                   fbc: lead.fbc || undefined,
                   fbp: lead.fbp || undefined,
                   ctwa_clid: lead.ctwa_clid || undefined
@@ -250,10 +323,8 @@ Responde UNICAMENTE con este JSON exacto (sin acentos en las claves):
                   origin_channel: 'whatsapp',
                   psychographic_segment: lead.perfil_psicologico || undefined,
                   main_pain: lead.main_pain || undefined,
-                  // Campos adicionales Purchase
                   currency: capiEventName === 'Purchase' ? 'MXN' : undefined,
                   value: purchaseAmount,
-                  // Atribución del anuncio en custom_data (para dashboards)
                   ad_source_id: lead.ad_source_id || undefined,
                   ad_headline: lead.ad_headline || undefined
                 }
@@ -271,6 +342,63 @@ Responde UNICAMENTE con este JSON exacto (sin acentos en las claves):
         }
       }
 
+      // CAPI ENRIQUECIMIENTO: si data mejoró pero intent no cambió, re-enviar evento
+      // para que Meta actualice el perfil del usuario con la nueva info (ciudad, CP, email, etc.)
+      // Solo dispara si: (a) hubo enriquecimiento, (b) intent NO subió (ya se envió arriba),
+      // (c) ya se envió al menos un evento Lead antes, (d) CAPI habilitado.
+      if (dataEnriched && !(newIntentLevel > oldIntentLevel) && lead.capi_lead_event_sent_at && metaPixelId && metaAccessToken && capiEnabled) {
+        try {
+          const enrichTimestamp = Math.floor(Date.now() / 1000);
+          const currentEvent = ({ 'BAJO': 'Lead', 'MEDIO': 'ViewContent', 'ALTO': 'InitiateCheckout', 'COMPRADO': 'Purchase' } as Record<string, string>)[updates.buying_intent] || 'Lead';
+          await supabase.functions.invoke('meta-capi-sender', {
+            body: {
+              config: { pixel_id: metaPixelId, access_token: metaAccessToken, test_event_code: configMap.meta_test_event_code || undefined },
+              eventData: {
+                event_name: currentEvent,
+                event_id: `samurai_${lead.id}_enrich_${enrichTimestamp}`,
+                lead_id: lead.id,
+                user_data: {
+                  ph: lead.telefono,
+                  fn: (updates.nombre || lead.nombre)?.split(' ')[0],
+                  ln: (updates.nombre || lead.nombre)?.split(' ').slice(1).join(' ') || undefined,
+                  em: updates.email || lead.email || undefined,
+                  ct: updates.ciudad || lead.ciudad || undefined,
+                  st: updates.estado || lead.estado || undefined,
+                  zp: updates.cp || lead.cp || undefined,
+                  ge: finalGender || undefined,
+                  country: 'mx',
+                  external_id: lead.id,
+                  fbc: lead.fbc || undefined,
+                  fbp: lead.fbp || undefined,
+                  ctwa_clid: lead.ctwa_clid || undefined
+                },
+                custom_data: {
+                  source: 'samurai_enrich',
+                  content_name: updates.servicio_interes || lead.servicio_interes || undefined,
+                  content_category: 'talleres_cuencoterapia',
+                  funnel_stage: updates.buying_intent,
+                  lead_score: updates.lead_score || lead.lead_score || undefined,
+                  origin_channel: 'whatsapp'
+                }
+              }
+            }
+          });
+          const enrichedFields = [
+            updates.ciudad && !lead.ciudad ? 'ciudad' : null,
+            updates.cp && !lead.cp ? 'cp' : null,
+            updates.email && !lead.email ? 'email' : null,
+            updates.estado && !lead.estado ? 'estado' : null,
+          ].filter(Boolean).join(', ');
+          await supabase.from('activity_logs').insert({
+            action: 'CAPI', resource: 'SYSTEM',
+            description: `🔄 CAPI Enrich ${currentEvent}: ${lead.nombre} — nuevos campos: ${enrichedFields}`,
+            status: 'OK'
+          });
+        } catch (enrichErr) {
+          console.error('CAPI enrich error:', enrichErr);
+        }
+      }
+
       // Enviar evento Lead para leads NUEVOS (primera vez que se analiza, intent = BAJO)
       if (oldIntentLevel === 0 && newIntentLevel === 0 && !lead.capi_lead_event_sent_at && metaPixelId && metaAccessToken && capiEnabled) {
         try {
@@ -284,12 +412,15 @@ Responde UNICAMENTE con este JSON exacto (sin acentos en las claves):
                 lead_id: lead.id,
                 user_data: {
                   ph: lead.telefono,
-                  fn: lead.nombre?.split(' ')[0],
-                  ln: lead.nombre?.split(' ').slice(1).join(' ') || undefined,
+                  fn: (updates.nombre || lead.nombre)?.split(' ')[0],
+                  ln: (updates.nombre || lead.nombre)?.split(' ').slice(1).join(' ') || undefined,
+                  em: updates.email || lead.email || undefined,
                   ct: updates.ciudad || lead.ciudad || undefined,
+                  st: updates.estado || lead.estado || undefined,
+                  zp: updates.cp || lead.cp || undefined,
+                  ge: finalGender || undefined,
                   country: 'mx',
                   external_id: lead.id,
-                  // 2026-04-10: atribución CTWA
                   fbc: lead.fbc || undefined,
                   fbp: lead.fbp || undefined,
                   ctwa_clid: lead.ctwa_clid || undefined

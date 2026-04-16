@@ -1,9 +1,9 @@
 "use client";
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, CheckCircle2, XCircle, AlertTriangle, Megaphone, User, Send, Clock, AlertCircle, Target } from 'lucide-react';
+import { Loader2, CheckCircle2, XCircle, AlertTriangle, Megaphone, User, Send, Clock, AlertCircle, Target, RefreshCw, Code, Zap, Radio } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
 
@@ -22,6 +22,22 @@ interface DiagnosticField {
   value: string | null;
 }
 
+interface LastCapiEvent {
+  event_name: string;
+  status: string;
+  has_fbc: boolean;
+  has_fbp: boolean;
+  has_ctwa_clid: boolean;
+  has_ge: boolean;
+  has_zp: boolean;
+  has_ct: boolean;
+  has_em: boolean;
+  source: string | null;
+  meta_response_ok: boolean;
+  meta_error: string | null;
+  created_at: string;
+}
+
 interface Diagnostic {
   lead: { id: string; nombre: string; telefono: string; buying_intent: string; lead_score: number; payment_status: string; capi_lead_event_sent_at: string | null };
   identity: { score_percent: number; fields_present: number; fields_total: number; fields: DiagnosticField[] };
@@ -35,49 +51,92 @@ interface Diagnostic {
     error_count: number;
   };
   receipts: Array<{ id: string; verdict: string; amount: number; matched_account: string; bank: string; verified: boolean; created_at: string }>;
-  config: { capi_enabled_on_channel: boolean; has_pixel_id: boolean; has_access_token: boolean; test_event_code: string | null; ready_to_send: boolean };
+  config: { channel_name: string | null; capi_enabled_on_channel: boolean; has_pixel_id: boolean; has_access_token: boolean; test_event_code: string | null; ready_to_send: boolean };
+  first_webhook: { raw_snippet: string | null; has_referral: boolean };
+  last_capi_event: LastCapiEvent | null;
+  diagnostic_errors: string[];
 }
 
 export const MetaCapiDiagnosticDialog = ({ open, onOpenChange, leadId }: Props) => {
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<Diagnostic | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [resending, setResending] = useState(false);
+  const [resendResult, setResendResult] = useState<string | null>(null);
+
+  const loadDiagnostic = useCallback(async () => {
+    if (!leadId) return;
+    setLoading(true);
+    setError(null);
+    setData(null);
+    setResendResult(null);
+    try {
+      await supabase.functions.invoke('analyze-leads', { body: { lead_id: leadId, force: true } });
+      await new Promise(r => setTimeout(r, 800));
+      const { data: diagnostic, error: fnErr } = await supabase.functions.invoke('get-capi-diagnostic', { body: { lead_id: leadId } });
+      if (fnErr) throw fnErr;
+      setData(diagnostic as Diagnostic);
+    } catch (e: any) {
+      setError(e?.message || 'Error al cargar diagnóstico');
+    } finally {
+      setLoading(false);
+    }
+  }, [leadId]);
 
   useEffect(() => {
     if (!open || !leadId) return;
-    let cancelled = false;
+    loadDiagnostic();
+  }, [open, leadId, loadDiagnostic]);
 
-    const run = async () => {
-      setLoading(true);
-      setError(null);
-      setData(null);
-      try {
-        // 1. Re-analizar lead con force=true (también disparado por el botón)
-        await supabase.functions.invoke('analyze-leads', { body: { lead_id: leadId, force: true } });
-        // 2. Pequeña pausa para que las escrituras en DB se vean
-        await new Promise(r => setTimeout(r, 800));
-        // 3. Traer diagnóstico fresco
-        const { data: diagnostic, error: fnErr } = await supabase.functions.invoke('get-capi-diagnostic', { body: { lead_id: leadId } });
-        if (fnErr) throw fnErr;
-        if (cancelled) return;
-        setData(diagnostic as Diagnostic);
-      } catch (e: any) {
-        if (!cancelled) setError(e?.message || 'Error al cargar diagnóstico');
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    };
+  const handleResendCapi = async () => {
+    if (!leadId || !data) return;
+    setResending(true);
+    setResendResult(null);
+    try {
+      const eventMap: Record<string, string> = { BAJO: 'Lead', MEDIO: 'ViewContent', ALTO: 'InitiateCheckout', COMPRADO: 'Purchase' };
+      const eventName = eventMap[data.lead.buying_intent] || 'Lead';
 
-    run();
-    return () => { cancelled = true; };
-  }, [open, leadId]);
+      const { data: configs } = await supabase.from('app_config').select('key, value').in('key', ['meta_pixel_id', 'meta_access_token', 'meta_test_event_code']);
+      const cfgMap = (configs || []).reduce((a: Record<string, string>, c: { key: string; value: string }) => ({ ...a, [c.key]: c.value }), {} as Record<string, string>);
+
+      const { data: lead } = await supabase.from('leads').select('*').eq('id', leadId).single();
+      if (!lead) throw new Error('Lead no encontrado');
+
+      const { data: result, error: sendErr } = await supabase.functions.invoke('meta-capi-sender', {
+        body: {
+          config: { pixel_id: cfgMap.meta_pixel_id, access_token: cfgMap.meta_access_token, test_event_code: cfgMap.meta_test_event_code || undefined },
+          eventData: {
+            event_name: eventName,
+            event_id: `samurai_${lead.id}_manual_${Math.floor(Date.now() / 1000)}`,
+            lead_id: lead.id,
+            user_data: {
+              ph: lead.telefono, fn: lead.nombre?.split(' ')[0], ln: lead.nombre?.split(' ').slice(1).join(' ') || undefined,
+              em: lead.email || undefined, ct: lead.ciudad || undefined, st: lead.estado || undefined,
+              zp: lead.cp || undefined, country: 'mx', external_id: lead.id,
+              fbc: lead.fbc || undefined, fbp: lead.fbp || undefined
+            },
+            custom_data: {
+              source: 'samurai_manual_test', funnel_stage: lead.buying_intent, origin_channel: 'whatsapp',
+              currency: eventName === 'Purchase' ? 'MXN' : undefined, value: eventName === 'Purchase' ? 0 : undefined
+            }
+          }
+        }
+      });
+      if (sendErr) throw sendErr;
+      const ok = result?.response?.events_received > 0;
+      setResendResult(ok ? `✓ ${eventName} enviado — Meta recibió ${result.response.events_received} evento(s)` : `✗ Error: ${result?.response?.error?.error_user_title || 'Respuesta inesperada'}`);
+      // Recargar diagnóstico para ver el evento nuevo
+      setTimeout(() => loadDiagnostic(), 1500);
+    } catch (e: any) {
+      setResendResult(`✗ Error: ${e?.message || 'Fallo al enviar'}`);
+    } finally {
+      setResending(false);
+    }
+  };
 
   const fmtDate = (iso: string) => {
-    try {
-      return new Date(iso).toLocaleString('es-MX', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
-    } catch {
-      return iso;
-    }
+    try { return new Date(iso).toLocaleString('es-MX', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }); }
+    catch { return iso; }
   };
 
   return (
@@ -98,8 +157,7 @@ export const MetaCapiDiagnosticDialog = ({ open, onOpenChange, leadId }: Props) 
 
         {error && !loading && (
           <div className="p-4 bg-red-950/30 border border-red-900/50 rounded-xl text-red-400 text-xs">
-            <AlertCircle className="w-4 h-4 inline mr-2" />
-            {error}
+            <AlertCircle className="w-4 h-4 inline mr-2" />{error}
           </div>
         )}
 
@@ -110,12 +168,18 @@ export const MetaCapiDiagnosticDialog = ({ open, onOpenChange, leadId }: Props) 
             <section className="bg-[#121214] border border-[#222225] rounded-xl p-4 space-y-2">
               <div className="flex items-center justify-between">
                 <span className="text-[10px] text-[#7A8A9E] uppercase tracking-widest">Lead</span>
-                <Badge variant="outline" className="text-[9px] bg-indigo-950/30 text-indigo-400 border-indigo-900/50 uppercase font-bold tracking-widest">
-                  {data.lead.buying_intent}
-                </Badge>
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline" className="text-[9px] bg-indigo-950/30 text-indigo-400 border-indigo-900/50 uppercase font-bold tracking-widest">
+                    {data.lead.buying_intent}
+                  </Badge>
+                  {data.config.channel_name && <span className="text-[9px] text-slate-600">{data.config.channel_name}</span>}
+                </div>
               </div>
               <div className="text-sm font-bold text-slate-100">{data.lead.nombre}</div>
-              <div className="text-[10px] text-slate-500">Score: <strong className="text-amber-400">{data.lead.lead_score || 0}/100</strong> · Pago: <strong className={data.lead.payment_status === 'VALID' ? 'text-emerald-400' : 'text-slate-400'}>{data.lead.payment_status || 'SIN COMPROBANTE'}</strong></div>
+              <div className="text-[10px] text-slate-500">
+                Score: <strong className="text-amber-400">{data.lead.lead_score || 0}/100</strong> ·
+                Pago: <strong className={data.lead.payment_status === 'VALID' ? 'text-emerald-400' : 'text-slate-400'}>{data.lead.payment_status || 'SIN COMPROBANTE'}</strong>
+              </div>
               <div className="text-[9px] text-slate-600">
                 CAPI canal: {data.config.ready_to_send ? <span className="text-emerald-400">✓ listo</span> : <span className="text-red-400">✗ no listo</span>}
                 {data.config.test_event_code && <span className="ml-2 text-amber-400">[test_event: {data.config.test_event_code}]</span>}
@@ -151,11 +215,15 @@ export const MetaCapiDiagnosticDialog = ({ open, onOpenChange, leadId }: Props) 
             {/* Campaign Attribution */}
             <section>
               <h4 className="text-[10px] font-bold text-[#7A8A9E] uppercase tracking-widest flex items-center gap-2 mb-2">
-                <Megaphone className="w-3.5 h-3.5 text-amber-400" /> Atribución del anuncio {data.campaign.has_attribution ? '(CTWA)' : '(orgánico)'}
+                <Megaphone className="w-3.5 h-3.5 text-amber-400" /> Atribución de campaña
+                {data.campaign.has_attribution
+                  ? <Badge variant="outline" className="text-[8px] bg-emerald-950/30 text-emerald-400 border-emerald-900/50 uppercase font-bold">CTWA</Badge>
+                  : <Badge variant="outline" className="text-[8px] bg-slate-800/30 text-slate-500 border-slate-700/50 uppercase font-bold">Orgánico</Badge>
+                }
               </h4>
               {!data.campaign.has_attribution ? (
                 <div className="p-3 bg-[#121214] border border-[#222225] rounded-xl text-[10px] text-slate-500 italic">
-                  Este lead llegó orgánicamente (no hay click_id de anuncio). Meta no podrá atribuirlo a una campaña específica.
+                  Este lead llegó orgánicamente — no hay click_id de anuncio. Meta no podrá atribuirlo a una campaña. Si vino de un anuncio CTWA, verificar que Gowa esté enviando el campo <code className="text-amber-400">referral</code> en el webhook.
                 </div>
               ) : (
                 <div className="space-y-1">
@@ -175,6 +243,76 @@ export const MetaCapiDiagnosticDialog = ({ open, onOpenChange, leadId }: Props) 
                     <div className="text-[9px] text-slate-600 mt-1 italic">Captura: {fmtDate(data.campaign.referral_captured_at)}</div>
                   )}
                 </div>
+              )}
+            </section>
+
+            {/* Último evento CAPI — QUÉ DATOS SE ENVIARON */}
+            {data.last_capi_event && (
+              <section>
+                <h4 className="text-[10px] font-bold text-[#7A8A9E] uppercase tracking-widest flex items-center gap-2 mb-2">
+                  <Radio className="w-3.5 h-3.5 text-cyan-400" /> Último evento CAPI enviado
+                </h4>
+                <div className={cn("p-3 rounded-xl border", data.last_capi_event.meta_response_ok ? 'bg-emerald-950/20 border-emerald-900/30' : 'bg-red-950/20 border-red-900/30')}>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className={cn("text-[11px] font-bold", data.last_capi_event.meta_response_ok ? 'text-emerald-300' : 'text-red-300')}>
+                      {data.last_capi_event.event_name} · {data.last_capi_event.status}
+                    </span>
+                    <span className="text-[9px] text-slate-600">{fmtDate(data.last_capi_event.created_at)}</span>
+                  </div>
+                  {data.last_capi_event.meta_error && (
+                    <div className="text-[10px] text-red-400 mb-2">Error: {data.last_capi_event.meta_error}</div>
+                  )}
+                  <div className="flex flex-wrap gap-1.5">
+                    {[
+                      { key: 'em', label: 'Email', has: data.last_capi_event.has_em },
+                      { key: 'ct', label: 'Ciudad', has: data.last_capi_event.has_ct },
+                      { key: 'zp', label: 'CP', has: data.last_capi_event.has_zp },
+                      { key: 'ge', label: 'Género', has: data.last_capi_event.has_ge },
+                      { key: 'fbc', label: 'fbc', has: data.last_capi_event.has_fbc },
+                      { key: 'fbp', label: 'fbp', has: data.last_capi_event.has_fbp },
+                      { key: 'ctwa', label: 'ctwa_clid', has: data.last_capi_event.has_ctwa_clid },
+                    ].map(f => (
+                      <span key={f.key} className={cn(
+                        "text-[9px] px-2 py-0.5 rounded-full font-mono",
+                        f.has ? 'bg-emerald-950/50 text-emerald-400 border border-emerald-900/50' : 'bg-[#161618] text-slate-600 border border-[#222225]'
+                      )}>
+                        {f.has ? '✓' : '✗'} {f.label}
+                      </span>
+                    ))}
+                  </div>
+                  {data.last_capi_event.source && (
+                    <div className="text-[9px] text-slate-600 mt-1">Fuente: <span className="font-mono text-slate-500">{data.last_capi_event.source}</span></div>
+                  )}
+                </div>
+              </section>
+            )}
+
+            {/* Botón Re-enviar CAPI */}
+            <section className="flex items-center gap-3">
+              <button
+                onClick={handleResendCapi}
+                disabled={resending || !data.config.ready_to_send}
+                className={cn(
+                  "flex items-center gap-2 px-4 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest transition-all",
+                  data.config.ready_to_send
+                    ? "bg-amber-600/20 border border-amber-500/30 text-amber-400 hover:bg-amber-600/30"
+                    : "bg-[#161618] border border-[#222225] text-slate-600 cursor-not-allowed"
+                )}
+              >
+                {resending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Zap className="w-3 h-3" />}
+                Forzar re-envío CAPI
+              </button>
+              <button
+                onClick={loadDiagnostic}
+                disabled={loading}
+                className="flex items-center gap-2 px-3 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest bg-[#161618] border border-[#222225] text-slate-400 hover:bg-[#222225] transition-all"
+              >
+                <RefreshCw className={cn("w-3 h-3", loading && "animate-spin")} /> Refrescar
+              </button>
+              {resendResult && (
+                <span className={cn("text-[10px]", resendResult.startsWith('✓') ? 'text-emerald-400' : 'text-red-400')}>
+                  {resendResult}
+                </span>
               )}
             </section>
 
@@ -265,6 +403,27 @@ export const MetaCapiDiagnosticDialog = ({ open, onOpenChange, leadId }: Props) 
                 </div>
               </section>
             )}
+
+            {/* Webhook crudo del primer mensaje */}
+            <section>
+              <h4 className="text-[10px] font-bold text-[#7A8A9E] uppercase tracking-widest flex items-center gap-2 mb-2">
+                <Code className="w-3.5 h-3.5 text-slate-500" /> Webhook primer mensaje
+                {data.first_webhook?.has_referral
+                  ? <Badge variant="outline" className="text-[8px] bg-emerald-950/30 text-emerald-400 border-emerald-900/50 uppercase font-bold">referral detectado</Badge>
+                  : <Badge variant="outline" className="text-[8px] bg-slate-800/30 text-slate-600 border-slate-700/50 uppercase font-bold">sin referral</Badge>
+                }
+              </h4>
+              {data.first_webhook?.raw_snippet ? (
+                <pre className="p-3 bg-[#0d0d0f] border border-[#222225] rounded-xl text-[9px] text-slate-500 font-mono whitespace-pre-wrap break-all max-h-32 overflow-y-auto custom-scrollbar">
+                  {data.first_webhook.raw_snippet}
+                </pre>
+              ) : (
+                <div className="p-3 bg-[#121214] border border-[#222225] rounded-xl text-[10px] text-slate-500 italic">
+                  No hay payload crudo almacenado para el primer mensaje.
+                </div>
+              )}
+            </section>
+
           </div>
         )}
       </DialogContent>

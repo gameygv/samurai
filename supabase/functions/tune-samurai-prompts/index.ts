@@ -18,34 +18,53 @@ serve(async (req) => {
     const { data: webContent } = await supabaseClient.from('main_website_content').select('title, content').eq('scrape_status', 'success');
     const masterTruth = webContent?.map(w => `[DATA WEB: ${w.title}]: ${w.content.substring(0, 500)}...`).join('\n') || "No hay datos web indexados.";
 
+    // Construir la lista de prompts dinámicamente para que TODOS se incluyan
+    const promptKeys = Object.keys(currentPrompts);
+    const promptLabels: Record<string, string> = {
+      prompt_alma_samurai: 'Personalidad y tono de Sam',
+      prompt_adn_core: 'Estrategia de ventas (ADN Core)',
+      prompt_estrategia_cierre: 'Protocolo de cierre de ventas',
+      prompt_vision_instrucciones: 'Ojo de Halcón (análisis de imágenes/comprobantes)',
+      prompt_analista_datos: 'Analista CAPI (extracción de datos: emails, nombres, ciudades, CP, estado → alimenta Meta CAPI)',
+      prompt_behavior_rules: 'Reglas de comportamiento y límites',
+      prompt_relearning: 'Reglas de re-aprendizaje',
+      prompt_human_handoff: 'Reglas de escalamiento a humano',
+    };
+
+    const promptsSection = promptKeys.map((key, i) => {
+      const label = promptLabels[key] || key;
+      const val = currentPrompts[key] || '';
+      return `${i + 1}. ${key} [${label}]:\n${val}`;
+    }).join('\n\n---\n\n');
+
+    const responseKeys = promptKeys.map(k => `    "${k}": "..."`).join(',\n');
+
     const systemInstruction = `
 Eres el "Ingeniero Maestro de The Elephant Bowl AI", experto en optimización de prompts y ventas.
 Tu misión es reescribir la configuración de la IA basándote en el feedback del usuario y capturas de pantalla.
 
+REGLAS CRÍTICAS:
+- Solo modifica los prompts que el usuario pide cambiar. Los demás devuélvelos EXACTAMENTE igual.
+- Si el usuario pide mejorar detección de datos (emails, ciudades, CP), edita prompt_analista_datos.
+- Si pide cambiar tono o personalidad, edita prompt_alma_samurai.
+- Si pide mejorar ventas o cierre, edita prompt_adn_core y/o prompt_estrategia_cierre.
+- Si pide cambiar reglas de escalamiento, edita prompt_human_handoff.
+- Si pide cambiar reglas de comportamiento, edita prompt_behavior_rules.
+- NUNCA devuelvas un prompt vacío si ya tenía contenido.
+- NUNCA inventes contenido que contradiga la Verdad Maestra.
+
 VERDAD MAESTRA (Datos reales del negocio):
 ${masterTruth}
 
-CONFIGURACIÓN ACTUAL QUE DEBES EDITAR:
-1. prompt_alma_samurai: ${currentPrompts.prompt_alma_samurai || ''}
-2. prompt_adn_core: ${currentPrompts.prompt_adn_core || ''}
-3. prompt_estrategia_cierre: ${currentPrompts.prompt_estrategia_cierre || ''}
-4. prompt_vision_instrucciones: ${currentPrompts.prompt_vision_instrucciones || ''} (Ojo de Halcón)
-5. prompt_analista_datos: ${currentPrompts.prompt_analista_datos || ''} (ESTE CONTROLA LA EXTRACCIÓN JSON PARA CAPI. Úsalo si el usuario pide mejorar la detección de emails, nombres o ciudades).
+CONFIGURACIÓN ACTUAL COMPLETA (${promptKeys.length} prompts):
 
-TU TAREA:
-1. Identifica qué quiere corregir el usuario.
-2. Si el usuario pide que Sam "entienda mejor" o "saque mejor los datos", edita 'prompt_analista_datos'.
-3. Responde con la explicación y el JSON completo de prompts. Los que no cambien, déjalos igual.
+${promptsSection}
 
 RESPONDE SOLO JSON:
 {
-  "message": "Explicación breve.",
-  "prompts": { 
-    "prompt_alma_samurai": "...", 
-    "prompt_adn_core": "...", 
-    "prompt_estrategia_cierre": "...", 
-    "prompt_vision_instrucciones": "...",
-    "prompt_analista_datos": "..."
+  "message": "Explicación de qué cambiaste y por qué (2-3 oraciones).",
+  "prompts": {
+${responseKeys}
   }
 }
 `;

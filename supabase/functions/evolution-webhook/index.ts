@@ -164,31 +164,48 @@ serve(async (req: Request): Promise<Response> => {
             return cleanPath;
         };
 
-        // 2026-04-11: Atribución CTWA para Gowa — Baileys/Evolution embeben los datos
-        // del anuncio Click-to-WhatsApp en contextInfo.externalAdReply. Lo intentamos
-        // parsear desde todos los paths conocidos del formato (camelCase y snake_case).
-        // Si Gowa strippea el campo o usa otro formato, queda null y el log en
-        // activity_logs lo hará visible.
-        const adReply =
-          msgContent.extendedTextMessage?.contextInfo?.externalAdReply
-          || msgContent.imageMessage?.contextInfo?.externalAdReply
-          || msgContent.videoMessage?.contextInfo?.externalAdReply
-          || msgContent.audioMessage?.contextInfo?.externalAdReply
-          || p.contextInfo?.externalAdReply
-          || p.context_info?.external_ad_reply
-          || p.externalAdReply
-          || p.external_ad_reply
-          || null;
-        if (adReply && typeof adReply === 'object') {
+        // 2026-04-12: Atribución CTWA para Gowa v8.3.0
+        // Gowa mapea contextInfo.externalAdReply → payload.referral (campo de primer nivel).
+        // Fuente: https://github.com/aldinokemal/go-whatsapp-web-multidevice
+        // Solo aparece en el PRIMER mensaje de una conversación iniciada desde anuncio CTWA.
+        // Intentamos: 1) p.referral (Gowa nativo), 2) externalAdReply paths (Baileys raw).
+        const gowaRef = p.referral;
+        if (gowaRef && typeof gowaRef === 'object' && (gowaRef.ctwa_clid || gowaRef.source_id)) {
           ctwaReferral = {
-            source_url: adReply.sourceUrl || adReply.source_url || null,
-            source_id: adReply.sourceId || adReply.source_id || null,
-            source_type: adReply.sourceType || adReply.source_type || null,
-            headline: adReply.title || adReply.headline || null,
-            body: adReply.body || null,
-            thumbnail_url: adReply.thumbnailUrl || adReply.thumbnail_url || null,
-            ctwa_clid: adReply.ctwaClid || adReply.ctwa_clid || adReply.clid || null,
+            source_url: gowaRef.source_url || null,
+            source_id: gowaRef.source_id || null,       // = Ad ID en Meta Ads Manager
+            source_type: gowaRef.source_type || null,    // "ad" | "post"
+            headline: gowaRef.ad_title || null,
+            body: gowaRef.ad_body || null,
+            thumbnail_url: gowaRef.thumbnail_url || null,
+            ctwa_clid: gowaRef.ctwa_clid || null,
+            // Campos adicionales Gowa v8.3.0
+            source_app: gowaRef.source_app || null,      // "facebook" | "instagram"
+            ref: gowaRef.ref || null,                    // parámetro ref del CTA
           };
+        } else {
+          // Fallback: Baileys raw (contextInfo.externalAdReply) por si Gowa no mapea a referral
+          const adReply =
+            msgContent.extendedTextMessage?.contextInfo?.externalAdReply
+            || msgContent.imageMessage?.contextInfo?.externalAdReply
+            || msgContent.videoMessage?.contextInfo?.externalAdReply
+            || msgContent.audioMessage?.contextInfo?.externalAdReply
+            || p.contextInfo?.externalAdReply
+            || p.context_info?.external_ad_reply
+            || p.externalAdReply
+            || p.external_ad_reply
+            || null;
+          if (adReply && typeof adReply === 'object') {
+            ctwaReferral = {
+              source_url: adReply.sourceUrl || adReply.source_url || null,
+              source_id: adReply.sourceId || adReply.source_id || null,
+              source_type: adReply.sourceType || adReply.source_type || null,
+              headline: adReply.title || adReply.headline || null,
+              body: adReply.body || null,
+              thumbnail_url: adReply.thumbnailUrl || adReply.thumbnail_url || null,
+              ctwa_clid: adReply.ctwaClid || adReply.ctwa_clid || adReply.clid || null,
+            };
+          }
         }
 
         // S7.1: Detectar tipo de media — Gowa nativo (p.audio, p.image, p.video, p.document)
@@ -312,7 +329,21 @@ serve(async (req: Request): Promise<Response> => {
         if ((audioMediaId || audioMediaUrl) && messageId && actualChannelId) {
             supabase.functions.invoke('transcribe-audio', {
                 body: { media_id: audioMediaId || null, media_url: audioMediaUrl || null, lead_id: lead.id, message_id: messageId, channel_id: actualChannelId, sender_phone: senderPhone, skip_ai: true }
-            }).catch((err) => console.error('transcribe-audio (outbound) fire error:', err));
+            }).then((res) => {
+                if (res.error) {
+                    supabase.from('activity_logs').insert({
+                        action: 'ERROR', resource: 'BRAIN',
+                        description: `🎙️ transcribe-audio (outbound) invoke failed: ${res.error?.message || JSON.stringify(res.error).substring(0, 150)}`,
+                        status: 'ERROR'
+                    }).catch(() => {});
+                }
+            }).catch((err) => {
+                supabase.from('activity_logs').insert({
+                    action: 'ERROR', resource: 'BRAIN',
+                    description: `🎙️ transcribe-audio (outbound) invoke crash: ${err?.message || String(err).substring(0, 150)}`,
+                    status: 'ERROR'
+                }).catch(() => {});
+            });
         }
 
         // Bug-fix 2026-04-10: re-analizar intent cuando el vendedor escribe
@@ -394,7 +425,21 @@ serve(async (req: Request): Promise<Response> => {
     if (audioMediaId || audioMediaUrl) {
         supabase.functions.invoke('transcribe-audio', {
             body: { media_id: audioMediaId || null, media_url: audioMediaUrl || null, lead_id: lead.id, message_id: messageId, channel_id: actualChannelId, sender_phone: senderPhone }
-        }).catch((err) => console.error('transcribe-audio fire error:', err));
+        }).then((res) => {
+            if (res.error) {
+                supabase.from('activity_logs').insert({
+                    action: 'ERROR', resource: 'BRAIN',
+                    description: `🎙️ transcribe-audio invoke failed: ${res.error?.message || JSON.stringify(res.error).substring(0, 150)}`,
+                    status: 'ERROR'
+                }).catch(() => {});
+            }
+        }).catch((err) => {
+            supabase.from('activity_logs').insert({
+                action: 'ERROR', resource: 'BRAIN',
+                description: `🎙️ transcribe-audio invoke crash: ${err?.message || String(err).substring(0, 150)}`,
+                status: 'ERROR'
+            }).catch(() => {});
+        });
     }
 
     // AI response only in 'on' mode + global not paused + lead not paused + agent AI enabled

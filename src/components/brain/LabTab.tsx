@@ -12,7 +12,7 @@ import { toast } from 'sonner';
 
 interface LabTabProps {
   currentPrompts: Record<string, string>;
-  onApplyPrompts: (prompts: Record<string, string>) => void;
+  onApplyPrompts: (prompts: Record<string, string>, reason?: string) => void;
 }
 
 export const LabTab = ({ currentPrompts, onApplyPrompts }: LabTabProps) => {
@@ -21,6 +21,7 @@ export const LabTab = ({ currentPrompts, onApplyPrompts }: LabTabProps) => {
   const [labImage, setLabImage] = useState<string | null>(null);
   const [labProcessing, setLabProcessing] = useState(false);
   const [proposedPrompts, setProposedPrompts] = useState<any>(null);
+  const [proposedReason, setProposedReason] = useState<string>('');
 
   const handleLabImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -55,6 +56,7 @@ export const LabTab = ({ currentPrompts, onApplyPrompts }: LabTabProps) => {
       
       setLabMessages(prev => [...prev, { role: 'assistant', text: data.result.message }]);
       setProposedPrompts(data.result.prompts);
+      setProposedReason(data.result.message || currentInput);
       toast.info("El Arquitecto ha redactado una propuesta de mejora.");
     } catch (err: any) {
       toast.error("Error en Laboratorio: " + err.message);
@@ -65,8 +67,9 @@ export const LabTab = ({ currentPrompts, onApplyPrompts }: LabTabProps) => {
 
   const applyProposedPrompts = () => {
     if (!proposedPrompts) return;
-    onApplyPrompts(proposedPrompts);
+    onApplyPrompts(proposedPrompts, proposedReason);
     setProposedPrompts(null);
+    setProposedReason('');
     toast.success("Propuesta inyectada en los editores. Pulsa 'Aplicar Cambios' para finalizar.");
   };
 

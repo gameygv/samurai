@@ -44,7 +44,7 @@ export const MemoryPanel = ({
   messages = []
 }: MemoryPanelProps) => {
 
-  const { user, isManager, profile } = useAuth();
+  const { user, isManager, isDev, profile } = useAuth();
   const [analyzing, setAnalyzing] = useState(false);
   const [agents, setAgents] = useState<any[]>([]);
   const [channels, setChannels] = useState<any[]>([]);
@@ -316,12 +316,13 @@ export const MemoryPanel = ({
   return (
     <div className="w-full flex-shrink-0 bg-[#0a0a0c] flex flex-col h-full text-slate-300">
       
-      <EmqHeader 
-         healthPercent={healthPercent} 
-         healthScore={healthScore} 
-         capiSent={currentAnalysis?.capi_lead_event_sent_at} 
-         analyzing={analyzing} 
-         onRunAnalysis={handleRunAnalysis} 
+      <EmqHeader
+         healthPercent={healthPercent}
+         healthScore={healthScore}
+         capiSent={currentAnalysis?.capi_lead_event_sent_at}
+         analyzing={analyzing}
+         onRunAnalysis={handleRunAnalysis}
+         showDiagnostic={isDev}
       />
 
       <div className="flex-1 overflow-y-auto custom-scrollbar">

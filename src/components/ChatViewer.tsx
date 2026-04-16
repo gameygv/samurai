@@ -132,10 +132,17 @@ export default function ChatViewer({ lead, open, onOpenChange }: ChatViewerProps
     try { rems = data.reminders ? (typeof data.reminders === 'string' ? JSON.parse(data.reminders) : data.reminders) : []; } catch(e){}
     setMemoryForm({
        nombre: String(data.nombre || ''), email: String(data.email || ''), summary: String(data.summary || ''),
-       mood: String(data.estado_emocional_actual || 'NEUTRO'), buying_intent: String(data.buying_intent || 'BAJO'),
-       ciudad: String(data.ciudad || ''), perfil_psicologico: String(data.perfil_psicologico || ''), assigned_to: data.assigned_to || '',
-       tags: Array.isArray(data.tags) ? data.tags : [], 
-       reminders: Array.isArray(rems) ? rems : []
+       estado_emocional_actual: String(data.estado_emocional_actual || 'NEUTRO'), buying_intent: String(data.buying_intent || 'BAJO'),
+       ciudad: String(data.ciudad || ''), estado: String(data.estado || ''), cp: String(data.cp || ''),
+       perfil_psicologico: String(data.perfil_psicologico || ''), assigned_to: data.assigned_to || '',
+       tags: Array.isArray(data.tags) ? data.tags : [],
+       reminders: Array.isArray(rems) ? rems : [],
+       genero: String(data.genero || ''),
+       direccion: String(data.direccion || ''),
+       rfc: String(data.rfc || ''),
+       uso_cfdi: String(data.uso_cfdi || ''),
+       regimen_fiscal: String(data.regimen_fiscal || ''),
+       csf_url: String(data.csf_url || ''),
     });
   };
 

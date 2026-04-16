@@ -30,6 +30,7 @@ const AgentBrain = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [versions, setVersions] = useState<any[]>([]);
+  const [lastLabReason, setLastLabReason] = useState<string>('');
 
   useEffect(() => { 
     fetchPrompts(); 
@@ -61,11 +62,41 @@ const AgentBrain = () => {
     setSaving(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
+
+      // Obtener prompts actuales de DB para calcular diff
+      const { data: currentDb } = await supabase.from('app_config').select('key, value').eq('category', 'PROMPT');
+      const dbPrompts: Record<string, string> = {};
+      currentDb?.forEach(item => { dbPrompts[item.key] = item.value; });
+
+      // Calcular qué prompts cambiaron
+      const changedKeys = Object.keys(prompts).filter(k => prompts[k] !== dbPrompts[k]);
+      const changedLabels: Record<string, string> = {
+        prompt_alma_samurai: 'Personalidad',
+        prompt_adn_core: 'ADN Táctico',
+        prompt_estrategia_cierre: 'Estrategia de Cierre',
+        prompt_vision_instrucciones: 'Ojo de Halcón',
+        prompt_analista_datos: 'Analista CAPI',
+        prompt_behavior_rules: 'Reglas de Comportamiento',
+        prompt_relearning: 'Re-learning',
+        prompt_human_handoff: 'Handoff Humano',
+      };
+      const changedNames = changedKeys.map(k => changedLabels[k] || k);
+
+      // Construir notas descriptivas
+      const isFromLab = !!lastLabReason;
+      const source = isFromLab ? 'Laboratorio IA' : 'Edición manual';
+      const versionName = isFromLab
+        ? `Lab — ${new Date().toLocaleString()}`
+        : `Manual — ${new Date().toLocaleString()}`;
+      const notes = changedKeys.length === 0
+        ? `${source}: sin cambios detectados.`
+        : `${source}: ${changedNames.join(', ')}.${isFromLab ? `\n\nMotivo: ${lastLabReason}` : ''}`;
+
       await supabase.from('prompt_versions').insert({
-          version_name: `Manual - ${new Date().toLocaleString()}`,
+          version_name: versionName,
           prompts_snapshot: prompts,
           created_by: user?.id,
-          notes: 'Respaldo manual desde el panel de control.'
+          notes,
       });
 
       const updates = Object.entries(prompts).map(([key, value]) => ({
@@ -74,7 +105,8 @@ const AgentBrain = () => {
 
       const { error } = await supabase.from('app_config').upsert(updates, { onConflict: 'key' });
       if (error) throw error;
-      
+
+      setLastLabReason('');
       toast.success("Cerebro sincronizado y snapshot guardado.");
       fetchVersions();
     } catch (err: any) {
@@ -169,7 +201,7 @@ const AgentBrain = () => {
             </TabsContent>
 
             <TabsContent value="lab" className="m-0 h-full">
-                <LabTab currentPrompts={prompts} onApplyPrompts={p => setPrompts(p)} />
+                <LabTab currentPrompts={prompts} onApplyPrompts={(p, reason) => { setPrompts(prev => ({ ...prev, ...p })); if (reason) setLastLabReason(reason); }} />
             </TabsContent>
           </div>
         </Tabs>

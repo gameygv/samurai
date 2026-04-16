@@ -34,6 +34,22 @@ serve(async (req: Request): Promise<Response> => {
         const capiEventName = isPurchase ? 'Purchase' : 'LeadLost';
         const funnelStage = isPurchase ? 'COMPRADO' : 'PERDIDO';
 
+        // Fetch lead completo para obtener campos de atribución (fbc, fbp, ctwa_clid)
+        // que el trigger SQL no incluye en el JSON del activity_log
+        let leadFbc: string | undefined;
+        let leadFbp: string | undefined;
+        let leadCtwaClid: string | undefined;
+        if (data.lead_id) {
+          const { data: leadFull } = await supabase.from('leads')
+            .select('fbc, fbp, ctwa_clid')
+            .eq('id', data.lead_id).maybeSingle();
+          if (leadFull) {
+            leadFbc = leadFull.fbc || undefined;
+            leadFbp = leadFull.fbp || undefined;
+            leadCtwaClid = leadFull.ctwa_clid || undefined;
+          }
+        }
+
         await supabase.functions.invoke('meta-capi-sender', {
           body: {
             config: {
@@ -54,7 +70,10 @@ serve(async (req: Request): Promise<Response> => {
                 st: data.estado || undefined,
                 zp: data.cp || undefined,
                 country: 'mx',
-                external_id: data.lead_id
+                external_id: data.lead_id,
+                fbc: leadFbc,
+                fbp: leadFbp,
+                ctwa_clid: leadCtwaClid
               },
               custom_data: {
                 source: 'samurai_auto',
