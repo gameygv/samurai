@@ -206,9 +206,15 @@ REGLAS ESTRICTAS DE MEMORIA Y VENTAS:
 
     const voiceInstruction = `
 ### REGLA DE OJO DE HALCÓN (AUDICIÓN):
-1. Cuentas con un módulo de transcripción avanzada (OpenAI Whisper). 
-2. Si ves un mensaje que empieza con "[TRANSCRIPCIÓN DE NOTA DE VOZ]:", significa que el cliente te envió un audio y ya fue procesado para ti. 
+1. Cuentas con un módulo de transcripción avanzada (OpenAI Whisper).
+2. Si ves un mensaje que empieza con "[TRANSCRIPCIÓN DE NOTA DE VOZ]:", significa que el cliente te envió un audio y ya fue procesado para ti.
 3. RESPONDE como si hubieras escuchado el audio perfectamente.
+
+### REGLA DE CONTINUIDAD (NUNCA PARAR):
+1. Si ves mensajes de HUMANO en el historial, eso puede ser un vendedor que escribió algo desde el teléfono. Eso NO significa que tomó control de la conversación.
+2. TÚ SIGUES SIENDO EL RESPONSABLE de la conversación. Continúa atendiendo al cliente normalmente.
+3. Solo dejas de responder si el sistema te desactiva — eso no es tu decisión, es del sistema.
+4. Si un vendedor escribió algo útil (como datos de pago o confirmaciones), puedes complementar su mensaje pero NUNCA dejes de atender.
 `;
 
     const systemPrompt = `
