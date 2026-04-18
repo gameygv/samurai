@@ -48,8 +48,26 @@ serve(async (req: Request): Promise<Response> => {
     const { data: configs } = await supabase.from('app_config').select('key, value');
     const configMap: Record<string, unknown> = configs?.reduce((acc: Record<string, unknown>, item: { key: string; value: unknown }) => ({...acc, [item.key]: item.value}), {} as Record<string, unknown>) ?? {};
 
-    // Verificar: agent self AI status + schedule (Admin > Agent self)
+    // Verificar global AI status (kill switch)
+    const globalStatus = configMap['global_ai_status'];
+    if (globalStatus === 'paused') {
+        return new Response('global_paused', { headers: corsHeaders });
+    }
+
+    // Verificar: admin AI status + agent self AI status + schedule (Admin > Agent self)
     if (lead.assigned_to) {
+        // Admin AI toggle (set by admin in Gestión de Equipo) — highest priority
+        const adminStatusRaw = configMap[`agent_ai_status_${lead.assigned_to}`];
+        if (adminStatusRaw) {
+            try {
+                const parsed = JSON.parse(adminStatusRaw as string);
+                if (parsed.enabled === false) {
+                    await supabase.from('activity_logs').insert({ action: 'UPDATE', resource: 'BRAIN', description: `⏸️ IA desactivada por admin para ${lead.nombre}`, status: 'OK' });
+                    return new Response('admin_disabled', { headers: corsHeaders });
+                }
+            } catch (_) {}
+        }
+
         // Agent self-toggle (set by agent in Mi Perfil)
         const selfStatusRaw = configMap[`agent_self_ai_status_${lead.assigned_to}`];
         if (selfStatusRaw) {

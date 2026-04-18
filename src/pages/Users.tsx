@@ -464,12 +464,17 @@ const UsersPage = () => {
                      if (!isAgent) return null;
                      return (
                         <div className="space-y-4 pt-4 border-t border-[#222225]">
-                           <div className="flex items-center justify-between bg-[#161618] p-4 rounded-xl border border-[#222225]">
-                              <div className="space-y-1">
-                                 <Label className="text-white font-bold text-xs flex items-center gap-2"><Bot className="w-3.5 h-3.5 text-emerald-400"/> Agente IA</Label>
-                                 <p className="text-[10px] text-slate-400 max-w-[250px] leading-relaxed">Activa o desactiva la IA para todos los leads asignados a este agente.</p>
+                           <div className="bg-[#161618] p-4 rounded-xl border border-[#222225] space-y-3">
+                              <div className="flex items-center justify-between">
+                                 <Label className="text-white font-bold text-sm flex items-center gap-2 cursor-pointer" onClick={() => setEditAiEnabled(!editAiEnabled)}>
+                                    <Bot className="w-4 h-4 text-emerald-400"/> Agente IA
+                                 </Label>
+                                 <Switch checked={editAiEnabled} onCheckedChange={setEditAiEnabled} />
                               </div>
-                              <Switch checked={editAiEnabled} onCheckedChange={setEditAiEnabled} />
+                              <p className="text-[10px] text-slate-400 leading-relaxed">Activa o desactiva la IA para todos los leads asignados a este agente.</p>
+                              <div className={`text-[10px] font-bold uppercase tracking-widest px-3 py-1.5 rounded-lg text-center ${editAiEnabled ? 'bg-emerald-950/50 text-emerald-400 border border-emerald-500/30' : 'bg-red-950/50 text-red-400 border border-red-500/30'}`}>
+                                 {editAiEnabled ? '✅ IA ACTIVA' : '⛔ IA INACTIVA'}
+                              </div>
                            </div>
 
                            {/* Horario de activación automática */}

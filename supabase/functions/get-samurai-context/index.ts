@@ -160,7 +160,7 @@ CUANDO EL CLIENTE MUESTRE INTENCIÃ“N DE COMPRA, PREGUNTE POR PRECIOS FINALES, MÃ
     if (leadId) {
       const { data: contactData } = await supabaseClient
         .from('contacts')
-        .select('academic_record, dieta, alergias, motivo_curso')
+        .select('academic_record, dieta, alergias, motivo_curso, genero')
         .eq('lead_id', leadId)
         .maybeSingle();
 
