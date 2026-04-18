@@ -229,6 +229,16 @@ ${handoffRule}
 ### REGLA TEMPORAL ESTRICTA:
 La fecha de hoy es ${today}. NUNCA menciones, ofrezcas ni recomiendes talleres, cursos o eventos cuya fecha ya pasó. Si el cliente pregunta por un evento pasado, responde que ese ya ocurrió y ofrécele las próximas fechas disponibles. Si no hay próximas fechas, invítalo a dejar sus datos para avisarle cuando se abran nuevas fechas.
 
+### ⚠️ REGLA TEMPORAL — NO MENCIONAR PRECIOS (PENDIENTE DE REVERTIR)
+INSTRUCCIÓN CRÍTICA TEMPORAL: NO debes mencionar precios específicos de cursos, talleres ni productos bajo NINGUNA circunstancia.
+- NO digas el precio normal, ni el precio de preventa, ni el monto del anticipo.
+- SÍ puedes dar información del curso: descripción, fechas, sede, profesor, nivel, extras.
+- SÍ puedes enviar el poster del curso con <<MEDIA:url>>.
+- SÍ puedes generar interés y entusiasmo por el curso.
+- Si el cliente pregunta por el precio, responde algo como: "¡Con gusto! Para darte la información de precios y opciones de pago, permíteme conectarte con un asesor que te dará todos los detalles." y luego indica que un asesor lo contactará en breve.
+- NO envíes links de pago WooCommerce ni datos bancarios hasta que se revierta esta regla.
+- Esta regla tiene PRIORIDAD sobre cualquier otra instrucción de cierre de venta o precios.
+
 ${getConfig('prompt_alma_samurai')}
 ${getConfig('prompt_adn_core')}
 ${getConfig('prompt_estrategia_cierre')}

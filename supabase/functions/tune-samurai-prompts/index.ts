@@ -81,13 +81,24 @@ ${responseKeys}
         }
     }
 
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${openaiApiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: "gpt-4o", messages: formattedMessages, response_format: { type: "json_object" }, temperature: 0.2 })
-    });
+    let response: Response | null = null;
+    const maxRetries = 3;
+    const requestBody = JSON.stringify({ model: "gpt-4o", messages: formattedMessages, response_format: { type: "json_object" }, temperature: 0.2 });
 
-    if (!response.ok) throw new Error(`OpenAI HTTP ${response.status}: ${await response.text()}`);
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      response = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${openaiApiKey}`, 'Content-Type': 'application/json' },
+        body: requestBody
+      });
+      if (response.status !== 429) break;
+      if (attempt === maxRetries) break;
+      const retryAfter = parseInt(response.headers.get('retry-after') || '0') || (attempt * 15);
+      const waitMs = Math.min(retryAfter * 1000, 45000);
+      await new Promise(r => setTimeout(r, waitMs));
+    }
+
+    if (!response!.ok) throw new Error(`OpenAI HTTP ${response!.status}: ${await response!.text()}`);
     const aiData = await response.json();
     return new Response(JSON.stringify({ success: true, result: JSON.parse(aiData.choices?.[0]?.message?.content || '{}') }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 

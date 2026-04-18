@@ -52,8 +52,13 @@ export const LabTab = ({ currentPrompts, onApplyPrompts }: LabTabProps) => {
         }
       });
       
-      if (error) throw error;
-      
+      if (error) {
+        // Extract real error message from edge function response if available
+        const realError = data?.error || error.message || "Error desconocido";
+        throw new Error(realError);
+      }
+      if (data?.error) throw new Error(data.error);
+
       setLabMessages(prev => [...prev, { role: 'assistant', text: data.result.message }]);
       setProposedPrompts(data.result.prompts);
       setProposedReason(data.result.message || currentInput);

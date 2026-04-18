@@ -128,8 +128,12 @@ serve(async (req: Request): Promise<Response> => {
 
         const p = payload.payload || payload.data || payload;
         isFromMe = p.is_from_me || p.fromMe || p.key?.fromMe || false;
-        // Gowa isFromMe: from=dispositivo propio, chat_id=cliente. Usar chat_id para buscar lead.
-        phone = isFromMe ? (p.chat_id || p.from) : (p.remoteJid || p.key?.remoteJid || p.from);
+        // Gowa isFromMe: from=dispositivo propio, chat_id o key.remoteJid=cliente.
+        // p.from es el teléfono del AGENTE en mensajes salientes, NO del cliente.
+        // Usar chat_id → key.remoteJid → to como fallbacks antes de p.from.
+        phone = isFromMe
+          ? (p.chat_id || p.key?.remoteJid || p.to || p.remoteJid || p.from)
+          : (p.remoteJid || p.key?.remoteJid || p.from);
         if (!phone) return new Response('ok', { status: 200 });
         const msgContent = p.message || {};
 
@@ -240,7 +244,18 @@ serve(async (req: Request): Promise<Response> => {
     let { data: lead } = await supabase.from('leads').select('*').or(`telefono.ilike.%${senderPhone.slice(-10)}%`).limit(1).maybeSingle();
     
     if (!lead) {
-        if (isFromMe) return new Response('ok', { status: 200 });
+        if (isFromMe) {
+            // Log cuando un agente envía un comando pero no se encuentra el lead
+            const cmdCheck = (text || '').trim().toUpperCase();
+            if (cmdCheck === '#OFF' || cmdCheck === '#ON' || cmdCheck === '#STOP' || cmdCheck === '#START') {
+                await supabase.from('activity_logs').insert({
+                    action: 'ERROR', resource: 'BRAIN',
+                    description: `⚠️ Comando ${cmdCheck} recibido pero lead no encontrado (phone: ${senderPhone.slice(-4)})`,
+                    status: 'ERROR'
+                });
+            }
+            return new Response('ok', { status: 200 });
+        }
         
         // Check if this channel has a direct agent assignment (per-channel, no global toggle needed)
         let assignedAgent: string | null = null;
