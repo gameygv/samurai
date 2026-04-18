@@ -328,6 +328,31 @@ serve(async (req: Request): Promise<Response> => {
             return new Response('ai_resumed', { status: 200, headers: corsHeaders });
         }
 
+        // Detectar y descartar auto-responders del teléfono WhatsApp
+        // Estos mensajes confunden a la IA porque parecen respuestas humanas
+        const autoReplyPatterns = [
+            'en este momento no podemos responder',
+            'nuestros horarios de atención',
+            'fuera de nuestro horario',
+            'te responderemos a la brevedad',
+            'no estamos disponibles',
+            'horario de atención',
+            'respuesta automática',
+            'auto-reply',
+            'away message'
+        ];
+        const lowerText = text.toLowerCase();
+        const isAutoReply = autoReplyPatterns.some(p => lowerText.includes(p));
+        if (isAutoReply) {
+            // No guardar en conversaciones — evita que la IA piense que un humano respondió
+            await supabase.from('activity_logs').insert({
+                action: 'INFO', resource: 'SYSTEM',
+                description: `🤖 Auto-responder descartado para ${lead.nombre}: "${text.substring(0, 60)}..."`,
+                status: 'OK'
+            });
+            return new Response('auto_reply_skipped', { status: 200, headers: corsHeaders });
+        }
+
         // Mensaje saliente del asesor desde teléfono: guardar como HUMANO sin mutar lead ni activar IA
         // deno-lint-ignore no-explicit-any
         const asesorMeta: Record<string, any> = { raw: payloadText.length <= 4000 ? payloadText : payloadText.substring(0, 4000) };
