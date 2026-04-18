@@ -79,10 +79,24 @@ export const SimulatorTab = ({ currentPrompts }: SimulatorTabProps) => {
               {simHistory.map((m, i) => (
                 <div key={i} className={cn("flex flex-col gap-2", m.role === 'user' ? 'items-end' : 'items-start')}>
                   <div className={cn(
-                    "p-4 rounded-2xl text-sm max-w-[85%] border shadow-lg", 
+                    "p-4 rounded-2xl text-sm max-w-[85%] border shadow-lg",
                     m.role === 'user' ? 'bg-indigo-900/40 border-indigo-900/60 text-slate-100' : 'bg-slate-900 border-slate-800 text-slate-200'
                   )}>
-                    {m.text}
+                    {(() => {
+                      if (m.role !== 'bot' || !m.text) return m.text;
+                      const mediaRegex = /<<MEDIA:(https?:\/\/[^>]+)>>/g;
+                      const parts: React.ReactNode[] = [];
+                      let lastIdx = 0;
+                      let match;
+                      const txt = m.text as string;
+                      while ((match = mediaRegex.exec(txt)) !== null) {
+                        if (match.index > lastIdx) parts.push(txt.substring(lastIdx, match.index));
+                        parts.push(<img key={match.index} src={match[1]} alt="Media IA" className="rounded-xl mt-2 mb-1 max-w-full border border-slate-700" />);
+                        lastIdx = match.index + match[0].length;
+                      }
+                      if (lastIdx < txt.length) parts.push(txt.substring(lastIdx));
+                      return parts.length > 0 ? parts : m.text;
+                    })()}
                   </div>
                   <div className="flex items-center gap-2 px-2">
                      {m.role === 'bot' ? <Bot className="w-3 h-3 text-amber-500" /> : <User className="w-3 h-3 text-indigo-400" />}

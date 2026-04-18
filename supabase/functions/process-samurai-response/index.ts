@@ -47,6 +47,50 @@ serve(async (req: Request): Promise<Response> => {
 
     const { data: configs } = await supabase.from('app_config').select('key, value');
     const configMap: Record<string, unknown> = configs?.reduce((acc: Record<string, unknown>, item: { key: string; value: unknown }) => ({...acc, [item.key]: item.value}), {} as Record<string, unknown>) ?? {};
+
+    // Verificar: agent self AI status + schedule (Admin > Agent self)
+    if (lead.assigned_to) {
+        // Agent self-toggle (set by agent in Mi Perfil)
+        const selfStatusRaw = configMap[`agent_self_ai_status_${lead.assigned_to}`];
+        if (selfStatusRaw) {
+            try {
+                const parsed = JSON.parse(selfStatusRaw as string);
+                if (parsed.enabled === false) {
+                    await supabase.from('activity_logs').insert({ action: 'UPDATE', resource: 'BRAIN', description: `⏸️ IA desactivada por agente (self) para ${lead.nombre}`, status: 'OK' });
+                    return new Response('self_disabled', { headers: corsHeaders });
+                }
+            } catch (_) {}
+        }
+
+        // Schedule: admin schedule has priority over agent self-schedule
+        const nowMx = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Mexico_City' }));
+        const dayId = nowMx.getDay().toString();
+        const hhmm = `${String(nowMx.getHours()).padStart(2, '0')}:${String(nowMx.getMinutes()).padStart(2, '0')}`;
+
+        const checkSchedule = (raw: unknown): boolean => {
+            try {
+                const schedule = JSON.parse(raw as string);
+                const hasAnyDay = Object.values(schedule).some((d: unknown) => (d as { active?: boolean })?.active);
+                if (!hasAnyDay) return false;
+                const dayCfg = schedule[dayId];
+                if (!dayCfg || !dayCfg.active) return true;
+                if (dayCfg.ranges && Array.isArray(dayCfg.ranges)) {
+                    return !dayCfg.ranges.some((r: { start: string; end: string }) => hhmm >= r.start && hhmm <= r.end);
+                }
+                return false;
+            } catch (_) { return false; }
+        };
+
+        const adminScheduleRaw = configMap[`agent_ai_schedule_${lead.assigned_to}`];
+        const selfScheduleRaw = configMap[`agent_self_schedule_${lead.assigned_to}`];
+        const outsideSchedule = adminScheduleRaw ? checkSchedule(adminScheduleRaw) : (selfScheduleRaw ? checkSchedule(selfScheduleRaw) : false);
+
+        if (outsideSchedule) {
+            await supabase.from('activity_logs').insert({ action: 'UPDATE', resource: 'BRAIN', description: `🕐 IA fuera de horario para ${lead.nombre} (${new Date().toLocaleString('es-MX', { timeZone: 'America/Mexico_City' })})`, status: 'OK' });
+            return new Response('outside_schedule', { headers: corsHeaders });
+        }
+    }
+
     const apiKey = Deno.env.get('OPENAI_API_KEY') || configMap['openai_api_key'];
 
     if (!apiKey) {

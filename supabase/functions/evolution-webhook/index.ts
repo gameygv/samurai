@@ -313,6 +313,21 @@ serve(async (req: Request): Promise<Response> => {
             });
         }
     } else if (isFromMe) {
+        // --- #OFF / #ON desde el teléfono WhatsApp (per-lead toggle) ---
+        const cmd = text.trim().toUpperCase();
+        if (cmd === '#OFF' || cmd === '#STOP') {
+            await supabase.from('leads').update({ ai_paused: true }).eq('id', lead.id);
+            await supabase.from('conversaciones').insert({ lead_id: lead.id, mensaje: 'IA Pausada manualmente (WhatsApp).', emisor: 'HUMANO', platform: 'WHATSAPP' });
+            await supabase.from('activity_logs').insert({ action: 'UPDATE', resource: 'BRAIN', description: `⏸️ IA pausada para ${lead.nombre} vía #OFF desde WhatsApp`, status: 'OK' });
+            return new Response('ai_paused', { status: 200, headers: corsHeaders });
+        }
+        if (cmd === '#ON' || cmd === '#START') {
+            await supabase.from('leads').update({ ai_paused: false }).eq('id', lead.id);
+            await supabase.from('conversaciones').insert({ lead_id: lead.id, mensaje: 'IA Activada manualmente (WhatsApp).', emisor: 'HUMANO', platform: 'WHATSAPP' });
+            await supabase.from('activity_logs').insert({ action: 'UPDATE', resource: 'BRAIN', description: `▶️ IA activada para ${lead.nombre} vía #ON desde WhatsApp`, status: 'OK' });
+            return new Response('ai_resumed', { status: 200, headers: corsHeaders });
+        }
+
         // Mensaje saliente del asesor desde teléfono: guardar como HUMANO sin mutar lead ni activar IA
         // deno-lint-ignore no-explicit-any
         const asesorMeta: Record<string, any> = { raw: payloadText.length <= 4000 ? payloadText : payloadText.substring(0, 4000) };
@@ -442,10 +457,13 @@ serve(async (req: Request): Promise<Response> => {
         });
     }
 
-    // AI response only in 'on' mode + global not paused + lead not paused + agent AI enabled
+    // AI response: channel on + global active + lead not paused + agent enabled + within schedule
+    // Schedule priority: Admin schedule > Agent self-schedule
     const { data: globalConfig } = await supabase.from('app_config').select('value').eq('key', 'global_ai_status').maybeSingle();
     let agentAiDisabled = false;
+    let outsideSchedule = false;
     if (lead.assigned_to) {
+        // 1. Admin AI status (highest priority — set in Gestión de Equipo)
         const { data: agentAiCfg } = await supabase.from('app_config').select('value').eq('key', `agent_ai_status_${lead.assigned_to}`).maybeSingle();
         if (agentAiCfg?.value) {
             try {
@@ -453,8 +471,50 @@ serve(async (req: Request): Promise<Response> => {
                 if (parsed.enabled === false) agentAiDisabled = true;
             } catch (_) {}
         }
+
+        // 2. Agent self AI status (set by agent in Mi Perfil)
+        if (!agentAiDisabled) {
+            const { data: selfAiCfg } = await supabase.from('app_config').select('value').eq('key', `agent_self_ai_status_${lead.assigned_to}`).maybeSingle();
+            if (selfAiCfg?.value) {
+                try {
+                    const parsed = JSON.parse(selfAiCfg.value);
+                    if (parsed.enabled === false) agentAiDisabled = true;
+                } catch (_) {}
+            }
+        }
+
+        // 3. Schedule check — helper to evaluate a schedule against current time
+        const nowMx = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Mexico_City' }));
+        const dayId = nowMx.getDay().toString();
+        const hhmm = `${String(nowMx.getHours()).padStart(2, '0')}:${String(nowMx.getMinutes()).padStart(2, '0')}`;
+
+        const isOutsideSchedule = (scheduleJson: string): boolean => {
+            try {
+                const schedule = JSON.parse(scheduleJson);
+                const hasAnyDay = Object.values(schedule).some((d: unknown) => (d as { active?: boolean })?.active);
+                if (!hasAnyDay) return false; // No schedule configured → no restriction
+                const dayCfg = schedule[dayId];
+                if (!dayCfg || !dayCfg.active) return true; // Day not active
+                if (dayCfg.ranges && Array.isArray(dayCfg.ranges)) {
+                    return !dayCfg.ranges.some((r: { start: string; end: string }) => hhmm >= r.start && hhmm <= r.end);
+                }
+                return false;
+            } catch (_) { return false; }
+        };
+
+        // Admin schedule has priority
+        const { data: adminScheduleCfg } = await supabase.from('app_config').select('value').eq('key', `agent_ai_schedule_${lead.assigned_to}`).maybeSingle();
+        if (adminScheduleCfg?.value) {
+            outsideSchedule = isOutsideSchedule(adminScheduleCfg.value);
+        } else {
+            // No admin schedule → check agent self-schedule
+            const { data: selfScheduleCfg } = await supabase.from('app_config').select('value').eq('key', `agent_self_schedule_${lead.assigned_to}`).maybeSingle();
+            if (selfScheduleCfg?.value) {
+                outsideSchedule = isOutsideSchedule(selfScheduleCfg.value);
+            }
+        }
     }
-    const aiEnabled = channelAiMode === 'on' && globalConfig?.value !== 'paused' && !lead.ai_paused && !agentAiDisabled;
+    const aiEnabled = channelAiMode === 'on' && globalConfig?.value !== 'paused' && !lead.ai_paused && !agentAiDisabled && !outsideSchedule;
 
     if (aiEnabled) {
         if (audioMediaId || audioMediaUrl) {
