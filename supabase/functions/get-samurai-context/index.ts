@@ -100,66 +100,62 @@ serve(async (req: Request): Promise<Response> => {
         }
     }
 
-    // --- CARGAR WOOCOMMERCE & BANCOS (SOLO SI EL CIERRE AUTOMÁTICO ESTÁ ACTIVO) ---
+    // --- CARGAR WOOCOMMERCE & BANCOS (SIEMPRE — la IA intenta cerrar la venta) ---
     let wcContext = "";
     let bankInfo = "";
     let handoffRule = "";
 
-    if (autoCloseEnabled) {
-        const wcProductsRaw = getConfig('wc_products');
-        if (wcProductsRaw) {
-            try {
-                const wcProducts = JSON.parse(wcProductsRaw);
-                const wcUrl = getConfig('wc_url', '').replace(/\/$/, '');
-                let wcCheckout = getConfig('wc_checkout_path', '/checkout/');
-                if (!wcCheckout.startsWith('/')) wcCheckout = '/' + wcCheckout;
+    // WooCommerce: siempre cargar si existe
+    const wcProductsRaw = getConfig('wc_products');
+    if (wcProductsRaw) {
+        try {
+            const wcProducts = JSON.parse(wcProductsRaw);
+            const wcUrl = getConfig('wc_url', '').replace(/\/$/, '');
+            let wcCheckout = getConfig('wc_checkout_path', '/checkout/');
+            if (!wcCheckout.startsWith('/')) wcCheckout = '/' + wcCheckout;
 
-                if (wcProducts.length > 0) {
-                    wcContext = "\n=== CATÁLOGO DE PRODUCTOS (TIENDA ONLINE WOOCOMMERCE) ===\n";
-                    (wcProducts as Array<{ wc_id: string; title: string; price: string; prompt: string }>).forEach(p => {
-                        const link = `${wcUrl}${wcCheckout}?add-to-cart=${p.wc_id}`;
-                        wcContext += `- PRODUCTO: ${p.title}\n  PRECIO: $${p.price}\n  LINK DE COMPRA: ${link}\n  REGLA DE VENTA E INSTRUCCIÓN IA: ${p.prompt}\n\n`;
-                    });
-                }
-            } catch (e) {}
-        }
-
-        bankInfo = `Banco: ${getConfig('bank_name')}\nCuenta: ${getConfig('bank_account')}\nCLABE: ${getConfig('bank_clabe')}\nTitular: ${getConfig('bank_holder')}`;
-        
-        if (lead.assigned_to) {
-            const agentBankRaw = getConfig(`agent_bank_${lead.assigned_to}`);
-            if (agentBankRaw) {
-                try {
-                    const agentBank = JSON.parse(agentBankRaw);
-                    if (agentBank.enabled) {
-                        bankInfo = `Banco: ${agentBank.bank_name}\nCuenta: ${agentBank.bank_account}\nCLABE: ${agentBank.bank_clabe}\nTitular: ${agentBank.bank_holder}`;
-                    }
-                } catch(e) {}
+            if (wcProducts.length > 0) {
+                wcContext = "\n=== CATÁLOGO DE PRODUCTOS (TIENDA ONLINE WOOCOMMERCE) ===\n";
+                (wcProducts as Array<{ wc_id: string; title: string; price: string; prompt: string }>).forEach(p => {
+                    const link = `${wcUrl}${wcCheckout}?add-to-cart=${p.wc_id}`;
+                    wcContext += `- PRODUCTO: ${p.title}\n  PRECIO: $${p.price}\n  LINK DE COMPRA: ${link}\n  REGLA DE VENTA E INSTRUCCIÓN IA: ${p.prompt}\n\n`;
+                });
             }
-        }
-    } else {
-        // SI EL CIERRE MANUAL ESTÁ ACTIVADO (Auto-Close Off)
-        wcContext = "\n=== CATÁLOGO DE PRODUCTOS ===\n(PRECIOS Y LINKS NO DISPONIBLES. EL HUMANO LOS PROPORCIONARÁ.)\n";
-        bankInfo = "NO DISPONIBLE - EL HUMANO PROPORCIONARÁ LA CUENTA.";
-        
-        handoffRule = `
-### REGLA DE CIERRE MANUAL (HANDOFF A HUMANO):
-El asesor humano (${agentName}) cerrará las ventas personalmente.
-
-IMPORTANTE — QUÉ SÍ PUEDES HACER:
-- SÍ puedes mencionar precios de preventa y precio regular de los cursos (están en el catálogo).
-- SÍ puedes dar información sobre sedes, fechas, horarios, profesores y extras.
-- SÍ puedes responder "¿cuánto cuesta?" o "¿cuál es el precio?" con los precios del catálogo.
-- SÍ puedes mencionar que el anticipo es de $1,500 MXN para apartar lugar.
-
-CUÁNDO HACER HANDOFF — Solo cuando el cliente diga explícitamente que QUIERE PAGAR, DEPOSITAR o pida DATOS BANCARIOS:
-- "¿Dónde deposito?", "¿Me das la cuenta?", "Quiero pagar", "Ya quiero inscribirme", "¿Cómo hago el pago?"
-EN ESE MOMENTO:
-1. NO proporciones cuentas bancarias ni enlaces de compra.
-2. Responde algo similar a: "¡Excelente! En breve mi compañero(a) ${agentName} te contactará personalmente por aquí para completar tu inscripción."
-3. DESPUÉS del handoff, SI el cliente sigue preguntando cosas generales, SIGUE ATENDIENDO normalmente.
-`;
+        } catch (e) {}
     }
+
+    // Banco: cargar global, luego override por agente si tiene cuenta propia
+    bankInfo = `Banco: ${getConfig('bank_name')}\nCuenta: ${getConfig('bank_account')}\nCLABE: ${getConfig('bank_clabe')}\nTitular: ${getConfig('bank_holder')}`;
+
+    if (lead.assigned_to) {
+        const agentBankRaw = getConfig(`agent_bank_${lead.assigned_to}`);
+        if (agentBankRaw) {
+            try {
+                const agentBank = JSON.parse(agentBankRaw);
+                if (agentBank.enabled) {
+                    bankInfo = `Banco: ${agentBank.bank_name}\nCuenta: ${agentBank.bank_account}\nCLABE: ${agentBank.bank_clabe}\nTitular: ${agentBank.bank_holder}`;
+                }
+            } catch(e) {}
+        }
+    }
+
+    // Detectar si hay datos bancarios reales configurados
+    const hasBankData = getConfig('bank_name') || (lead.assigned_to && getConfig(`agent_bank_${lead.assigned_to}`));
+    const hasWcProducts = wcContext.length > 100;
+
+    handoffRule = `
+### REGLA DE CIERRE DE VENTA:
+Tu objetivo es CERRAR la venta tú mismo. NUNCA derives al humano excepto si el cliente lo pide o si no tienes los datos necesarios.
+
+PROCESO DE CIERRE:
+1. Cuando el cliente quiera pagar o inscribirse:
+${hasWcProducts ? '   - PRIMERO ofrece el link de pago en línea (WooCommerce) si hay un producto que corresponda.' : ''}
+${hasBankData ? '   - TAMBIÉN ofrece los datos bancarios para transferencia/depósito del anticipo de $1,500 MXN.' : '   - NO tienes datos bancarios configurados. En este caso sí deriva al humano para el cobro.'}
+2. Si el cliente pide hablar con un humano o pide atención personal → ahí sí responde: "¡Con gusto! En breve ${agentName} te atenderá personalmente por aquí."
+3. Si no sabes algo o no tienes la información → responde honestamente y ofrece que ${agentName} puede resolver su duda.
+4. NUNCA digas "te contactará un humano" si tú puedes resolver la situación.
+`;
+
 
     // --- CARGAR HISTORIAL ACADÉMICO DEL CONTACTO ---
     let academicContext = '';
