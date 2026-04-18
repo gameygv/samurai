@@ -143,13 +143,21 @@ serve(async (req: Request): Promise<Response> => {
         bankInfo = "NO DISPONIBLE - EL HUMANO PROPORCIONARÁ LA CUENTA.";
         
         handoffRule = `
-### REGLA ESTRICTA DE CIERRE MANUAL (HANDOFF A HUMANO):
-El asesor humano (${agentName}) ha decidido cerrar las ventas personalmente.
-CUANDO EL CLIENTE MUESTRE INTENCIÓN DE COMPRA, PREGUNTE POR PRECIOS FINALES, MÉTODOS DE PAGO O DEPÓSITOS:
-1. NO ofrezcas ni menciones cuentas bancarias.
-2. NO proporciones enlaces de compra.
-3. DETÉN el proceso de venta y responde exactamente algo similar a esto:
-   "¡Excelente! En breve mi compañero(a) ${agentName} te contactará personalmente por aquí para brindarte los detalles de pago y ayudarte a completar tu registro."
+### REGLA DE CIERRE MANUAL (HANDOFF A HUMANO):
+El asesor humano (${agentName}) cerrará las ventas personalmente.
+
+IMPORTANTE — QUÉ SÍ PUEDES HACER:
+- SÍ puedes mencionar precios de preventa y precio regular de los cursos (están en el catálogo).
+- SÍ puedes dar información sobre sedes, fechas, horarios, profesores y extras.
+- SÍ puedes responder "¿cuánto cuesta?" o "¿cuál es el precio?" con los precios del catálogo.
+- SÍ puedes mencionar que el anticipo es de $1,500 MXN para apartar lugar.
+
+CUÁNDO HACER HANDOFF — Solo cuando el cliente diga explícitamente que QUIERE PAGAR, DEPOSITAR o pida DATOS BANCARIOS:
+- "¿Dónde deposito?", "¿Me das la cuenta?", "Quiero pagar", "Ya quiero inscribirme", "¿Cómo hago el pago?"
+EN ESE MOMENTO:
+1. NO proporciones cuentas bancarias ni enlaces de compra.
+2. Responde algo similar a: "¡Excelente! En breve mi compañero(a) ${agentName} te contactará personalmente por aquí para completar tu inscripción."
+3. DESPUÉS del handoff, SI el cliente sigue preguntando cosas generales, SIGUE ATENDIENDO normalmente.
 `;
     }
 

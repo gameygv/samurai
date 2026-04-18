@@ -120,12 +120,17 @@ serve(async (req: Request): Promise<Response> => {
         return new Response('no_key', { headers: corsHeaders });
     }
 
-    // Obtener historial de conversación
-    const { data: history } = await supabase.from('conversaciones')
-        .select('emisor, mensaje')
+    // Obtener historial de conversación (incluir metadata para filtrar auto-replies)
+    const { data: rawHistory } = await supabase.from('conversaciones')
+        .select('emisor, mensaje, metadata')
         .eq('lead_id', lead.id)
         .order('created_at', { ascending: true })
-        .limit(10);
+        .limit(12);
+    // Filtrar auto-replies del historial — se guardan en DB para ChatView pero no los ve la IA
+    const history = (rawHistory || []).filter(h => {
+        if (h.metadata && typeof h.metadata === 'object' && (h.metadata as Record<string, unknown>).auto_reply) return false;
+        return true;
+    }).slice(-10);
 
     // Obtener constitución del Kernel (protegido para no matar el flujo)
     let systemPrompt = "Eres Sam, asistente de ventas amigable y profesional.";
@@ -162,13 +167,31 @@ serve(async (req: Request): Promise<Response> => {
         status: 'OK' 
     });
 
-    const aiRes = await fetch("https://api.openai.com/v1/chat/completions", {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: "gpt-4o", messages: msgs, temperature: 0.4 })
-    });
+    // Llamar a OpenAI con retry automático en rate limit (429)
+    let aiRes: Response | null = null;
+    const maxRetries = 3;
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        aiRes = await fetch("https://api.openai.com/v1/chat/completions", {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ model: "gpt-4o", messages: msgs, temperature: 0.4 })
+        });
+        if (aiRes.status !== 429) break;
+        // Rate limit: esperar según Retry-After header o backoff exponencial
+        const retryAfter = parseInt(aiRes.headers.get('retry-after') || '0') || (attempt * 15);
+        const waitMs = Math.min(retryAfter * 1000, 45000);
+        await supabase.from('activity_logs').insert({
+            action: 'INFO', resource: 'BRAIN',
+            description: `⏳ Rate limit OpenAI (intento ${attempt}/${maxRetries}), esperando ${Math.round(waitMs/1000)}s para ${lead.nombre}...`,
+            status: 'OK'
+        });
+        await new Promise(r => setTimeout(r, waitMs));
+    }
 
-    if (!aiRes.ok) throw new Error(`OpenAI HTTP ${aiRes.status}: ${await aiRes.text()}`);
+    if (!aiRes || !aiRes.ok) {
+        const errText = aiRes ? await aiRes.text() : 'no response';
+        throw new Error(`OpenAI HTTP ${aiRes?.status || 'null'}: ${errText}`);
+    }
     const aiData = await aiRes.json();
 
     // DETECTOR DE ERRORES OPENAI

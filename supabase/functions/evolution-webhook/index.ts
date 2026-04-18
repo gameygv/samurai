@@ -338,19 +338,24 @@ serve(async (req: Request): Promise<Response> => {
             'no estamos disponibles',
             'horario de atención',
             'respuesta automática',
+            '(mensaje automático)',
+            'en un momento te atenderemos',
             'auto-reply',
             'away message'
         ];
         const lowerText = text.toLowerCase();
         const isAutoReply = autoReplyPatterns.some(p => lowerText.includes(p));
         if (isAutoReply) {
-            // No guardar en conversaciones — evita que la IA piense que un humano respondió
-            await supabase.from('activity_logs').insert({
-                action: 'INFO', resource: 'SYSTEM',
-                description: `🤖 Auto-responder descartado para ${lead.nombre}: "${text.substring(0, 60)}..."`,
-                status: 'OK'
-            });
-            return new Response('auto_reply_skipped', { status: 200, headers: corsHeaders });
+            // Guardar con marca auto_reply para que aparezca en el ChatView,
+            // pero process-samurai-response lo excluye del historial IA
+            // deno-lint-ignore no-explicit-any
+            const autoInsert: Record<string, any> = {
+                lead_id: lead.id, emisor: 'HUMANO', mensaje: text, platform: 'WHATSAPP',
+                metadata: { auto_reply: true, raw: payloadText.length <= 4000 ? payloadText : payloadText.substring(0, 4000) }
+            };
+            if (messageId) autoInsert.message_id = messageId;
+            await supabase.from('conversaciones').insert(autoInsert);
+            return new Response('auto_reply_stored', { status: 200, headers: corsHeaders });
         }
 
         // Mensaje saliente del asesor desde teléfono: guardar como HUMANO sin mutar lead ni activar IA
