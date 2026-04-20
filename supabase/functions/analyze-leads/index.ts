@@ -112,6 +112,9 @@ REGLAS DE DATOS GEOGRÁFICOS (CRÍTICO para Meta CAPI):
 - "cp": SIEMPRE que detectes una ciudad, infiere el código postal del CENTRO de esa ciudad (ej: Guadalajara → 44100, Monterrey → 64000, CDMX → 06000). Si el cliente menciona una colonia específica, usa el CP de esa colonia. El CP debe ser exactamente 5 dígitos.
 - "genero": Infiere del nombre: "f" para femenino, "m" para masculino, null si no puedes determinarlo.
 
+FECHA DE NACIMIENTO:
+- "fecha_nacimiento": Si el cliente menciona su fecha de nacimiento, edad o cumpleaños, extraerla en formato YYYY-MM-DD. Si solo dice la edad, calcular el año aproximado (año actual menos edad) y poner null en día/mes. Si dice "tengo 35 años", poner null. Solo extraer si da fecha específica (ej: "nací el 15 de marzo de 1990" → "1990-03-15").
+
 DATOS FISCALES (extraer SOLO si el cliente los menciona explícitamente en el chat):
 - "rfc": RFC del cliente si lo menciona (13 caracteres persona física, 12 moral). Solo si aparece textualmente.
 - "direccion": Dirección completa si la menciona (calle, número, colonia).
@@ -126,7 +129,7 @@ ${chatContext}
 RESUMEN (summary): Escribe 1 frase corta (máximo 15 palabras) que resuma el estado actual de la conversación. Ejemplos: "Interesada en taller Guadalajara mayo, pidió precios", "Preguntó por cuencos nivel 2, vive en CDMX", "Solo saludó, sin interés claro aún". Sé específico sobre qué curso/servicio le interesa.
 
 Responde UNICAMENTE con este JSON exacto (sin acentos en las claves):
-{"nombre": null, "apellido": null, "email": null, "ciudad": null, "estado": null, "cp": null, "genero": null, "direccion": null, "rfc": null, "uso_cfdi": null, "regimen_fiscal": null, "servicio_interes": null, "summary": null, "intent": "BAJO", "lead_score": 10}`;
+{"nombre": null, "apellido": null, "email": null, "ciudad": null, "estado": null, "cp": null, "genero": null, "fecha_nacimiento": null, "direccion": null, "rfc": null, "uso_cfdi": null, "regimen_fiscal": null, "servicio_interes": null, "summary": null, "intent": "BAJO", "lead_score": 10}`;
 
     const aiRes = await fetch("https://api.openai.com/v1/chat/completions", {
       method: 'POST',
@@ -194,6 +197,11 @@ Responde UNICAMENTE con este JSON exacto (sin acentos en las claves):
       const detGender = inferGender(updates.nombre || lead.nombre);
       const finalGender = aiGender || detGender;
       if (finalGender && !lead.genero) updates.genero = finalGender;
+
+      // Fecha de nacimiento: si la IA la detectó en el chat (formato YYYY-MM-DD)
+      if (parsed.fecha_nacimiento && /^\d{4}-\d{2}-\d{2}$/.test(String(parsed.fecha_nacimiento)) && !lead.fecha_nacimiento) {
+        updates.fecha_nacimiento = String(parsed.fecha_nacimiento);
+      }
 
       // Datos fiscales: solo si la IA los detectó explícitamente en el chat
       if (parsed.rfc && /^[A-ZÑ&]{3,4}\d{6}[A-Z0-9]{3}$/i.test(String(parsed.rfc)) && !lead.rfc) updates.rfc = String(parsed.rfc).toUpperCase();
@@ -283,6 +291,39 @@ Responde UNICAMENTE con este JSON exacto (sin acentos en las claves):
         const capiEventName = capiEventMap[updates.buying_intent] || 'Lead';
         const eventTimestamp = Math.floor(Date.now() / 1000);
 
+        // Mejora: AddToCart intermedio — si sube a ALTO y el lead_score >= 50,
+        // enviar AddToCart ANTES de InitiateCheckout para dar más señal a Meta
+        if (capiEventName === 'InitiateCheckout' && (updates.lead_score || lead.lead_score || 0) >= 50) {
+          try {
+            await supabase.functions.invoke('meta-capi-sender', {
+              body: {
+                config: { pixel_id: metaPixelId, access_token: metaAccessToken, test_event_code: configMap.meta_test_event_code || undefined },
+                eventData: {
+                  event_name: 'AddToCart',
+                  event_id: `samurai_${lead.id}_AddToCart`,
+                  lead_id: lead.id,
+                  user_data: {
+                    ph: lead.telefono, fn: (updates.nombre || lead.nombre)?.split(' ')[0],
+                    ln: (updates.nombre || lead.nombre)?.split(' ').slice(1).join(' ') || undefined,
+                    em: updates.email || lead.email || undefined,
+                    ct: updates.ciudad || lead.ciudad || undefined,
+                    st: updates.estado || lead.estado || undefined,
+                    zp: updates.cp || lead.cp || undefined,
+                    ge: finalGender || undefined,
+                    db: (updates.fecha_nacimiento || lead.fecha_nacimiento) ? String(updates.fecha_nacimiento || lead.fecha_nacimiento).replace(/-/g, '') : undefined,
+                    country: 'mx', external_id: lead.id,
+                    fbc: lead.fbc || undefined, ctwa_clid: lead.ctwa_clid || undefined
+                  },
+                  custom_data: {
+                    source: 'samurai_auto', content_name: updates.servicio_interes || lead.servicio_interes || undefined,
+                    content_category: 'talleres_cuencoterapia', funnel_stage: 'ALTO', origin_channel: 'whatsapp'
+                  }
+                }
+              }
+            });
+          } catch (_) {}
+        }
+
         // Monto del Purchase: tomar del receipt válido más reciente si existe
         let purchaseAmount: number | undefined;
         if (capiEventName === 'Purchase' && validReceipts && validReceipts.length > 0) {
@@ -299,7 +340,7 @@ Responde UNICAMENTE con este JSON exacto (sin acentos en las claves):
               },
               eventData: {
                 event_name: capiEventName,
-                event_id: `samurai_${lead.id}_${capiEventName}_${eventTimestamp}`,
+                event_id: `samurai_${lead.id}_${capiEventName}`,
                 lead_id: lead.id,
                 user_data: {
                   ph: lead.telefono,
@@ -310,6 +351,7 @@ Responde UNICAMENTE con este JSON exacto (sin acentos en las claves):
                   st: updates.estado || lead.estado || undefined,
                   zp: updates.cp || lead.cp || undefined,
                   ge: finalGender || undefined,
+                  db: (updates.fecha_nacimiento || lead.fecha_nacimiento) ? String(updates.fecha_nacimiento || lead.fecha_nacimiento).replace(/-/g, '') : undefined,
                   country: 'mx',
                   external_id: lead.id,
                   fbc: lead.fbc || undefined,
@@ -319,6 +361,7 @@ Responde UNICAMENTE con este JSON exacto (sin acentos en las claves):
                 custom_data: {
                   source: 'samurai_auto',
                   content_name: updates.servicio_interes || lead.servicio_interes || undefined,
+                  content_ids: (updates.servicio_interes || lead.servicio_interes) ? [String(updates.servicio_interes || lead.servicio_interes).toLowerCase().replace(/\s+/g, '_')] : undefined,
                   content_category: 'talleres_cuencoterapia',
                   funnel_stage: updates.buying_intent,
                   lead_score: updates.lead_score || lead.lead_score || undefined,
@@ -369,6 +412,7 @@ Responde UNICAMENTE con este JSON exacto (sin acentos en las claves):
                   st: updates.estado || lead.estado || undefined,
                   zp: updates.cp || lead.cp || undefined,
                   ge: finalGender || undefined,
+                  db: (updates.fecha_nacimiento || lead.fecha_nacimiento) ? String(updates.fecha_nacimiento || lead.fecha_nacimiento).replace(/-/g, '') : undefined,
                   country: 'mx',
                   external_id: lead.id,
                   fbc: lead.fbc || undefined,
@@ -405,13 +449,12 @@ Responde UNICAMENTE con este JSON exacto (sin acentos en las claves):
       // Enviar evento Lead para leads NUEVOS (primera vez que se analiza, intent = BAJO)
       if (oldIntentLevel === 0 && newIntentLevel === 0 && !lead.capi_lead_event_sent_at && metaPixelId && metaAccessToken && capiEnabled) {
         try {
-          const eventTimestamp = Math.floor(Date.now() / 1000);
           await supabase.functions.invoke('meta-capi-sender', {
             body: {
               config: { pixel_id: metaPixelId, access_token: metaAccessToken, test_event_code: configMap.meta_test_event_code || undefined },
               eventData: {
                 event_name: 'Lead',
-                event_id: `samurai_${lead.id}_Lead_${eventTimestamp}`,
+                event_id: `samurai_${lead.id}_Lead`,
                 lead_id: lead.id,
                 user_data: {
                   ph: lead.telefono,
@@ -422,6 +465,7 @@ Responde UNICAMENTE con este JSON exacto (sin acentos en las claves):
                   st: updates.estado || lead.estado || undefined,
                   zp: updates.cp || lead.cp || undefined,
                   ge: finalGender || undefined,
+                  db: (updates.fecha_nacimiento || lead.fecha_nacimiento) ? String(updates.fecha_nacimiento || lead.fecha_nacimiento).replace(/-/g, '') : undefined,
                   country: 'mx',
                   external_id: lead.id,
                   fbc: lead.fbc || undefined,

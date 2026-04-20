@@ -205,7 +205,8 @@ Ciudad: ${lead.ciudad || 'NO PROPORCIONADA'}
 REGLAS ESTRICTAS DE MEMORIA Y VENTAS:
 1. SI EL EMAIL O LA CIUDAD YA ESTÁN CAPTURADOS, NO VUELVAS A PEDIRLOS BAJO NINGUNA CIRCUNSTANCIA.
 2. PAGOS: Si el cliente dice "ya pagué", "listo" o envía una imagen de comprobante, NUNCA le confirmes que el pago está validado o completo. Tu respuesta DEBE SER SIEMPRE: "¡Excelente! He recibido tu confirmación. En breve nuestro sistema automático o un asesor verificará el comprobante y validará tu acceso."
-3. RECOPILACIÓN DE DATOS PERSONALES: Cuando la conversación avance hacia la etapa de cierre (el cliente muestra interés alto o pregunta por precios/inscripción), además del email y ciudad, pregunta de forma natural: dieta (vegetariana, vegana, omnívora, etc.), alergias alimentarias, y con qué género se identifica (hombre, mujer, otro). Hazlo de forma cálida y natural, no como un formulario. Si alguno de estos datos ya está capturado, NO lo preguntes de nuevo.
+3. CAPTURA DE EMAIL (PRIORIDAD ALTA): Cuando el cliente muestre interés real (pregunta precios, fechas, quiere inscribirse), pídele su correo electrónico de forma natural. Ejemplos: "Para enviarte la información completa y tu confirmación, ¿me compartes tu correo electrónico?", "¿A qué email te envío los detalles del taller?". El email es CRÍTICO para el seguimiento. Si ya está capturado, NO lo pidas de nuevo.
+4. RECOPILACIÓN DE DATOS PERSONALES: Cuando la conversación avance hacia la etapa de cierre (el cliente muestra interés alto o pregunta por precios/inscripción), además del email y ciudad, pregunta de forma natural: dieta (vegetariana, vegana, omnívora, etc.), alergias alimentarias, y con qué género se identifica (hombre, mujer, otro). Hazlo de forma cálida y natural, no como un formulario. Si alguno de estos datos ya está capturado, NO lo preguntes de nuevo.
 `;
 
     const voiceInstruction = `
