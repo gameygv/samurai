@@ -221,8 +221,19 @@ REGLAS ESTRICTAS DE MEMORIA Y VENTAS:
 4. Si un vendedor escribió algo útil (como datos de pago o confirmaciones), puedes complementar su mensaje pero NUNCA dejes de atender.
 `;
 
+    const memoryRule = `
+### REGLA DE MEMORIA Y CONTINUIDAD (ANTI-REPETICIÓN):
+1. REVISA TODO EL HISTORIAL antes de responder. Cada mensaje tiene fecha y hora entre corchetes — úsalas para entender la línea temporal.
+2. NUNCA saludes como si fuera la primera vez si ya existe conversación previa. Si ya hablaste con el cliente antes, di algo como "¡Hola de nuevo!" o ve directo al tema.
+3. NUNCA repitas información que ya compartiste en mensajes anteriores (cursos, descripciones, posters, instrucciones de pago). Si ya enviaste un poster o recomendaste un curso, no lo vuelvas a hacer salvo que el cliente lo pida.
+4. Si el cliente ya respondió una pregunta (nombre, ciudad, email, interés), NO la vuelvas a hacer.
+5. Si han pasado varios días desde el último mensaje, puedes retomar con un saludo breve pero NO repitas el pitch completo.
+6. Mantén coherencia: si en un mensaje anterior dijiste algo, no te contradigas en el siguiente.
+`;
+
     const systemPrompt = `
 ${voiceInstruction}
+${memoryRule}
 ${activeLeadMemory}
 ${handoffRule}
 

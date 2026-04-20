@@ -120,17 +120,30 @@ serve(async (req: Request): Promise<Response> => {
         return new Response('no_key', { headers: corsHeaders });
     }
 
-    // Obtener historial de conversación (incluir metadata para filtrar auto-replies)
-    const { data: rawHistory } = await supabase.from('conversaciones')
-        .select('emisor, mensaje, metadata')
+    // Protección contra race condition: si ya hay una respuesta IA en los últimos 5s para este lead, no duplicar
+    const { data: recentAi } = await supabase.from('conversaciones')
+        .select('id')
         .eq('lead_id', lead.id)
-        .order('created_at', { ascending: true })
-        .limit(12);
+        .eq('emisor', 'IA')
+        .gte('created_at', new Date(Date.now() - 5000).toISOString())
+        .limit(1);
+    if (recentAi && recentAi.length > 0) {
+        await supabase.from('activity_logs').insert({ action: 'INFO', resource: 'BRAIN', description: `🛡️ Race condition prevenida: ya hay respuesta IA reciente para ${lead.nombre}`, status: 'OK' });
+        return new Response('duplicate_prevented', { headers: corsHeaders });
+    }
+
+    // Obtener historial de conversación RECIENTE (desc + reverse para traer los últimos, no los primeros)
+    const { data: rawHistory } = await supabase.from('conversaciones')
+        .select('emisor, mensaje, metadata, created_at')
+        .eq('lead_id', lead.id)
+        .order('created_at', { ascending: false })
+        .limit(30);
     // Filtrar auto-replies del historial — se guardan en DB para ChatView pero no los ve la IA
+    // Luego tomar los últimos 20 mensajes útiles y revertir a orden cronológico
     const history = (rawHistory || []).filter(h => {
         if (h.metadata && typeof h.metadata === 'object' && (h.metadata as Record<string, unknown>).auto_reply) return false;
         return true;
-    }).slice(-10);
+    }).slice(0, 20).reverse();
 
     // Obtener constitución del Kernel (protegido para no matar el flujo)
     let systemPrompt = "Eres Sam, asistente de ventas amigable y profesional.";
@@ -154,10 +167,22 @@ serve(async (req: Request): Promise<Response> => {
         });
     }
 
+    // Formatear historial con timestamps para que la IA tenga contexto temporal
+    const formatTs = (iso: string) => {
+        try { return new Date(iso).toLocaleString('es-MX', { timeZone: 'America/Mexico_City', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }); }
+        catch (_) { return ''; }
+    };
+    // Detectar si el mensaje actual ya está en el historial (el webhook lo inserta antes de llamarnos)
+    const lastH = history[history.length - 1];
+    const alreadyInHistory = lastH && !(['IA', 'SAMURAI', 'BOT'].includes(lastH.emisor)) && lastH.mensaje === client_message;
+
     const msgs = [
-        { role: 'system', content: systemPrompt },
-        ...(history || []).map(h => ({ role: (['IA', 'SAMURAI', 'BOT'].includes(h.emisor)) ? 'assistant' : 'user', content: h.mensaje })),
-        { role: 'user', content: client_message }
+        { role: 'system' as const, content: systemPrompt },
+        ...(history || []).map(h => ({
+            role: (['IA', 'SAMURAI', 'BOT'].includes(h.emisor) ? 'assistant' : 'user') as 'assistant' | 'user',
+            content: h.created_at ? `[${formatTs(h.created_at)}] ${h.mensaje}` : h.mensaje
+        })),
+        ...(!alreadyInHistory ? [{ role: 'user' as const, content: client_message }] : [])
     ];
 
     // LOG: Llamando a OpenAI
