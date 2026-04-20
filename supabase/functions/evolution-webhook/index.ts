@@ -122,11 +122,16 @@ serve(async (req: Request): Promise<Response> => {
             if (ch) actualChannelId = ch.id;
         }
     } else {
-        // Gowa: solo procesar eventos de mensaje (entrante y saliente)
+        // Gowa: solo procesar eventos de mensaje (whitelist — cualquier otro evento se descarta)
         const gowaEvent = payload.event;
-        if (gowaEvent && gowaEvent !== 'message' && gowaEvent !== 'send_message') return new Response('ok', { status: 200 });
+        if (gowaEvent !== 'message' && gowaEvent !== 'send_message') return new Response('ok', { status: 200 });
 
         const p = payload.payload || payload.data || payload;
+
+        // Filtrar mensajes de grupo — chat_id contiene @g.us para grupos WhatsApp
+        const chatJid = p.chat_id || '';
+        if (String(chatJid).includes('@g.us')) return new Response('ok', { status: 200 });
+
         isFromMe = p.is_from_me || p.fromMe || p.key?.fromMe || false;
         // Gowa isFromMe: from=dispositivo propio, chat_id o key.remoteJid=cliente.
         // p.from es el teléfono del AGENTE en mensajes salientes, NO del cliente.
