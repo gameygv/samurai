@@ -123,8 +123,10 @@ DATOS FISCALES (extraer SOLO si el cliente los menciona explícitamente en el ch
 CONVERSACION:
 ${chatContext}
 
+RESUMEN (summary): Escribe 1 frase corta (máximo 15 palabras) que resuma el estado actual de la conversación. Ejemplos: "Interesada en taller Guadalajara mayo, pidió precios", "Preguntó por cuencos nivel 2, vive en CDMX", "Solo saludó, sin interés claro aún". Sé específico sobre qué curso/servicio le interesa.
+
 Responde UNICAMENTE con este JSON exacto (sin acentos en las claves):
-{"nombre": null, "apellido": null, "email": null, "ciudad": null, "estado": null, "cp": null, "genero": null, "direccion": null, "rfc": null, "uso_cfdi": null, "regimen_fiscal": null, "servicio_interes": null, "intent": "BAJO", "lead_score": 10}`;
+{"nombre": null, "apellido": null, "email": null, "ciudad": null, "estado": null, "cp": null, "genero": null, "direccion": null, "rfc": null, "uso_cfdi": null, "regimen_fiscal": null, "servicio_interes": null, "summary": null, "intent": "BAJO", "lead_score": 10}`;
 
     const aiRes = await fetch("https://api.openai.com/v1/chat/completions", {
       method: 'POST',
@@ -185,6 +187,7 @@ Responde UNICAMENTE con este JSON exacto (sin acentos en las claves):
       if (parsed.servicio_interes && parsed.servicio_interes.length > 2) updates.servicio_interes = parsed.servicio_interes;
       const parsedScore = Number(parsed.lead_score);
       if (!isNaN(parsedScore) && parsedScore >= 0 && parsedScore <= 100) updates.lead_score = parsedScore;
+      if (parsed.summary && typeof parsed.summary === 'string' && parsed.summary.length > 3) updates.summary = parsed.summary;
 
       // Género: primero IA, luego inferencia determinística del nombre — guardar en DB
       const aiGender = parsed.genero === 'f' || parsed.genero === 'm' ? parsed.genero : null;

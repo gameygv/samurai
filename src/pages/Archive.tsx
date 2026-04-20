@@ -6,9 +6,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { 
-  Archive as ArchiveIcon, Search, Loader2, MessageSquare, 
-  RefreshCw, Sparkles, Mail, User as UserIcon, Bot, BotOff, ShieldCheck
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import {
+  Archive as ArchiveIcon, Search, Loader2, MessageSquare,
+  RefreshCw, Sparkles, Mail, User as UserIcon, Bot, BotOff, ShieldCheck, Filter
 } from 'lucide-react';
 import { toast } from 'sonner';
 import ChatViewer from '@/components/ChatViewer';
@@ -20,6 +21,7 @@ const Archive = () => {
   const [conversations, setConversations] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [agentFilter, setAgentFilter] = useState<string>('all');
   const [selectedLead, setSelectedLead] = useState<any>(null);
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [agentsMap, setAgentsMap] = useState<Record<string, string>>({});
@@ -69,11 +71,14 @@ const Archive = () => {
     setIsChatOpen(true);
   };
 
-  const filtered = conversations.filter(l => 
-    l.nombre?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    l.telefono?.includes(searchTerm) ||
-    l.summary?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filtered = conversations.filter(l => {
+    const matchesSearch = !searchTerm ||
+      l.nombre?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      l.telefono?.includes(searchTerm) ||
+      l.summary?.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesAgent = agentFilter === 'all' || l.assigned_to === agentFilter || (agentFilter === 'unassigned' && !l.assigned_to);
+    return matchesSearch && matchesAgent;
+  });
 
   return (
     <Layout>
@@ -82,9 +87,26 @@ const Archive = () => {
           <h1 className="text-3xl font-bold text-white flex items-center gap-3">
              <ArchiveIcon className="w-8 h-8 text-indigo-400" /> Archivo de Chats
           </h1>
-          <div className="relative w-80">
-            <Search className="absolute left-3 top-3 h-4 w-4 text-slate-500" />
-            <Input placeholder="Buscar..." className="pl-10 h-10 rounded-xl" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}/>
+          <div className="flex items-center gap-3">
+            {isManager && (
+              <Select value={agentFilter} onValueChange={setAgentFilter}>
+                <SelectTrigger className="w-48 h-10 rounded-xl bg-[#0f0f11] border-[#222225] text-slate-300 text-xs">
+                  <Filter className="w-3.5 h-3.5 mr-2 text-slate-500" />
+                  <SelectValue placeholder="Filtrar por agente" />
+                </SelectTrigger>
+                <SelectContent className="bg-[#0f0f11] border-[#222225]">
+                  <SelectItem value="all">Todos los agentes</SelectItem>
+                  <SelectItem value="unassigned">Sin asignar</SelectItem>
+                  {Object.entries(agentsMap).map(([id, name]) => (
+                    <SelectItem key={id} value={id}>{name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+            <div className="relative w-80">
+              <Search className="absolute left-3 top-3 h-4 w-4 text-slate-500" />
+              <Input placeholder="Buscar..." className="pl-10 h-10 rounded-xl" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}/>
+            </div>
           </div>
         </div>
 
