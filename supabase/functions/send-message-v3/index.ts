@@ -83,7 +83,13 @@ serve(async (req: Request): Promise<Response> => {
 
       if (mediaData?.url) {
         delete headers['Content-Type'];
-        const fileRes = await fetch(mediaData.url);
+        // Comprimir imágenes de Supabase Storage via transform API para evitar 413 nginx
+        let downloadUrl = mediaData.url;
+        if (mediaData.type === 'image' && downloadUrl.includes('/storage/v1/object/public/')) {
+            downloadUrl = downloadUrl.replace('/storage/v1/object/public/', '/storage/v1/render/image/public/');
+            downloadUrl += (downloadUrl.includes('?') ? '&' : '?') + 'width=800&quality=75';
+        }
+        const fileRes = await fetch(downloadUrl);
         const fileBlob = await fileRes.blob();
         const formData = new FormData();
         formData.append('phone', cleanPhone);

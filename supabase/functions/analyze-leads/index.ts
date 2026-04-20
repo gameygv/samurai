@@ -425,7 +425,8 @@ Responde UNICAMENTE con este JSON exacto (sin acentos en las claves):
                   content_category: 'talleres_cuencoterapia',
                   funnel_stage: updates.buying_intent,
                   lead_score: updates.lead_score || lead.lead_score || undefined,
-                  origin_channel: 'whatsapp'
+                  origin_channel: 'whatsapp',
+                  currency: currentEvent === 'Purchase' ? 'MXN' : undefined,
                 }
               }
             }

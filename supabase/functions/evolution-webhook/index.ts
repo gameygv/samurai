@@ -566,6 +566,12 @@ serve(async (req: Request): Promise<Response> => {
     }
     const aiEnabled = channelAiMode === 'on' && globalConfig?.value !== 'paused' && !lead.ai_paused && !agentAiDisabled && !outsideSchedule;
 
+    if (!aiEnabled) {
+        // Log detallado de por qué la IA no se activa
+        const reason = !channelAiMode || channelAiMode !== 'on' ? `canal=${channelAiMode}` : globalConfig?.value === 'paused' ? 'global_paused' : lead.ai_paused ? 'lead_paused' : agentAiDisabled ? 'agent_disabled' : outsideSchedule ? 'fuera_horario' : 'unknown';
+        await supabase.from('activity_logs').insert({ action: 'INFO', resource: 'BRAIN', description: `🚫 IA no activa para ${lead.nombre}: ${reason}`, status: 'OK' });
+    }
+
     if (aiEnabled) {
         if (audioMediaId || audioMediaUrl) {
             // Audio ya se envió a transcribir arriba, no invocar process-samurai-response aquí
@@ -574,17 +580,24 @@ serve(async (req: Request): Promise<Response> => {
             // Llamar al procesador IA con fetch directo
             try {
                 const fnUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/process-samurai-response`;
+                const authKey = Deno.env.get('SUPABASE_ANON_KEY') || Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
                 const fnRes = await fetch(fnUrl, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${Deno.env.get('SUPABASE_ANON_KEY') || Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`
+                        'Authorization': `Bearer ${authKey}`
                     },
                     body: JSON.stringify({ lead_id: lead.id, client_message: text })
                 });
-                await fnRes.json().catch(() => ({}));
-            } catch (invokeErr) {
-                console.error('Error calling process-samurai-response:', invokeErr);
+                if (!fnRes.ok) {
+                    const errBody = await fnRes.text().catch(() => '');
+                    await supabase.from('activity_logs').insert({ action: 'ERROR', resource: 'BRAIN', description: `❌ process-samurai-response HTTP ${fnRes.status}: ${errBody.substring(0, 200)}`, status: 'ERROR' });
+                } else {
+                    await fnRes.json().catch(() => ({}));
+                }
+            } catch (invokeErr: unknown) {
+                const errMsg = invokeErr instanceof Error ? invokeErr.message : String(invokeErr);
+                await supabase.from('activity_logs').insert({ action: 'ERROR', resource: 'BRAIN', description: `❌ process-samurai-response CRASH: ${errMsg.substring(0, 200)}`, status: 'ERROR' });
             }
         }
     }

@@ -8,6 +8,8 @@ serve(async (req: Request): Promise<Response> => {
   // FIX: Supabase env variable read fix.
   const supabase = createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '');
 
+  const incomingAuth = req.headers.get('Authorization') || '';
+
   try {
     const { lead_id, client_message } = await req.json();
     if (!lead_id) return new Response('no_id', { headers: corsHeaders });
@@ -108,6 +110,18 @@ serve(async (req: Request): Promise<Response> => {
             return new Response('outside_schedule', { headers: corsHeaders });
         }
     }
+
+    // Helper: llamar send-message-v3 via fetch directo (invoke falla con non-2xx en media pesada)
+    const sendMsg = async (body: Record<string, unknown>): Promise<{ success: boolean; wamid?: string; error?: string }> => {
+        const fnUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/send-message-v3`;
+        const res = await fetch(fnUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': incomingAuth },
+            body: JSON.stringify(body)
+        });
+        if (!res.ok) return { success: false, error: `HTTP ${res.status}: ${await res.text().catch(() => 'no body')}` };
+        return await res.json();
+    };
 
     const apiKey = Deno.env.get('OPENAI_API_KEY') || configMap['openai_api_key'];
 
@@ -243,73 +257,47 @@ serve(async (req: Request): Promise<Response> => {
         try {
             if (mediaMatch) {
                 const mediaUrl = mediaMatch[1];
-                // S4.3: Validar URL de media antes de enviar
                 if (!mediaUrl.startsWith('https://')) {
                     await supabase.from('activity_logs').insert({ action: 'ERROR', resource: 'BRAIN', description: `URL de media invalida: ${mediaUrl.substring(0, 100)}`, status: 'ERROR' });
-                    // Fallback: enviar solo texto sin imagen
-                    const { data: sendData, error: sendErr } = await supabase.functions.invoke('send-message-v3', {
-                        body: { channel_id: lead.channel_id, phone: lead.telefono, message: cleanText || aiText, lead_id: lead.id }
-                    });
-                    if (sendErr || (sendData && !sendData.success)) {
-                        sendFailed = true;
-                        await supabase.from('activity_logs').insert({ action: 'ERROR', resource: 'SYSTEM', description: `ERROR WHATSAPP (${lead.telefono}): ${sendErr?.message || JSON.stringify(sendData?.error || 'unknown')}`, status: 'ERROR' });
-                    } else {
-                        wamid = sendData?.wamid || null;
-                    }
+                    const result = await sendMsg({ channel_id: lead.channel_id, phone: lead.telefono, message: cleanText || aiText, lead_id: lead.id });
+                    if (!result.success) { sendFailed = true; await supabase.from('activity_logs').insert({ action: 'ERROR', resource: 'SYSTEM', description: `ERROR WHATSAPP (${lead.telefono}): ${result.error?.substring(0, 200)}`, status: 'ERROR' }); }
+                    else { wamid = result.wamid || null; }
                 } else if (cleanText && cleanText.length <= 1024) {
                     // Caption mode: imagen con texto como caption
-                    const { data: sendData, error: sendErr } = await supabase.functions.invoke('send-message-v3', {
-                        body: { channel_id: lead.channel_id, phone: lead.telefono, message: cleanText, mediaData: { url: mediaUrl, type: 'image' }, lead_id: lead.id }
-                    });
-                    if (sendErr || (sendData && !sendData.success)) {
-                        sendFailed = true;
-                        await supabase.from('activity_logs').insert({ action: 'ERROR', resource: 'SYSTEM', description: `ERROR WHATSAPP MEDIA (${lead.telefono}): ${sendErr?.message || JSON.stringify(sendData?.error || 'unknown')}`, status: 'ERROR' });
+                    const result = await sendMsg({ channel_id: lead.channel_id, phone: lead.telefono, message: cleanText, mediaData: { url: mediaUrl, type: 'image' }, lead_id: lead.id });
+                    if (!result.success) {
+                        await supabase.from('activity_logs').insert({ action: 'ERROR', resource: 'SYSTEM', description: `ERROR WHATSAPP MEDIA (${lead.telefono}): ${result.error?.substring(0, 200)}`, status: 'ERROR' });
+                        // FALLBACK: media fallo — enviar solo texto
+                        const fb = await sendMsg({ channel_id: lead.channel_id, phone: lead.telefono, message: cleanText, lead_id: lead.id });
+                        if (!fb.success) { sendFailed = true; await supabase.from('activity_logs').insert({ action: 'ERROR', resource: 'SYSTEM', description: `ERROR WHATSAPP FALLBACK (${lead.telefono}): ${fb.error?.substring(0, 200)}`, status: 'ERROR' }); }
+                        else { wamid = fb.wamid || null; await supabase.from('activity_logs').insert({ action: 'INFO', resource: 'BRAIN', description: `🔄 Fallback: imagen fallo, texto enviado OK a ${lead.nombre}`, status: 'OK' }); }
                     } else {
-                        wamid = sendData?.wamid || null;
+                        wamid = result.wamid || null;
                         await supabase.from('activity_logs').insert({ action: 'UPDATE', resource: 'BRAIN', description: `🖼️ Imagen enviada a ${lead.nombre} (caption mode)`, status: 'OK' });
                     }
                 } else if (cleanText && cleanText.length > 1024) {
                     // Split mode: imagen sola + texto aparte
-                    const { data: imgData, error: imgErr } = await supabase.functions.invoke('send-message-v3', {
-                        body: { channel_id: lead.channel_id, phone: lead.telefono, message: '', mediaData: { url: mediaUrl, type: 'image' }, lead_id: lead.id }
-                    });
-                    if (imgErr || (imgData && !imgData.success)) {
-                        sendFailed = true;
-                        await supabase.from('activity_logs').insert({ action: 'ERROR', resource: 'SYSTEM', description: `ERROR WHATSAPP MEDIA (${lead.telefono}): ${imgErr?.message || JSON.stringify(imgData?.error || 'unknown')}`, status: 'ERROR' });
+                    const imgResult = await sendMsg({ channel_id: lead.channel_id, phone: lead.telefono, message: '', mediaData: { url: mediaUrl, type: 'image' }, lead_id: lead.id });
+                    if (!imgResult.success) { await supabase.from('activity_logs').insert({ action: 'ERROR', resource: 'SYSTEM', description: `ERROR WHATSAPP MEDIA (${lead.telefono}): ${imgResult.error?.substring(0, 200)}`, status: 'ERROR' }); }
+                    const txtResult = await sendMsg({ channel_id: lead.channel_id, phone: lead.telefono, message: cleanText, lead_id: lead.id });
+                    if (!txtResult.success) {
+                        if (!imgResult.success) sendFailed = true;
+                        await supabase.from('activity_logs').insert({ action: 'ERROR', resource: 'SYSTEM', description: `ERROR WHATSAPP TEXTO (${lead.telefono}): ${txtResult.error?.substring(0, 200)}`, status: 'ERROR' });
                     } else {
-                        const { data: txtData, error: txtErr } = await supabase.functions.invoke('send-message-v3', {
-                            body: { channel_id: lead.channel_id, phone: lead.telefono, message: cleanText, lead_id: lead.id }
-                        });
-                        if (txtErr || (txtData && !txtData.success)) {
-                            await supabase.from('activity_logs').insert({ action: 'ERROR', resource: 'SYSTEM', description: `ERROR WHATSAPP TEXTO (${lead.telefono}): ${txtErr?.message || JSON.stringify(txtData?.error || 'unknown')}`, status: 'ERROR' });
-                        }
-                        wamid = txtData?.wamid || imgData?.wamid || null;
-                        await supabase.from('activity_logs').insert({ action: 'UPDATE', resource: 'BRAIN', description: `🖼️ Imagen enviada a ${lead.nombre} (split mode)`, status: 'OK' });
+                        wamid = txtResult.wamid || imgResult.wamid || null;
+                        await supabase.from('activity_logs').insert({ action: 'UPDATE', resource: 'BRAIN', description: `${imgResult.success ? '🖼️ Imagen+texto' : '🔄 Fallback texto (imagen fallo)'} enviado a ${lead.nombre}`, status: 'OK' });
                     }
                 } else {
                     // Solo imagen, sin texto
-                    const { data: sendData, error: sendErr } = await supabase.functions.invoke('send-message-v3', {
-                        body: { channel_id: lead.channel_id, phone: lead.telefono, message: '', mediaData: { url: mediaUrl, type: 'image' }, lead_id: lead.id }
-                    });
-                    if (sendErr || (sendData && !sendData.success)) {
-                        sendFailed = true;
-                        await supabase.from('activity_logs').insert({ action: 'ERROR', resource: 'SYSTEM', description: `ERROR WHATSAPP MEDIA (${lead.telefono}): ${sendErr?.message || JSON.stringify(sendData?.error || 'unknown')}`, status: 'ERROR' });
-                    } else {
-                        wamid = sendData?.wamid || null;
-                        await supabase.from('activity_logs').insert({ action: 'UPDATE', resource: 'BRAIN', description: `🖼️ Imagen enviada a ${lead.nombre} (image only)`, status: 'OK' });
-                    }
+                    const result = await sendMsg({ channel_id: lead.channel_id, phone: lead.telefono, message: '', mediaData: { url: mediaUrl, type: 'image' }, lead_id: lead.id });
+                    if (!result.success) { sendFailed = true; await supabase.from('activity_logs').insert({ action: 'ERROR', resource: 'SYSTEM', description: `ERROR WHATSAPP MEDIA (${lead.telefono}): ${result.error?.substring(0, 200)}`, status: 'ERROR' }); }
+                    else { wamid = result.wamid || null; await supabase.from('activity_logs').insert({ action: 'UPDATE', resource: 'BRAIN', description: `🖼️ Imagen enviada a ${lead.nombre} (image only)`, status: 'OK' }); }
                 }
             } else {
-                // Sin media tag: flujo original sin cambios
-                const { data: sendData, error: sendErr } = await supabase.functions.invoke('send-message-v3', {
-                    body: { channel_id: lead.channel_id, phone: lead.telefono, message: aiText, lead_id: lead.id }
-                });
-                if (sendErr || (sendData && !sendData.success)) {
-                    sendFailed = true;
-                    await supabase.from('activity_logs').insert({ action: 'ERROR', resource: 'SYSTEM', description: `ERROR WHATSAPP (${lead.telefono}): ${sendErr?.message || JSON.stringify(sendData?.error || 'unknown')}`, status: 'ERROR' });
-                } else {
-                    wamid = sendData?.wamid || null;
-                }
+                // Sin media tag: flujo original
+                const result = await sendMsg({ channel_id: lead.channel_id, phone: lead.telefono, message: aiText, lead_id: lead.id });
+                if (!result.success) { sendFailed = true; await supabase.from('activity_logs').insert({ action: 'ERROR', resource: 'SYSTEM', description: `ERROR WHATSAPP (${lead.telefono}): ${result.error?.substring(0, 200)}`, status: 'ERROR' }); }
+                else { wamid = result.wamid || null; }
             }
         } catch (sendError: unknown) {
             sendFailed = true;
