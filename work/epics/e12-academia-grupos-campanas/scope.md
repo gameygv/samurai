@@ -25,10 +25,14 @@ Integrar la gestión de grupos de WhatsApp y campañas como funcionalidad nativa
 
 ## Planned Stories
 
-1. **S12.1 — Schema + Edge Functions base**: Migration BD + `list-whatsapp-groups` + `sync-group-members`
-2. **S12.2 — UI vinculación de grupo**: Dialog en editor de curso, selector canal/grupo, persistencia
-3. **S12.3 — Campañas dentro de Academia**: Mover Campañas al módulo Academia, eliminar del sidebar, nuevo tipo "grupo de curso"
-4. **S12.4 — Envío a grupo + sincronización**: `send-group-message`, UI de campaña a grupo, sync de miembros al enviar
+| ID | Nombre | Descripción | Size | Deps |
+|---|---|---|---|---|
+| S12.1 | Schema + Edge Functions base | Migration BD (`courses` cols + `contact_whatsapp_groups`) + `list-whatsapp-groups` + `sync-group-members` | M | — |
+| S12.2 | UI vinculación de grupo | Dialog en editor de curso: selector canal GOWA → lista grupos → vincular + auto-sync miembros | M | S12.1 |
+| S12.3 | Campañas dentro de Academia | Mover Campañas.tsx a tab dentro de Academia, eliminar del sidebar, redirect `/campaigns` → `/academic` | M | — |
+| S12.4 | Envío a grupo de curso | Edge function `send-group-message` + UI campaña a grupo: elegir curso → mensaje → enviar | S | S12.1, S12.3 |
+
+**Grafo de dependencias:** S12.1 → S12.2, S12.1 + S12.3 → S12.4. S12.1 y S12.3 son independientes (parallelizables).
 
 ## Done Criteria
 
