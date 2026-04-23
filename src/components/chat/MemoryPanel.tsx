@@ -17,7 +17,6 @@ import { IdentityCrm } from './memory/IdentityCrm';
 import { RemindersBlock } from './memory/RemindersBlock';
 import { StudentProfile } from './memory/StudentProfile';
 import { AcademicRecord } from './memory/AcademicRecord';
-import { CreditHistory } from './memory/CreditHistory';
 import { InternalNotes } from './memory/InternalNotes';
 import { TagsManager } from './memory/TagsManager';
 import { MetaCapiDiagnosticDialog } from './memory/MetaCapiDiagnosticDialog';
@@ -391,8 +390,6 @@ export const MemoryPanel = ({
          />
 
          <AcademicRecord academicArray={academicArray} />
-
-         <CreditHistory contactId={contactData?.id || null} />
 
          <InternalNotes 
             internalNotes={internalNotes} 

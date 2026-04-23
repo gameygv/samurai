@@ -21,7 +21,6 @@ import Campaigns from "./pages/Campaigns";
 import Archive from "./pages/Archive";
 import MediaManager from "./pages/MediaManager";
 import WebsiteContent from "./pages/WebsiteContent";
-import Payments from "./pages/Payments";
 import MetaCapi from "./pages/MetaCapi";
 import Pipeline from "./pages/Pipeline";
 import Inbox from "./pages/Inbox";
@@ -86,8 +85,7 @@ const App = () => (
             <Route path="/tools" element={<PrivateRoute><AgentTools /></PrivateRoute>} />
             <Route path="/pipeline" element={<PrivateRoute><Pipeline /></PrivateRoute>} />
             <Route path="/archive" element={<PrivateRoute><Archive /></PrivateRoute>} />
-            <Route path="/payments" element={<PrivateRoute><Payments /></PrivateRoute>} />
-            
+
             <Route path="/academic" element={<PrivateRoute><ManagerRoute><AcademicCatalog /></ManagerRoute></PrivateRoute>} />
             
             <Route path="/activity" element={<PrivateRoute><AdminRoute><Activity /></AdminRoute></PrivateRoute>} />
