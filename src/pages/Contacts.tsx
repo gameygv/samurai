@@ -13,8 +13,8 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { 
   Search, Loader2, MapPin, Phone, Trash2,
-  Users, FileSpreadsheet, X, Mail, Edit3, MessageCircle, Wallet,
-  UserPlus, Filter, DollarSign, CheckSquare, Download, GraduationCap, Globe, User as UserIcon, Sparkles, Settings,
+  Users, FileSpreadsheet, X, Mail, Edit3, MessageCircle,
+  UserPlus, Filter, CheckSquare, Download, GraduationCap, Globe, User as UserIcon, Sparkles, Settings,
   CalendarDays, BookOpen, MapPinned, UserCheck
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -22,10 +22,8 @@ import Papa from 'papaparse';
 import ChatViewer from '@/components/ChatViewer';
 import { CreateLeadDialog } from '@/components/leads/CreateLeadDialog';
 import { ImportContactsDialog } from '@/components/contacts/ImportContactsDialog';
-import { FinancialStatusBadge, financialStatuses } from '@/components/contacts/FinancialStatusBadge';
 import { EditContactDialog } from '@/components/contacts/EditContactDialog';
 import { ManageGroupsDialog } from '@/components/contacts/ManageGroupsDialog';
-import { CreateCreditSaleDialog } from '@/components/contacts/CreateCreditSaleDialog';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/context/AuthContext';
 import { extractTagText, parseTagsSafe } from '@/lib/tag-parser';
@@ -60,8 +58,6 @@ const Contacts = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedGroup, setSelectedGroup] = useState<string>('ALL');
   const [selectedCity, setSelectedCity] = useState<string>('ALL'); 
-  const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>('ALL');
-  const [debtFilter, setDebtFilter] = useState<string>('ALL'); 
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [selectedCourses, setSelectedCourses] = useState<string[]>([]);
   const [selectedSedes, setSelectedSedes] = useState<string[]>([]);
@@ -77,9 +73,6 @@ const Contacts = () => {
   const [contactToEdit, setContactToEdit] = useState<any>(null);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isManageGroupsOpen, setIsManageGroupsOpen] = useState(false);
-
-  const [contactForCredit, setContactForCredit] = useState<any>(null);
-  const [isCreditOpen, setIsCreditOpen] = useState(false);
 
   const [isBulkDeleteOpen, setIsBulkDeleteOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -121,7 +114,7 @@ const Contacts = () => {
       : 'leads!inner(id, assigned_to, buying_intent, payment_status, lead_score, ai_paused, summary)';
     let query = supabase
       .from('contacts')
-      .select(`*, ${leadsJoin}, credit_sales(status, total_amount)`);
+      .select(`*, ${leadsJoin}`);
 
     if (!isManager) {
         query = query.eq('leads.assigned_to', user?.id);
@@ -131,11 +124,9 @@ const Contacts = () => {
 
     if (!error && data) {
       const mappedData = data.map(c => {
-        const activeSales = c.credit_sales?.filter((s: any) => s.status === 'ACTIVE') || [];
-        const totalDebt = activeSales.reduce((acc: number, sale: any) => acc + Number(sale.total_amount || 0), 0);
         let academicArray = [];
         try { academicArray = Array.isArray(c.academic_record) ? c.academic_record : JSON.parse(c.academic_record || '[]'); } catch(e){}
-        return { ...c, total_debt: totalDebt, active_sales: activeSales, academic_count: academicArray.length };
+        return { ...c, academic_count: academicArray.length };
       });
       setContacts(mappedData);
       setCities(Array.from(new Set(mappedData.map(d => String(d.ciudad || '')).filter(Boolean))) as string[]);
@@ -207,8 +198,6 @@ const Contacts = () => {
           CP: c.cp || '',
           Etiquetas: safeTags,
           Cursos_Tomados: c.academic_count || 0,
-          Estatus_Financiero: c.financial_status || 'Sin transacción',
-          Deuda_Total: c.total_debt || 0,
           Intencion_Compra: c.leads?.buying_intent || 'N/A'
         };
       });
@@ -240,9 +229,6 @@ const Contacts = () => {
     const matchesSearch = term === '' || nombre.includes(term) || apellido.includes(term) || telefono.includes(term) || email.includes(term);
     const matchesGroup = selectedGroup === 'ALL' || String(c.grupo || '') === selectedGroup;
     const matchesCity = selectedCity === 'ALL' || String(c.ciudad || '') === selectedCity;
-    const matchesStatus = selectedStatusFilter === 'ALL' || String(c.financial_status || 'Sin transacción') === selectedStatusFilter;
-    const matchesDebt = debtFilter === 'ALL' || (debtFilter === 'CON_DEUDA' ? (c.total_debt || 0) > 0 : (c.total_debt || 0) === 0);
-    
     const matchesTag = selectedTags.length === 0 || selectedTags.every(t => contactTags.includes(t));
 
     const ar = parseAcademicRecord(c.academic_record);
@@ -256,7 +242,7 @@ const Contacts = () => {
       return true;
     });
 
-    return matchesSearch && matchesGroup && matchesCity && matchesStatus && matchesTag && matchesDebt && matchesCourse && matchesSede && matchesProfesor && matchesDate;
+    return matchesSearch && matchesGroup && matchesCity && matchesTag && matchesCourse && matchesSede && matchesProfesor && matchesDate;
   });
 
   const allTags = [...globalTags, ...localTags];
@@ -279,7 +265,7 @@ const Contacts = () => {
     };
   }, [contacts]);
 
-  const hasActiveFilters = searchTerm !== '' || selectedGroup !== 'ALL' || selectedCity !== 'ALL' || selectedTags.length > 0 || selectedStatusFilter !== 'ALL' || debtFilter !== 'ALL' || selectedCourses.length > 0 || selectedSedes.length > 0 || selectedProfesores.length > 0 || dateFrom !== '' || dateTo !== '';
+  const hasActiveFilters = searchTerm !== '' || selectedGroup !== 'ALL' || selectedCity !== 'ALL' || selectedTags.length > 0 || selectedCourses.length > 0 || selectedSedes.length > 0 || selectedProfesores.length > 0 || dateFrom !== '' || dateTo !== '';
 
   return (
     <Layout>
@@ -507,26 +493,6 @@ const Contacts = () => {
             <Input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="w-[130px] h-10 bg-[#161618] border-[#222225] rounded-xl text-xs text-slate-300" placeholder="Hasta" />
           </div>
 
-          {/* SALDO filter */}
-          <Select value={debtFilter} onValueChange={setDebtFilter}>
-            <SelectTrigger className="w-[160px] h-10 bg-[#161618] border-[#222225] rounded-xl text-xs text-slate-300"><SelectValue placeholder="Saldo" /></SelectTrigger>
-            <SelectContent className="bg-[#121214] border-[#222225] text-white rounded-xl">
-              <SelectItem value="ALL">Cualquier Saldo</SelectItem>
-              <SelectItem value="CON_DEUDA">Con Deuda Activa</SelectItem>
-              <SelectItem value="SIN_DEUDA">Sin Deuda</SelectItem>
-            </SelectContent>
-          </Select>
-
-          {isManager && (
-            <Select value={selectedStatusFilter} onValueChange={setSelectedStatusFilter}>
-                <SelectTrigger className="w-[150px] h-10 bg-[#161618] border-[#222225] rounded-xl text-xs text-slate-300"><SelectValue placeholder="Finanzas" /></SelectTrigger>
-                <SelectContent className="bg-[#121214] border-[#222225] text-white rounded-xl">
-                  <SelectItem value="ALL">Cualquier Estado</SelectItem>
-                  {financialStatuses.map(s => <SelectItem key={s.id} value={s.id}>{s.id}</SelectItem>)}
-                </SelectContent>
-            </Select>
-          )}
-
           {hasActiveFilters && filteredContacts.length > 0 && (
             <Button onClick={handleToggleSelectAll} variant="secondary" className={cn("h-10 px-4 ml-auto rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all", selectedIds.length === filteredContacts.length ? "bg-indigo-600/20 text-indigo-400 border border-indigo-500/30" : "bg-[#161618] text-slate-300 hover:bg-[#222225] border border-[#333336]")}>
               <CheckSquare className="w-3.5 h-3.5 mr-2" />
@@ -543,15 +509,14 @@ const Contacts = () => {
                   <TableHead className="w-12 pl-6"><Checkbox checked={selectedIds.length > 0 && selectedIds.length === filteredContacts.length} onCheckedChange={handleToggleSelectAll} className="border-slate-600 data-[state=checked]:bg-indigo-500"/></TableHead>
                   <TableHead className="text-slate-400 text-[10px] uppercase font-bold tracking-widest py-4">Nombre y Contacto</TableHead>
                   <TableHead className="text-slate-400 text-[10px] uppercase font-bold tracking-widest">Ubicación & Etiquetas</TableHead>
-                  {isManager && <TableHead className="text-slate-400 text-[10px] uppercase font-bold tracking-widest w-48">Finanzas & Deuda</TableHead>}
                   <TableHead className="text-slate-400 text-[10px] uppercase font-bold tracking-widest text-right pr-6">Acciones</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {loading ? (
-                  <TableRow><TableCell colSpan={isManager ? 5 : 4} className="h-60 text-center"><Loader2 className="animate-spin mx-auto text-indigo-500" /></TableCell></TableRow>
+                  <TableRow><TableCell colSpan={4} className="h-60 text-center"><Loader2 className="animate-spin mx-auto text-indigo-500" /></TableCell></TableRow>
                 ) : filteredContacts.length === 0 ? (
-                  <TableRow><TableCell colSpan={isManager ? 5 : 4} className="h-60 text-center text-slate-600 italic uppercase text-[10px] tracking-widest font-bold">No tienes contactos asignados todavía.</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={4} className="h-60 text-center text-slate-600 italic uppercase text-[10px] tracking-widest font-bold">No tienes contactos asignados todavía.</TableCell></TableRow>
                 ) : filteredContacts.map((contact) => (
                   <TableRow key={contact.id} className={cn("border-b border-[#161618] transition-colors", selectedIds.includes(contact.id) ? "bg-indigo-900/10" : "hover:bg-[#1a1a1d]")}>
                     <TableCell className="pl-6"><Checkbox checked={selectedIds.includes(contact.id)} onCheckedChange={() => handleToggleSelect(contact.id)} className="border-slate-600 data-[state=checked]:bg-indigo-500"/></TableCell>
@@ -593,16 +558,6 @@ const Contacts = () => {
                         )}
                       </div>
                     </TableCell>
-                    {isManager && (
-                      <TableCell>
-                        <div className="flex flex-col gap-2">
-                          <FinancialStatusBadge contactId={contact.id} currentStatus={contact.financial_status || 'Sin transacción'} isManager={isManager} onUpdate={fetchContacts} />
-                          {Number(contact.total_debt || 0) > 0 && (
-                             <span className="text-[11px] font-mono font-bold text-amber-500 flex items-center gap-1"><DollarSign className="w-3 h-3"/> {Number(contact.total_debt).toLocaleString()}</span>
-                          )}
-                        </div>
-                      </TableCell>
-                    )}
                     <TableCell className="text-right pr-6">
                       <div className="flex justify-end items-center gap-2">
                         <Button variant="outline" size="sm" className="h-8 bg-[#161618] border-[#333336] text-indigo-400 hover:bg-indigo-600 hover:border-indigo-500 hover:text-white text-[10px] font-bold uppercase tracking-widest px-3" onClick={() => handleOpenChat(contact)}>

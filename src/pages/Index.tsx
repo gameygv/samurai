@@ -6,7 +6,6 @@ import { StatCard } from '@/components/dashboard/StatCard';
 import { SystemStatus } from '@/components/SystemStatus';
 import { BrainHealthCard } from '@/components/dashboard/BrainHealthCard';
 import { TaskRadar } from '@/components/dashboard/TaskRadar';
-import { FinancialOverviewCard } from '@/components/dashboard/FinancialOverviewCard';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { CheckCircle2, DollarSign, Users2, Fingerprint, Terminal, Loader2, Zap, Activity, TrendingUp } from 'lucide-react';
@@ -17,9 +16,8 @@ import { cn } from '@/lib/utils';
 const Index = () => {
   const { user, profile, isManager } = useAuth();
   const [loading, setLoading] = useState(true);
-  const [stats, setStats] = useState<any>({ 
-     totalLeads: 0, wonSales: 0, capiReady: 0, recentLogs: [], tasks: [],
-     financial: { totalCreditSales: 0, totalCollected: 0, totalPending: 0, lateInstallments: 0, activeCredits: 0 }
+  const [stats, setStats] = useState<any>({
+     totalLeads: 0, wonSales: 0, capiReady: 0, recentLogs: [], tasks: []
   });
   const [chartData, setChartData] = useState<any[]>([]);
 
@@ -35,38 +33,8 @@ const Index = () => {
     const { data: leads } = await leadsQuery;
     const { data: logs } = await supabase.from('activity_logs').select('*').order('created_at', { ascending: false }).limit(20);
     
-    // Buscar cobros vencidos o para hoy para el Radar
-    const { data: inst } = await supabase.from('credit_installments')
-      .select('id, amount, due_date, status, sale:credit_sales(concept, contact:contacts(nombre, telefono))')
-      .in('status', ['LATE', 'PENDING'])
-      .lte('due_date', new Date().toISOString().split('T')[0]);
-
     // Buscar Campañas Programadas para el Radar
     const { data: campaignsConfig } = await supabase.from('app_config').select('value').eq('key', 'scheduled_campaigns').maybeSingle();
-
-    // Data Financiera (Solo si es manager)
-    let financialData = { totalCreditSales: 0, totalCollected: 0, totalPending: 0, lateInstallments: 0, activeCredits: 0 };
-    if (isManager) {
-       const { data: salesData } = await supabase.from('credit_sales').select('total_amount, down_payment, status, installments:credit_installments(amount, status, due_date)');
-       if (salesData) {
-          salesData.forEach(sale => {
-             financialData.totalCreditSales += parseFloat(sale.total_amount) || 0;
-             financialData.totalCollected += parseFloat(sale.down_payment) || 0;
-             if (sale.status === 'ACTIVE') financialData.activeCredits++;
-             
-             sale.installments?.forEach((i: any) => {
-                const amt = parseFloat(i.amount) || 0;
-                if (i.status === 'PAID') {
-                   financialData.totalCollected += amt;
-                } else {
-                   financialData.totalPending += amt;
-                   const isLate = i.status === 'LATE' || (i.status === 'PENDING' && new Date(i.due_date) < new Date(new Date().toISOString().split('T')[0]));
-                   if (isLate) financialData.lateInstallments++;
-                }
-             });
-          });
-       }
-    }
 
     if (leads) {
       const allTasks: any[] = [];
@@ -98,22 +66,6 @@ const Index = () => {
             });
          }
       });
-
-      // Inyectar cobros en el radar de tareas
-      if (inst) {
-        inst.forEach((i: any) => {
-           const remDate = new Date(i.due_date);
-           allTasks.push({
-              id: `cobro-${i.id}`,
-              target: `Cobro: ${i.sale?.contact?.nombre?.split(' ')[0] || 'Cliente'} - $${i.amount}`,
-              time: remDate.toLocaleDateString(),
-              type: i.status === 'LATE' ? 'ATRASADO' : 'COBRO HOY',
-              status: 'pending',
-              rawDate: remDate,
-              rawLead: null
-           });
-        });
-      }
 
       // Inyectar Campañas Programadas en el radar de tareas
       if (campaignsConfig?.value) {
@@ -151,7 +103,6 @@ const Index = () => {
         capiReady: leads.filter(l => l.email && l.email.includes('@')).length,
         recentLogs: logs || [],
         tasks: allTasks.slice(0, 10),
-        financial: financialData
       });
     }
     setLoading(false);
@@ -240,7 +191,6 @@ const Index = () => {
           </div>
 
           <div className="lg:col-span-4 space-y-6">
-            {isManager && <FinancialOverviewCard stats={stats.financial} />}
             <SystemStatus />
             <BrainHealthCard health={{ adnCoreStatus: 'ok', ciaRules: 5, webHealth: 95, overallStatus: 'Operational' }} />
           </div>

@@ -39,7 +39,6 @@ NO_VERIFY_JWT=(
   "health-check-pipeline"
   "process-followups"
   "process-lead-reminders"
-  "process-credit-reminders"
   "process-campaign-queue"
   "process-capi-purchase"
   "auto-sync-knowledge"
