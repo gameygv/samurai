@@ -21,7 +21,8 @@ import { cn } from '@/lib/utils';
 import { useAuth } from '@/context/AuthContext';
 import { extractTagText, parseTagsSafe } from '@/lib/tag-parser';
 
-const Campaigns = () => {
+/** Inner content without Layout wrapper — used by AcademicCatalog */
+export const CampaignsContent = () => {
   const { user, isManager } = useAuth();
   const [contacts, setContacts] = useState<any[]>([]);
   const [groups, setGroups] = useState<string[]>([]);
@@ -134,17 +135,11 @@ const Campaigns = () => {
   const hasActiveFilters = searchTerm !== '' || selectedGroup !== 'ALL' || selectedCity !== 'ALL' || selectedGender !== 'ALL' || selectedTags.length > 0;
 
   return (
-    <Layout>
-      <div className="max-w-[1800px] mx-auto space-y-8 pb-24 animate-in fade-in duration-500">
+    <>
+      <div className="space-y-8 pb-24 animate-in fade-in duration-500">
         <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-white flex items-center gap-3">
-              <div className="p-2 bg-amber-900/30 rounded-xl border border-amber-500/20">
-                <Megaphone className="w-6 h-6 text-amber-500" />
-              </div>
-              Centro de Campañas
-            </h1>
-            <p className="text-slate-400 text-sm mt-1">Filtra tu audiencia y lanza difusiones masivas seguras.</p>
+            <p className="text-slate-400 text-sm">Filtra tu audiencia y lanza difusiones masivas seguras.</p>
           </div>
           {selectedIds.length > 0 && (
              <Button onClick={() => setIsMassMessageOpen(true)} className="bg-amber-600 hover:bg-amber-500 text-slate-950 h-11 px-8 rounded-xl shadow-lg shadow-amber-900/20 font-bold uppercase tracking-widest text-[10px] animate-in slide-in-from-right-4">
@@ -352,6 +347,20 @@ const Campaigns = () => {
       </div>
 
       <MassMessageDialog open={isMassMessageOpen} onOpenChange={setIsMassMessageOpen} targetContacts={contacts.filter(c => selectedIds.includes(c.id))} onScheduled={fetchScheduledCampaigns} />
+    </>
+  );
+};
+
+/** Standalone page — redirects to /academic?tab=campaigns */
+const Campaigns = () => {
+  React.useEffect(() => {
+    window.location.replace('/academic?tab=campaigns');
+  }, []);
+  return (
+    <Layout>
+      <div className="flex h-[80vh] items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-amber-500" />
+      </div>
     </Layout>
   );
 };
