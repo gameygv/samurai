@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { 
   LayoutDashboard, Brain, Settings as SettingsIcon, LogOut, 
-  Users, UserCircle, Contact, Tag, Image, Globe, CreditCard, BarChart3, Zap, Trello, Menu, Activity, Search, MessageCircle, Command, GraduationCap, Megaphone
+  Users, UserCircle, Contact, Tag, Image, Globe, CreditCard, BarChart3, Zap, Trello, Menu, Activity, Search, MessageCircle, Command, GraduationCap
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/context/AuthContext';
@@ -92,7 +92,6 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
         { icon: Contact, label: 'Contactos', path: '/contacts', roles: ['any'] },
         { icon: Tag, label: 'Mis Plantillas', path: '/tools', roles: ['any'] },
         { icon: GraduationCap, label: 'Academia', path: '/academic', roles: ['admin', 'dev', 'gerente'] },
-        { icon: Megaphone, label: 'Campañas', path: '/campaigns', roles: ['admin', 'dev', 'gerente'] },
         { icon: CreditCard, label: 'Pagos & Ventas', path: '/payments', roles: ['any'] },
         { icon: Globe, label: 'Archivo de Chats', path: '/archive', roles: ['admin', 'dev', 'gerente'] },
       ]

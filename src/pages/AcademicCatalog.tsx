@@ -15,10 +15,12 @@ import { Textarea } from '@/components/ui/textarea';
 import {
   GraduationCap, MapPin, UserCheck, Plus, Trash2, Save, Loader2,
   LayoutGrid, List, Music, CalendarClock, Users, ChevronDown, Settings2,
-  DollarSign, Upload, Scan, Sparkles, Bot, BotOff, X as XIcon
+  DollarSign, Upload, Scan, Sparkles, Bot, BotOff, X as XIcon, Megaphone
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { CampaignsContent } from './Campaigns';
+import { useSearchParams } from 'react-router-dom';
 
 interface Course {
   id: string;
@@ -58,6 +60,16 @@ const isPresaleActive = (c: Course): boolean => {
 const formatPrice = (n: number): string => `$${n.toLocaleString()}`;
 
 const AcademicCatalog = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialTab = searchParams.get('tab') === 'campaigns' ? 'campaigns' : 'catalog';
+  const [activeMainTab, setActiveMainTab] = useState(initialTab);
+
+  const handleMainTabChange = (tab: string) => {
+    setActiveMainTab(tab);
+    if (tab === 'campaigns') setSearchParams({ tab: 'campaigns' });
+    else setSearchParams({});
+  };
+
   const [catalogCourses, setCatalogCourses] = useState<CatalogItem[]>([]);
   const [locations, setLocations] = useState<CatalogItem[]>([]);
   const [teachers, setTeachers] = useState<CatalogItem[]>([]);
@@ -290,20 +302,39 @@ const AcademicCatalog = () => {
           <div>
             <h1 className="text-3xl font-bold text-white flex items-center gap-3">
               <div className="p-2 bg-indigo-500/10 rounded-xl border border-indigo-500/20"><GraduationCap className="w-6 h-6 text-indigo-400" /></div>
-              Academia — Cursos y Talleres
+              Academia
             </h1>
-            <p className="text-slate-400 text-sm mt-1">{filteredCourses.length} curso{filteredCourses.length !== 1 ? 's' : ''} de {courses.length} total</p>
+            <p className="text-slate-400 text-sm mt-1">Cursos, talleres y campañas</p>
           </div>
-          <div className="flex items-center gap-2">
-            <div className="flex bg-[#121214] border border-[#222225] rounded-xl p-1">
-              <Button variant="ghost" size="sm" onClick={() => setViewMode('grid')} className={cn('h-8 w-8 p-0 rounded-lg', viewMode === 'grid' ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:text-white')}><LayoutGrid className="w-4 h-4" /></Button>
-              <Button variant="ghost" size="sm" onClick={() => setViewMode('list')} className={cn('h-8 w-8 p-0 rounded-lg', viewMode === 'list' ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:text-white')}><List className="w-4 h-4" /></Button>
+          {activeMainTab === 'catalog' && (
+            <div className="flex items-center gap-2">
+              <div className="flex bg-[#121214] border border-[#222225] rounded-xl p-1">
+                <Button variant="ghost" size="sm" onClick={() => setViewMode('grid')} className={cn('h-8 w-8 p-0 rounded-lg', viewMode === 'grid' ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:text-white')}><LayoutGrid className="w-4 h-4" /></Button>
+                <Button variant="ghost" size="sm" onClick={() => setViewMode('list')} className={cn('h-8 w-8 p-0 rounded-lg', viewMode === 'list' ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:text-white')}><List className="w-4 h-4" /></Button>
+              </div>
+              <Button className="bg-indigo-600 hover:bg-indigo-500 text-white h-11 px-6 rounded-xl font-bold uppercase tracking-widest text-xs" onClick={openCreate}>
+                <Plus className="w-4 h-4 mr-2" /> Nuevo Curso
+              </Button>
             </div>
-            <Button className="bg-indigo-600 hover:bg-indigo-500 text-white h-11 px-6 rounded-xl font-bold uppercase tracking-widest text-xs" onClick={openCreate}>
-              <Plus className="w-4 h-4 mr-2" /> Nuevo Curso
-            </Button>
-          </div>
+          )}
         </div>
+
+        {/* Main Tabs: Catálogo | Campañas */}
+        <div className="flex bg-[#121214] border border-[#222225] rounded-xl p-1 w-fit">
+          <Button variant="ghost" size="sm" onClick={() => handleMainTabChange('catalog')}
+            className={cn('h-9 px-6 rounded-lg text-xs font-bold uppercase tracking-widest gap-2', activeMainTab === 'catalog' ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:text-white')}>
+            <GraduationCap className="w-4 h-4" /> Catálogo
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => handleMainTabChange('campaigns')}
+            className={cn('h-9 px-6 rounded-lg text-xs font-bold uppercase tracking-widest gap-2', activeMainTab === 'campaigns' ? 'bg-amber-600 text-white' : 'text-slate-500 hover:text-white')}>
+            <Megaphone className="w-4 h-4" /> Campañas
+          </Button>
+        </div>
+
+        {activeMainTab === 'campaigns' && <CampaignsContent />}
+
+        {activeMainTab === 'catalog' && (<>
+        {/* Catalog content starts here */}
 
         {/* Filters */}
         <div className="flex flex-wrap gap-3 items-end">
@@ -440,6 +471,7 @@ const AcademicCatalog = () => {
             </Tabs>
           </CollapsibleContent>
         </Collapsible>
+        </>)}
       </div>
 
       {/* Course Create/Edit Dialog */}
