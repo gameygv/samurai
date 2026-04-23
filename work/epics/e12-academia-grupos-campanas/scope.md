@@ -34,6 +34,38 @@ Integrar la gestión de grupos de WhatsApp y campañas como funcionalidad nativa
 
 **Grafo de dependencias:** S12.1 → S12.2, S12.1 + S12.3 → S12.4. S12.1 y S12.3 son independientes (parallelizables).
 
+## Implementation Plan
+
+### Secuencia y rationale
+
+| # | Story | Estrategia | Rationale | Habilita |
+|---|---|---|---|---|
+| 1 | **S12.1** Schema + EF base | Risk-first | Verificar envío a grupo (`POST /send/message` con JID `@g.us`) — principal incertidumbre técnica. Sin schema no hay nada | S12.2, S12.4 |
+| 2 | **S12.3** Campañas → Academia | Quick win (parallelizable con S12.1) | Refactoring de UI puro, sin dependencias de backend. Prepara el terreno para S12.4 | S12.4 |
+| 3 | **S12.2** UI vinculación grupo | Dependency-driven | Requiere S12.1 (edge functions). Dialog de vinculación + auto-sync | — |
+| 4 | **S12.4** Envío a grupo | Dependency-driven | Requiere S12.1 (send-group-message) + S12.3 (Campañas en Academia) | — |
+
+**Parallelismo:** S12.1 y S12.3 son independientes → se pueden hacer en paralelo (S12.1 es backend, S12.3 es frontend puro).
+
+**Critical path:** S12.1 → S12.4 (la incertidumbre técnica del envío a grupo bloquea la feature final).
+
+### Milestones
+
+| Milestone | Stories | Criterio de éxito |
+|---|---|---|
+| **M1: Walking Skeleton** | S12.1 | Migration aplicada, `list-whatsapp-groups` retorna datos reales, `sync-group-members` cruza con contactos, envío a grupo verificado en GOWA |
+| **M2: Core MVP** | S12.1 + S12.2 + S12.3 | Un curso tiene grupo vinculado visible en UI, campañas accesibles desde Academia |
+| **M3: Epic Complete** | Todas | Campaña a grupo funcional E2E, miembros sincronizados, sin regresiones |
+
+### Progress Tracking
+
+| Story | Status | Branch | Commit |
+|---|---|---|---|
+| S12.1 | pending | — | — |
+| S12.2 | pending | — | — |
+| S12.3 | pending | — | — |
+| S12.4 | pending | — | — |
+
 ## Done Criteria
 
 - [ ] Un curso puede tener un grupo de WhatsApp vinculado y se muestra en la UI
