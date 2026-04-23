@@ -20,6 +20,7 @@ import { MassMessageDialog } from '@/components/contacts/MassMessageDialog';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/context/AuthContext';
 import { extractTagText, parseTagsSafe } from '@/lib/tag-parser';
+import { GroupCampaignSection } from '@/components/academic/GroupCampaignSection';
 
 /** Inner content without Layout wrapper — used by AcademicCatalog */
 export const CampaignsContent = () => {
@@ -137,6 +138,16 @@ export const CampaignsContent = () => {
   return (
     <>
       <div className="space-y-8 pb-24 animate-in fade-in duration-500">
+        {/* Group Campaign Section */}
+        <GroupCampaignSection />
+
+        {/* Divider */}
+        <div className="flex items-center gap-4">
+          <div className="flex-1 h-px bg-[#222225]" />
+          <span className="text-[10px] uppercase tracking-widest font-bold text-slate-600">Difusión Masiva Individual</span>
+          <div className="flex-1 h-px bg-[#222225]" />
+        </div>
+
         <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
           <div>
             <p className="text-slate-400 text-sm">Filtra tu audiencia y lanza difusiones masivas seguras.</p>
