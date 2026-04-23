@@ -59,12 +59,12 @@ Integrar la gestión de grupos de WhatsApp y campañas como funcionalidad nativa
 
 ### Progress Tracking
 
-| Story | Status | Branch | Commit |
-|---|---|---|---|
-| S12.1 | pending | — | — |
-| S12.2 | pending | — | — |
-| S12.3 | pending | — | — |
-| S12.4 | pending | — | — |
+| Story | Status | Commit |
+|---|---|---|
+| S12.1 | completed | ca3f9cc |
+| S12.2 | completed | e1f7c91 |
+| S12.3 | completed | 0f17783 |
+| S12.4 | completed | 2144ec2 |
 
 ## Done Criteria
 
