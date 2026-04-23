@@ -15,12 +15,13 @@ import { Textarea } from '@/components/ui/textarea';
 import {
   GraduationCap, MapPin, UserCheck, Plus, Trash2, Save, Loader2,
   LayoutGrid, List, Music, CalendarClock, Users, ChevronDown, Settings2,
-  DollarSign, Upload, Scan, Sparkles, Bot, BotOff, X as XIcon, Megaphone
+  DollarSign, Upload, Scan, Sparkles, Bot, BotOff, X as XIcon, Megaphone, Wifi
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { CampaignsContent } from './Campaigns';
 import { useSearchParams } from 'react-router-dom';
+import { LinkWhatsAppGroupDialog } from '@/components/academic/LinkWhatsAppGroupDialog';
 
 interface Course {
   id: string;
@@ -41,6 +42,8 @@ interface Course {
   session_dates: { date: string; start_time: string; end_time: string }[];
   valid_until: string | null;
   created_at: string;
+  whatsapp_group_jid: string | null;
+  whatsapp_channel_id: string | null;
 }
 
 interface CatalogItem { id: string; name: string; }
@@ -104,6 +107,9 @@ const AcademicCatalog = () => {
   });
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState('');
+
+  // WhatsApp group linking
+  const [isGroupDialogOpen, setIsGroupDialogOpen] = useState(false);
 
   useEffect(() => { fetchAll(); }, []);
 
@@ -407,7 +413,10 @@ const AcademicCatalog = () => {
                         <CalendarClock className="w-3 h-3"/> {c.session_dates.filter(s => s.date).map(s => new Date(s.date + 'T00:00:00').toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })).join(', ')}
                       </div>
                     )}
-                    <div className="text-[9px] text-slate-500 flex items-center gap-1"><Users className="w-3 h-3"/> {enrolled} alumno{enrolled !== 1 ? 's' : ''}</div>
+                    <div className="flex items-center gap-3">
+                      <span className="text-[9px] text-slate-500 flex items-center gap-1"><Users className="w-3 h-3"/> {enrolled} alumno{enrolled !== 1 ? 's' : ''}</span>
+                      {c.whatsapp_group_jid && <Badge className="bg-emerald-900/20 text-emerald-400 border-emerald-500/20 text-[7px] h-4"><Wifi className="w-2 h-2 mr-0.5"/>Grupo WA</Badge>}
+                    </div>
                   </div>
                 </Card>
               );
@@ -564,6 +573,28 @@ const AcademicCatalog = () => {
                 <Input value={form.extras} onChange={e => setForm({...form, extras: e.target.value})} placeholder="Ej: Concierto del viernes incluido" className="bg-slate-950 border-slate-800 h-10 rounded-xl"/>
               </div>
 
+              {/* WhatsApp Group Link */}
+              {editingCourse && (
+                <div className="p-3 bg-[#121214] border border-[#222225] rounded-xl">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Wifi className="w-3.5 h-3.5 text-emerald-400" />
+                      <span className="text-[10px] uppercase font-bold text-slate-400 tracking-widest">Grupo WhatsApp</span>
+                    </div>
+                    <Button variant="outline" size="sm" onClick={() => setIsGroupDialogOpen(true)}
+                      className={cn('h-8 rounded-lg text-[10px] uppercase tracking-widest font-bold',
+                        editingCourse.whatsapp_group_jid
+                          ? 'border-emerald-500/30 text-emerald-400 hover:bg-emerald-900/20'
+                          : 'border-[#333336] text-slate-400 hover:text-white')}>
+                      {editingCourse.whatsapp_group_jid ? 'Vinculado' : 'Vincular'}
+                    </Button>
+                  </div>
+                  {editingCourse.whatsapp_group_jid && (
+                    <p className="text-[10px] text-slate-600 font-mono mt-1">{editingCourse.whatsapp_group_jid}</p>
+                  )}
+                </div>
+              )}
+
               {/* Session dates */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
@@ -601,6 +632,25 @@ const AcademicCatalog = () => {
           )}
         </DialogContent>
       </Dialog>
+      {/* WhatsApp Group Link Dialog */}
+      {editingCourse && (
+        <LinkWhatsAppGroupDialog
+          open={isGroupDialogOpen}
+          onOpenChange={setIsGroupDialogOpen}
+          courseId={editingCourse.id}
+          courseTitle={editingCourse.title}
+          currentGroupJid={editingCourse.whatsapp_group_jid}
+          currentChannelId={editingCourse.whatsapp_channel_id}
+          onLinked={(groupJid, channelId, _groupName) => {
+            setEditingCourse({ ...editingCourse, whatsapp_group_jid: groupJid, whatsapp_channel_id: channelId });
+            setCourses(prev => prev.map(c => c.id === editingCourse.id ? { ...c, whatsapp_group_jid: groupJid, whatsapp_channel_id: channelId } : c));
+          }}
+          onUnlinked={() => {
+            setEditingCourse({ ...editingCourse, whatsapp_group_jid: null, whatsapp_channel_id: null });
+            setCourses(prev => prev.map(c => c.id === editingCourse.id ? { ...c, whatsapp_group_jid: null, whatsapp_channel_id: null } : c));
+          }}
+        />
+      )}
     </Layout>
   );
 };
