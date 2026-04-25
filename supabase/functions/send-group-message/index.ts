@@ -9,10 +9,10 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
   try {
-    const { channel_id, group_jid, message, course_id } = await req.json();
+    const { channel_id, group_jid, message, course_id, mediaData } = await req.json();
 
-    if (!channel_id || !group_jid || !message) {
-      return new Response(JSON.stringify({ error: 'channel_id, group_jid y message requeridos' }), {
+    if (!channel_id || !group_jid || (!message && !mediaData)) {
+      return new Response(JSON.stringify({ error: 'channel_id, group_jid y (message o mediaData) requeridos' }), {
         status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
@@ -41,26 +41,73 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Enviar mensaje al grupo via GOWA
     const authHeader = channel.api_key.startsWith('Basic ')
       ? channel.api_key
       : `Basic ${channel.api_key}`;
 
-    const gowaRes = await fetch(`${channel.api_url}/send/message`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': authHeader,
-        'X-Device-Id': channel.instance_id ?? '',
-      },
-      body: JSON.stringify({
-        phone: group_jid,
-        message: message,
-      }),
-    });
+    const baseHeaders: Record<string, string> = {
+      'Authorization': authHeader,
+      'X-Device-Id': channel.instance_id ?? '',
+    };
+
+    let gowaRes: Response;
+
+    if (mediaData?.url) {
+      // --- Envío con media (imagen/video/audio) ---
+      let downloadUrl = mediaData.url;
+      // Comprimir imágenes de Supabase Storage via transform API
+      if (mediaData.type === 'image' && downloadUrl.includes('/storage/v1/object/public/')) {
+        downloadUrl = downloadUrl.replace('/storage/v1/object/public/', '/storage/v1/render/image/public/');
+        downloadUrl += (downloadUrl.includes('?') ? '&' : '?') + 'width=1200&quality=85';
+      }
+
+      const fileRes = await fetch(downloadUrl);
+      if (!fileRes.ok) {
+        return new Response(JSON.stringify({ error: `No se pudo descargar media: ${fileRes.status}` }), {
+          status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      const fileBlob = await fileRes.blob();
+      const formData = new FormData();
+      formData.append('phone', group_jid);
+      if (message) formData.append('caption', message);
+
+      let suffix = 'file';
+      const urlPath = (mediaData.url || '').split('?')[0].toLowerCase();
+      const isPng = urlPath.endsWith('.png');
+
+      if (mediaData.type === 'image') {
+        suffix = 'image';
+        const fileName = isPng ? 'img.png' : 'img.jpg';
+        formData.append('image', fileBlob, fileName);
+      } else if (mediaData.type === 'video') {
+        suffix = 'file';
+        formData.append('file', fileBlob, mediaData.name || 'video.mp4');
+      } else if (mediaData.type === 'audio') {
+        suffix = 'file';
+        formData.append('file', fileBlob, mediaData.name || 'audio.ogg');
+      } else {
+        suffix = 'file';
+        formData.append('file', fileBlob, mediaData.name || 'document.pdf');
+      }
+
+      gowaRes = await fetch(`${channel.api_url}/send/${suffix}`, {
+        method: 'POST',
+        headers: baseHeaders, // No Content-Type — FormData lo pone automáticamente
+        body: formData,
+      });
+    } else {
+      // --- Envío solo texto ---
+      gowaRes = await fetch(`${channel.api_url}/send/message`, {
+        method: 'POST',
+        headers: { ...baseHeaders, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: group_jid, message }),
+      });
+    }
 
     const gowaText = await gowaRes.text();
-    let gowaData: any = gowaText;
+    let gowaData: unknown = gowaText;
     try { gowaData = JSON.parse(gowaText); } catch (_) { /* plain text */ }
 
     if (!gowaRes.ok) {
@@ -74,20 +121,23 @@ Deno.serve(async (req) => {
     }
 
     // Log en activity_logs
+    const mediaLabel = mediaData?.type ? ` [${mediaData.type}]` : '';
     await supabase.from('activity_logs').insert({
       action: 'CAMPAIGN_GROUP_SEND',
       resource: 'CAMPAIGNS',
-      description: `Mensaje enviado al grupo ${group_jid} via ${channel.name}${course_id ? ` (curso: ${course_id})` : ''}`,
+      description: `Mensaje${mediaLabel} enviado al grupo ${group_jid} via ${channel.name}${course_id ? ` (curso: ${course_id})` : ''}`,
       status: 'OK',
       metadata: {
         channel_id,
         group_jid,
         course_id: course_id || null,
-        message_length: message.length,
+        message_length: (message || '').length,
+        has_media: !!mediaData,
+        media_type: mediaData?.type || null,
       },
-    }).catch((err: any) => console.error('[send-group-message] Log error:', err));
+    }).catch((err: unknown) => console.error('[send-group-message] Log error:', err));
 
-    console.log(`[send-group-message] Enviado a grupo ${group_jid} via ${channel.name}`);
+    console.log(`[send-group-message] Enviado a grupo ${group_jid} via ${channel.name}${mediaLabel}`);
 
     return new Response(JSON.stringify({
       success: true,
