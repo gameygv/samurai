@@ -21,7 +21,9 @@ import { cn } from '@/lib/utils';
 import { useAuth } from '@/context/AuthContext';
 import { extractTagText, parseTagsSafe } from '@/lib/tag-parser';
 import { GroupCampaignSection } from '@/components/academic/GroupCampaignSection';
+import { DirectGroupCampaign } from '@/components/campaigns/DirectGroupCampaign';
 import { FilterBuilder } from '@/components/filters/FilterBuilder';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 /** Inner content without Layout wrapper — used by AcademicCatalog */
 export const CampaignsContent = () => {
@@ -44,6 +46,9 @@ export const CampaignsContent = () => {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [isMassMessageOpen, setIsMassMessageOpen] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [campaignMode, setCampaignMode] = useState<'individual' | 'groups' | 'courses'>('individual');
+  const [currentPage, setCurrentPage] = useState(1);
+  const PAGE_SIZE = 50;
 
   useEffect(() => {
     fetchContacts();
@@ -139,15 +144,32 @@ export const CampaignsContent = () => {
   return (
     <>
       <div className="space-y-8 pb-24 animate-in fade-in duration-500">
-        {/* Group Campaign Section */}
-        <GroupCampaignSection />
+        {/* Campaign mode selector */}
+        <Tabs value={campaignMode} onValueChange={(v: any) => setCampaignMode(v)}>
+          <TabsList className="bg-[#0a0a0c] border border-[#222225] h-11 p-1 rounded-xl w-full max-w-lg">
+            <TabsTrigger value="individual" className="flex-1 rounded-lg text-[10px] font-bold uppercase tracking-widest data-[state=active]:bg-amber-600 data-[state=active]:text-slate-900">
+              Difusión Individual
+            </TabsTrigger>
+            <TabsTrigger value="groups" className="flex-1 rounded-lg text-[10px] font-bold uppercase tracking-widest data-[state=active]:bg-indigo-600 data-[state=active]:text-white">
+              Grupos Directos
+            </TabsTrigger>
+            <TabsTrigger value="courses" className="flex-1 rounded-lg text-[10px] font-bold uppercase tracking-widest data-[state=active]:bg-emerald-600 data-[state=active]:text-white">
+              Grupos de Curso
+            </TabsTrigger>
+          </TabsList>
 
-        {/* Divider */}
-        <div className="flex items-center gap-4">
-          <div className="flex-1 h-px bg-[#222225]" />
-          <span className="text-[10px] uppercase tracking-widest font-bold text-slate-600">Difusión Masiva Individual</span>
-          <div className="flex-1 h-px bg-[#222225]" />
-        </div>
+          {/* Grupos directos de WhatsApp */}
+          <TabsContent value="groups" className="mt-6">
+            <DirectGroupCampaign />
+          </TabsContent>
+
+          {/* Grupos vinculados a cursos */}
+          <TabsContent value="courses" className="mt-6">
+            <GroupCampaignSection />
+          </TabsContent>
+
+          {/* Difusión individual con filtros */}
+          <TabsContent value="individual" className="mt-6 space-y-6">
 
         <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
           <div>
@@ -228,7 +250,7 @@ export const CampaignsContent = () => {
           
           <div className="relative flex-1 min-w-[200px]">
             <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-500" />
-            <Input placeholder="Buscar por nombre, email o tel..." className="pl-10 h-10 bg-[#161618] border-[#222225] rounded-xl text-xs focus-visible:ring-amber-500/50 text-white" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+            <Input placeholder="Buscar por nombre, email o tel..." className="pl-10 h-10 bg-[#161618] border-[#222225] rounded-xl text-xs focus-visible:ring-amber-500/50 text-white" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); setCurrentPage(1); }} />
           </div>
 
           <Select value={selectedGroup} onValueChange={setSelectedGroup}>
@@ -318,7 +340,7 @@ export const CampaignsContent = () => {
                   <TableRow><TableCell colSpan={3} className="h-60 text-center"><Loader2 className="animate-spin mx-auto text-amber-500" /></TableCell></TableRow>
                 ) : filteredContacts.length === 0 ? (
                   <TableRow><TableCell colSpan={3} className="h-60 text-center text-slate-600 italic uppercase text-[10px] tracking-widest font-bold">No hay contactos con estos filtros.</TableCell></TableRow>
-                ) : filteredContacts.map((contact) => (
+                ) : filteredContacts.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE).map((contact) => (
                   <TableRow key={contact.id} className={cn("border-b border-[#161618] transition-colors", selectedIds.includes(contact.id) ? "bg-amber-900/10" : "hover:bg-[#1a1a1d]")}>
                     <TableCell className="pl-6"><Checkbox checked={selectedIds.includes(contact.id)} onCheckedChange={() => handleToggleSelect(contact.id)} className="border-slate-600 data-[state=checked]:bg-amber-500"/></TableCell>
                     <TableCell className="py-4">
@@ -357,7 +379,25 @@ export const CampaignsContent = () => {
               </TableBody>
             </Table>
           </CardContent>
+
+          {/* Paginación */}
+          {filteredContacts.length > PAGE_SIZE && (
+            <div className="flex items-center justify-between px-4 py-3 border-t border-[#222225]">
+              <span className="text-[10px] text-slate-500">
+                {(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(currentPage * PAGE_SIZE, filteredContacts.length)} de {filteredContacts.length}
+              </span>
+              <div className="flex gap-1">
+                <Button variant="ghost" size="sm" disabled={currentPage <= 1} onClick={() => setCurrentPage(p => p - 1)}
+                  className="text-[10px] h-7 px-3 text-slate-400">Anterior</Button>
+                <Button variant="ghost" size="sm" disabled={currentPage * PAGE_SIZE >= filteredContacts.length} onClick={() => setCurrentPage(p => p + 1)}
+                  className="text-[10px] h-7 px-3 text-slate-400">Siguiente</Button>
+              </div>
+            </div>
+          )}
         </Card>
+
+          </TabsContent>
+        </Tabs>
       </div>
 
       <MassMessageDialog open={isMassMessageOpen} onOpenChange={setIsMassMessageOpen} targetContacts={contacts.filter(c => selectedIds.includes(c.id))} onScheduled={fetchScheduledCampaigns} />

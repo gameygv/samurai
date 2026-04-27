@@ -26,6 +26,10 @@ const FIELDS = [
   { value: 'telefono', label: 'Teléfono' },
   { value: 'email', label: 'Email' },
   { value: 'confidence_score', label: 'Score' },
+  { value: 'origen', label: 'Origen' },
+  { value: 'genero', label: 'Género' },
+  { value: 'estado_emocional_actual', label: 'Estado Emocional' },
+  { value: 'ai_paused', label: 'IA Pausada' },
 ];
 
 const OPS = [

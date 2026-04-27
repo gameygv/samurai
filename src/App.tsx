@@ -88,7 +88,7 @@ const App = () => (
             <Route path="/archive" element={<PrivateRoute><Archive /></PrivateRoute>} />
 
             <Route path="/academic" element={<PrivateRoute><ManagerRoute><AcademicCatalog /></ManagerRoute></PrivateRoute>} />
-            <Route path="/channels" element={<PrivateRoute><ManagerRoute><ChannelsCatalog /></ManagerRoute></PrivateRoute>} />
+            <Route path="/channels" element={<PrivateRoute><AdminRoute><ChannelsCatalog /></AdminRoute></PrivateRoute>} />
             
             <Route path="/activity" element={<PrivateRoute><AdminRoute><Activity /></AdminRoute></PrivateRoute>} />
             <Route path="/brain" element={<PrivateRoute><AdminRoute><AgentBrain /></AdminRoute></PrivateRoute>} />

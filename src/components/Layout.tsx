@@ -94,7 +94,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
         { icon: Contact, label: 'Contactos', path: '/contacts', roles: ['any'] },
         { icon: Tag, label: 'Mis Plantillas', path: '/tools', roles: ['any'] },
         { icon: GraduationCap, label: 'Academia', path: '/academic', roles: ['admin', 'dev', 'gerente'] },
-        { icon: Wifi, label: 'Canales y Grupos', path: '/channels', roles: ['admin', 'dev', 'gerente'] },
+        { icon: Wifi, label: 'Canales y Grupos', path: '/channels', roles: ['dev'] },
         { icon: Globe, label: 'Archivo de Chats', path: '/archive', roles: ['admin', 'dev', 'gerente'] },
       ]
     },
