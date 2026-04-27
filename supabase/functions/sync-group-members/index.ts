@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { appendAcademicRecord } from '../_shared/academic-record.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -247,6 +248,16 @@ Deno.serve(async (req) => {
           .delete()
           .in('id', toDelete.map((r) => r.id));
       }
+    }
+
+    // S15.4: Autofill academic_record para contacts con course_id
+    if (course_id && upsertRows.length > 0) {
+      let academicAdded = 0;
+      for (const row of upsertRows) {
+        const result = await appendAcademicRecord(supabase, row.contact_id, course_id);
+        if (result.added) academicAdded++;
+      }
+      console.log(`[sync-group-members] academic_record: ${academicAdded} added for course ${course_id}`);
     }
 
     console.log(`[sync-group-members] group=${group_jid} total=${participants.length} matched=${matched} unmatched=${unmatched}`);
