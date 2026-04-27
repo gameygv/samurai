@@ -181,28 +181,76 @@
 :root:not(.dark) .text-slate-50 {
   color: #0f172a !important;
 }
+:root:not(.dark) .text-slate-100 {
+  color: #1e293b !important;
+}
 :root:not(.dark) .text-slate-200 {
   color: #334155 !important;
 }
 :root:not(.dark) .text-slate-300 {
   color: #475569 !important;
 }
+:root:not(.dark) .text-slate-400 {
+  color: #64748b !important;
+}
 :root:not(.dark) .hover\:text-white:hover {
   color: #0f172a !important;
 }
+:root:not(.dark) .group-hover\:text-white:hover {
+  color: #0f172a !important;
+}
+:root:not(.dark) .placeholder\:text-slate-500::placeholder {
+  color: #94a3b8 !important;
+}
+:root:not(.dark) .placeholder\:text-slate-400::placeholder {
+  color: #94a3b8 !important;
+}
 
-/* --- Preserve white text on colored backgrounds --- */
+/* --- Additional dark backgrounds missing --- */
+:root:not(.dark) .bg-slate-800 {
+  background-color: #e2e8f0 !important;
+}
+:root:not(.dark) .bg-slate-700 {
+  background-color: #cbd5e1 !important;
+}
+:root:not(.dark) .bg-black\/60,
+:root:not(.dark) .bg-black\/80 {
+  background-color: rgba(0,0,0,0.6) !important;
+}
+
+/* Hover states for dark slate */
+:root:not(.dark) .hover\:bg-slate-800:hover {
+  background-color: #e2e8f0 !important;
+}
+
+/* --- Additional border patterns --- */
+:root:not(.dark) .border-slate-700 {
+  border-color: #cbd5e1 !important;
+}
+:root:not(.dark) .border-slate-600 {
+  border-color: #cbd5e1 !important;
+}
+:root:not(.dark) .divide-slate-800 > :not([hidden]) ~ :not([hidden]) {
+  border-color: #e2e8f0 !important;
+}
+
+/* --- Preserve white/light text on colored backgrounds --- */
 :root:not(.dark) .bg-indigo-600.text-white,
 :root:not(.dark) .bg-indigo-600 .text-white,
+:root:not(.dark) .bg-indigo-600 .text-slate-50,
 :root:not(.dark) .bg-indigo-500.text-white,
 :root:not(.dark) .bg-indigo-500 .text-white,
 :root:not(.dark) .bg-emerald-500.text-white,
 :root:not(.dark) .bg-emerald-600.text-white,
+:root:not(.dark) .bg-emerald-600 .text-white,
 :root:not(.dark) .bg-red-500.text-white,
 :root:not(.dark) .bg-red-600.text-white,
 :root:not(.dark) .bg-red-600 .text-white,
 :root:not(.dark) .bg-amber-500.text-white,
 :root:not(.dark) .bg-amber-600.text-white,
+:root:not(.dark) .bg-amber-600 .text-white,
+:root:not(.dark) .bg-amber-600 .text-slate-50,
+:root:not(.dark) .bg-amber-600 .text-slate-100,
 :root:not(.dark) .bg-purple-500.text-white,
 :root:not(.dark) .bg-purple-600.text-white,
 :root:not(.dark) .bg-blue-500.text-white,
@@ -210,8 +258,81 @@
 :root:not(.dark) .bg-green-500.text-white,
 :root:not(.dark) .bg-green-600.text-white,
 :root:not(.dark) .hover\:bg-indigo-600:hover .text-white,
-:root:not(.dark) .hover\:bg-red-600:hover.hover\:text-white:hover {
+:root:not(.dark) .hover\:bg-red-600:hover.hover\:text-white:hover,
+:root:not(.dark) .hover\:bg-indigo-500:hover.hover\:text-white:hover {
   color: #ffffff !important;
+}
+
+/* Badges/pills with colored bg — keep their text color */
+:root:not(.dark) .bg-red-500 .text-white,
+:root:not(.dark) .bg-red-500.text-white,
+:root:not(.dark) .bg-red-600 .text-slate-50,
+:root:not(.dark) .bg-amber-500 .text-slate-50,
+:root:not(.dark) .bg-amber-500 .text-slate-100 {
+  color: #ffffff !important;
+}
+
+/* --- Input/form elements --- */
+:root:not(.dark) .bg-transparent {
+  /* Don't override transparent */
+}
+:root:not(.dark) input.text-white,
+:root:not(.dark) textarea.text-white {
+  color: #0f172a !important;
+}
+:root:not(.dark) .focus\:ring-0:focus {
+  --tw-ring-color: transparent !important;
+}
+
+/* --- Select/dropdown content --- */
+:root:not(.dark) [data-radix-popper-content-wrapper] .bg-slate-900 {
+  background-color: #ffffff !important;
+}
+:root:not(.dark) [data-radix-popper-content-wrapper] .text-slate-100 {
+  color: #1e293b !important;
+}
+
+/* --- Pipeline columns (dark bg on cards) --- */
+:root:not(.dark) .bg-slate-800\/50 {
+  background-color: rgba(241,245,249,0.5) !important;
+}
+:root:not(.dark) .bg-slate-800\/40 {
+  background-color: rgba(241,245,249,0.4) !important;
+}
+:root:not(.dark) .bg-slate-800\/30 {
+  background-color: rgba(241,245,249,0.3) !important;
+}
+:root:not(.dark) .bg-slate-800\/20 {
+  background-color: rgba(241,245,249,0.2) !important;
+}
+
+/* Red/amber dark variant backgrounds */
+:root:not(.dark) .bg-red-900\/10 {
+  background-color: rgba(254,226,226,0.3) !important;
+}
+:root:not(.dark) .bg-red-900\/20 {
+  background-color: rgba(254,226,226,0.4) !important;
+}
+:root:not(.dark) .bg-red-950\/20,
+:root:not(.dark) .bg-red-950\/30 {
+  background-color: rgba(254,226,226,0.2) !important;
+}
+:root:not(.dark) .bg-amber-900\/10 {
+  background-color: rgba(254,243,199,0.3) !important;
+}
+:root:not(.dark) .bg-indigo-900\/10 {
+  background-color: rgba(224,231,255,0.3) !important;
+}
+:root:not(.dark) .bg-emerald-900\/10 {
+  background-color: rgba(209,250,229,0.3) !important;
+}
+:root:not(.dark) .bg-purple-900\/10 {
+  background-color: rgba(233,213,255,0.2) !important;
+}
+
+/* --- Glow shadows invisible in light mode --- */
+:root:not(.dark) [class*="shadow-\[0_0_"] {
+  box-shadow: none !important;
 }
 
 /* --- Scrollbar light mode --- */
