@@ -368,17 +368,17 @@ const Inbox = () => {
                          </button>
                       ))}
                    </div>}
-                {/* Mini paginador sidebar */}
-                {!loadingLeads && inboxTotal > inboxPageSize && (
-                  <div className="flex items-center justify-between px-3 py-2 border-t border-[#1a1a1a] bg-[#0a0a0c] shrink-0">
-                    <Button variant="ghost" size="sm" disabled={inboxPage <= 1} onClick={() => { setInboxPage(p => p - 1); fetchLeads(true, inboxPage - 1); }}
-                      className="text-[9px] h-6 px-2 text-slate-500 uppercase font-bold">Ant</Button>
-                    <span className="text-[9px] text-slate-600">{inboxPage}/{Math.ceil(inboxTotal / inboxPageSize)} ({inboxTotal})</span>
-                    <Button variant="ghost" size="sm" disabled={inboxPage * inboxPageSize >= inboxTotal} onClick={() => { setInboxPage(p => p + 1); fetchLeads(true, inboxPage + 1); }}
-                      className="text-[9px] h-6 px-2 text-slate-500 uppercase font-bold">Sig</Button>
-                  </div>
-                )}
              </ScrollArea>
+             {/* Mini paginador sidebar — fuera del scroll, siempre visible */}
+             {!loadingLeads && inboxTotal > inboxPageSize && (
+               <div className="flex items-center justify-between px-3 py-2 border-t border-[#1a1a1a] bg-[#0a0a0c] shrink-0">
+                 <Button variant="ghost" size="sm" disabled={inboxPage <= 1} onClick={() => { setInboxPage(p => p - 1); fetchLeads(true, inboxPage - 1); }}
+                   className="text-[9px] h-6 px-2 text-slate-500 uppercase font-bold">Ant</Button>
+                 <span className="text-[9px] text-slate-600">{inboxPage}/{Math.ceil(inboxTotal / inboxPageSize)} ({inboxTotal})</span>
+                 <Button variant="ghost" size="sm" disabled={inboxPage * inboxPageSize >= inboxTotal} onClick={() => { setInboxPage(p => p + 1); fetchLeads(true, inboxPage + 1); }}
+                   className="text-[9px] h-6 px-2 text-slate-500 uppercase font-bold">Sig</Button>
+               </div>
+             )}
           </div>
 
           {/* COLUMNA 2: CHAT */}
