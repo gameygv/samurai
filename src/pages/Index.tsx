@@ -108,21 +108,21 @@ const Index = () => {
     setLoading(false);
   };
 
-  if (loading) return <div className="h-screen flex items-center justify-center bg-[#050505]"><Loader2 className="animate-spin text-indigo-500" /></div>;
+  if (loading) return <div className="h-screen flex items-center justify-center bg-white dark:bg-[#050505]"><Loader2 className="animate-spin text-indigo-500" /></div>;
 
   return (
     <Layout>
       <div className="max-w-[1600px] mx-auto space-y-8 pb-12 animate-in fade-in duration-500">
-        <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-[#0a0a0c] p-6 rounded-3xl border border-[#1a1a1a] shadow-2xl">
+        <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white dark:bg-[#0a0a0c] p-6 rounded-3xl border border-slate-200 dark:border-[#1a1a1a] shadow-lg dark:shadow-2xl">
           <div>
-            <h1 className="text-3xl font-bold text-white tracking-tight flex items-center gap-3">
+            <h1 className="text-3xl font-bold text-slate-900 dark:text-white tracking-tight flex items-center gap-3">
                Dashboard <Badge className="bg-indigo-600 hover:bg-indigo-600 text-white border-none shadow-lg">v2.5 Pro</Badge>
             </h1>
-            <p className="text-slate-400 text-sm mt-1">Status: Operational | User: {profile?.full_name}</p>
+            <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">Status: Operational | User: {profile?.full_name}</p>
           </div>
-          <div className="flex items-center gap-3 bg-[#121214] p-2.5 px-5 rounded-xl border border-[#222225] border-l-4 border-l-amber-500 shadow-xl">
+          <div className="flex items-center gap-3 bg-amber-50 dark:bg-[#121214] p-2.5 px-5 rounded-xl border border-amber-200 dark:border-[#222225] border-l-4 border-l-amber-500 shadow-md dark:shadow-xl">
              <div className="w-2 h-2 rounded-full bg-amber-500 animate-pulse shadow-[0_0_10px_rgba(245,158,11,0.8)]"></div>
-             <span className="text-[11px] text-amber-500 font-mono font-bold uppercase tracking-widest">Kernel Synced</span>
+             <span className="text-[11px] text-amber-600 dark:text-amber-500 font-mono font-bold uppercase tracking-widest">Kernel Synced</span>
           </div>
         </header>
 
@@ -136,10 +136,10 @@ const Index = () => {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
           
           <div className="lg:col-span-8 space-y-8">
-            <Card className="bg-[#0a0a0c] border-[#1a1a1a] shadow-2xl rounded-3xl overflow-hidden">
-               <CardHeader className="border-b border-[#1a1a1a] bg-[#0f0f11]/50">
-                  <CardTitle className="text-sm font-bold uppercase tracking-widest text-slate-300 flex items-center gap-2">
-                     <TrendingUp className="w-4 h-4 text-indigo-400"/> Flujo de Ingreso de Leads (7 Días)
+            <Card className="bg-white dark:bg-[#0a0a0c] border-slate-200 dark:border-[#1a1a1a] shadow-lg dark:shadow-2xl rounded-3xl overflow-hidden">
+               <CardHeader className="border-b border-slate-200 dark:border-[#1a1a1a] bg-slate-50 dark:bg-[#0f0f11]/50">
+                  <CardTitle className="text-sm font-bold uppercase tracking-widest text-slate-700 dark:text-slate-300 flex items-center gap-2">
+                     <TrendingUp className="w-4 h-4 text-indigo-500 dark:text-indigo-400"/> Flujo de Ingreso de Leads (7 Días)
                   </CardTitle>
                </CardHeader>
                <CardContent className="p-0">
@@ -153,18 +153,18 @@ const Index = () => {
                                 <stop offset="95%" stopColor="#6366f1" stopOpacity={0}/>
                               </linearGradient>
                             </defs>
-                            <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" vertical={false} />
-                            <XAxis dataKey="name" stroke="#475569" fontSize={10} tickLine={false} axisLine={false} />
-                            <YAxis stroke="#475569" fontSize={10} tickLine={false} axisLine={false} />
-                            <RechartsTooltip 
-                              contentStyle={{ backgroundColor: '#0f0f11', borderColor: '#1f2937', borderRadius: '12px', color: '#f8fafc', fontSize: '12px' }}
+                            <CartesianGrid strokeDasharray="3 3" className="[&>line]:stroke-slate-200 dark:[&>line]:stroke-gray-800" stroke="#1f2937" vertical={false} />
+                            <XAxis dataKey="name" className="[&>g>text]:fill-slate-500 dark:[&>g>text]:fill-slate-500" stroke="#475569" fontSize={10} tickLine={false} axisLine={false} />
+                            <YAxis className="[&>g>text]:fill-slate-500 dark:[&>g>text]:fill-slate-500" stroke="#475569" fontSize={10} tickLine={false} axisLine={false} />
+                            <RechartsTooltip
+                              contentStyle={{ backgroundColor: 'var(--tooltip-bg, #0f0f11)', borderColor: 'var(--tooltip-border, #1f2937)', borderRadius: '12px', color: 'var(--tooltip-color, #f8fafc)', fontSize: '12px' }}
                               itemStyle={{ color: '#818cf8', fontWeight: 'bold' }}
                             />
                             <Area type="monotone" dataKey="Leads" stroke="#818cf8" strokeWidth={3} fillOpacity={1} fill="url(#colorLeads)" />
                           </AreaChart>
                         </ResponsiveContainer>
                      </div>
-                     <ScrollBar orientation="horizontal" className="bg-[#121214]" />
+                     <ScrollBar orientation="horizontal" className="bg-slate-100 dark:bg-[#121214]" />
                   </ScrollArea>
                </CardContent>
             </Card>
@@ -172,17 +172,17 @@ const Index = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                <TaskRadar tasks={stats.tasks} />
                
-               <div className="bg-[#0a0a0c] border border-[#1a1a1a] rounded-3xl overflow-hidden shadow-2xl flex flex-col h-[250px]">
-                 <div className="p-4 bg-[#0f0f11] border-b border-[#1a1a1a] flex items-center gap-2 shrink-0">
-                   <Terminal className="w-4 h-4 text-slate-500" />
-                   <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Live Mission Logs</span>
+               <div className="bg-white dark:bg-[#0a0a0c] border border-slate-200 dark:border-[#1a1a1a] rounded-3xl overflow-hidden shadow-lg dark:shadow-2xl flex flex-col h-[250px]">
+                 <div className="p-4 bg-slate-50 dark:bg-[#0f0f11] border-b border-slate-200 dark:border-[#1a1a1a] flex items-center gap-2 shrink-0">
+                   <Terminal className="w-4 h-4 text-slate-400 dark:text-slate-500" />
+                   <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Live Mission Logs</span>
                  </div>
-                 <ScrollArea className="flex-1 p-4 font-mono text-[10px] bg-[#050505]">
+                 <ScrollArea className="flex-1 p-4 font-mono text-[10px] bg-slate-50 dark:bg-[#050505]">
                    {stats.recentLogs.map((log: any, i: number) => (
-                     <div key={i} className={cn("flex gap-4 py-2 border-l-2 border-[#1a1a1a] pl-3 mb-2 rounded-r-lg transition-all group cursor-default", log.action === 'ERROR' ? "hover:border-red-500 hover:bg-red-950/20" : "hover:border-indigo-500 hover:bg-[#0f0f11]")}>
-                       <span className="text-slate-600 shrink-0">[{new Date(log.created_at).toLocaleTimeString()}]</span>
-                       <span className={cn("uppercase font-bold shrink-0", log.action === 'ERROR' ? "text-red-500" : "text-indigo-400")}>{log.action}</span>
-                       <span className={cn("truncate", log.action === 'ERROR' ? "text-red-400" : "text-slate-400")}>{log.description}</span>
+                     <div key={i} className={cn("flex gap-4 py-2 border-l-2 border-slate-200 dark:border-[#1a1a1a] pl-3 mb-2 rounded-r-lg transition-all group cursor-default", log.action === 'ERROR' ? "hover:border-red-500 hover:bg-red-50 dark:hover:bg-red-950/20" : "hover:border-indigo-500 hover:bg-slate-100 dark:hover:bg-[#0f0f11]")}>
+                       <span className="text-slate-400 dark:text-slate-600 shrink-0">[{new Date(log.created_at).toLocaleTimeString()}]</span>
+                       <span className={cn("uppercase font-bold shrink-0", log.action === 'ERROR' ? "text-red-500" : "text-indigo-600 dark:text-indigo-400")}>{log.action}</span>
+                       <span className={cn("truncate", log.action === 'ERROR' ? "text-red-600 dark:text-red-400" : "text-slate-600 dark:text-slate-400")}>{log.description}</span>
                      </div>
                    ))}
                  </ScrollArea>

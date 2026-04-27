@@ -37,7 +37,7 @@ export const FontSizeToggle = () => {
       variant="ghost"
       size="icon"
       onClick={cycle}
-      className="h-9 w-9 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800"
+      className="h-9 w-9 rounded-xl text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-800"
       title={`Tamaño de letra: ${SIZES[sizeIndex].label}`}
     >
       <AArrowUp className="w-4 h-4" />

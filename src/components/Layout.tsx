@@ -109,14 +109,14 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
   ];
 
   const NavContent = () => (
-    <div className="flex flex-col h-full bg-[#0a0a0c]">
-      <div className="p-6 flex items-center gap-3 border-b border-[#1a1a1a]">
+    <div className="flex flex-col h-full bg-white dark:bg-[#0a0a0c]">
+      <div className="p-6 flex items-center gap-3 border-b border-slate-200 dark:border-[#1a1a1a]">
         <div className="w-10 h-10 flex items-center justify-center shrink-0">
           <img src="/logo.png" alt="Brand Logo" className="w-full h-full object-contain drop-shadow-md" />
         </div>
         <div className="flex flex-col">
-           <span className="font-bold text-[14px] tracking-tight uppercase text-slate-50 leading-none">{brandName}</span>
-           <span className="text-[9px] text-amber-500 font-mono font-bold mt-1 flex items-center gap-1">
+           <span className="font-bold text-[14px] tracking-tight uppercase text-slate-900 dark:text-slate-50 leading-none">{brandName}</span>
+           <span className="text-[9px] text-amber-600 dark:text-amber-500 font-mono font-bold mt-1 flex items-center gap-1">
               <div className="w-1.5 h-1.5 bg-amber-500 rounded-full animate-pulse"/> KERNEL ONLINE
            </span>
         </div>
@@ -125,9 +125,9 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
       <ScrollArea className="flex-1 px-4">
         <div className="space-y-6 py-4">
           {menuGroups.map((group, i) => {
-            const visibleItems = group.items.filter(item => 
-               item.roles.includes('any') || 
-               (isAdmin && item.roles.includes('admin')) || 
+            const visibleItems = group.items.filter(item =>
+               item.roles.includes('any') ||
+               (isAdmin && item.roles.includes('admin')) ||
                (isDev && item.roles.includes('dev')) ||
                (isManager && item.roles.includes('gerente'))
             );
@@ -136,7 +136,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
 
             return (
               <div key={i}>
-                <h4 className="mb-2 px-2 text-[9px] font-bold text-[#7A8A9E] uppercase tracking-widest">
+                <h4 className="mb-2 px-2 text-[9px] font-bold text-slate-400 dark:text-[#7A8A9E] uppercase tracking-widest">
                   {group.title}
                 </h4>
                 <div className="space-y-1">
@@ -150,12 +150,12 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
                         onClick={() => setIsMobileOpen(false)}
                         className={cn(
                           "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all duration-200",
-                          isActive 
-                            ? "bg-indigo-600 text-white font-bold shadow-md shadow-indigo-900/20" 
-                            : "text-[#7A8A9E] hover:bg-[#161618] hover:text-slate-200"
+                          isActive
+                            ? "bg-indigo-600 text-white font-bold shadow-md shadow-indigo-900/20"
+                            : "text-slate-500 dark:text-[#7A8A9E] hover:bg-slate-100 dark:hover:bg-[#161618] hover:text-slate-900 dark:hover:text-slate-200"
                         )}
                       >
-                        <Icon className={cn("w-4 h-4", isActive ? "text-white" : "text-[#7A8A9E]")} />
+                        <Icon className={cn("w-4 h-4", isActive ? "text-white" : "text-slate-400 dark:text-[#7A8A9E]")} />
                         <span>{item.label}</span>
                       </Link>
                     );
@@ -166,20 +166,20 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
           })}
         </div>
       </ScrollArea>
-      
-      <div className="p-4 border-t border-[#1a1a1a]">
-         <div className="bg-[#121214] rounded-xl p-3 border border-[#222225] hover:border-indigo-500/50 hover:bg-[#161618] transition-colors cursor-pointer group" onClick={() => navigate('/profile')}>
+
+      <div className="p-4 border-t border-slate-200 dark:border-[#1a1a1a]">
+         <div className="bg-slate-50 dark:bg-[#121214] rounded-xl p-3 border border-slate-200 dark:border-[#222225] hover:border-indigo-500/50 hover:bg-slate-100 dark:hover:bg-[#161618] transition-colors cursor-pointer group" onClick={() => navigate('/profile')}>
             <div className="flex items-center gap-3">
-               <div className="w-8 h-8 rounded-full bg-[#1a1a1a] flex items-center justify-center text-[10px] font-bold text-indigo-400 border border-[#222225] shadow-inner shrink-0">
+               <div className="w-8 h-8 rounded-full bg-slate-200 dark:bg-[#1a1a1a] flex items-center justify-center text-[10px] font-bold text-indigo-600 dark:text-indigo-400 border border-slate-300 dark:border-[#222225] shadow-inner shrink-0">
                   {profile?.full_name?.substring(0, 2).toUpperCase() || '??'}
                </div>
                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-bold text-slate-200 truncate group-hover:text-white transition-colors">{profile?.full_name || 'Usuario'}</p>
-                  <p className="text-[9px] text-indigo-400 uppercase font-bold tracking-widest mt-0.5 flex items-center gap-1">
+                  <p className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate group-hover:text-slate-900 dark:group-hover:text-white transition-colors">{profile?.full_name || 'Usuario'}</p>
+                  <p className="text-[9px] text-indigo-600 dark:text-indigo-400 uppercase font-bold tracking-widest mt-0.5 flex items-center gap-1">
                     <UserCircle className="w-3 h-3" /> Mi Perfil / Ajustes
                   </p>
                </div>
-               <button onClick={(e) => { e.stopPropagation(); handleLogout(); }} title="Cerrar Sesión" className="text-slate-600 hover:text-red-400 transition-colors p-2 z-10 relative bg-[#0a0a0c] rounded-lg border border-[#222225]">
+               <button onClick={(e) => { e.stopPropagation(); handleLogout(); }} title="Cerrar Sesión" className="text-slate-400 dark:text-slate-600 hover:text-red-500 dark:hover:text-red-400 transition-colors p-2 z-10 relative bg-white dark:bg-[#0a0a0c] rounded-lg border border-slate-200 dark:border-[#222225]">
                   <LogOut className="w-4 h-4" />
                </button>
             </div>
@@ -190,33 +190,33 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
 
   return (
     <div className="flex min-h-screen bg-white dark:bg-[#050505] text-slate-900 dark:text-slate-50 font-sans">
-      <aside className="w-64 border-r border-[#1a1a1a] bg-[#0a0a0c] hidden md:flex flex-col z-20">
+      <aside className="w-64 border-r border-slate-200 dark:border-[#1a1a1a] bg-white dark:bg-[#0a0a0c] hidden md:flex flex-col z-20">
         <NavContent />
       </aside>
 
       <main className="flex-1 overflow-auto flex flex-col">
-        <header className="h-16 border-b border-[#1a1a1a] bg-[#0a0a0c]/80 backdrop-blur-xl flex items-center px-4 md:px-8 justify-between sticky top-0 z-10">
+        <header className="h-16 border-b border-slate-200 dark:border-[#1a1a1a] bg-white/80 dark:bg-[#0a0a0c]/80 backdrop-blur-xl flex items-center px-4 md:px-8 justify-between sticky top-0 z-10">
           <Sheet open={isMobileOpen} onOpenChange={setIsMobileOpen}>
             <SheetTrigger asChild>
-              <Button variant="ghost" size="icon" className="md:hidden text-slate-400 hover:text-white">
+              <Button variant="ghost" size="icon" className="md:hidden text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white">
                 <Menu className="w-6 h-6" />
               </Button>
             </SheetTrigger>
-            <SheetContent side="left" className="p-0 border-r-[#1a1a1a] w-72">
+            <SheetContent side="left" className="p-0 border-r-slate-200 dark:border-r-[#1a1a1a] w-72">
               <NavContent />
             </SheetContent>
           </Sheet>
-          
+
           <div className="flex-1 flex justify-center max-w-2xl mx-auto px-4 hidden sm:block">
-             <button 
+             <button
                onClick={() => setSearchOpen(true)}
-               className="w-full flex items-center justify-between px-4 py-2 bg-[#121214] border border-[#222225] hover:border-indigo-500/50 hover:bg-[#161618] transition-all rounded-xl text-slate-500 text-sm group"
+               className="w-full flex items-center justify-between px-4 py-2 bg-slate-100 dark:bg-[#121214] border border-slate-200 dark:border-[#222225] hover:border-indigo-500/50 hover:bg-slate-200 dark:hover:bg-[#161618] transition-all rounded-xl text-slate-500 text-sm group"
              >
                 <div className="flex items-center gap-2">
-                   <Search className="w-4 h-4 group-hover:text-indigo-400 transition-colors" />
+                   <Search className="w-4 h-4 group-hover:text-indigo-500 dark:group-hover:text-indigo-400 transition-colors" />
                    <span>Búsqueda global y comandos...</span>
                 </div>
-                <kbd className="hidden md:inline-flex h-5 items-center gap-1 rounded border border-[#222225] bg-[#0a0a0c] px-1.5 font-mono text-[10px] font-medium text-slate-400">
+                <kbd className="hidden md:inline-flex h-5 items-center gap-1 rounded border border-slate-300 dark:border-[#222225] bg-white dark:bg-[#0a0a0c] px-1.5 font-mono text-[10px] font-medium text-slate-400">
                    <Command className="w-3 h-3" /> K
                 </kbd>
              </button>
@@ -226,7 +226,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
              <FontSizeToggle />
              <ThemeToggle />
              <div className="hidden sm:flex flex-col items-end ml-2 mr-1">
-                <span className="text-[9px] text-[#7A8A9E] uppercase font-bold tracking-widest">Sys Health</span>
+                <span className="text-[9px] text-slate-400 dark:text-[#7A8A9E] uppercase font-bold tracking-widest">Sys Health</span>
                 <span className="text-[10px] text-emerald-500 font-mono font-bold">100% STABLE</span>
              </div>
              <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]"></div>
@@ -240,19 +240,19 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
 
       <Dialog open={searchOpen} onOpenChange={setSearchOpen}>
          <DialogContent className="p-0 border-0 bg-transparent shadow-2xl sm:max-w-2xl top-[20%] translate-y-0">
-            <div className="bg-[#0f0f11] border border-[#222225] rounded-2xl overflow-hidden shadow-[0_0_50px_-12px_rgba(0,0,0,0.8)]">
-               <div className="flex items-center px-4 border-b border-[#222225] bg-[#161618]">
-                  <Search className="w-5 h-5 text-indigo-400" />
-                  <input 
+            <div className="bg-white dark:bg-[#0f0f11] border border-slate-200 dark:border-[#222225] rounded-2xl overflow-hidden shadow-[0_0_50px_-12px_rgba(0,0,0,0.3)] dark:shadow-[0_0_50px_-12px_rgba(0,0,0,0.8)]">
+               <div className="flex items-center px-4 border-b border-slate-200 dark:border-[#222225] bg-slate-50 dark:bg-[#161618]">
+                  <Search className="w-5 h-5 text-indigo-500 dark:text-indigo-400" />
+                  <input
                      autoFocus
                      value={globalQuery}
                      onChange={e => setGlobalQuery(e.target.value)}
-                     className="flex-1 h-14 bg-transparent border-0 text-white placeholder:text-slate-500 focus:ring-0 px-4 outline-none text-lg"
+                     className="flex-1 h-14 bg-transparent border-0 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:ring-0 px-4 outline-none text-lg"
                      placeholder="Busca leads, contactos o escribe un comando..."
                   />
-                  <kbd className="hidden sm:inline-flex h-6 items-center rounded border border-[#222225] bg-[#0a0a0c] px-2 font-mono text-[10px] font-bold text-slate-500">ESC</kbd>
+                  <kbd className="hidden sm:inline-flex h-6 items-center rounded border border-slate-300 dark:border-[#222225] bg-slate-100 dark:bg-[#0a0a0c] px-2 font-mono text-[10px] font-bold text-slate-500">ESC</kbd>
                </div>
-               
+
                <ScrollArea className="max-h-[350px]">
                   <div className="p-2">
                      {globalQuery.length > 2 && searchResults.length === 0 && (
@@ -263,16 +263,16 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
                         <div className="mb-4">
                            <div className="px-3 py-2 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Prospectos y Contactos</div>
                            {searchResults.map(res => (
-                              <button 
-                                 key={res.id} 
+                              <button
+                                 key={res.id}
                                  onClick={() => { setSearchOpen(false); navigate(`/inbox`); }}
-                                 className="w-full flex items-center gap-3 px-3 py-3 hover:bg-[#161618] rounded-xl text-left transition-colors group"
+                                 className="w-full flex items-center gap-3 px-3 py-3 hover:bg-slate-100 dark:hover:bg-[#161618] rounded-xl text-left transition-colors group"
                               >
-                                 <div className="w-8 h-8 rounded-full bg-[#121214] border border-[#222225] flex items-center justify-center text-indigo-400 shrink-0">
+                                 <div className="w-8 h-8 rounded-full bg-slate-100 dark:bg-[#121214] border border-slate-200 dark:border-[#222225] flex items-center justify-center text-indigo-500 dark:text-indigo-400 shrink-0">
                                     <UserCircle className="w-4 h-4" />
                                  </div>
                                  <div className="flex flex-col">
-                                    <span className="text-sm font-bold text-slate-200 group-hover:text-white">{res.nombre}</span>
+                                    <span className="text-sm font-bold text-slate-800 dark:text-slate-200 group-hover:text-slate-900 dark:group-hover:text-white">{res.nombre}</span>
                                     <span className="text-[10px] text-slate-500 font-mono">{res.telefono} {res.email ? `• ${res.email}` : ''}</span>
                                  </div>
                               </button>
@@ -284,14 +284,14 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
                         <>
                            <div className="px-3 py-2 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Comandos Rápidos</div>
                            <div className="space-y-1">
-                              <button onClick={() => {setSearchOpen(false); navigate('/inbox')}} className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-[#161618] rounded-xl text-left text-sm text-slate-300">
+                              <button onClick={() => {setSearchOpen(false); navigate('/inbox')}} className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-slate-100 dark:hover:bg-[#161618] rounded-xl text-left text-sm text-slate-700 dark:text-slate-300">
                                  <MessageCircle className="w-4 h-4 text-slate-500" /> Ir a Bandeja de Entrada (Inbox)
                               </button>
-                              <button onClick={() => {setSearchOpen(false); navigate('/pipeline')}} className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-[#161618] rounded-xl text-left text-sm text-slate-300">
+                              <button onClick={() => {setSearchOpen(false); navigate('/pipeline')}} className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-slate-100 dark:hover:bg-[#161618] rounded-xl text-left text-sm text-slate-700 dark:text-slate-300">
                                  <Trello className="w-4 h-4 text-slate-500" /> Abrir Embudo de Ventas (Pipeline)
                               </button>
                               {isAdmin && (
-                                 <button onClick={() => {setSearchOpen(false); navigate('/settings')}} className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-[#161618] rounded-xl text-left text-sm text-slate-300">
+                                 <button onClick={() => {setSearchOpen(false); navigate('/settings')}} className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-slate-100 dark:hover:bg-[#161618] rounded-xl text-left text-sm text-slate-700 dark:text-slate-300">
                                     <SettingsIcon className="w-4 h-4 text-slate-500" /> Configuración del Sistema
                                  </button>
                               )}

@@ -60,7 +60,7 @@ export const SystemStatus = () => {
     const evoUrl = configData?.find(c => c.key === 'evolution_api_url')?.value;
     const evoKey = configData?.find(c => c.key === 'evolution_api_key')?.value;
     const hasEvo = !!(evoUrl && evoKey);
-    
+
     newStatuses.push({
         name: 'Evolution Link',
         status: hasEvo ? 'online' : 'offline',
@@ -72,9 +72,9 @@ export const SystemStatus = () => {
   };
 
   return (
-    <Card className="bg-slate-900 border-slate-800">
+    <Card className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
       <CardHeader className="pb-3">
-        <CardTitle className="text-sm text-slate-400 uppercase tracking-widest flex items-center gap-2">
+        <CardTitle className="text-sm text-slate-500 dark:text-slate-400 uppercase tracking-widest flex items-center gap-2">
           <Wifi className="w-4 h-4" /> Estado del Sistema
         </CardTitle>
       </CardHeader>
@@ -86,13 +86,13 @@ export const SystemStatus = () => {
               <div className="flex items-center gap-2">
                 <Icon className={`w-4 h-4 transition-colors ${service.status === 'online' ? 'text-green-500' : service.status === 'offline' ? 'text-red-500' : 'text-slate-500'}`} />
                 <div className="flex flex-col">
-                   <span className="text-xs text-slate-300">{service.name}</span>
-                   {service.detail && <span className="text-[9px] text-slate-600 font-mono">{service.detail}</span>}
+                   <span className="text-xs text-slate-700 dark:text-slate-300">{service.name}</span>
+                   {service.detail && <span className="text-[9px] text-slate-400 dark:text-slate-600 font-mono">{service.detail}</span>}
                 </div>
               </div>
               <div className="flex items-center gap-2">
                 {service.latency && (
-                  <span className="text-[10px] text-slate-500 font-mono">{service.latency}ms</span>
+                  <span className="text-[10px] text-slate-400 dark:text-slate-500 font-mono">{service.latency}ms</span>
                 )}
                 <div className={`w-2 h-2 rounded-full ${service.status === 'online' ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.4)]' : service.status === 'offline' ? 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.4)]' : 'bg-slate-500 animate-pulse'}`} />
               </div>

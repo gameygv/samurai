@@ -19,7 +19,7 @@
 
 @layer components {
   .glass-panel {
-    @apply bg-slate-900/40 backdrop-blur-md border border-slate-800 shadow-tactical;
+    @apply bg-white/60 dark:bg-slate-900/40 backdrop-blur-md border border-slate-200 dark:border-slate-800 shadow-lg dark:shadow-tactical;
   }
   
   /* Scrollbar Táctico */
@@ -44,9 +44,15 @@
 /* Light mode adjustments for readability */
 :root {
   --text-muted: #64748b; /* slate-500 — 4.6:1 ratio on white */
+  --tooltip-bg: #ffffff;
+  --tooltip-border: #e2e8f0;
+  --tooltip-color: #1e293b;
 }
 .dark {
   --text-muted: #94a3b8; /* slate-400 — 4.5:1 ratio on slate-950 */
+  --tooltip-bg: #0f0f11;
+  --tooltip-border: #1f2937;
+  --tooltip-color: #f8fafc;
 }
 
 .animate-in {
