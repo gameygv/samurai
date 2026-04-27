@@ -40,6 +40,8 @@ export const MassMessageDialog = ({ open, onOpenChange, targetContacts, onSchedu
   const [paused, setPaused] = useState(false);
   const [progress, setProgress] = useState({ current: 0, total: 0, success: 0, failed: 0 });
   const [eta, setEta] = useState(0);
+  const [generatingVariants, setGeneratingVariants] = useState(false);
+  const [aiVariants, setAiVariants] = useState<string[]>([]);
 
   // Scheduling State
   const [sendMode, setSendMode] = useState<'NOW' | 'SCHEDULE'>('NOW');
@@ -65,6 +67,8 @@ export const MassMessageDialog = ({ open, onOpenChange, targetContacts, onSchedu
       setCampaignTitle('');
       setUseVariants(false);
       setVariants([{ position: 0, label: 'Variante A', caption: '', media: null }]);
+      setAiVariants([]);
+      setGeneratingVariants(false);
       
       // Auto-set schedule date to 10 mins from now
       const d = new Date();
@@ -234,13 +238,19 @@ export const MassMessageDialog = ({ open, onOpenChange, targetContacts, onSchedu
          if (abortRef.current) break;
 
          const contact = targetContacts[i];
-         
+
          if (contact.telefono) {
              try {
-                 const personalizedMsg = message
+                 // Si hay variantes activas, rotar entre ellas (round-robin)
+                 let baseMsg = message;
+                 if (useVariants && variants.length > 1) {
+                    const variantIndex = i % variants.length;
+                    baseMsg = variants[variantIndex].caption || message;
+                 }
+                 const personalizedMsg = baseMsg
                     .replace(/{nombre}/g, contact.nombre?.split(' ')[0] || 'amigo')
                     .replace(/{ciudad}/g, contact.ciudad || '');
-                 
+
                  await sendEvolutionMessage(contact.telefono, personalizedMsg, contact.lead_id, uploadedMediaData);
                  
                  if (contact.lead_id) {
@@ -281,6 +291,35 @@ export const MassMessageDialog = ({ open, onOpenChange, targetContacts, onSchedu
   };
 
   const handleSpeedChange = (val: string) => { setSpeed(val); calculateEta(targetContacts.length, val); };
+
+  const handleGenerateAiVariants = async () => {
+    if (!message.trim() || message.trim().length < 5) return toast.error('Escribe un mensaje base de al menos 5 caracteres.');
+    setGeneratingVariants(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('generate-message-variants', {
+        body: { message: message.trim(), count: 4 },
+      });
+      if (error) throw new Error(error.message);
+      if (!data?.variants?.length) throw new Error('No se generaron variantes');
+      setAiVariants(data.variants);
+      setUseVariants(true);
+      // Map AI variants to the VariantTabs format
+      const labels = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
+      setVariants([
+        { position: 0, label: `Original`, caption: message.trim(), media: null },
+        ...data.variants.map((v: string, i: number) => ({
+          position: i + 1,
+          label: `Variante ${labels[i] || i + 1}`,
+          caption: v,
+          media: null,
+        })),
+      ]);
+      toast.success(`${data.variants.length} variantes generadas. Puedes editarlas antes de enviar.`);
+    } catch (err: any) {
+      toast.error('Error al generar variantes: ' + err.message);
+    }
+    setGeneratingVariants(false);
+  };
 
   const previewContact = targetContacts.length > 0 ? targetContacts[0] : { nombre: 'Juan Pérez', ciudad: 'Monterrey' };
   const previewMessage = message.replace(/{nombre}/g, previewContact.nombre?.split(' ')[0] || 'amigo').replace(/{ciudad}/g, previewContact.ciudad || 'tu ciudad');
@@ -404,33 +443,45 @@ export const MassMessageDialog = ({ open, onOpenChange, targetContacts, onSchedu
               <ScrollArea className="flex-1 p-6">
                  <div className="max-w-2xl mx-auto space-y-6 pb-6">
                     
-                    {/* TOGGLE VARIANTES ANTI-BAN */}
-                    {!sending && sendMode === 'SCHEDULE' && (
+                    {/* VARIANTES ANTI-BAN — disponible en ambos modos */}
+                    {!sending && (
                        <div className="flex items-center justify-between p-3 bg-[#121214] border border-[#222225] rounded-xl">
                           <div>
                              <span className="text-[10px] uppercase font-bold text-slate-500 tracking-widest">Variantes Anti-Ban</span>
-                             <p className="text-[9px] text-slate-600 mt-0.5">Distribuye mensajes diferentes entre destinatarios</p>
+                             <p className="text-[9px] text-slate-600 mt-0.5">IA genera variantes con sinónimos para evitar bloqueos</p>
                           </div>
-                          <Button
-                             variant={useVariants ? 'default' : 'outline'}
-                             size="sm"
-                             onClick={() => setUseVariants(!useVariants)}
-                             className={cn('text-[10px] uppercase tracking-widest font-bold h-7',
-                               useVariants ? 'bg-indigo-600 hover:bg-indigo-500' : 'border-[#333336] text-slate-400'
+                          <div className="flex items-center gap-2">
+                             <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={handleGenerateAiVariants}
+                                disabled={generatingVariants || !message.trim()}
+                                className="text-[10px] uppercase tracking-widest font-bold h-7 border-amber-500/30 text-amber-400 hover:bg-amber-500/10"
+                             >
+                                {generatingVariants ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Megaphone className="w-3 h-3 mr-1" />}
+                                {generatingVariants ? 'Generando...' : 'Generar con IA'}
+                             </Button>
+                             {useVariants && (
+                                <Button
+                                   variant="ghost"
+                                   size="sm"
+                                   onClick={() => { setUseVariants(false); setAiVariants([]); setVariants([{ position: 0, label: 'Variante A', caption: '', media: null }]); }}
+                                   className="text-[10px] h-7 text-slate-500 hover:text-red-400"
+                                >
+                                   <X className="w-3 h-3" />
+                                </Button>
                              )}
-                          >
-                             {useVariants ? 'Activo' : 'Activar'}
-                          </Button>
+                          </div>
                        </div>
                     )}
 
-                    {/* EDITOR DE VARIANTES */}
-                    {useVariants && sendMode === 'SCHEDULE' && !sending && (
+                    {/* EDITOR DE VARIANTES — editable antes de enviar */}
+                    {useVariants && !sending && (
                        <VariantTabs variants={variants} onChange={setVariants} disabled={sending} />
                     )}
 
-                    {/* ZONA DE MULTIMEDIA (single mode) */}
-                    {(!useVariants || sendMode === 'NOW') && (
+                    {/* ZONA DE MULTIMEDIA Y TEXTO (cuando no hay variantes activas) */}
+                    {!useVariants && (
                     <>
                     {/* ZONA DE MULTIMEDIA */}
                     <div className="space-y-2">
