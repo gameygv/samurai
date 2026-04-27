@@ -23,6 +23,7 @@ import MediaManager from "./pages/MediaManager";
 import WebsiteContent from "./pages/WebsiteContent";
 import MetaCapi from "./pages/MetaCapi";
 import Pipeline from "./pages/Pipeline";
+import PendingPayments from "./pages/PendingPayments";
 import Inbox from "./pages/Inbox";
 import WebhookDiag from "./pages/WebhookDiag";
 import AgentTools from "./pages/AgentTools";
@@ -85,6 +86,7 @@ const App = () => (
             <Route path="/campaigns" element={<PrivateRoute><Campaigns /></PrivateRoute>} />
             <Route path="/tools" element={<PrivateRoute><AgentTools /></PrivateRoute>} />
             <Route path="/pipeline" element={<PrivateRoute><Pipeline /></PrivateRoute>} />
+            <Route path="/pending-payments" element={<PrivateRoute><PendingPayments /></PrivateRoute>} />
             <Route path="/archive" element={<PrivateRoute><Archive /></PrivateRoute>} />
 
             <Route path="/academic" element={<PrivateRoute><ManagerRoute><AcademicCatalog /></ManagerRoute></PrivateRoute>} />

@@ -218,31 +218,44 @@ serve(async (req) => {
       status: 'OK'
     });
 
-    // 10. 2026-04-10 AUTO-COMPRADO: si el veredicto es PROBABLE_VALID con match de cuenta
-    // Y el monto detectado es > 0, promover automáticamente el lead a COMPRADO.
-    // El trigger DB (on_lead_comprado) insertará CAPI_PURCHASE en activity_logs y
-    // llamamos process-capi-purchase para drenarlo inmediatamente a Meta.
+    // 10. AUTO-COMPRADO: si se detectó un comprobante real con monto > 0, promover a COMPRADO.
+    // Prioridad: CAPI debe recibir el evento de compra lo antes posible.
+    // - PROBABLE_VALID (cuenta coincide): payment_status = 'VALID'
+    // - INCONCLUSIVE (cuenta no coincide pero comprobante real): payment_status = 'PENDING_VERIFICATION'
+    //   → Lead pasa a GANADO para CAPI, pero queda en "Pagos por Validar" para revisión manual.
     const parsedAmount = amountMatch ? parseFloat(amountMatch[1].replace(/,/g, '')) : 0;
-    const shouldAutoMove = verdict === 'PROBABLE_VALID'
-       && parsedAmount > 0
-       && matchedAccount
-       && matchedAccount !== 'No identificada';
+    const isConfirmedValid = verdict === 'PROBABLE_VALID' && matchedAccount && matchedAccount !== 'No identificada';
+    const isLikelyValid = verdict === 'INCONCLUSIVE' && parsedAmount > 0;
+    const shouldAutoMove = (isConfirmedValid || isLikelyValid) && parsedAmount > 0;
 
     let autoMoved = false;
     if (shouldAutoMove) {
        const { data: currentLead } = await supabase.from('leads').select('buying_intent').eq('id', lead_id).single();
        if (currentLead && currentLead.buying_intent !== 'COMPRADO') {
+          const paymentStatus = isConfirmedValid ? 'VALID' : 'PENDING_VERIFICATION';
           await supabase.from('leads').update({
              buying_intent: 'COMPRADO',
-             payment_status: 'VALID',
+             payment_status: paymentStatus,
              followup_stage: 100
           }).eq('id', lead_id);
 
+          const statusLabel = isConfirmedValid ? 'VALID' : 'PENDIENTE VERIFICACIÓN';
           await supabase.from('activity_logs').insert({
              action: 'UPDATE', resource: 'LEADS',
-             description: `🚀 Auto-COMPRADO: ${lead?.nombre || lead_id} (Ojo de Halcón verdict=VALID, monto=$${parsedAmount}, cuenta=${matchedAccount})`,
+             description: `🚀 Auto-COMPRADO: ${lead?.nombre || lead_id} (Ojo de Halcón verdict=${verdict}, monto=$${parsedAmount}, cuenta=${matchedAccount || 'No identificada'}, pago=${statusLabel})`,
              status: 'OK'
           });
+
+          // Si es INCONCLUSIVE, insertar nota interna extra advirtiendo verificación manual
+          if (!isConfirmedValid) {
+            await supabase.from('conversaciones').insert({
+              lead_id,
+              emisor: 'SISTEMA',
+              mensaje: `⚠️ PAGO PENDIENTE DE VERIFICACIÓN\nEl comprobante de $${parsedAmount} fue detectado pero la cuenta no coincide con las registradas. El lead se movió a GANADO para CAPI, pero el pago requiere validación manual en "Pagos por Validar".`,
+              platform: 'PANEL_INTERNO',
+              metadata: { author: 'Ojo de Halcón', type: 'pending_verification' }
+            }).catch(() => {});
+          }
 
           invokeFunction({ functionName: 'process-capi-purchase', body: {}, supabase, errorContext: `auto-COMPRADO CAPI drain lead=${lead_id}` });
           autoMoved = true;

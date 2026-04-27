@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { 
   LayoutDashboard, Brain, Settings as SettingsIcon, LogOut,
-  Users, UserCircle, Contact, Tag, Image, Globe, BarChart3, Zap, Trello, Menu, Activity, Search, MessageCircle, Command, GraduationCap, Wifi
+  Users, UserCircle, Contact, Tag, Image, Globe, BarChart3, Zap, Trello, Menu, Activity, Search, MessageCircle, Command, GraduationCap, Wifi, DollarSign
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/context/AuthContext';
@@ -90,6 +90,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
       title: "GESTIÓN",
       items: [
         { icon: Trello, label: 'Pipeline Ventas', path: '/pipeline', roles: ['any'] },
+        { icon: DollarSign, label: 'Pagos por Validar', path: '/pending-payments', roles: ['admin', 'dev', 'gerente'] },
         { icon: MessageCircle, label: 'Radar Leads', path: '/leads', roles: ['admin', 'dev', 'gerente'] },
         { icon: Contact, label: 'Contactos', path: '/contacts', roles: ['any'] },
         { icon: Tag, label: 'Mis Plantillas', path: '/tools', roles: ['any'] },
