@@ -80,7 +80,7 @@ export const FilterBuilder = ({ onFilterChange, onLeadIds }: FilterBuilderProps)
             type: 'leaf',
             field: r.field,
             op: r.op,
-            value: r.op === 'gt' || r.op === 'lt' ? Number(r.value) : r.value,
+            value: (r.op === 'gt' || r.op === 'lt') && r.value ? (isNaN(Number(r.value)) ? 0 : Number(r.value)) : r.value,
           })),
         },
       };
@@ -92,7 +92,10 @@ export const FilterBuilder = ({ onFilterChange, onLeadIds }: FilterBuilderProps)
       if (!error && data) {
         setPreviewCount(data.count ?? 0);
       }
-    } catch (_) { /* ignore */ }
+    } catch (err) {
+      console.error('[FilterBuilder] evaluate error:', err);
+      setPreviewCount(null);
+    }
     setLoading(false);
   }, [rules]);
 
@@ -119,7 +122,7 @@ export const FilterBuilder = ({ onFilterChange, onLeadIds }: FilterBuilderProps)
           type: 'leaf',
           field: r.field,
           op: r.op,
-          value: r.op === 'gt' || r.op === 'lt' ? Number(r.value) : r.value,
+          value: (r.op === 'gt' || r.op === 'lt') && r.value ? (isNaN(Number(r.value)) ? 0 : Number(r.value)) : r.value,
         })),
       },
     };

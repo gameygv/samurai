@@ -120,9 +120,14 @@ function applyLeafFilter(query: any, field: string, op: string, value: unknown):
 function buildOrCondition(field: string, op: string, value: unknown): string {
   switch (op) {
     case 'eq': return `${field}.eq.${value}`;
+    case 'neq': return `${field}.neq.${value}`;
     case 'like':
     case 'contains': return `${field}.ilike.%${value}%`;
     case 'in': return `${field}.in.(${Array.isArray(value) ? value.join(',') : value})`;
+    case 'is_null': return `${field}.is.null`;
+    case 'not_null': return `${field}.not.is.null`;
+    case 'gt': return `${field}.gt.${value}`;
+    case 'lt': return `${field}.lt.${value}`;
     default: return `${field}.eq.${value}`;
   }
 }
