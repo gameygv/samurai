@@ -57,19 +57,28 @@ export const LinkWhatsAppGroupDialog = ({
     if (open) {
       fetchChannels();
       setSyncResult(null);
-      if (currentChannelId) setSelectedChannel(currentChannelId);
+      if (currentChannelId) {
+        setSelectedChannel(currentChannelId);
+        // Cargar grupos del canal vinculado para resolver el nombre del grupo
+        if (currentGroupJid) fetchGroups(currentChannelId);
+      }
     }
   }, [open]);
 
   const fetchChannels = async () => {
     setLoadingChannels(true);
-    const { data } = await supabase
-      .from('whatsapp_channels')
-      .select('id, name, instance_id')
-      .eq('provider', 'gowa')
-      .eq('is_active', true)
-      .order('name');
-    if (data) setChannels(data as WhatsAppChannel[]);
+    try {
+      const { data, error } = await supabase
+        .from('whatsapp_channels')
+        .select('id, name, instance_id')
+        .eq('provider', 'gowa')
+        .eq('is_active', true)
+        .order('name');
+      if (error) throw error;
+      if (data) setChannels(data as WhatsAppChannel[]);
+    } catch (err: any) {
+      toast.error(`Error cargando canales: ${err.message}`);
+    }
     setLoadingChannels(false);
   };
 

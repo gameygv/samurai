@@ -61,6 +61,13 @@ export const GroupCampaignSection = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [mediaType, setMediaType] = useState<'image' | 'video' | 'audio'>('image');
 
+  // Cleanup object URLs on unmount to prevent memory leaks
+  useEffect(() => {
+    return () => {
+      if (media?.previewUrl) URL.revokeObjectURL(media.previewUrl);
+    };
+  }, [media]);
+
   useEffect(() => {
     fetchCoursesWithGroups();
   }, []);
@@ -110,12 +117,13 @@ export const GroupCampaignSection = () => {
 
     setUploading(true);
     try {
-      const ext = file.name.split('.').pop() || 'bin';
+      const ext = file.name.split('.').pop()?.toLowerCase() || 'bin';
       const path = `campaigns/${Date.now()}.${ext}`;
       const { error } = await supabase.storage.from('media').upload(path, file);
       if (error) throw error;
 
       const { data: { publicUrl } } = supabase.storage.from('media').getPublicUrl(path);
+      if (!publicUrl) throw new Error('No se pudo generar URL pública');
 
       setMedia({
         url: publicUrl,
@@ -170,7 +178,7 @@ export const GroupCampaignSection = () => {
 
         const { data, error } = await supabase.functions.invoke('send-group-message', { body });
 
-        if (error) throw new Error(error.message);
+        if (error) throw new Error(error?.message || 'Error al invocar función');
         if (!data?.success) throw new Error(data?.error || 'Error al enviar');
 
         results.push({ courseId: course.id, courseTitle: course.title, success: true });

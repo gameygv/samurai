@@ -41,6 +41,21 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Validar mediaData shape si viene presente
+    if (mediaData && (!mediaData.url || !mediaData.type || !['image', 'video', 'audio'].includes(mediaData.type))) {
+      return new Response(JSON.stringify({ error: 'mediaData inválido: requiere url y type (image|video|audio)' }), {
+        status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Validar que la URL de media sea de Supabase Storage (prevenir SSRF)
+    const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
+    if (mediaData?.url && !mediaData.url.startsWith(supabaseUrl)) {
+      return new Response(JSON.stringify({ error: 'Solo se permite media desde Supabase Storage' }), {
+        status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     const authHeader = channel.api_key.startsWith('Basic ')
       ? channel.api_key
       : `Basic ${channel.api_key}`;
@@ -61,7 +76,9 @@ Deno.serve(async (req) => {
         downloadUrl += (downloadUrl.includes('?') ? '&' : '?') + 'width=1200&quality=85';
       }
 
-      const fileRes = await fetch(downloadUrl);
+      const fetchCtrl = new AbortController();
+      const fetchTimeout = setTimeout(() => fetchCtrl.abort(), 15000); // 15s timeout
+      const fileRes = await fetch(downloadUrl, { signal: fetchCtrl.signal }).finally(() => clearTimeout(fetchTimeout));
       if (!fileRes.ok) {
         return new Response(JSON.stringify({ error: `No se pudo descargar media: ${fileRes.status}` }), {
           status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -113,8 +130,7 @@ Deno.serve(async (req) => {
     if (!gowaRes.ok) {
       console.error(`[send-group-message] GOWA ${gowaRes.status}: ${gowaText}`);
       return new Response(JSON.stringify({
-        error: `GOWA API error: ${gowaRes.status}`,
-        details: gowaText.substring(0, 200),
+        error: `Error al enviar mensaje (código ${gowaRes.status})`,
       }), {
         status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
@@ -147,7 +163,8 @@ Deno.serve(async (req) => {
     });
   } catch (err) {
     console.error('[send-group-message] Error:', err);
-    return new Response(JSON.stringify({ error: (err as Error).message }), {
+    console.error('[send-group-message] Unhandled:', (err as Error).message);
+    return new Response(JSON.stringify({ error: 'Error interno al procesar envío' }), {
       status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
