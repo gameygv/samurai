@@ -50,6 +50,11 @@ const Inbox = () => {
   const [localTags, setLocalTags] = useState<{id: string, text: string, color: string}[]>([]);
   const [globalTags, setGlobalTags] = useState<{id: string, text: string, color: string}[]>([]);
 
+  // Paginación de leads sidebar
+  const [inboxPage, setInboxPage] = useState(1);
+  const [inboxPageSize] = useState(100);
+  const [inboxTotal, setInboxTotal] = useState(0);
+
   const { messages, loading: loadingMessages, refetch: refetchMessages } = useRealtimeMessages(
     activeLead?.id || null,
     true
@@ -95,14 +100,18 @@ const Inbox = () => {
     }));
   }, [searchTerm, leads]);
 
-  const fetchLeads = async (showLoader = true) => {
+  const fetchLeads = async (showLoader = true, page = inboxPage) => {
     if (showLoader) setLoadingLeads(true);
-    let query = supabase.from('leads').select('*').order('last_message_at', { ascending: false });
+    let query = supabase.from('leads').select('*', { count: 'exact' }).order('last_message_at', { ascending: false });
     if (!isManager) query = query.eq('assigned_to', user?.id);
-    
-    const { data } = await query;
+
+    const from = (page - 1) * inboxPageSize;
+    const to = from + inboxPageSize - 1;
+
+    const { data, count } = await query.range(from, to);
     if (data) {
        setLeads(data);
+       setInboxTotal(count ?? 0);
        if (activeLead) {
           const updated = data.find(l => l.id === activeLead.id);
           if (updated) setActiveLead(updated);
@@ -359,6 +368,16 @@ const Inbox = () => {
                          </button>
                       ))}
                    </div>}
+                {/* Mini paginador sidebar */}
+                {!loadingLeads && inboxTotal > inboxPageSize && (
+                  <div className="flex items-center justify-between px-3 py-2 border-t border-[#1a1a1a] bg-[#0a0a0c] shrink-0">
+                    <Button variant="ghost" size="sm" disabled={inboxPage <= 1} onClick={() => { setInboxPage(p => p - 1); fetchLeads(true, inboxPage - 1); }}
+                      className="text-[9px] h-6 px-2 text-slate-500 uppercase font-bold">Ant</Button>
+                    <span className="text-[9px] text-slate-600">{inboxPage}/{Math.ceil(inboxTotal / inboxPageSize)} ({inboxTotal})</span>
+                    <Button variant="ghost" size="sm" disabled={inboxPage * inboxPageSize >= inboxTotal} onClick={() => { setInboxPage(p => p + 1); fetchLeads(true, inboxPage + 1); }}
+                      className="text-[9px] h-6 px-2 text-slate-500 uppercase font-bold">Sig</Button>
+                  </div>
+                )}
              </ScrollArea>
           </div>
 

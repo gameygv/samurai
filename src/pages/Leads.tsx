@@ -32,28 +32,40 @@ const Leads = () => {
   const [globalTags, setGlobalTags] = useState<any[]>([]);
   const [localTags, setLocalTags] = useState<any[]>([]);
 
-  useEffect(() => { 
+  // Paginación
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50);
+  const [totalCount, setTotalCount] = useState(0);
+
+  useEffect(() => {
     if (user) {
-        fetchLeads(); 
+        fetchLeads(1, pageSize);
         fetchTags();
     }
   }, [user]);
 
-  const fetchLeads = async () => {
+  useEffect(() => {
+    if (user) fetchLeads(currentPage, pageSize);
+  }, [currentPage, pageSize]);
+
+  const fetchLeads = async (page = currentPage, size = pageSize) => {
     setLoading(true);
     try {
-      // FILTRO DE PRIVACIDAD: Si no es manager, solo ve lo asignado a él
-      let query = supabase.from('leads').select('*').order('last_message_at', { ascending: false });
-      
+      let query = supabase.from('leads').select('*', { count: 'exact' }).order('last_message_at', { ascending: false });
+
       if (!isManager) {
           query = query.eq('assigned_to', user?.id);
       }
-      
-      const { data, error } = await query;
+
+      const from = (page - 1) * size;
+      const to = from + size - 1;
+
+      const { data, error, count } = await query.range(from, to);
       if (error) throw error;
-      
+
       const leadsList = data || [];
       setLeads(leadsList);
+      setTotalCount(count ?? 0);
 
       const targetId = searchParams.get('id');
       if (targetId) {
@@ -225,6 +237,33 @@ const Leads = () => {
               )}
             </TableBody>
           </Table>
+
+          {/* Paginación */}
+          <div className="flex items-center justify-between px-6 py-3 border-t border-[#222225]">
+            <div className="flex items-center gap-3">
+              <span className="text-[10px] text-slate-500">
+                {totalCount > 0 ? `${(currentPage - 1) * pageSize + 1}–${Math.min(currentPage * pageSize, totalCount)} de ${totalCount}` : '0 leads'}
+              </span>
+              <Select value={String(pageSize)} onValueChange={v => { setPageSize(Number(v)); setCurrentPage(1); }}>
+                <SelectTrigger className="w-[90px] h-7 bg-[#161618] border-[#222225] rounded-lg text-[10px] text-slate-400">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-slate-900 border-slate-800 text-slate-100 rounded-xl">
+                  <SelectItem value="50">50 / pág</SelectItem>
+                  <SelectItem value="100">100 / pág</SelectItem>
+                  <SelectItem value="200">200 / pág</SelectItem>
+                  <SelectItem value="500">500 / pág</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex items-center gap-1">
+              <Button variant="ghost" size="sm" disabled={currentPage <= 1} onClick={() => setCurrentPage(p => p - 1)}
+                className="text-[10px] h-7 px-3 text-slate-400 uppercase font-bold tracking-widest">Anterior</Button>
+              <span className="text-[10px] text-slate-500 px-2">Pág {currentPage} de {Math.max(1, Math.ceil(totalCount / pageSize))}</span>
+              <Button variant="ghost" size="sm" disabled={currentPage * pageSize >= totalCount} onClick={() => setCurrentPage(p => p + 1)}
+                className="text-[10px] h-7 px-3 text-slate-400 uppercase font-bold tracking-widest">Siguiente</Button>
+            </div>
+          </div>
         </Card>
       </div>
 
