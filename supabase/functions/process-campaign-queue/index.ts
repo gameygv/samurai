@@ -41,16 +41,30 @@ serve(async (req) => {
           const batchSize = 4; 
           const batch = pendingContacts.slice(0, batchSize);
           
-          for (const contact of batch) {
+          for (let ci = 0; ci < batch.length; ci++) {
+              const contact = batch[ci];
               try {
+                  // Determinar mensaje y media (variantes round-robin o single)
+                  let rawMsg = camp.message || '';
+                  let mediaData = camp.mediaData;
+
+                  if (camp.variants && camp.variants.length > 0) {
+                      // Round-robin: distribuir variantes entre contactos
+                      const globalIndex = camp.contacts.indexOf(contact);
+                      const variantIndex = globalIndex >= 0 ? globalIndex % camp.variants.length : ci % camp.variants.length;
+                      const variant = camp.variants[variantIndex];
+                      rawMsg = variant.caption || variant.message || '';
+                      mediaData = variant.media || null;
+                      contact.variant_position = variantIndex;
+                  }
+
                   const clientName = contact.nombre?.split(' ')[0] || 'amigo';
-                  const personalizedMsg = camp.message
+                  const personalizedMsg = rawMsg
                       .replace(/{nombre}/g, clientName)
                       .replace(/{ciudad}/g, contact.ciudad || '');
-                  
-                  // Pasamos el lead_id para que el router de mensajes sepa de qué canal enviarlo
+
                   await supabaseClient.functions.invoke('send-message-v3', {
-                      body: { lead_id: contact.lead_id, phone: contact.telefono, message: personalizedMsg, mediaData: camp.mediaData }
+                      body: { lead_id: contact.lead_id, phone: contact.telefono, message: personalizedMsg, mediaData }
                   });
                   
                   if (contact.lead_id) {

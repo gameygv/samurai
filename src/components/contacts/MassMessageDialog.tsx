@@ -15,6 +15,7 @@ import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/context/AuthContext';
+import { VariantTabs, CampaignVariant } from '@/components/campaigns/VariantTabs';
 
 interface MassMessageDialogProps {
   open: boolean;
@@ -31,6 +32,8 @@ export const MassMessageDialog = ({ open, onOpenChange, targetContacts, onSchedu
   
   const [mediaFile, setMediaFile] = useState<File | null>(null);
   const [mediaPreview, setMediaPreview] = useState<string | null>(null);
+  const [useVariants, setUseVariants] = useState(false);
+  const [variants, setVariants] = useState<CampaignVariant[]>([{ position: 0, label: 'Variante A', caption: '', media: null }]);
 
   const [speed, setSpeed] = useState('SAFE');
   const [sending, setSending] = useState(false);
@@ -60,6 +63,8 @@ export const MassMessageDialog = ({ open, onOpenChange, targetContacts, onSchedu
       setMediaFile(null);
       setMediaPreview(null);
       setCampaignTitle('');
+      setUseVariants(false);
+      setVariants([{ position: 0, label: 'Variante A', caption: '', media: null }]);
       
       // Auto-set schedule date to 10 mins from now
       const d = new Date();
@@ -144,17 +149,28 @@ export const MassMessageDialog = ({ open, onOpenChange, targetContacts, onSchedu
               uploadedMediaData = await uploadMediaAsset();
           }
 
-          const newCampaign = {
+          const newCampaign: Record<string, unknown> = {
               id: `camp-${Date.now()}`,
               name: campaignTitle,
               message,
               mediaData: uploadedMediaData,
               scheduledAt: new Date(scheduledDate).toISOString(),
-              status: 'pending', // pending, processing, completed
+              status: 'pending',
               contacts: targetContacts.map(c => ({
                   id: c.id, lead_id: c.lead_id, telefono: c.telefono, nombre: c.nombre, ciudad: c.ciudad, status: 'pending'
-              }))
+              })),
           };
+
+          // Incluir variantes si están activas y hay más de 1
+          if (useVariants && variants.length > 1) {
+              newCampaign.variants = variants.map(v => ({
+                  position: v.position,
+                  label: v.label,
+                  caption: v.caption,
+                  media: v.media,
+              }));
+              newCampaign.distribution = 'round_robin';
+          }
 
           const { data: existingData } = await supabase.from('app_config').select('value').eq('key', 'scheduled_campaigns').maybeSingle();
           let existingCampaigns = [];
@@ -388,6 +404,34 @@ export const MassMessageDialog = ({ open, onOpenChange, targetContacts, onSchedu
               <ScrollArea className="flex-1 p-6">
                  <div className="max-w-2xl mx-auto space-y-6 pb-6">
                     
+                    {/* TOGGLE VARIANTES ANTI-BAN */}
+                    {!sending && sendMode === 'SCHEDULE' && (
+                       <div className="flex items-center justify-between p-3 bg-[#121214] border border-[#222225] rounded-xl">
+                          <div>
+                             <span className="text-[10px] uppercase font-bold text-slate-500 tracking-widest">Variantes Anti-Ban</span>
+                             <p className="text-[9px] text-slate-600 mt-0.5">Distribuye mensajes diferentes entre destinatarios</p>
+                          </div>
+                          <Button
+                             variant={useVariants ? 'default' : 'outline'}
+                             size="sm"
+                             onClick={() => setUseVariants(!useVariants)}
+                             className={cn('text-[10px] uppercase tracking-widest font-bold h-7',
+                               useVariants ? 'bg-indigo-600 hover:bg-indigo-500' : 'border-[#333336] text-slate-400'
+                             )}
+                          >
+                             {useVariants ? 'Activo' : 'Activar'}
+                          </Button>
+                       </div>
+                    )}
+
+                    {/* EDITOR DE VARIANTES */}
+                    {useVariants && sendMode === 'SCHEDULE' && !sending && (
+                       <VariantTabs variants={variants} onChange={setVariants} disabled={sending} />
+                    )}
+
+                    {/* ZONA DE MULTIMEDIA (single mode) */}
+                    {(!useVariants || sendMode === 'NOW') && (
+                    <>
                     {/* ZONA DE MULTIMEDIA */}
                     <div className="space-y-2">
                        <Label className="text-[10px] uppercase font-bold text-slate-500 flex items-center justify-between">
@@ -450,8 +494,11 @@ export const MassMessageDialog = ({ open, onOpenChange, targetContacts, onSchedu
                        </div>
                     </div>
 
+                    </>
+                    )}
+
                     {/* VISTA PREVIA EN TIEMPO REAL */}
-                    {message.trim() && (
+                    {message.trim() && !useVariants && (
                        <div className="mt-8 pt-6 border-t border-[#1a1a1a] animate-in fade-in duration-300">
                           <Label className="text-[10px] uppercase font-bold text-indigo-400 flex items-center gap-2 mb-4">
                              <Eye className="w-3.5 h-3.5" /> Vista Previa (Simulando entrega a {previewContact.nombre?.split(' ')[0] || 'Cliente'})
