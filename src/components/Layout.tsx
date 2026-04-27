@@ -2,8 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { 
-  LayoutDashboard, Brain, Settings as SettingsIcon, LogOut, 
-  Users, UserCircle, Contact, Tag, Image, Globe, BarChart3, Zap, Trello, Menu, Activity, Search, MessageCircle, Command, GraduationCap
+  LayoutDashboard, Brain, Settings as SettingsIcon, LogOut,
+  Users, UserCircle, Contact, Tag, Image, Globe, BarChart3, Zap, Trello, Menu, Activity, Search, MessageCircle, Command, GraduationCap, Wifi
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/context/AuthContext';
@@ -92,6 +92,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
         { icon: Contact, label: 'Contactos', path: '/contacts', roles: ['any'] },
         { icon: Tag, label: 'Mis Plantillas', path: '/tools', roles: ['any'] },
         { icon: GraduationCap, label: 'Academia', path: '/academic', roles: ['admin', 'dev', 'gerente'] },
+        { icon: Wifi, label: 'Canales y Grupos', path: '/channels', roles: ['admin', 'dev', 'gerente'] },
         { icon: Globe, label: 'Archivo de Chats', path: '/archive', roles: ['admin', 'dev', 'gerente'] },
       ]
     },

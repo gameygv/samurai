@@ -28,6 +28,7 @@ import WebhookDiag from "./pages/WebhookDiag";
 import AgentTools from "./pages/AgentTools";
 import AcademicCatalog from "./pages/AcademicCatalog";
 import MetaVerify from "./pages/MetaVerify";
+import ChannelsCatalog from "./pages/ChannelsCatalog";
 import { Loader2 } from "lucide-react";
 
 const queryClient = new QueryClient();
@@ -87,6 +88,7 @@ const App = () => (
             <Route path="/archive" element={<PrivateRoute><Archive /></PrivateRoute>} />
 
             <Route path="/academic" element={<PrivateRoute><ManagerRoute><AcademicCatalog /></ManagerRoute></PrivateRoute>} />
+            <Route path="/channels" element={<PrivateRoute><ManagerRoute><ChannelsCatalog /></ManagerRoute></PrivateRoute>} />
             
             <Route path="/activity" element={<PrivateRoute><AdminRoute><Activity /></AdminRoute></PrivateRoute>} />
             <Route path="/brain" element={<PrivateRoute><AdminRoute><AgentBrain /></AdminRoute></PrivateRoute>} />
