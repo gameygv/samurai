@@ -336,6 +336,66 @@
   background-color: rgba(233,213,255,0.2) !important;
 }
 
+/* --- Pipeline column headers (dark-950 tinted bg) --- */
+:root:not(.dark) .bg-indigo-950\/20 {
+  background-color: rgba(224,231,255,0.3) !important;
+}
+:root:not(.dark) .bg-amber-950\/20 {
+  background-color: rgba(254,243,199,0.3) !important;
+}
+:root:not(.dark) .bg-emerald-950\/20 {
+  background-color: rgba(209,250,229,0.3) !important;
+}
+:root:not(.dark) .bg-red-950\/20 {
+  background-color: rgba(254,226,226,0.3) !important;
+}
+:root:not(.dark) .bg-purple-950\/20 {
+  background-color: rgba(233,213,255,0.3) !important;
+}
+:root:not(.dark) .bg-indigo-950\/40 {
+  background-color: rgba(224,231,255,0.4) !important;
+}
+
+/* Pipeline column borders */
+:root:not(.dark) .border-indigo-900\/30 {
+  border-color: rgba(199,210,254,0.5) !important;
+}
+:root:not(.dark) .border-amber-900\/30 {
+  border-color: rgba(253,230,138,0.5) !important;
+}
+:root:not(.dark) .border-emerald-900\/30 {
+  border-color: rgba(167,243,208,0.5) !important;
+}
+:root:not(.dark) .border-red-900\/30 {
+  border-color: rgba(254,202,202,0.5) !important;
+}
+:root:not(.dark) .border-indigo-500\/30 {
+  border-color: rgba(99,102,241,0.3) !important;
+}
+:root:not(.dark) .border-amber-500\/30 {
+  border-color: rgba(245,158,11,0.3) !important;
+}
+:root:not(.dark) .border-emerald-500\/30 {
+  border-color: rgba(16,185,129,0.3) !important;
+}
+:root:not(.dark) .border-red-500\/30 {
+  border-color: rgba(239,68,68,0.3) !important;
+}
+:root:not(.dark) .border-indigo-500\/20 {
+  border-color: rgba(99,102,241,0.2) !important;
+}
+:root:not(.dark) .border-red-900\/50 {
+  border-color: rgba(254,202,202,0.4) !important;
+}
+:root:not(.dark) .border-amber-900\/50 {
+  border-color: rgba(253,230,138,0.4) !important;
+}
+
+/* Pipeline card lead name */
+:root:not(.dark) .group-hover\:text-indigo-300:hover {
+  color: #4f46e5 !important;
+}
+
 /* --- Glow shadows invisible in light mode --- */
 :root:not(.dark) [class*="shadow-\[0_0_"] {
   box-shadow: none !important;
