@@ -52,6 +52,9 @@ NO_VERIFY_JWT=(
   # Sync de canales/grupos (E13 — cron + manual desde UI)
   "sync-channel-groups"
 
+  # Filtros segmentados (E16)
+  "evaluate-segment"
+
   # Frontend read-only / diagnóstico
   "get-capi-diagnostic"
   "get-ai-suggestions"

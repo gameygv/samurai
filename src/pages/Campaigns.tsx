@@ -21,6 +21,7 @@ import { cn } from '@/lib/utils';
 import { useAuth } from '@/context/AuthContext';
 import { extractTagText, parseTagsSafe } from '@/lib/tag-parser';
 import { GroupCampaignSection } from '@/components/academic/GroupCampaignSection';
+import { FilterBuilder } from '@/components/filters/FilterBuilder';
 
 /** Inner content without Layout wrapper — used by AcademicCatalog */
 export const CampaignsContent = () => {
@@ -299,6 +300,8 @@ export const CampaignsContent = () => {
             </Button>
           )}
         </div>
+
+        <FilterBuilder />
 
         <Card className="bg-[#0f0f11] border-[#222225] shadow-2xl rounded-2xl overflow-hidden min-h-[400px]">
           <CardContent className="p-0">
