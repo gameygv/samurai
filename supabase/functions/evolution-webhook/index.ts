@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0'
 import { corsHeaders } from '../_shared/cors.ts'
+import { invokeFunction } from '../_shared/invoke.ts'
 
 serve(async (req: Request): Promise<Response> => {
   const url = new URL(req.url);
@@ -392,22 +393,10 @@ serve(async (req: Request): Promise<Response> => {
         // para que queden legibles en el historial. skip_ai=true evita que la IA responda
         // al cliente como si la nota del vendedor fuese del cliente.
         if ((audioMediaId || audioMediaUrl) && messageId && actualChannelId) {
-            supabase.functions.invoke('transcribe-audio', {
-                body: { media_id: audioMediaId || null, media_url: audioMediaUrl || null, lead_id: lead.id, message_id: messageId, channel_id: actualChannelId, sender_phone: senderPhone, skip_ai: true }
-            }).then((res) => {
-                if (res.error) {
-                    supabase.from('activity_logs').insert({
-                        action: 'ERROR', resource: 'BRAIN',
-                        description: `🎙️ transcribe-audio (outbound) invoke failed: ${res.error?.message || JSON.stringify(res.error).substring(0, 150)}`,
-                        status: 'ERROR'
-                    }).catch(() => {});
-                }
-            }).catch((err) => {
-                supabase.from('activity_logs').insert({
-                    action: 'ERROR', resource: 'BRAIN',
-                    description: `🎙️ transcribe-audio (outbound) invoke crash: ${err?.message || String(err).substring(0, 150)}`,
-                    status: 'ERROR'
-                }).catch(() => {});
+            invokeFunction({
+                functionName: 'transcribe-audio',
+                body: { media_id: audioMediaId || null, media_url: audioMediaUrl || null, lead_id: lead.id, message_id: messageId, channel_id: actualChannelId, sender_phone: senderPhone, skip_ai: true },
+                supabase, errorContext: `outbound audio ${lead.nombre}`,
             });
         }
 
@@ -415,9 +404,11 @@ serve(async (req: Request): Promise<Response> => {
         // (su respuesta cambia el contexto de la conversación y puede mover de etapa)
         const skipAnalysisOutbound = !text || text.length < 3 || text === '[Sticker]';
         if (!skipAnalysisOutbound) {
-            supabase.functions.invoke('analyze-leads', {
-                body: { lead_id: lead.id, triggered_by: 'agent_message' }
-            }).catch(() => {});
+            invokeFunction({
+                functionName: 'analyze-leads',
+                body: { lead_id: lead.id, triggered_by: 'agent_message' },
+                supabase, errorContext: `outbound ${lead.nombre}`,
+            });
         }
 
         return new Response('ok', { status: 200, headers: corsHeaders });
@@ -463,9 +454,11 @@ serve(async (req: Request): Promise<Response> => {
     // Bug-fix 2026-04-10: antes sólo se analizaba si el caption contenía palabras clave
     // o el lead ya estaba en ALTO, lo que dejaba fuera los comprobantes sin caption.
     if (imageMediaId || imageMediaUrl) {
-        supabase.functions.invoke('analyze-receipt', {
-            body: { image_id: imageMediaId || null, media_url: imageMediaUrl || null, lead_id: lead.id, channel_id: actualChannelId, caption: text }
-        }).catch(err => console.error('analyze-receipt fire error:', err));
+        invokeFunction({
+            functionName: 'analyze-receipt',
+            body: { image_id: imageMediaId || null, media_url: imageMediaUrl || null, lead_id: lead.id, channel_id: actualChannelId, caption: text },
+            supabase, errorContext: `image ${lead.nombre}`,
+        });
     }
 
     // Determine AI mode: per-channel > per-lead > global
@@ -481,29 +474,23 @@ serve(async (req: Request): Promise<Response> => {
 
     // ALWAYS run analyze-leads in 'on' and 'monitor' modes (extracts data + sends CAPI)
     // Skip analysis for empty/placeholder messages (no value for OpenAI tokens)
+    // 2026-04-23: Migrated to invokeFunction helper — supabase.functions.invoke caused
+    // 24h+ silent failure of CAPI pipeline (zero events sent to Meta).
     const skipAnalysis = !text || text === '[Mensaje]' || text === '[Sticker]';
     if (!skipAnalysis) {
-        supabase.functions.invoke('analyze-leads', { body: { lead_id: lead.id } }).catch(() => {});
+        invokeFunction({
+            functionName: 'analyze-leads',
+            body: { lead_id: lead.id },
+            supabase, errorContext: `inbound ${lead.nombre}`,
+        });
     }
 
     // ALWAYS transcribe audio in 'on' and 'monitor' modes (so conversations are readable)
     if (audioMediaId || audioMediaUrl) {
-        supabase.functions.invoke('transcribe-audio', {
-            body: { media_id: audioMediaId || null, media_url: audioMediaUrl || null, lead_id: lead.id, message_id: messageId, channel_id: actualChannelId, sender_phone: senderPhone }
-        }).then((res) => {
-            if (res.error) {
-                supabase.from('activity_logs').insert({
-                    action: 'ERROR', resource: 'BRAIN',
-                    description: `🎙️ transcribe-audio invoke failed: ${res.error?.message || JSON.stringify(res.error).substring(0, 150)}`,
-                    status: 'ERROR'
-                }).catch(() => {});
-            }
-        }).catch((err) => {
-            supabase.from('activity_logs').insert({
-                action: 'ERROR', resource: 'BRAIN',
-                description: `🎙️ transcribe-audio invoke crash: ${err?.message || String(err).substring(0, 150)}`,
-                status: 'ERROR'
-            }).catch(() => {});
+        invokeFunction({
+            functionName: 'transcribe-audio',
+            body: { media_id: audioMediaId || null, media_url: audioMediaUrl || null, lead_id: lead.id, message_id: messageId, channel_id: actualChannelId, sender_phone: senderPhone },
+            supabase, errorContext: `inbound audio ${lead.nombre}`,
         });
     }
 

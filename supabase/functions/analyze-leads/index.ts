@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0'
 import { corsHeaders } from '../_shared/cors.ts'
 import { lookupGeo, inferGender } from '../_shared/mexico-geo.ts'
+import { invokeFunction } from '../_shared/invoke.ts'
 
 serve(async (req: Request): Promise<Response> => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
@@ -294,34 +295,35 @@ Responde UNICAMENTE con este JSON exacto (sin acentos en las claves):
         // Mejora: AddToCart intermedio — si sube a ALTO y el lead_score >= 50,
         // enviar AddToCart ANTES de InitiateCheckout para dar más señal a Meta
         if (capiEventName === 'InitiateCheckout' && (updates.lead_score || lead.lead_score || 0) >= 50) {
-          try {
-            await supabase.functions.invoke('meta-capi-sender', {
-              body: {
-                config: { pixel_id: metaPixelId, access_token: metaAccessToken, test_event_code: configMap.meta_test_event_code || undefined },
-                eventData: {
-                  event_name: 'AddToCart',
-                  event_id: `samurai_${lead.id}_AddToCart`,
-                  lead_id: lead.id,
-                  user_data: {
-                    ph: lead.telefono, fn: (updates.nombre || lead.nombre)?.split(' ')[0],
-                    ln: (updates.nombre || lead.nombre)?.split(' ').slice(1).join(' ') || undefined,
-                    em: updates.email || lead.email || undefined,
-                    ct: updates.ciudad || lead.ciudad || undefined,
-                    st: updates.estado || lead.estado || undefined,
-                    zp: updates.cp || lead.cp || undefined,
-                    ge: finalGender || undefined,
-                    db: (updates.fecha_nacimiento || lead.fecha_nacimiento) ? String(updates.fecha_nacimiento || lead.fecha_nacimiento).replace(/-/g, '') : undefined,
-                    country: 'mx', external_id: lead.id,
-                    fbc: lead.fbc || undefined, ctwa_clid: lead.ctwa_clid || undefined
-                  },
-                  custom_data: {
-                    source: 'samurai_auto', content_name: updates.servicio_interes || lead.servicio_interes || undefined,
-                    content_category: 'talleres_cuencoterapia', funnel_stage: 'ALTO', origin_channel: 'whatsapp'
-                  }
+          const addToCartResult = await invokeFunction({
+            functionName: 'meta-capi-sender', await: true, supabase,
+            errorContext: `AddToCart ${lead.nombre}`,
+            body: {
+              config: { pixel_id: metaPixelId, access_token: metaAccessToken, test_event_code: configMap.meta_test_event_code || undefined },
+              eventData: {
+                event_name: 'AddToCart',
+                event_id: `samurai_${lead.id}_AddToCart`,
+                lead_id: lead.id,
+                user_data: {
+                  ph: lead.telefono, fn: (updates.nombre || lead.nombre)?.split(' ')[0],
+                  ln: (updates.nombre || lead.nombre)?.split(' ').slice(1).join(' ') || undefined,
+                  em: updates.email || lead.email || undefined,
+                  ct: updates.ciudad || lead.ciudad || undefined,
+                  st: updates.estado || lead.estado || undefined,
+                  zp: updates.cp || lead.cp || undefined,
+                  ge: finalGender || undefined,
+                  db: (updates.fecha_nacimiento || lead.fecha_nacimiento) ? String(updates.fecha_nacimiento || lead.fecha_nacimiento).replace(/-/g, '') : undefined,
+                  country: 'mx', external_id: lead.id,
+                  fbc: lead.fbc || undefined, ctwa_clid: lead.ctwa_clid || undefined
+                },
+                custom_data: {
+                  source: 'samurai_auto', content_name: updates.servicio_interes || lead.servicio_interes || undefined,
+                  content_category: 'talleres_cuencoterapia', funnel_stage: 'ALTO', origin_channel: 'whatsapp'
                 }
               }
-            });
-          } catch (_) {}
+            },
+          });
+          if (addToCartResult && !addToCartResult.ok) console.error('AddToCart CAPI failed');
         }
 
         // Monto del Purchase: tomar del receipt válido más reciente si existe
@@ -330,61 +332,61 @@ Responde UNICAMENTE con este JSON exacto (sin acentos en las claves):
           purchaseAmount = Number(validReceipts[0].amount_detected) || undefined;
         }
 
-        try {
-          await supabase.functions.invoke('meta-capi-sender', {
-            body: {
-              config: {
-                pixel_id: metaPixelId,
-                access_token: metaAccessToken,
-                test_event_code: configMap.meta_test_event_code || undefined
+        const capiResult = await invokeFunction({
+          functionName: 'meta-capi-sender', await: true, supabase,
+          errorContext: `${capiEventName} ${lead.nombre}`,
+          body: {
+            config: {
+              pixel_id: metaPixelId,
+              access_token: metaAccessToken,
+              test_event_code: configMap.meta_test_event_code || undefined
+            },
+            eventData: {
+              event_name: capiEventName,
+              event_id: `samurai_${lead.id}_${capiEventName}`,
+              lead_id: lead.id,
+              user_data: {
+                ph: lead.telefono,
+                fn: (updates.nombre || lead.nombre)?.split(' ')[0],
+                ln: (updates.nombre || lead.nombre)?.split(' ').slice(1).join(' ') || undefined,
+                em: updates.email || lead.email || undefined,
+                ct: updates.ciudad || lead.ciudad || undefined,
+                st: updates.estado || lead.estado || undefined,
+                zp: updates.cp || lead.cp || undefined,
+                ge: finalGender || undefined,
+                db: (updates.fecha_nacimiento || lead.fecha_nacimiento) ? String(updates.fecha_nacimiento || lead.fecha_nacimiento).replace(/-/g, '') : undefined,
+                country: 'mx',
+                external_id: lead.id,
+                fbc: lead.fbc || undefined,
+                fbp: lead.fbp || undefined,
+                ctwa_clid: lead.ctwa_clid || undefined
               },
-              eventData: {
-                event_name: capiEventName,
-                event_id: `samurai_${lead.id}_${capiEventName}`,
-                lead_id: lead.id,
-                user_data: {
-                  ph: lead.telefono,
-                  fn: (updates.nombre || lead.nombre)?.split(' ')[0],
-                  ln: (updates.nombre || lead.nombre)?.split(' ').slice(1).join(' ') || undefined,
-                  em: updates.email || lead.email || undefined,
-                  ct: updates.ciudad || lead.ciudad || undefined,
-                  st: updates.estado || lead.estado || undefined,
-                  zp: updates.cp || lead.cp || undefined,
-                  ge: finalGender || undefined,
-                  db: (updates.fecha_nacimiento || lead.fecha_nacimiento) ? String(updates.fecha_nacimiento || lead.fecha_nacimiento).replace(/-/g, '') : undefined,
-                  country: 'mx',
-                  external_id: lead.id,
-                  fbc: lead.fbc || undefined,
-                  fbp: lead.fbp || undefined,
-                  ctwa_clid: lead.ctwa_clid || undefined
-                },
-                custom_data: {
-                  source: 'samurai_auto',
-                  content_name: updates.servicio_interes || lead.servicio_interes || undefined,
-                  content_ids: (updates.servicio_interes || lead.servicio_interes) ? [String(updates.servicio_interes || lead.servicio_interes).toLowerCase().replace(/\s+/g, '_')] : undefined,
-                  content_category: 'talleres_cuencoterapia',
-                  funnel_stage: updates.buying_intent,
-                  lead_score: updates.lead_score || lead.lead_score || undefined,
-                  agent_id: lead.assigned_to || undefined,
-                  origin_channel: 'whatsapp',
-                  psychographic_segment: lead.perfil_psicologico || undefined,
-                  main_pain: lead.main_pain || undefined,
-                  currency: capiEventName === 'Purchase' ? 'MXN' : undefined,
-                  value: purchaseAmount,
-                  ad_source_id: lead.ad_source_id || undefined,
-                  ad_headline: lead.ad_headline || undefined
-                }
+              custom_data: {
+                source: 'samurai_auto',
+                content_name: updates.servicio_interes || lead.servicio_interes || undefined,
+                content_ids: (updates.servicio_interes || lead.servicio_interes) ? [String(updates.servicio_interes || lead.servicio_interes).toLowerCase().replace(/\s+/g, '_')] : undefined,
+                content_category: 'talleres_cuencoterapia',
+                funnel_stage: updates.buying_intent,
+                lead_score: updates.lead_score || lead.lead_score || undefined,
+                agent_id: lead.assigned_to || undefined,
+                origin_channel: 'whatsapp',
+                psychographic_segment: lead.perfil_psicologico || undefined,
+                main_pain: lead.main_pain || undefined,
+                currency: capiEventName === 'Purchase' ? 'MXN' : undefined,
+                value: purchaseAmount,
+                ad_source_id: lead.ad_source_id || undefined,
+                ad_headline: lead.ad_headline || undefined
               }
             }
-          });
+          },
+        });
 
+        if (capiResult?.ok) {
           await supabase.from('activity_logs').insert({
             action: 'CAPI', resource: 'SYSTEM',
             description: `📡 CAPI ${capiEventName}: ${lead.nombre} (${lead.buying_intent}→${updates.buying_intent})${purchaseAmount ? ` $${purchaseAmount}` : ''}`,
             status: 'OK'
           });
-        } catch (capiErr) {
-          console.error('CAPI auto error:', capiErr);
         }
       }
 
@@ -393,44 +395,46 @@ Responde UNICAMENTE con este JSON exacto (sin acentos en las claves):
       // Solo dispara si: (a) hubo enriquecimiento, (b) intent NO subió (ya se envió arriba),
       // (c) ya se envió al menos un evento Lead antes, (d) CAPI habilitado.
       if (dataEnriched && !(newIntentLevel > oldIntentLevel) && lead.capi_lead_event_sent_at && metaPixelId && metaAccessToken && capiEnabled) {
-        try {
-          const enrichTimestamp = Math.floor(Date.now() / 1000);
-          const currentEvent = ({ 'BAJO': 'Lead', 'MEDIO': 'ViewContent', 'ALTO': 'InitiateCheckout', 'COMPRADO': 'Purchase' } as Record<string, string>)[updates.buying_intent] || 'Lead';
-          await supabase.functions.invoke('meta-capi-sender', {
-            body: {
-              config: { pixel_id: metaPixelId, access_token: metaAccessToken, test_event_code: configMap.meta_test_event_code || undefined },
-              eventData: {
-                event_name: currentEvent,
-                event_id: `samurai_${lead.id}_enrich_${enrichTimestamp}`,
-                lead_id: lead.id,
-                user_data: {
-                  ph: lead.telefono,
-                  fn: (updates.nombre || lead.nombre)?.split(' ')[0],
-                  ln: (updates.nombre || lead.nombre)?.split(' ').slice(1).join(' ') || undefined,
-                  em: updates.email || lead.email || undefined,
-                  ct: updates.ciudad || lead.ciudad || undefined,
-                  st: updates.estado || lead.estado || undefined,
-                  zp: updates.cp || lead.cp || undefined,
-                  ge: finalGender || undefined,
-                  db: (updates.fecha_nacimiento || lead.fecha_nacimiento) ? String(updates.fecha_nacimiento || lead.fecha_nacimiento).replace(/-/g, '') : undefined,
-                  country: 'mx',
-                  external_id: lead.id,
-                  fbc: lead.fbc || undefined,
-                  fbp: lead.fbp || undefined,
-                  ctwa_clid: lead.ctwa_clid || undefined
-                },
-                custom_data: {
-                  source: 'samurai_enrich',
-                  content_name: updates.servicio_interes || lead.servicio_interes || undefined,
-                  content_category: 'talleres_cuencoterapia',
-                  funnel_stage: updates.buying_intent,
-                  lead_score: updates.lead_score || lead.lead_score || undefined,
-                  origin_channel: 'whatsapp',
-                  currency: currentEvent === 'Purchase' ? 'MXN' : undefined,
-                }
+        const enrichTimestamp = Math.floor(Date.now() / 1000);
+        const currentEvent = ({ 'BAJO': 'Lead', 'MEDIO': 'ViewContent', 'ALTO': 'InitiateCheckout', 'COMPRADO': 'Purchase' } as Record<string, string>)[updates.buying_intent] || 'Lead';
+        const enrichResult = await invokeFunction({
+          functionName: 'meta-capi-sender', await: true, supabase,
+          errorContext: `Enrich ${currentEvent} ${lead.nombre}`,
+          body: {
+            config: { pixel_id: metaPixelId, access_token: metaAccessToken, test_event_code: configMap.meta_test_event_code || undefined },
+            eventData: {
+              event_name: currentEvent,
+              event_id: `samurai_${lead.id}_enrich_${enrichTimestamp}`,
+              lead_id: lead.id,
+              user_data: {
+                ph: lead.telefono,
+                fn: (updates.nombre || lead.nombre)?.split(' ')[0],
+                ln: (updates.nombre || lead.nombre)?.split(' ').slice(1).join(' ') || undefined,
+                em: updates.email || lead.email || undefined,
+                ct: updates.ciudad || lead.ciudad || undefined,
+                st: updates.estado || lead.estado || undefined,
+                zp: updates.cp || lead.cp || undefined,
+                ge: finalGender || undefined,
+                db: (updates.fecha_nacimiento || lead.fecha_nacimiento) ? String(updates.fecha_nacimiento || lead.fecha_nacimiento).replace(/-/g, '') : undefined,
+                country: 'mx',
+                external_id: lead.id,
+                fbc: lead.fbc || undefined,
+                fbp: lead.fbp || undefined,
+                ctwa_clid: lead.ctwa_clid || undefined
+              },
+              custom_data: {
+                source: 'samurai_enrich',
+                content_name: updates.servicio_interes || lead.servicio_interes || undefined,
+                content_category: 'talleres_cuencoterapia',
+                funnel_stage: updates.buying_intent,
+                lead_score: updates.lead_score || lead.lead_score || undefined,
+                origin_channel: 'whatsapp',
+                currency: currentEvent === 'Purchase' ? 'MXN' : undefined,
               }
             }
-          });
+          },
+        });
+        if (enrichResult?.ok) {
           const enrichedFields = [
             updates.ciudad && !lead.ciudad ? 'ciudad' : null,
             updates.cp && !lead.cp ? 'cp' : null,
@@ -442,52 +446,52 @@ Responde UNICAMENTE con este JSON exacto (sin acentos en las claves):
             description: `🔄 CAPI Enrich ${currentEvent}: ${lead.nombre} — nuevos campos: ${enrichedFields}`,
             status: 'OK'
           });
-        } catch (enrichErr) {
-          console.error('CAPI enrich error:', enrichErr);
         }
       }
 
       // Enviar evento Lead para leads NUEVOS (primera vez que se analiza, intent = BAJO)
       if (oldIntentLevel === 0 && newIntentLevel === 0 && !lead.capi_lead_event_sent_at && metaPixelId && metaAccessToken && capiEnabled) {
-        try {
-          await supabase.functions.invoke('meta-capi-sender', {
-            body: {
-              config: { pixel_id: metaPixelId, access_token: metaAccessToken, test_event_code: configMap.meta_test_event_code || undefined },
-              eventData: {
-                event_name: 'Lead',
-                event_id: `samurai_${lead.id}_Lead`,
-                lead_id: lead.id,
-                user_data: {
-                  ph: lead.telefono,
-                  fn: (updates.nombre || lead.nombre)?.split(' ')[0],
-                  ln: (updates.nombre || lead.nombre)?.split(' ').slice(1).join(' ') || undefined,
-                  em: updates.email || lead.email || undefined,
-                  ct: updates.ciudad || lead.ciudad || undefined,
-                  st: updates.estado || lead.estado || undefined,
-                  zp: updates.cp || lead.cp || undefined,
-                  ge: finalGender || undefined,
-                  db: (updates.fecha_nacimiento || lead.fecha_nacimiento) ? String(updates.fecha_nacimiento || lead.fecha_nacimiento).replace(/-/g, '') : undefined,
-                  country: 'mx',
-                  external_id: lead.id,
-                  fbc: lead.fbc || undefined,
-                  fbp: lead.fbp || undefined,
-                  ctwa_clid: lead.ctwa_clid || undefined
-                },
-                custom_data: {
-                  source: 'samurai_auto',
-                  content_name: updates.servicio_interes || lead.servicio_interes || 'new_lead',
-                  content_category: 'talleres_cuencoterapia',
-                  funnel_stage: 'BAJO',
-                  origin_channel: 'whatsapp',
-                  agent_id: lead.assigned_to || undefined,
-                  ad_source_id: lead.ad_source_id || undefined,
-                  ad_headline: lead.ad_headline || undefined
-                }
+        const leadResult = await invokeFunction({
+          functionName: 'meta-capi-sender', await: true, supabase,
+          errorContext: `Lead ${lead.nombre}`,
+          body: {
+            config: { pixel_id: metaPixelId, access_token: metaAccessToken, test_event_code: configMap.meta_test_event_code || undefined },
+            eventData: {
+              event_name: 'Lead',
+              event_id: `samurai_${lead.id}_Lead`,
+              lead_id: lead.id,
+              user_data: {
+                ph: lead.telefono,
+                fn: (updates.nombre || lead.nombre)?.split(' ')[0],
+                ln: (updates.nombre || lead.nombre)?.split(' ').slice(1).join(' ') || undefined,
+                em: updates.email || lead.email || undefined,
+                ct: updates.ciudad || lead.ciudad || undefined,
+                st: updates.estado || lead.estado || undefined,
+                zp: updates.cp || lead.cp || undefined,
+                ge: finalGender || undefined,
+                db: (updates.fecha_nacimiento || lead.fecha_nacimiento) ? String(updates.fecha_nacimiento || lead.fecha_nacimiento).replace(/-/g, '') : undefined,
+                country: 'mx',
+                external_id: lead.id,
+                fbc: lead.fbc || undefined,
+                fbp: lead.fbp || undefined,
+                ctwa_clid: lead.ctwa_clid || undefined
+              },
+              custom_data: {
+                source: 'samurai_auto',
+                content_name: updates.servicio_interes || lead.servicio_interes || 'new_lead',
+                content_category: 'talleres_cuencoterapia',
+                funnel_stage: 'BAJO',
+                origin_channel: 'whatsapp',
+                agent_id: lead.assigned_to || undefined,
+                ad_source_id: lead.ad_source_id || undefined,
+                ad_headline: lead.ad_headline || undefined
               }
             }
-          });
+          },
+        });
+        if (leadResult?.ok) {
           await supabase.from('leads').update({ capi_lead_event_sent_at: new Date().toISOString() }).eq('id', lead.id);
-        } catch (_) {}
+        }
       }
 
       // S5.2: Routing — assign agent to lead if not yet assigned

@@ -9,6 +9,7 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0'
 import { corsHeaders } from '../_shared/cors.ts'
 import { lookupGeo, inferGender } from '../_shared/mexico-geo.ts'
+import { invokeFunction } from '../_shared/invoke.ts'
 
 serve(async (req: Request): Promise<Response> => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
@@ -191,7 +192,8 @@ async function sendCapiEnrich(supabase: any, lead: any, updates: any, pixelId: s
   const gender = lead.genero || inferGender(lead.nombre);
 
   try {
-    await supabase.functions.invoke('meta-capi-sender', {
+    await invokeFunction({
+      functionName: 'meta-capi-sender',
       body: {
         config: {
           pixel_id: pixelId,
@@ -227,7 +229,9 @@ async function sendCapiEnrich(supabase: any, lead: any, updates: any, pixelId: s
             value: eventName === 'Purchase' ? 0 : undefined
           }
         }
-      }
+      },
+      supabase,
+      errorContext: `CAPI backfill lead=${lead.id}`,
     });
   } catch (err) {
     console.error(`CAPI backfill error for ${lead.id}:`, err);

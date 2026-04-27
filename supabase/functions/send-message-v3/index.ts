@@ -84,10 +84,11 @@ serve(async (req: Request): Promise<Response> => {
       if (mediaData?.url) {
         delete headers['Content-Type'];
         // Comprimir imágenes de Supabase Storage via transform API para evitar 413 nginx
+        // width=1200 + quality=85 → buena nitidez en pósters verticales (~200-400KB)
         let downloadUrl = mediaData.url;
         if (mediaData.type === 'image' && downloadUrl.includes('/storage/v1/object/public/')) {
             downloadUrl = downloadUrl.replace('/storage/v1/object/public/', '/storage/v1/render/image/public/');
-            downloadUrl += (downloadUrl.includes('?') ? '&' : '?') + 'width=800&quality=75';
+            downloadUrl += (downloadUrl.includes('?') ? '&' : '?') + 'width=1200&quality=85';
         }
         const fileRes = await fetch(downloadUrl);
         const fileBlob = await fileRes.blob();
@@ -95,7 +96,11 @@ serve(async (req: Request): Promise<Response> => {
         formData.append('phone', cleanPhone);
         if (message) formData.append('caption', message);
         let suffix = 'file';
-        if (mediaData.type === 'image') { suffix = 'image'; formData.append('image', fileBlob, 'img.jpg'); }
+        // Detectar extensión original para preservar formato (PNG = mejor para texto/pósters)
+        const urlPath = (mediaData.url || '').split('?')[0].toLowerCase();
+        const isPng = urlPath.endsWith('.png');
+        const fileName = isPng ? 'img.png' : 'img.jpg';
+        if (mediaData.type === 'image') { suffix = 'image'; formData.append('image', fileBlob, fileName); }
         else if (mediaData.type === 'video') { suffix = 'file'; formData.append('file', fileBlob, mediaData.name || 'video.mp4'); }
         else if (mediaData.type === 'audio') { suffix = 'file'; formData.append('file', fileBlob, mediaData.name || 'audio.ogg'); }
         else { suffix = 'file'; formData.append('file', fileBlob, mediaData.name || 'document.pdf'); }

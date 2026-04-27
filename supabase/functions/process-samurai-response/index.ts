@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0'
 import { corsHeaders } from '../_shared/cors.ts'
+import { invokeFunction } from '../_shared/invoke.ts'
 
 serve(async (req: Request): Promise<Response> => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
@@ -161,24 +162,13 @@ serve(async (req: Request): Promise<Response> => {
 
     // Obtener constitución del Kernel (protegido para no matar el flujo)
     let systemPrompt = "Eres Sam, asistente de ventas amigable y profesional.";
-    try {
-        const { data: kernel, error: kernelErr } = await supabase.functions.invoke('get-samurai-context', { body: { lead } });
-        if (kernelErr) {
-            await supabase.from('activity_logs').insert({
-                action: 'ERROR', resource: 'BRAIN',
-                description: `Fallo al obtener contexto del Kernel: ${kernelErr.message}`,
-                status: 'ERROR'
-            });
-        } else if (kernel?.system_prompt) {
-            systemPrompt = kernel.system_prompt;
-        }
-    } catch (ctxErr: unknown) {
-        const ctxErrMsg = ctxErr instanceof Error ? ctxErr.message : String(ctxErr);
-        await supabase.from('activity_logs').insert({
-            action: 'ERROR', resource: 'BRAIN',
-            description: `CRASH get-samurai-context: ${ctxErrMsg}`,
-            status: 'ERROR'
-        });
+    const kernelResult = await invokeFunction({
+        functionName: 'get-samurai-context', await: true, supabase,
+        errorContext: `kernel ${lead.nombre || lead.id}`,
+        body: { lead },
+    });
+    if (kernelResult?.ok && kernelResult.data?.system_prompt) {
+        systemPrompt = kernelResult.data.system_prompt;
     }
 
     // Formatear historial con timestamps para que la IA tenga contexto temporal

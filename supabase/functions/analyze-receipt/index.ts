@@ -2,6 +2,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0'
 import { corsHeaders } from '../_shared/cors.ts'
+import { invokeFunction } from '../_shared/invoke.ts'
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
@@ -206,9 +207,7 @@ serve(async (req) => {
       const { data: agent } = await supabase.from('profiles').select('phone, full_name').eq('id', lead.assigned_to).single();
       if (agent?.phone) {
         const msg = `🔍 Comprobante recibido de ${lead?.nombre || 'lead'}:\n\n${analysis.substring(0, 300)}\n\n${aiNote}`;
-        await supabase.functions.invoke('send-message-v3', {
-          body: { phone: agent.phone, message: msg }
-        });
+        await invokeFunction({ functionName: 'send-message-v3', body: { phone: agent.phone, message: msg }, supabase, errorContext: `notify agent receipt lead=${lead_id}` });
       }
     }
 
@@ -245,7 +244,7 @@ serve(async (req) => {
              status: 'OK'
           });
 
-          supabase.functions.invoke('process-capi-purchase', { body: {} }).catch((e) => console.error('CAPI drain error:', e));
+          invokeFunction({ functionName: 'process-capi-purchase', body: {}, supabase, errorContext: `auto-COMPRADO CAPI drain lead=${lead_id}` });
           autoMoved = true;
        }
     }

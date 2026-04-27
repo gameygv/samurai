@@ -2,6 +2,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0'
 import { corsHeaders } from '../_shared/cors.ts'
+import { invokeFunction } from '../_shared/invoke.ts'
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
@@ -52,9 +53,7 @@ serve(async (req) => {
             // Enviar al cliente por el canal del lead
             const { data: leadFull } = await supabase.from('leads').select('telefono').eq('id', lead.id).single();
             if (leadFull?.telefono) {
-              await supabase.functions.invoke('send-message-v3', {
-                body: { lead_id: lead.id, phone: leadFull.telefono, message: rem.title }
-              });
+              await invokeFunction({ functionName: 'send-message-v3', body: { lead_id: lead.id, phone: leadFull.telefono, message: rem.title }, supabase, errorContext: `reminder client lead=${lead.id}` });
               // Registrar en conversaciones como mensaje del sistema
               await supabase.from('conversaciones').insert({
                 lead_id: lead.id, emisor: 'SISTEMA', mensaje: rem.title, platform: 'CAMPAÑA_AUTO'
@@ -87,9 +86,7 @@ serve(async (req) => {
             }
 
             const msg = `📋 Recordatorio: ${rem.title}\n👤 Lead: ${lead.nombre}\n⏰ Programado: ${rem.datetime}`;
-            await supabase.functions.invoke('send-message-v3', {
-              body: { phone: agent.phone, message: msg }
-            });
+            await invokeFunction({ functionName: 'send-message-v3', body: { phone: agent.phone, message: msg }, supabase, errorContext: `reminder agent lead=${lead.nombre}` });
             sent++;
           }
         } catch (sendErr) {
