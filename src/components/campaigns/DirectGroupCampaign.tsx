@@ -7,7 +7,8 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import {
   Loader2, Users, Wifi, Send, Search, Check, AlertCircle,
-  CheckCircle2, XCircle, Image, Video, Music, X as XIcon, Paperclip
+  CheckCircle2, XCircle, Image, Video, Music, X as XIcon,
+  ChevronDown, ChevronUp, UserX
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -20,6 +21,14 @@ interface CachedGroup {
   member_count: number;
   channel_id: string;
   channel_name?: string;
+}
+
+interface GroupMember {
+  contact_id: string;
+  nombre: string;
+  apellido: string;
+  telefono: string;
+  isAgent: boolean;
 }
 
 interface SendResult {
@@ -56,8 +65,17 @@ export const DirectGroupCampaign = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [mediaType, setMediaType] = useState<'image' | 'video' | 'audio'>('image');
 
+  // Member selection
+  const [sendMode, setSendMode] = useState<'group' | 'individual'>('group');
+  const [expandedGroupId, setExpandedGroupId] = useState<string | null>(null);
+  const [groupMembers, setGroupMembers] = useState<Map<string, GroupMember[]>>(new Map());
+  const [loadingMembers, setLoadingMembers] = useState<string | null>(null);
+  const [deselectedMembers, setDeselectedMembers] = useState<Set<string>>(new Set());
+  const [agentUserIds, setAgentUserIds] = useState<Set<string>>(new Set());
+
   useEffect(() => {
     fetchGroups();
+    fetchAgentIds();
   }, []);
 
   useEffect(() => {
@@ -66,7 +84,6 @@ export const DirectGroupCampaign = () => {
 
   const fetchGroups = async () => {
     setLoading(true);
-    // Load all active groups with channel name
     const { data } = await supabase
       .from('whatsapp_groups_cache')
       .select('id, jid, name, member_count, channel_id, whatsapp_channels(name)')
@@ -80,6 +97,69 @@ export const DirectGroupCampaign = () => {
       })));
     }
     setLoading(false);
+  };
+
+  const fetchAgentIds = async () => {
+    const { data } = await supabase.from('profiles').select('id');
+    if (data) {
+      setAgentUserIds(new Set(data.map(p => p.id)));
+    }
+  };
+
+  const fetchMembersForGroup = async (groupJid: string) => {
+    if (groupMembers.has(groupJid)) return;
+    setLoadingMembers(groupJid);
+
+    const { data } = await supabase
+      .from('contact_whatsapp_groups')
+      .select('contact_id, contacts(id, nombre, apellido, telefono, lead_id)')
+      .eq('group_jid', groupJid);
+
+    if (data) {
+      const members: GroupMember[] = data
+        .filter((row: any) => row.contacts)
+        .map((row: any) => ({
+          contact_id: row.contact_id,
+          nombre: row.contacts.nombre || '',
+          apellido: row.contacts.apellido || '',
+          telefono: row.contacts.telefono || '',
+          isAgent: agentUserIds.has(row.contact_id),
+        }));
+      setGroupMembers(prev => new Map(prev).set(groupJid, members));
+    }
+    setLoadingMembers(null);
+  };
+
+  const toggleExpandGroup = async (group: CachedGroup) => {
+    if (expandedGroupId === group.jid) {
+      setExpandedGroupId(null);
+    } else {
+      setExpandedGroupId(group.jid);
+      await fetchMembersForGroup(group.jid);
+    }
+  };
+
+  const toggleMember = (contactId: string) => {
+    setDeselectedMembers(prev => {
+      const next = new Set(prev);
+      if (next.has(contactId)) next.delete(contactId);
+      else next.add(contactId);
+      return next;
+    });
+  };
+
+  const getSelectedMemberCount = () => {
+    let total = 0;
+    const selected = groups.filter(g => selectedGroupIds.includes(g.id));
+    for (const g of selected) {
+      const members = groupMembers.get(g.jid);
+      if (members) {
+        total += members.filter(m => !deselectedMembers.has(m.contact_id) && !m.isAgent).length;
+      } else {
+        total += g.member_count;
+      }
+    }
+    return total;
   };
 
   const filteredGroups = searchQuery
@@ -140,7 +220,8 @@ export const DirectGroupCampaign = () => {
     const selected = groups.filter(g => selectedGroupIds.includes(g.id));
     if (selected.length === 0 || (!message.trim() && !media)) return;
 
-    if (!confirm(`¿Enviar mensaje a ${selected.length} grupo${selected.length > 1 ? 's' : ''} de WhatsApp?`)) return;
+    const modeLabel = sendMode === 'group' ? `${selected.length} grupo${selected.length > 1 ? 's' : ''}` : `${getSelectedMemberCount()} miembros individuales`;
+    if (!confirm(`¿Enviar mensaje a ${modeLabel} de WhatsApp?`)) return;
 
     setSending(true);
     setSendResults([]);
@@ -156,6 +237,13 @@ export const DirectGroupCampaign = () => {
           message: message.trim(),
         };
         if (media) body.mediaData = { url: media.url, type: media.type, name: media.name };
+
+        if (sendMode === 'individual') {
+          const members = groupMembers.get(group.jid) || [];
+          const selectedMembers = members.filter(m => !deselectedMembers.has(m.contact_id) && !m.isAgent);
+          body.individual_mode = true;
+          body.member_phones = selectedMembers.map(m => m.telefono).filter(Boolean);
+        }
 
         const { data, error } = await supabase.functions.invoke('send-group-message', { body });
         if (error) throw new Error(error?.message || 'Error');
@@ -188,7 +276,7 @@ export const DirectGroupCampaign = () => {
         <CardTitle className="text-white text-sm uppercase tracking-widest font-bold flex items-center gap-2">
           <Wifi className="w-4 h-4 text-indigo-400" /> Campaña a Grupos Directos
         </CardTitle>
-        <p className="text-xs text-slate-500 mt-1">Selecciona grupos de WhatsApp y envía un mensaje directo.</p>
+        <p className="text-xs text-slate-500 mt-1">Selecciona grupos y envía al grupo o a miembros individuales.</p>
       </CardHeader>
       <CardContent className="p-6 space-y-4">
         {/* Search + select all */}
@@ -204,42 +292,100 @@ export const DirectGroupCampaign = () => {
           </Button>
         </div>
 
-        {/* Group list */}
-        <div className="max-h-[250px] overflow-y-auto space-y-1.5 custom-scrollbar pr-1">
+        {/* Group list with expandable members */}
+        <div className="max-h-[350px] overflow-y-auto space-y-1.5 custom-scrollbar pr-1">
           {filteredGroups.map(g => {
             const isSelected = selectedGroupIds.includes(g.id);
             const result = sendResults.find(r => r.groupId === g.id);
-            const selected = groups.filter(gg => selectedGroupIds.includes(gg.id));
-            const isCurrent = sending && currentSendIndex >= 0 && selected[currentSendIndex]?.id === g.id;
+            const selectedList = groups.filter(gg => selectedGroupIds.includes(gg.id));
+            const isCurrent = sending && currentSendIndex >= 0 && selectedList[currentSendIndex]?.id === g.id;
+            const isExpanded = expandedGroupId === g.jid;
+            const members = groupMembers.get(g.jid);
 
             return (
-              <button key={g.id} onClick={() => !sending && handleToggle(g.id)} disabled={sending}
-                className={cn('w-full flex items-center gap-3 p-2.5 rounded-xl border transition-all text-left',
+              <div key={g.id}>
+                <div className={cn('flex items-center gap-3 p-2.5 rounded-xl border transition-all',
                   isSelected ? 'bg-indigo-900/10 border-indigo-500/30' : 'bg-[#121214] border-[#222225] hover:border-[#333336]',
                   sending && 'cursor-default'
                 )}>
-                <Checkbox checked={isSelected} tabIndex={-1}
-                  className="border-slate-600 data-[state=checked]:bg-indigo-500 data-[state=checked]:border-indigo-500 shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-slate-200 truncate">{g.name}</p>
-                  <span className="text-[10px] text-slate-600">{g.channel_name}</span>
+                  <Checkbox checked={isSelected} onCheckedChange={() => !sending && handleToggle(g.id)} tabIndex={-1}
+                    className="border-slate-600 data-[state=checked]:bg-indigo-500 data-[state=checked]:border-indigo-500 shrink-0" />
+                  <button onClick={() => toggleExpandGroup(g)} disabled={sending} className="flex-1 min-w-0 text-left">
+                    <p className="text-sm font-semibold text-slate-200 truncate">{g.name}</p>
+                    <span className="text-[10px] text-slate-600">{g.channel_name}</span>
+                  </button>
+                  <Badge variant="outline" className="text-[9px] border-slate-700 text-slate-400 shrink-0">
+                    <Users className="w-2.5 h-2.5 mr-1" />{g.member_count}
+                  </Badge>
+                  <button onClick={() => toggleExpandGroup(g)} className="text-slate-500 hover:text-slate-300 shrink-0">
+                    {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                  </button>
+                  {isCurrent && <Loader2 className="w-4 h-4 animate-spin text-indigo-400 shrink-0" />}
+                  {result?.success && <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />}
+                  {result && !result.success && <XCircle className="w-4 h-4 text-red-400 shrink-0" />}
                 </div>
-                <Badge variant="outline" className="text-[9px] border-slate-700 text-slate-400 shrink-0">
-                  <Users className="w-2.5 h-2.5 mr-1" />{g.member_count}
-                </Badge>
-                {isCurrent && <Loader2 className="w-4 h-4 animate-spin text-indigo-400 shrink-0" />}
-                {result?.success && <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />}
-                {result && !result.success && <XCircle className="w-4 h-4 text-red-400 shrink-0" />}
-              </button>
+
+                {isExpanded && (
+                  <div className="ml-8 mt-1 mb-2 space-y-1 border-l-2 border-[#222225] pl-3">
+                    {loadingMembers === g.jid ? (
+                      <div className="py-3 text-center"><Loader2 className="w-4 h-4 animate-spin text-slate-500 mx-auto" /></div>
+                    ) : members && members.length > 0 ? (
+                      members.map(m => (
+                        <div key={m.contact_id} className={cn("flex items-center gap-2 py-1.5 px-2 rounded-lg text-xs", m.isAgent ? "opacity-40" : "")}>
+                          <Checkbox
+                            checked={!deselectedMembers.has(m.contact_id) && !m.isAgent}
+                            disabled={m.isAgent}
+                            onCheckedChange={() => toggleMember(m.contact_id)}
+                            className="border-slate-600 data-[state=checked]:bg-indigo-500 shrink-0"
+                          />
+                          <span className="text-slate-300 flex-1 truncate">
+                            {m.nombre} {m.apellido}
+                            {m.isAgent && <span className="ml-1.5 text-[9px] text-amber-500 font-bold uppercase">(Agente)</span>}
+                          </span>
+                          <span className="text-[10px] text-slate-600 font-mono shrink-0">{m.telefono}</span>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-[10px] text-slate-600 py-2 italic">Sin miembros sincronizados. Sincroniza desde Academia.</p>
+                    )}
+                  </div>
+                )}
+              </div>
             );
           })}
         </div>
+
+        {/* Send mode toggle */}
+        {someSelected && (
+          <div className="flex items-center gap-2 p-2 bg-[#121214] border border-[#222225] rounded-xl">
+            <Button variant={sendMode === 'group' ? 'default' : 'ghost'} size="sm"
+              onClick={() => setSendMode('group')} disabled={sending}
+              className={cn("text-[10px] uppercase tracking-widest font-bold h-8 rounded-lg flex-1", sendMode === 'group' ? "bg-indigo-600 text-white" : "text-slate-400")}>
+              <Users className="w-3 h-3 mr-1.5" /> Enviar al grupo
+            </Button>
+            <Button variant={sendMode === 'individual' ? 'default' : 'ghost'} size="sm"
+              onClick={() => setSendMode('individual')} disabled={sending}
+              className={cn("text-[10px] uppercase tracking-widest font-bold h-8 rounded-lg flex-1", sendMode === 'individual' ? "bg-amber-600 text-slate-900" : "text-slate-400")}>
+              <UserX className="w-3 h-3 mr-1.5" /> Individual a miembros
+            </Button>
+          </div>
+        )}
+
+        {sendMode === 'individual' && someSelected && (
+          <div className="flex items-center gap-2 p-2.5 bg-amber-900/10 border border-amber-500/20 rounded-xl">
+            <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
+            <p className="text-[10px] text-amber-400">
+              Se enviará individualmente a <strong>{getSelectedMemberCount()}</strong> miembros (agentes del equipo excluidos automáticamente).
+              Expande cada grupo para deseleccionar miembros.
+            </p>
+          </div>
+        )}
 
         {/* Editor */}
         {someSelected && (
           <>
             <label className="text-[10px] uppercase font-bold text-slate-500 tracking-widest">
-              Mensaje para {selectedGroupIds.length} grupo{selectedGroupIds.length > 1 ? 's' : ''}
+              Mensaje para {sendMode === 'group' ? `${selectedGroupIds.length} grupo${selectedGroupIds.length > 1 ? 's' : ''}` : `${getSelectedMemberCount()} miembros`}
             </label>
 
             {media && (
@@ -278,9 +424,13 @@ export const DirectGroupCampaign = () => {
               </div>
             ) : (
               <Button onClick={handleSend} disabled={!canSend}
-                className="w-full h-12 rounded-xl font-bold uppercase tracking-widest text-[10px] bg-indigo-600 hover:bg-indigo-500 text-white">
+                className={cn("w-full h-12 rounded-xl font-bold uppercase tracking-widest text-[10px]",
+                  sendMode === 'individual' ? "bg-amber-600 hover:bg-amber-500 text-slate-900" : "bg-indigo-600 hover:bg-indigo-500 text-white"
+                )}>
                 {sending ? (<><Loader2 className="w-4 h-4 animate-spin mr-2" /> Enviando {currentSendIndex + 1} de {selectedGroupIds.length}...</>)
-                  : (<><Send className="w-4 h-4 mr-2" /> Enviar a {selectedGroupIds.length} Grupo{selectedGroupIds.length > 1 ? 's' : ''}</>)}
+                  : sendMode === 'individual'
+                    ? (<><Send className="w-4 h-4 mr-2" /> Enviar individual a {getSelectedMemberCount()} miembros</>)
+                    : (<><Send className="w-4 h-4 mr-2" /> Enviar a {selectedGroupIds.length} Grupo{selectedGroupIds.length > 1 ? 's' : ''}</>)}
               </Button>
             )}
           </>

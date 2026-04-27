@@ -48,6 +48,8 @@ NO_VERIFY_JWT=(
   "list-whatsapp-groups"
   "sync-group-members"
   "send-group-message"
+  "generate-message-variants"
+  "send-campaign-individual"
 
   # Sync de canales/grupos (E13 — cron + manual desde UI)
   "sync-channel-groups"
