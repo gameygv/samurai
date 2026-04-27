@@ -127,11 +127,84 @@ Deno.serve(async (req) => {
           synced_at: new Date().toISOString(),
         });
       } else {
-        unmatched++;
-        unmatchedMembers.push({
-          phone_number: phone,
-          display_name: p.display_name || '',
-        });
+        // AUTO-CREATE: crear contact + lead para miembros no registrados
+        const displayName = p.display_name || null;
+        const phoneNorm = variants[0]; // usar la primera variante normalizada
+
+        try {
+          // INSERT contact (SELECT explícito, no tocar pos_*)
+          const { data: newContact, error: cErr } = await supabase
+            .from('contacts')
+            .insert({
+              nombre: displayName,
+              telefono: phoneNorm,
+              origen_contacto: 'auto-from-group',
+            })
+            .select('id')
+            .single();
+
+          if (cErr) {
+            // Si ya existe por telefono (race condition), buscar
+            const { data: existing } = await supabase
+              .from('contacts')
+              .select('id')
+              .eq('telefono', phoneNorm)
+              .maybeSingle();
+
+            if (existing) {
+              matched++;
+              upsertRows.push({
+                contact_id: existing.id,
+                group_jid,
+                group_name: groupName,
+                course_id: course_id || null,
+                channel_id,
+                phone_number: phone,
+                synced_at: new Date().toISOString(),
+              });
+              continue;
+            }
+            unmatched++;
+            unmatchedMembers.push({ phone_number: phone, display_name: displayName || '' });
+            continue;
+          }
+
+          // INSERT lead con ai_paused=TRUE (Sam NO responde hasta primer mensaje entrante)
+          const { data: newLead } = await supabase
+            .from('leads')
+            .insert({
+              telefono: phoneNorm,
+              nombre: displayName,
+              funnel_stage: 'INICIAL',
+              buying_intent: 'BAJO',
+              confidence_score: 0,
+              origen: 'auto-from-group',
+              ai_paused: true,
+              estado_emocional_actual: 'NEUTRO',
+            })
+            .select('id')
+            .single();
+
+          // Link contact → lead
+          if (newLead) {
+            await supabase.from('contacts').update({ lead_id: newLead.id }).eq('id', newContact.id);
+          }
+
+          matched++;
+          upsertRows.push({
+            contact_id: newContact.id,
+            group_jid,
+            group_name: groupName,
+            course_id: course_id || null,
+            channel_id,
+            phone_number: phone,
+            synced_at: new Date().toISOString(),
+          });
+        } catch (autoErr) {
+          console.error(`[sync-group-members] Auto-create error for ${phone}:`, autoErr);
+          unmatched++;
+          unmatchedMembers.push({ phone_number: phone, display_name: displayName || '' });
+        }
       }
     }
 
