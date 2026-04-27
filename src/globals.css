@@ -35,6 +35,20 @@
   }
 }
 
+/* WCAG AA: Focus visible en todos los interactivos */
+:focus-visible {
+  outline: 2px solid rgb(99 102 241); /* indigo-500 */
+  outline-offset: 2px;
+}
+
+/* Light mode adjustments for readability */
+:root {
+  --text-muted: #64748b; /* slate-500 — 4.6:1 ratio on white */
+}
+.dark {
+  --text-muted: #94a3b8; /* slate-400 — 4.5:1 ratio on slate-950 */
+}
+
 .animate-in {
   animation-duration: 400ms;
 }
