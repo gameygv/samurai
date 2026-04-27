@@ -7,6 +7,8 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/context/AuthContext';
+import { ThemeToggle } from '@/components/layout/ThemeToggle';
+import { FontSizeToggle } from '@/components/layout/FontSizeToggle';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
@@ -187,7 +189,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
   );
 
   return (
-    <div className="flex min-h-screen bg-[#050505] text-slate-50 font-sans">
+    <div className="flex min-h-screen bg-white dark:bg-[#050505] text-slate-900 dark:text-slate-50 font-sans">
       <aside className="w-64 border-r border-[#1a1a1a] bg-[#0a0a0c] hidden md:flex flex-col z-20">
         <NavContent />
       </aside>
@@ -220,8 +222,10 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
              </button>
           </div>
 
-          <div className="flex items-center gap-2">
-             <div className="hidden sm:flex flex-col items-end mr-2">
+          <div className="flex items-center gap-1">
+             <FontSizeToggle />
+             <ThemeToggle />
+             <div className="hidden sm:flex flex-col items-end ml-2 mr-1">
                 <span className="text-[9px] text-[#7A8A9E] uppercase font-bold tracking-widest">Sys Health</span>
                 <span className="text-[10px] text-emerald-500 font-mono font-bold">100% STABLE</span>
              </div>
