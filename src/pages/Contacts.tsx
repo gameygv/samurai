@@ -79,13 +79,22 @@ const Contacts = () => {
   const [loading, setLoading] = useState(true);
   const [analyzing, setAnalyzing] = useState(false);
 
+  // Paginación
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50);
+  const [totalCount, setTotalCount] = useState(0);
+
   useEffect(() => {
     if (user) {
-        fetchContacts();
+        fetchContacts(1, pageSize);
         fetchTags();
         fetchGroupsCatalog();
     }
   }, [user]);
+
+  useEffect(() => {
+    if (user) fetchContacts(currentPage, pageSize);
+  }, [currentPage, pageSize]);
 
   const fetchTags = async () => {
     if (!user) return;
@@ -105,22 +114,27 @@ const Contacts = () => {
     }
   };
 
-  const fetchContacts = async () => {
+  const fetchContacts = async (page = currentPage, size = pageSize) => {
     setLoading(true);
-    
+
     // FILTRO DE PRIVACIDAD — inner join solo cuando se filtra por agente
     const leadsJoin = isManager
       ? 'leads(id, assigned_to, buying_intent, payment_status, lead_score, ai_paused, summary)'
       : 'leads!inner(id, assigned_to, buying_intent, payment_status, lead_score, ai_paused, summary)';
     let query = supabase
       .from('contacts')
-      .select(`*, ${leadsJoin}`);
+      .select(`*, ${leadsJoin}`, { count: 'exact' });
 
     if (!isManager) {
         query = query.eq('leads.assigned_to', user?.id);
     }
 
-    const { data, error } = await query.order('updated_at', { ascending: false });
+    const from = (page - 1) * size;
+    const to = from + size - 1;
+
+    const { data, error, count } = await query
+      .order('updated_at', { ascending: false })
+      .range(from, to);
 
     if (!error && data) {
       const mappedData = data.map(c => {
@@ -129,6 +143,7 @@ const Contacts = () => {
         return { ...c, academic_count: academicArray.length };
       });
       setContacts(mappedData);
+      setTotalCount(count ?? 0);
       setCities(Array.from(new Set(mappedData.map(d => String(d.ciudad || '')).filter(Boolean))) as string[]);
     }
     setLoading(false);
@@ -573,6 +588,33 @@ const Contacts = () => {
               </TableBody>
             </Table>
           </CardContent>
+
+          {/* Paginación */}
+          <div className="flex items-center justify-between px-6 py-3 border-t border-[#222225]">
+            <div className="flex items-center gap-3">
+              <span className="text-[10px] text-slate-500">
+                {totalCount > 0 ? `${(currentPage - 1) * pageSize + 1}–${Math.min(currentPage * pageSize, totalCount)} de ${totalCount}` : '0 contactos'}
+              </span>
+              <Select value={String(pageSize)} onValueChange={v => { setPageSize(Number(v)); setCurrentPage(1); }}>
+                <SelectTrigger className="w-[90px] h-7 bg-[#161618] border-[#222225] rounded-lg text-[10px] text-slate-400">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-slate-900 border-slate-800 text-slate-100 rounded-xl">
+                  <SelectItem value="50">50 / pág</SelectItem>
+                  <SelectItem value="100">100 / pág</SelectItem>
+                  <SelectItem value="200">200 / pág</SelectItem>
+                  <SelectItem value="500">500 / pág</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex items-center gap-1">
+              <Button variant="ghost" size="sm" disabled={currentPage <= 1} onClick={() => setCurrentPage(p => p - 1)}
+                className="text-[10px] h-7 px-3 text-slate-400 uppercase font-bold tracking-widest">Anterior</Button>
+              <span className="text-[10px] text-slate-500 px-2">Pág {currentPage} de {Math.max(1, Math.ceil(totalCount / pageSize))}</span>
+              <Button variant="ghost" size="sm" disabled={currentPage * pageSize >= totalCount} onClick={() => setCurrentPage(p => p + 1)}
+                className="text-[10px] h-7 px-3 text-slate-400 uppercase font-bold tracking-widest">Siguiente</Button>
+            </div>
+          </div>
         </Card>
       </div>
 

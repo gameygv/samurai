@@ -87,8 +87,14 @@
 :root:not(.dark) .bg-\[\#0a0a0c\]\/90 {
   background-color: rgba(255,255,255,0.9) !important;
 }
+:root:not(.dark) .bg-\[\#0a0a0c\]\/80 {
+  background-color: rgba(255,255,255,0.8) !important;
+}
 :root:not(.dark) .bg-\[\#0f0f11\]\/50 {
   background-color: rgba(248,250,252,0.5) !important;
+}
+:root:not(.dark) .bg-\[\#121214\]\/50 {
+  background-color: rgba(241,245,249,0.5) !important;
 }
 
 /* Slate dark backgrounds */
