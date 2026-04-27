@@ -99,11 +99,18 @@ export const MassMessageDialog = ({ open, onOpenChange, targetContacts, onSchedu
 
   const handleMediaChange = (e: React.ChangeEvent<HTMLInputElement>) => {
      const file = e.target.files?.[0];
-     if (file) {
-        setMediaFile(file);
+     if (!file) return;
+     if (file.size > 16 * 1024 * 1024) {
+        toast.error('Archivo muy grande. Máximo 16MB para WhatsApp.');
+        return;
+     }
+     setMediaFile(file);
+     if (file.type.startsWith('image/')) {
         const reader = new FileReader();
         reader.onloadend = () => setMediaPreview(reader.result as string);
         reader.readAsDataURL(file);
+     } else {
+        setMediaPreview(null); // no image preview for video/audio
      }
   };
 
@@ -118,6 +125,7 @@ export const MassMessageDialog = ({ open, onOpenChange, targetContacts, onSchedu
       let type = 'document';
       if (mediaFile.type.startsWith('image/')) type = 'image';
       else if (mediaFile.type.startsWith('video/')) type = 'video';
+      else if (mediaFile.type.startsWith('audio/')) type = 'audio';
       
       return { url: publicUrl, type, mimetype: mediaFile.type, name: mediaFile.name };
   };
@@ -383,25 +391,41 @@ export const MassMessageDialog = ({ open, onOpenChange, targetContacts, onSchedu
                     {/* ZONA DE MULTIMEDIA */}
                     <div className="space-y-2">
                        <Label className="text-[10px] uppercase font-bold text-slate-500 flex items-center justify-between">
-                          <span>Imagen Promocional (Opcional)</span>
+                          <span>Multimedia (Opcional)</span>
                        </Label>
                        
-                       {mediaPreview ? (
+                       {mediaFile ? (
                           <div className="relative rounded-2xl border-2 border-[#222225] overflow-hidden bg-[#121214] group">
-                             <img src={mediaPreview} alt="Preview" className="w-full max-h-64 object-contain" />
+                             {mediaPreview ? (
+                                <img src={mediaPreview} alt="Preview" className="w-full max-h-64 object-contain" />
+                             ) : (
+                                <div className="flex items-center gap-3 p-4">
+                                   <div className={cn('w-12 h-12 rounded-lg flex items-center justify-center',
+                                     mediaFile.type.startsWith('video/') ? 'bg-indigo-500/10 border border-indigo-500/20' : 'bg-amber-500/10 border border-amber-500/20'
+                                   )}>
+                                     {mediaFile.type.startsWith('video/')
+                                       ? <ImageIcon className="w-5 h-5 text-indigo-400" />
+                                       : <ImageIcon className="w-5 h-5 text-amber-400" />}
+                                   </div>
+                                   <div>
+                                     <p className="text-sm text-slate-200 font-semibold truncate max-w-[300px]">{mediaFile.name}</p>
+                                     <p className="text-[10px] text-slate-500">{mediaFile.type.startsWith('video/') ? 'Video' : 'Audio'} adjunto</p>
+                                   </div>
+                                </div>
+                             )}
                              <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                                 <Button variant="destructive" onClick={() => { setMediaFile(null); setMediaPreview(null); }} className="font-bold uppercase tracking-widest text-[10px]">
-                                   <X className="w-4 h-4 mr-2" /> Quitar Imagen
+                                   <X className="w-4 h-4 mr-2" /> Quitar Archivo
                                 </Button>
                              </div>
                           </div>
                        ) : (
                           <div className="border-2 border-dashed border-[#333336] rounded-2xl p-8 text-center hover:border-indigo-500/50 hover:bg-[#121214] transition-all cursor-pointer">
-                             <input type="file" id="media-upload" className="hidden" accept="image/*" onChange={handleMediaChange} disabled={sending} />
+                             <input type="file" id="media-upload" className="hidden" accept="image/jpeg,image/png,image/webp,video/mp4,video/3gpp,audio/ogg,audio/mpeg,audio/mp4,audio/wav" onChange={handleMediaChange} disabled={sending} />
                              <label htmlFor="media-upload" className="cursor-pointer flex flex-col items-center justify-center w-full h-full">
                                 <UploadCloud className="w-10 h-10 text-slate-600 mb-3" />
-                                <span className="text-sm font-bold text-slate-300">Añadir Flyer o Foto</span>
-                                <span className="text-[10px] text-slate-500 mt-1">Soporta JPG, PNG, WEBP</span>
+                                <span className="text-sm font-bold text-slate-300">Añadir Imagen, Video o Audio</span>
+                                <span className="text-[10px] text-slate-500 mt-1">JPG, PNG, WEBP, MP4, OGG, MP3 (máx 16MB)</span>
                              </label>
                           </div>
                        )}
