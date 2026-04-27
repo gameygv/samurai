@@ -49,6 +49,9 @@ NO_VERIFY_JWT=(
   "sync-group-members"
   "send-group-message"
 
+  # Sync de canales/grupos (E13 — cron + manual desde UI)
+  "sync-channel-groups"
+
   # Frontend read-only / diagnóstico
   "get-capi-diagnostic"
   "get-ai-suggestions"
