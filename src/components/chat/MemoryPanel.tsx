@@ -409,7 +409,23 @@ export const MemoryPanel = ({
 
       </div>
 
-      <div className="p-5 bg-[#0a0a0c] border-t border-[#1a1a1a] mt-auto">
+      <div className="p-5 bg-[#0a0a0c] border-t border-[#1a1a1a] mt-auto space-y-3">
+         {(isDev || isManager) && (
+           <div className="flex items-center justify-between px-1">
+             <span className="text-[10px] uppercase font-bold tracking-widest text-slate-500">Lead de Prueba</span>
+             <button
+               onClick={async () => {
+                 const newVal = !currentAnalysis?.is_test_lead;
+                 await supabase.from('leads').update({ is_test_lead: newVal }).eq('id', currentAnalysis?.id);
+                 toast.success(newVal ? 'Marcado como lead de prueba — no enviará a Meta CAPI' : 'Lead de prueba desactivado');
+                 if (onAnalysisComplete) onAnalysisComplete();
+               }}
+               className={cn("relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors", currentAnalysis?.is_test_lead ? "bg-amber-500" : "bg-slate-700")}
+             >
+               <span className={cn("pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow-lg transform transition-transform", currentAnalysis?.is_test_lead ? "translate-x-4" : "translate-x-0")} />
+             </button>
+           </div>
+         )}
          <Button onClick={onToggleFollowup} className={cn("w-full h-12 text-[10px] font-bold tracking-widest uppercase rounded-xl border transition-all duration-300 shadow-none", currentAnalysis?.ai_paused ? "bg-emerald-950/30 text-emerald-500 border-emerald-900/50" : "bg-[#3d0f0f] text-red-400 border-[#5e1616]")}>
             {currentAnalysis?.ai_paused ? "▶ ACTIVAR IA" : "⏸ PAUSAR IA"}
          </Button>

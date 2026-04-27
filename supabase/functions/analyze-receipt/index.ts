@@ -123,7 +123,7 @@ serve(async (req) => {
     const analysis = rawAnalysis.replace(/^IS_RECEIPT:\s*(YES|NO)\s*\n?/i, '').trim();
 
     // 5. Obtener datos del lead para la notificación
-    const { data: lead } = await supabase.from('leads').select('nombre, assigned_to').eq('id', lead_id).single();
+    const { data: lead } = await supabase.from('leads').select('nombre, assigned_to, is_test_lead').eq('id', lead_id).single();
 
     // 5b. Comparar con cuentas bancarias registradas
     const bankKeys = ['bank_name', 'bank_account', 'bank_clabe', 'bank_holder'];
@@ -226,7 +226,8 @@ serve(async (req) => {
     const parsedAmount = amountMatch ? parseFloat(amountMatch[1].replace(/,/g, '')) : 0;
     const isConfirmedValid = verdict === 'PROBABLE_VALID' && matchedAccount && matchedAccount !== 'No identificada';
     const isLikelyValid = verdict === 'INCONCLUSIVE' && parsedAmount > 0;
-    const shouldAutoMove = (isConfirmedValid || isLikelyValid) && parsedAmount > 0;
+    const isTestLead = lead?.is_test_lead === true;
+    const shouldAutoMove = (isConfirmedValid || isLikelyValid) && parsedAmount > 0 && !isTestLead;
 
     let autoMoved = false;
     if (shouldAutoMove) {

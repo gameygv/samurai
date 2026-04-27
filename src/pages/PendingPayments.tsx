@@ -31,6 +31,7 @@ const PendingPayments = () => {
       .from('leads')
       .select('id, nombre, telefono, ciudad, buying_intent, payment_status, last_message_at')
       .eq('payment_status', 'PENDING_VERIFICATION')
+      .or('is_test_lead.is.null,is_test_lead.eq.false')
       .order('last_message_at', { ascending: false });
 
     if (data) {

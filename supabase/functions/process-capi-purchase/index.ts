@@ -42,9 +42,16 @@ serve(async (req: Request): Promise<Response> => {
         let leadCtwaClid: string | undefined;
         if (data.lead_id) {
           const { data: leadFull } = await supabase.from('leads')
-            .select('fbc, fbp, ctwa_clid')
+            .select('fbc, fbp, ctwa_clid, is_test_lead')
             .eq('id', data.lead_id).maybeSingle();
           if (leadFull) {
+            // Skip test leads — never send to Meta CAPI
+            if (leadFull.is_test_lead) {
+              console.log(`[process-capi-purchase] Skipping test lead ${data.lead_id}`);
+              await supabase.from('activity_logs').update({ status: 'OK', description: event.description + ' [SKIPPED: test lead]' }).eq('id', event.id);
+              processed++;
+              continue;
+            }
             leadFbc = leadFull.fbc || undefined;
             leadFbp = leadFull.fbp || undefined;
             leadCtwaClid = leadFull.ctwa_clid || undefined;
