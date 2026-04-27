@@ -58,3 +58,176 @@
 .animate-in {
   animation-duration: 400ms;
 }
+
+/* ================================================================
+   LIGHT MODE OVERRIDES
+   App built dark-first with hardcoded colors across 50+ files.
+   These rules map dark colors → light equivalents when .dark is absent.
+   ================================================================ */
+
+/* --- Backgrounds: hex dark → light --- */
+:root:not(.dark) .bg-\[\#050505\],
+:root:not(.dark) .bg-\[\#0a0a0c\] {
+  background-color: #ffffff !important;
+}
+:root:not(.dark) .bg-\[\#0f0f11\],
+:root:not(.dark) .bg-\[\#0D0B0A\] {
+  background-color: #f8fafc !important;
+}
+:root:not(.dark) .bg-\[\#121214\],
+:root:not(.dark) .bg-\[\#1A1714\] {
+  background-color: #f1f5f9 !important;
+}
+:root:not(.dark) .bg-\[\#161618\],
+:root:not(.dark) .bg-\[\#1a1a1d\] {
+  background-color: #f1f5f9 !important;
+}
+
+/* Backgrounds with opacity */
+:root:not(.dark) .bg-\[\#0a0a0c\]\/90 {
+  background-color: rgba(255,255,255,0.9) !important;
+}
+:root:not(.dark) .bg-\[\#0f0f11\]\/50 {
+  background-color: rgba(248,250,252,0.5) !important;
+}
+
+/* Slate dark backgrounds */
+:root:not(.dark) .bg-slate-900 {
+  background-color: #ffffff !important;
+}
+:root:not(.dark) .bg-slate-950 {
+  background-color: #ffffff !important;
+}
+:root:not(.dark) .bg-slate-900\/50 {
+  background-color: rgba(248,250,252,0.5) !important;
+}
+:root:not(.dark) .bg-slate-900\/40 {
+  background-color: rgba(248,250,252,0.6) !important;
+}
+:root:not(.dark) .bg-slate-900\/80 {
+  background-color: rgba(241,245,249,0.8) !important;
+}
+:root:not(.dark) .bg-slate-950\/30 {
+  background-color: rgba(248,250,252,0.3) !important;
+}
+:root:not(.dark) .bg-slate-950\/40 {
+  background-color: rgba(248,250,252,0.4) !important;
+}
+:root:not(.dark) .bg-slate-950\/50 {
+  background-color: rgba(248,250,252,0.5) !important;
+}
+
+/* --- Hover backgrounds --- */
+:root:not(.dark) .hover\:bg-\[\#161618\]:hover,
+:root:not(.dark) .hover\:bg-\[\#1a1a1d\]:hover {
+  background-color: #e2e8f0 !important;
+}
+:root:not(.dark) .hover\:bg-\[\#0f0f11\]:hover {
+  background-color: #e2e8f0 !important;
+}
+:root:not(.dark) .hover\:bg-\[\#121214\]:hover {
+  background-color: #e2e8f0 !important;
+}
+:root:not(.dark) .hover\:bg-\[\#222225\]:hover {
+  background-color: #e2e8f0 !important;
+}
+:root:not(.dark) .hover\:bg-slate-900:hover {
+  background-color: #f1f5f9 !important;
+}
+:root:not(.dark) .hover\:bg-slate-900\/80:hover {
+  background-color: rgba(241,245,249,0.8) !important;
+}
+:root:not(.dark) .hover\:bg-slate-800\/30:hover {
+  background-color: rgba(241,245,249,0.3) !important;
+}
+
+/* --- Borders: dark → light --- */
+:root:not(.dark) .border-\[\#1a1a1a\],
+:root:not(.dark) .border-\[\#222225\] {
+  border-color: #e2e8f0 !important;
+}
+:root:not(.dark) .border-\[\#333336\] {
+  border-color: #cbd5e1 !important;
+}
+:root:not(.dark) .border-slate-800 {
+  border-color: #e2e8f0 !important;
+}
+:root:not(.dark) .border-slate-800\/50 {
+  border-color: rgba(226,232,240,0.5) !important;
+}
+:root:not(.dark) .border-white\/10 {
+  border-color: rgba(15,23,42,0.1) !important;
+}
+:root:not(.dark) .divide-\[\#1a1a1a\] > :not([hidden]) ~ :not([hidden]) {
+  border-color: #e2e8f0 !important;
+}
+:root:not(.dark) .hover\:border-\[\#333336\]:hover {
+  border-color: #cbd5e1 !important;
+}
+:root:not(.dark) .border-r-\[\#1a1a1a\] {
+  border-right-color: #e2e8f0 !important;
+}
+:root:not(.dark) .border-l-\[\#1a1a1a\] {
+  border-left-color: #e2e8f0 !important;
+}
+:root:not(.dark) .border-b-\[\#1a1a1a\] {
+  border-bottom-color: #e2e8f0 !important;
+}
+
+/* --- Text: light-on-dark → dark-on-light --- */
+:root:not(.dark) .text-white {
+  color: #0f172a !important;
+}
+:root:not(.dark) .text-slate-50 {
+  color: #0f172a !important;
+}
+:root:not(.dark) .text-slate-200 {
+  color: #334155 !important;
+}
+:root:not(.dark) .text-slate-300 {
+  color: #475569 !important;
+}
+:root:not(.dark) .hover\:text-white:hover {
+  color: #0f172a !important;
+}
+
+/* --- Preserve white text on colored backgrounds --- */
+:root:not(.dark) .bg-indigo-600.text-white,
+:root:not(.dark) .bg-indigo-600 .text-white,
+:root:not(.dark) .bg-indigo-500.text-white,
+:root:not(.dark) .bg-indigo-500 .text-white,
+:root:not(.dark) .bg-emerald-500.text-white,
+:root:not(.dark) .bg-emerald-600.text-white,
+:root:not(.dark) .bg-red-500.text-white,
+:root:not(.dark) .bg-red-600.text-white,
+:root:not(.dark) .bg-red-600 .text-white,
+:root:not(.dark) .bg-amber-500.text-white,
+:root:not(.dark) .bg-amber-600.text-white,
+:root:not(.dark) .bg-purple-500.text-white,
+:root:not(.dark) .bg-purple-600.text-white,
+:root:not(.dark) .bg-blue-500.text-white,
+:root:not(.dark) .bg-blue-600.text-white,
+:root:not(.dark) .bg-green-500.text-white,
+:root:not(.dark) .bg-green-600.text-white,
+:root:not(.dark) .hover\:bg-indigo-600:hover .text-white,
+:root:not(.dark) .hover\:bg-red-600:hover.hover\:text-white:hover {
+  color: #ffffff !important;
+}
+
+/* --- Scrollbar light mode --- */
+:root:not(.dark) .custom-scrollbar::-webkit-scrollbar-thumb {
+  background-color: #cbd5e1 !important;
+}
+:root:not(.dark) .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(99,102,241,0.5) !important;
+}
+
+/* --- Shadows: softer in light mode --- */
+:root:not(.dark) .shadow-2xl {
+  --tw-shadow: 0 10px 40px -10px rgba(0,0,0,0.08) !important;
+  box-shadow: var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), 0 10px 40px -10px rgba(0,0,0,0.08) !important;
+}
+:root:not(.dark) .shadow-inner {
+  --tw-shadow: inset 0 2px 4px 0 rgba(0,0,0,0.03) !important;
+  box-shadow: var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), inset 0 2px 4px 0 rgba(0,0,0,0.03) !important;
+}
