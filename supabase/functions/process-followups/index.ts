@@ -24,7 +24,7 @@ serve(async (req) => {
     }
 
     const { data: activeLeads } = await supabase.from('leads')
-      .select('id, nombre, buying_intent, last_message_at, created_at')
+      .select('id, nombre, buying_intent, last_message_at, created_at, origen')
       .not('buying_intent', 'in', '("PERDIDO","COMPRADO")');
 
     if (!activeLeads || activeLeads.length === 0) {
@@ -47,6 +47,23 @@ serve(async (req) => {
       if (leadAgeHours < PROTECTION_HOURS) {
         results.push({ id: lead.id, nombre: lead.nombre, status: 'PROTECTED', reason: `< ${PROTECTION_HOURS}h old (${Math.round(leadAgeHours)}h)` });
         continue;
+      }
+
+      // GUARDRAIL MUST-AR-03 + E15.S3:
+      // Leads auto-creados desde grupos de WhatsApp (origen='auto-from-group')
+      // NO se marcan como PERDIDO hasta que envíen al menos 1 mensaje entrante.
+      // Esto preserva la calidad de eventos para Meta CAPI.
+      if (lead.origen && lead.origen.includes('auto-from-group')) {
+        const { count: inboundCount } = await supabase
+          .from('conversaciones')
+          .select('id', { count: 'exact', head: true })
+          .eq('lead_id', lead.id)
+          .eq('emisor', 'CLIENTE');
+
+        if (!inboundCount || inboundCount === 0) {
+          results.push({ id: lead.id, nombre: lead.nombre, status: 'PROTECTED_AUTO_GROUP', reason: 'auto-from-group sin conversaciones entrantes' });
+          continue;
+        }
       }
 
       const lastActivity = lead.last_message_at ? new Date(lead.last_message_at) : new Date(lead.created_at);
