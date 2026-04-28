@@ -134,7 +134,51 @@ serve(async (req: Request): Promise<Response> => {
     const talkId = payload['unsorted[update][0][data][contacts][0][talk_id]'] || '';
     const kommoAccountId = payload['account[id]'] || '';
 
-    if (!messageText) {
+    // If no text from unsorted webhook, try to fetch last message via Kommo API (for existing leads)
+    let finalMessageText = messageText;
+    let finalSenderName = senderName;
+    const webhookLeadId = kommoLeadId || payload['leads[update][0][id]'] || '';
+
+    if (!finalMessageText && webhookLeadId) {
+      // Fetch last message from Kommo API
+      const { data: tokenCfg } = await supabase.from('app_config').select('value').eq('key', 'kommo_api_token').maybeSingle();
+      if (tokenCfg?.value) {
+        try {
+          const notesRes = await fetch(`https://theelephantbowl.kommo.com/api/v4/leads/${webhookLeadId}/notes?limit=5&order=desc`, {
+            headers: { 'Authorization': `Bearer ${tokenCfg.value}` },
+          });
+          if (notesRes.ok) {
+            const notesData = await notesRes.json();
+            const notes = notesData?._embedded?.notes || [];
+            // Find the latest incoming message note
+            for (const note of notes) {
+              if (note.note_type === 'message_cashier' || note.note_type === 'incoming_message' || note.note_type === 'service_message') {
+                finalMessageText = note.params?.text || '';
+                if (finalMessageText) break;
+              }
+            }
+          }
+
+          // Also get contact name
+          if (!finalSenderName) {
+            const contactsRes = await fetch(`https://theelephantbowl.kommo.com/api/v4/leads/${webhookLeadId}?with=contacts`, {
+              headers: { 'Authorization': `Bearer ${tokenCfg.value}` },
+            });
+            if (contactsRes.ok) {
+              const leadData = await contactsRes.json();
+              const contacts = leadData?._embedded?.contacts || [];
+              if (contacts.length > 0) {
+                finalSenderName = contacts[0].name || '';
+              }
+            }
+          }
+        } catch (e) {
+          console.error('[kommo-hook] Kommo API fetch error:', e);
+        }
+      }
+    }
+
+    if (!finalMessageText) {
       return new Response('OK', { status: 200 });
     }
 
@@ -146,7 +190,7 @@ serve(async (req: Request): Promise<Response> => {
     const platform = service === 'instagram' ? 'instagram' : 'messenger';
     const psidField = platform === 'instagram' ? 'instagram_psid' : 'messenger_psid';
 
-    console.log(`[kommo-hook] ${platform} message from ${senderName}: "${messageText.substring(0, 80)}"`);
+    console.log(`[kommo-hook] ${platform} message from ${finalSenderName}: "${finalMessageText.substring(0, 80)}"`);
 
     // --- Find or create lead in Samurai ---
     let { data: lead } = await supabase.from('leads')
@@ -172,7 +216,7 @@ serve(async (req: Request): Promise<Response> => {
     if (!lead) {
       // Create new lead
       const { data: newLead, error: createErr } = await supabase.from('leads').insert({
-        nombre: senderName,
+        nombre: finalSenderName,
         telefono: `${platform}:${clientPsid}`,
         [psidField]: clientPsid,
         kommo_id: kommoLeadId ? parseInt(kommoLeadId) : null,
@@ -197,7 +241,7 @@ serve(async (req: Request): Promise<Response> => {
         lead = newLead;
         // Create contact
         await supabase.from('contacts').insert({
-          nombre: senderName,
+          nombre: finalSenderName,
           telefono: `${platform}:${clientPsid}`,
           lead_id: lead!.id,
           origen_contacto: platform,
@@ -219,7 +263,7 @@ serve(async (req: Request): Promise<Response> => {
     await supabase.from('conversaciones').insert({
       lead_id: lead.id,
       emisor: 'CLIENTE',
-      mensaje: messageText,
+      mensaje: finalMessageText,
       platform: platform.toUpperCase(),
       metadata: {
         source: 'kommo',
@@ -270,7 +314,7 @@ serve(async (req: Request): Promise<Response> => {
             role: 'system',
             content: context + `\n\nIMPORTANTE: Este lead llegó por ${platform === 'instagram' ? 'Instagram DM' : 'Facebook Messenger'}, NO por WhatsApp. No tienes su número de teléfono. Si es natural en la conversación, pídele su número de WhatsApp para poder atenderlo mejor y enviarle información de los cursos.`
           },
-          { role: 'user', content: messageText },
+          { role: 'user', content: finalMessageText },
         ],
       }),
     });
@@ -338,7 +382,7 @@ serve(async (req: Request): Promise<Response> => {
           });
 
           if (graphRes.ok) {
-            console.log(`[kommo-hook] Reply sent via Graph API to ${senderName}`);
+            console.log(`[kommo-hook] Reply sent via Graph API to ${finalSenderName}`);
           } else {
             const errText = await graphRes.text();
             console.error(`[kommo-hook] Graph API error: ${errText}`);
@@ -352,7 +396,7 @@ serve(async (req: Request): Promise<Response> => {
 
     await supabase.from('activity_logs').insert({
       action: 'INFO', resource: 'MESSENGER',
-      description: `[kommo-hook] ${platform} de ${senderName}: "${messageText.substring(0, 50)}" → IA respondió`,
+      description: `[kommo-hook] ${platform} de ${finalSenderName}: "${finalMessageText.substring(0, 50)}" → IA respondió`,
       status: 'OK',
     }).then(() => {}).catch(() => {});
 
