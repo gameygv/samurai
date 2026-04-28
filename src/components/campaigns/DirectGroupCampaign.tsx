@@ -52,7 +52,7 @@ const MEDIA_ACCEPT: Record<string, string> = {
 };
 
 interface DirectGroupCampaignProps {
-  onContinueToCampaign?: (contacts: Array<{id: string; nombre: string; apellido?: string; telefono: string; ciudad?: string; lead_id?: string}>) => void;
+  onContinueToCampaign?: (contacts: Array<{id: string; nombre: string; apellido?: string; telefono: string; ciudad?: string; lead_id?: string}>, meta?: { mode: 'group' | 'individual'; groups?: Array<{jid: string; channel_id: string; name: string}> }) => void;
 }
 
 export const DirectGroupCampaign = ({ onContinueToCampaign }: DirectGroupCampaignProps = {}) => {
@@ -406,9 +406,18 @@ export const DirectGroupCampaign = ({ onContinueToCampaign }: DirectGroupCampaig
         {/* Botón para continuar al Campaign Manager (plantillas, variantes, programación) */}
         {someSelected && onContinueToCampaign && (
           <Button onClick={() => {
-            const members = collectSelectedMembers();
-            if (members.length === 0) { toast.error('No hay miembros seleccionados. Expande los grupos para cargar miembros.'); return; }
-            onContinueToCampaign(members);
+            const selected = groups.filter(g => selectedGroupIds.includes(g.id));
+            if (sendMode === 'individual') {
+              const members = collectSelectedMembers();
+              if (members.length === 0) { toast.error('No hay miembros seleccionados. Expande los grupos para cargar miembros.'); return; }
+              onContinueToCampaign(members, { mode: 'individual' });
+            } else {
+              // Modo grupo: pasar los grupos seleccionados con sus channel_ids
+              const groupMeta = selected.map(g => ({ jid: g.jid, channel_id: g.channel_id, name: g.name }));
+              // Los "contactos" para el Campaign Manager son dummy — el envío real va al grupo
+              const dummyContacts = selected.map(g => ({ id: g.id, nombre: g.name, telefono: g.jid }));
+              onContinueToCampaign(dummyContacts, { mode: 'group', groups: groupMeta });
+            }
           }} className={cn("w-full h-12 rounded-xl font-bold uppercase tracking-widest text-[10px]", sendMode === 'individual' ? "bg-amber-600 hover:bg-amber-500 text-slate-900" : "bg-indigo-600 hover:bg-indigo-500 text-white")}>
             <Megaphone className="w-4 h-4 mr-2" /> {sendMode === 'individual' ? `Crear Campaña Individual (${getSelectedMemberCount()} miembros)` : `Crear Campaña a ${selectedGroupIds.length} Grupo${selectedGroupIds.length > 1 ? 's' : ''}`}
           </Button>

@@ -80,6 +80,7 @@ export const CampaignsContent = () => {
   // Campaign history/edit
   const [editingCampaignId, setEditingCampaignId] = useState<string | null>(null);
   const [editDate, setEditDate] = useState('');
+  const [campaignMeta, setCampaignMeta] = useState<any>(null);
 
   useEffect(() => {
     fetchContacts();
@@ -325,11 +326,11 @@ export const CampaignsContent = () => {
           </TabsList>
 
           <TabsContent value="groups" className="mt-6">
-            <DirectGroupCampaign onContinueToCampaign={(members) => {
-              // Set members as selected contacts and open Campaign Manager
+            <DirectGroupCampaign onContinueToCampaign={(members, meta) => {
               setContacts(members);
               setTotalContacts(members.length);
               setSelectedIds(members.map(m => m.id));
+              setCampaignMeta(meta || null);
               setIsMassMessageOpen(true);
             }} />
           </TabsContent>
@@ -533,7 +534,7 @@ export const CampaignsContent = () => {
         </Tabs>
       </div>
 
-      <MassMessageDialog open={isMassMessageOpen} onOpenChange={setIsMassMessageOpen} targetContacts={contacts.filter(c => selectedIds.includes(c.id))} onScheduled={fetchScheduledCampaigns} />
+      <MassMessageDialog open={isMassMessageOpen} onOpenChange={(v) => { setIsMassMessageOpen(v); if (!v) setCampaignMeta(null); }} targetContacts={contacts.filter(c => selectedIds.includes(c.id))} onScheduled={fetchScheduledCampaigns} campaignMeta={campaignMeta} />
     </>
   );
 };
