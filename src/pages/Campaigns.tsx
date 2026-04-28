@@ -91,22 +91,56 @@ export const CampaignsContent = () => {
     fetchContacts();
   }, [currentPage, pageSize]);
 
-  const fetchContacts = async () => {
+  const fetchContacts = async (rules: FilterRule[] = filterRules) => {
     setLoading(true);
-    // Query contacts directly — no join to leads (avoids RLS/embed issues)
-    // For campaigns, we need: id, nombre, apellido, telefono, email, ciudad, academic_record, tags, lead_id
-    const query = supabase
-      .from('contacts')
-      .select('id, nombre, apellido, telefono, email, ciudad, academic_record, tags, lead_id', { count: 'exact' })
-      .order('updated_at', { ascending: false });
 
-    const from = (currentPage - 1) * pageSize;
-    const to = from + pageSize - 1;
+    // Check if there are group WA filters — if so, query via junction table
+    const groupRules = rules.filter(r => r.field === 'grupo_whatsapp' && r.value);
 
-    const { data, error, count } = await query.range(from, to);
-    if (!error && data) {
-      setContacts(data);
-      setTotalContacts(count ?? 0);
+    if (groupRules.length > 0) {
+      // Get contact IDs from contact_whatsapp_groups matching the group filter(s)
+      let gwQuery = supabase.from('contact_whatsapp_groups').select('contact_id, group_name');
+      for (const gr of groupRules) {
+        if (gr.op === 'eq') gwQuery = gwQuery.eq('group_name', gr.value);
+        else if (gr.op === 'contains') gwQuery = gwQuery.ilike('group_name', `%${gr.value}%`);
+        else if (gr.op === 'neq') gwQuery = gwQuery.neq('group_name', gr.value);
+      }
+      const { data: gwData } = await gwQuery;
+      const contactIds = [...new Set((gwData || []).map(r => r.contact_id))];
+
+      if (contactIds.length === 0) {
+        setContacts([]);
+        setTotalContacts(0);
+        setLoading(false);
+        return;
+      }
+
+      // Fetch those contacts
+      const { data, error } = await supabase
+        .from('contacts')
+        .select('id, nombre, apellido, telefono, email, ciudad, academic_record, tags, lead_id')
+        .in('id', contactIds)
+        .order('nombre');
+
+      if (!error && data) {
+        setContacts(data);
+        setTotalContacts(data.length);
+      }
+    } else {
+      // No group filter — regular paginated query
+      const query = supabase
+        .from('contacts')
+        .select('id, nombre, apellido, telefono, email, ciudad, academic_record, tags, lead_id', { count: 'exact' })
+        .order('updated_at', { ascending: false });
+
+      const from = (currentPage - 1) * pageSize;
+      const to = from + pageSize - 1;
+
+      const { data, error, count } = await query.range(from, to);
+      if (!error && data) {
+        setContacts(data);
+        setTotalContacts(count ?? 0);
+      }
     }
     setLoading(false);
   };
@@ -157,7 +191,13 @@ export const CampaignsContent = () => {
   const handleFilterChange = useCallback((rules: FilterRule[]) => {
     setFilterRules(rules);
     setCurrentPage(1);
-  }, []);
+    // Re-fetch if group filter changed (server-side)
+    const hasGroupFilter = rules.some(r => r.field === 'grupo_whatsapp' && r.value);
+    const hadGroupFilter = filterRules.some(r => r.field === 'grupo_whatsapp' && r.value);
+    if (hasGroupFilter || hadGroupFilter) {
+      setTimeout(() => fetchContacts(rules), 100);
+    }
+  }, [filterRules]);
 
   // Client-side filtering
   const filteredContacts = contacts.filter(c => {
@@ -196,8 +236,7 @@ export const CampaignsContent = () => {
       <div className="space-y-8 pb-24 animate-in fade-in duration-500">
 
         {/* CAMPAÑAS PROGRAMADAS E HISTORIAL — siempre visible */}
-        {scheduledCampaigns.length > 0 && (
-          <Card className="bg-[#0f0f11] border-[#222225] shadow-2xl rounded-2xl border-l-4 border-l-amber-500">
+        <Card className="bg-[#0f0f11] border-[#222225] shadow-2xl rounded-2xl border-l-4 border-l-amber-500">
             <CardHeader className="bg-[#161618] border-b border-[#222225] py-4 flex flex-row items-center justify-between">
               <CardTitle className="text-white text-sm uppercase tracking-widest font-bold flex items-center gap-2">
                 <History className="w-4 h-4 text-amber-500"/> Campañas ({scheduledCampaigns.length})
@@ -264,9 +303,14 @@ export const CampaignsContent = () => {
                   })}
                 </TableBody>
               </Table>
+            {scheduledCampaigns.length === 0 && (
+              <TableBody>
+                <TableRow><TableCell colSpan={5} className="h-16 text-center text-slate-600 italic text-[10px] uppercase tracking-widest">Sin campañas programadas. Selecciona contactos para crear una.</TableCell></TableRow>
+              </TableBody>
+            )}
+              </Table>
             </CardContent>
           </Card>
-        )}
 
         <Tabs value={campaignMode} onValueChange={(v: any) => setCampaignMode(v)}>
           <TabsList className="bg-[#0a0a0c] border border-[#222225] h-11 p-1 rounded-xl w-full max-w-lg">
