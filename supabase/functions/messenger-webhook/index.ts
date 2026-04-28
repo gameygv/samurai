@@ -87,37 +87,51 @@ serve(async (req: Request): Promise<Response> => {
           .maybeSingle();
 
         if (!lead) {
-          // Create new lead
-          const { data: newLead, error: createErr } = await supabase.from('leads').insert({
-            nombre: senderName,
-            telefono: `${platform}:${senderId}`, // Placeholder until they give phone
-            [psidField]: senderId,
-            origen: platform,
-            buying_intent: 'BAJO',
-            confidence_score: 0,
-            ai_paused: false,
-            estado_emocional_actual: 'NEUTRO',
-          }).select('*').single();
+          // Also try by placeholder phone
+          const { data: leadByPhone } = await supabase.from('leads')
+            .select('*')
+            .eq('telefono', `${platform}:${senderId}`)
+            .maybeSingle();
 
-          if (createErr) {
-            console.error('[messenger-webhook] Lead create error:', createErr);
-            continue;
+          if (leadByPhone) {
+            lead = leadByPhone;
+            // Update PSID if missing
+            if (!leadByPhone[psidField]) {
+              await supabase.from('leads').update({ [psidField]: senderId }).eq('id', lead.id);
+            }
+          } else {
+            // Create new lead
+            const { data: newLead, error: createErr } = await supabase.from('leads').insert({
+              nombre: senderName,
+              telefono: `${platform}:${senderId}`,
+              [psidField]: senderId,
+              origen_contacto: platform,
+              buying_intent: 'BAJO',
+              confidence_score: 0,
+              ai_paused: false,
+              estado_emocional_actual: 'NEUTRO',
+            }).select('*').single();
+
+            if (createErr) {
+              console.error('[messenger-webhook] Lead create error:', createErr.message);
+              continue;
+            }
+            lead = newLead;
+
+            // Create contact linked to lead
+            await supabase.from('contacts').insert({
+              nombre: senderName,
+              telefono: `${platform}:${senderId}`,
+              lead_id: lead.id,
+              origen_contacto: platform,
+            }).then(() => {}).catch(() => {});
+
+            await supabase.from('activity_logs').insert({
+              action: 'CREATE', resource: 'LEADS',
+              description: `Nuevo lead via ${platform}: ${senderName} (PSID: ${senderId})`,
+              status: 'OK',
+            }).then(() => {}).catch(() => {});
           }
-          lead = newLead;
-
-          // Create contact linked to lead
-          await supabase.from('contacts').insert({
-            nombre: senderName,
-            telefono: `${platform}:${senderId}`,
-            lead_id: lead.id,
-            origen_contacto: platform,
-          }).catch(e => console.error('[messenger-webhook] Contact create error:', e));
-
-          await supabase.from('activity_logs').insert({
-            action: 'CREATE', resource: 'LEADS',
-            description: `Nuevo lead via ${platform}: ${senderName} (PSID: ${senderId})`,
-            status: 'OK',
-          }).catch(() => {});
         }
 
         // --- Store message in conversaciones ---
@@ -147,38 +161,57 @@ serve(async (req: Request): Promise<Response> => {
           continue;
         }
 
-        // --- Process with AI ---
-        if (text) {
-          // Call process-samurai-response (same as WhatsApp)
-          const aiResult = await invokeFunction({
-            functionName: 'process-samurai-response',
-            body: {
-              lead_id: lead.id,
-              message: text,
-              sender_phone: senderId,
-              channel_id: null, // No WhatsApp channel
-              platform,
-            },
-            supabase,
-            errorContext: `messenger-ai lead=${lead.id}`,
-            await: true,
-          });
+        // --- Process with AI and reply ---
+        if (text && pageToken) {
+          try {
+            // Get context and generate AI response
+            const contextResult = await invokeFunction({
+              functionName: 'get-lead-context',
+              body: { lead_id: lead.id },
+              supabase,
+              errorContext: `messenger-context lead=${lead.id}`,
+              await: true,
+            });
 
-          // Get the AI response from conversaciones (process-samurai-response inserts it)
-          if (aiResult?.ok) {
-            // Fetch the latest AI response
-            const { data: aiMessages } = await supabase.from('conversaciones')
-              .select('mensaje')
-              .eq('lead_id', lead.id)
-              .eq('emisor', 'IA')
-              .order('created_at', { ascending: false })
-              .limit(1);
+            if (contextResult?.ok && contextResult.data?.context) {
+              // Call OpenAI directly for response
+              const openaiKey = Deno.env.get('OPENAI_API_KEY');
+              if (openaiKey) {
+                const aiRes = await fetch('https://api.openai.com/v1/chat/completions', {
+                  method: 'POST',
+                  headers: { 'Authorization': `Bearer ${openaiKey}`, 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    model: 'gpt-4o-mini',
+                    temperature: 0.7,
+                    max_tokens: 500,
+                    messages: [
+                      { role: 'system', content: contextResult.data.context + `\n\nIMPORTANTE: Este lead llegó por ${platform}, NO por WhatsApp. No tienes su número de teléfono aún. Si es natural en la conversación, pídele su número de WhatsApp para poder atenderlo mejor.` },
+                      { role: 'user', content: text },
+                    ],
+                  }),
+                });
 
-            const aiResponse = aiMessages?.[0]?.mensaje;
-            if (aiResponse && pageToken) {
-              // Send reply via Graph API
-              await sendMessengerReply(pageToken, senderId, aiResponse, platform);
+                if (aiRes.ok) {
+                  const aiData = await aiRes.json();
+                  const aiResponse = aiData.choices?.[0]?.message?.content;
+
+                  if (aiResponse) {
+                    // Store AI response in conversaciones
+                    await supabase.from('conversaciones').insert({
+                      lead_id: lead.id,
+                      emisor: 'IA',
+                      mensaje: aiResponse,
+                      platform: platform.toUpperCase(),
+                    });
+
+                    // Send reply via Graph API
+                    await sendMessengerReply(pageToken, senderId, aiResponse, platform);
+                  }
+                }
+              }
             }
+          } catch (aiErr) {
+            console.error('[messenger-webhook] AI processing error:', aiErr);
           }
         }
       }
