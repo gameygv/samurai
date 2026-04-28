@@ -11,7 +11,8 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import {
   Search, Loader2, MapPin, Phone,
-  Megaphone, CheckSquare, Mail, CalendarClock, Trash2, RefreshCw, Edit3, Clock, History
+  Megaphone, CheckSquare, Mail, CalendarClock, Trash2, RefreshCw, Edit3, Clock, History,
+  Eye, ChevronDown, ChevronUp, CheckCircle2, XCircle
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { MassMessageDialog } from '@/components/contacts/MassMessageDialog';
@@ -81,6 +82,7 @@ export const CampaignsContent = () => {
   const [editingCampaignId, setEditingCampaignId] = useState<string | null>(null);
   const [editDate, setEditDate] = useState('');
   const [campaignMeta, setCampaignMeta] = useState<any>(null);
+  const [expandedCampaignId, setExpandedCampaignId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchContacts();
@@ -299,7 +301,8 @@ export const CampaignsContent = () => {
                       const pct = total > 0 ? Math.round((sent / total) * 100) : 0;
                       const isEditing = editingCampaignId === camp.id;
                       return (
-                        <TableRow key={camp.id} className="border-[#222225] hover:bg-[#1a1a1d] transition-colors">
+                        <React.Fragment key={camp.id}>
+                        <TableRow className="border-[#222225] hover:bg-[#1a1a1d] transition-colors">
                           <TableCell className="pl-6">
                             <p className="font-bold text-white text-sm">{camp.name}</p>
                             {camp.message && <p className="text-[10px] text-slate-500 truncate max-w-[200px] mt-0.5">{camp.message.substring(0, 60)}...</p>}
@@ -337,11 +340,57 @@ export const CampaignsContent = () => {
                             </Badge>
                           </TableCell>
                           <TableCell className="text-right pr-6">
-                            {camp.status !== 'processing' && (
-                              <Button variant="ghost" size="icon" onClick={() => handleDeleteCampaign(camp.id)} className="h-8 w-8 text-slate-500 hover:bg-red-900/20 hover:text-red-500 rounded-lg"><Trash2 className="w-4 h-4"/></Button>
-                            )}
+                            <div className="flex justify-end items-center gap-1">
+                              <Button variant="ghost" size="icon" onClick={() => setExpandedCampaignId(expandedCampaignId === camp.id ? null : camp.id)} className="h-8 w-8 text-slate-400 hover:text-indigo-400 rounded-lg">
+                                {expandedCampaignId === camp.id ? <ChevronUp className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                              </Button>
+                              {camp.status !== 'processing' && (
+                                <Button variant="ghost" size="icon" onClick={() => handleDeleteCampaign(camp.id)} className="h-8 w-8 text-slate-500 hover:bg-red-900/20 hover:text-red-500 rounded-lg"><Trash2 className="w-4 h-4"/></Button>
+                              )}
+                            </div>
                           </TableCell>
                         </TableRow>
+                        {/* Detalle expandido */}
+                        {expandedCampaignId === camp.id && (
+                          <TableRow className="border-[#222225]">
+                            <TableCell colSpan={6} className="p-0">
+                              <div className="bg-[#0a0a0c] border-t border-[#222225] p-4 space-y-3">
+                                {camp.message && (
+                                  <div className="bg-[#121214] border border-[#222225] rounded-xl p-3">
+                                    <p className="text-[10px] uppercase font-bold text-slate-500 tracking-widest mb-1">Mensaje enviado</p>
+                                    <p className="text-xs text-slate-300 whitespace-pre-wrap">{camp.message}</p>
+                                  </div>
+                                )}
+                                <div>
+                                  <p className="text-[10px] uppercase font-bold text-slate-500 tracking-widest mb-2">Detalle de envíos ({camp.contacts?.length || 0})</p>
+                                  <div className="max-h-[300px] overflow-y-auto custom-scrollbar space-y-1">
+                                    {(camp.contacts || []).map((c: any, idx: number) => (
+                                      <div key={idx} className="flex items-center justify-between py-1.5 px-3 rounded-lg bg-[#121214] border border-[#222225] text-xs">
+                                        <div className="flex items-center gap-2 min-w-0">
+                                          <span className="font-bold text-slate-200 truncate">{c.nombre || c.telefono || c.id}</span>
+                                          {c.telefono && <span className="text-[10px] text-slate-500 font-mono shrink-0">{c.telefono}</span>}
+                                        </div>
+                                        <div className="flex items-center gap-1 shrink-0">
+                                          {c.status === 'sent' ? (
+                                            <Badge variant="outline" className="text-[8px] border-emerald-500/30 text-emerald-400 h-4 px-1.5"><CheckCircle2 className="w-2.5 h-2.5 mr-0.5"/>Enviado</Badge>
+                                          ) : c.status === 'error' ? (
+                                            <Badge variant="outline" className="text-[8px] border-red-500/30 text-red-400 h-4 px-1.5"><XCircle className="w-2.5 h-2.5 mr-0.5"/>Error</Badge>
+                                          ) : (
+                                            <Badge variant="outline" className="text-[8px] border-slate-600 text-slate-400 h-4 px-1.5">Pendiente</Badge>
+                                          )}
+                                        </div>
+                                      </div>
+                                    ))}
+                                    {(!camp.contacts || camp.contacts.length === 0) && (
+                                      <p className="text-[10px] text-slate-600 italic text-center py-4">Sin detalle de contactos disponible.</p>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        )}
+                      </React.Fragment>
                       );
                     })}
                   </TableBody>
