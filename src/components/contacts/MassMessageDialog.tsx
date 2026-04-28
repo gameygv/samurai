@@ -466,8 +466,8 @@ export const MassMessageDialog = ({ open, onOpenChange, targetContacts, onSchedu
                        <VariantTabs variants={variants} onChange={setVariants} disabled={sending} />
                     )}
 
-                    {/* ZONA DE MULTIMEDIA Y TEXTO (cuando no hay variantes activas) */}
-                    {!useVariants && (
+                    {/* ZONA DE MULTIMEDIA Y TEXTO */}
+                    {(
                     <>
                     {/* ZONA DE MULTIMEDIA */}
                     <div className="space-y-2">

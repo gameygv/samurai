@@ -216,15 +216,14 @@ export const CampaignsContent = () => {
     return true;
   });
 
-  // Auto-select all when filter is applied
+  // Auto-select all when filter rules change (not on contacts change)
   useEffect(() => {
     const validRules = filterRules.filter(r => r.field && r.op && (r.value || r.op === 'is_null' || r.op === 'not_null'));
     if (validRules.length > 0 && filteredContacts.length > 0) {
       setSelectedIds(filteredContacts.map(c => c.id));
-    } else if (validRules.length === 0) {
-      setSelectedIds([]);
     }
-  }, [filterRules, contacts, groupMembership]);
+    // Don't clear selectedIds when no filters — onContinueToCampaign sets them directly
+  }, [filterRules]);
 
   const handleToggleSelectAll = () => setSelectedIds(selectedIds.length === filteredContacts.length ? [] : filteredContacts.map(c => c.id));
   const handleToggleSelect = (id: string) => setSelectedIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
@@ -235,8 +234,8 @@ export const CampaignsContent = () => {
     <>
       <div className="space-y-8 pb-24 animate-in fade-in duration-500">
 
-        {/* CAMPAÑAS PROGRAMADAS E HISTORIAL — siempre visible */}
-        <Card className="bg-[#0f0f11] border-[#222225] shadow-2xl rounded-2xl border-l-4 border-l-amber-500">
+        {/* CAMPAÑAS PROGRAMADAS — colapsable, solo si hay */}
+        {scheduledCampaigns.length > 0 && <Card className="bg-[#0f0f11] border-[#222225] shadow-2xl rounded-2xl border-l-4 border-l-amber-500">
             <CardHeader className="bg-[#161618] border-b border-[#222225] py-4 flex flex-row items-center justify-between">
               <CardTitle className="text-white text-sm uppercase tracking-widest font-bold flex items-center gap-2">
                 <History className="w-4 h-4 text-amber-500"/> Campañas ({scheduledCampaigns.length})
@@ -303,17 +302,13 @@ export const CampaignsContent = () => {
                   })}
                 </TableBody>
               </Table>
-            {scheduledCampaigns.length === 0 && (
-              <TableBody>
-                <TableRow><TableCell colSpan={5} className="h-16 text-center text-slate-600 italic text-[10px] uppercase tracking-widest">Sin campañas programadas. Selecciona contactos para crear una.</TableCell></TableRow>
-              </TableBody>
-            )}
+                </TableBody>
               </Table>
             </CardContent>
-          </Card>
+          </Card>}
 
         <Tabs value={campaignMode} onValueChange={(v: any) => setCampaignMode(v)}>
-          <TabsList className="bg-[#0a0a0c] border border-[#222225] h-11 p-1 rounded-xl w-full max-w-lg">
+          <TabsList className="bg-[#0a0a0c] border border-[#222225] h-11 p-1 rounded-xl w-full max-w-2xl">
             <TabsTrigger value="individual" className="flex-1 rounded-lg text-[10px] font-bold uppercase tracking-widest data-[state=active]:bg-amber-600 data-[state=active]:text-slate-900">
               Difusión Individual
             </TabsTrigger>
@@ -322,6 +317,9 @@ export const CampaignsContent = () => {
             </TabsTrigger>
             <TabsTrigger value="courses" className="flex-1 rounded-lg text-[10px] font-bold uppercase tracking-widest data-[state=active]:bg-emerald-600 data-[state=active]:text-white">
               Grupos de Curso
+            </TabsTrigger>
+            <TabsTrigger value="history" className="flex-1 rounded-lg text-[10px] font-bold uppercase tracking-widest data-[state=active]:bg-purple-600 data-[state=active]:text-white">
+              <History className="w-3 h-3 mr-1" /> Historial
             </TabsTrigger>
           </TabsList>
 
@@ -335,6 +333,91 @@ export const CampaignsContent = () => {
             }} />
           </TabsContent>
           <TabsContent value="courses" className="mt-6"><GroupCampaignSection /></TabsContent>
+
+          {/* HISTORIAL DE CAMPAÑAS */}
+          <TabsContent value="history" className="mt-6 space-y-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-bold text-white flex items-center gap-2"><History className="w-5 h-5 text-purple-400" /> Historial de Campañas</h2>
+                <p className="text-xs text-slate-500 mt-1">Consulta envíos pasados, edita programadas, elimina pendientes.</p>
+              </div>
+              <Button variant="outline" size="sm" onClick={fetchScheduledCampaigns} className="text-[10px] uppercase tracking-widest font-bold"><RefreshCw className="w-3.5 h-3.5 mr-1.5"/> Refrescar</Button>
+            </div>
+
+            <Card className="bg-[#0f0f11] border-[#222225] shadow-2xl rounded-2xl overflow-hidden">
+              <CardContent className="p-0">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="border-[#222225] bg-[#121214] hover:bg-[#121214]">
+                      <TableHead className="text-slate-500 text-[10px] uppercase font-bold tracking-widest pl-6">Campaña</TableHead>
+                      <TableHead className="text-slate-500 text-[10px] uppercase font-bold tracking-widest">Contactos</TableHead>
+                      <TableHead className="text-slate-500 text-[10px] uppercase font-bold tracking-widest">Fecha Envío</TableHead>
+                      <TableHead className="text-slate-500 text-[10px] uppercase font-bold tracking-widest">Progreso</TableHead>
+                      <TableHead className="text-slate-500 text-[10px] uppercase font-bold tracking-widest">Estatus</TableHead>
+                      <TableHead className="text-right pr-6 text-slate-500 text-[10px] uppercase font-bold tracking-widest">Acciones</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {scheduledCampaigns.length === 0 ? (
+                      <TableRow><TableCell colSpan={6} className="h-32 text-center text-slate-600 italic text-xs">
+                        No hay campañas registradas. Crea una desde Difusión Individual o Grupos Directos.
+                      </TableCell></TableRow>
+                    ) : scheduledCampaigns.map(camp => {
+                      const total = camp.contacts?.length || 0;
+                      const sent = camp.contacts?.filter((c:any) => c.status === 'sent' || c.status === 'error').length || 0;
+                      const pct = total > 0 ? Math.round((sent / total) * 100) : 0;
+                      const isEditing = editingCampaignId === camp.id;
+                      return (
+                        <TableRow key={camp.id} className="border-[#222225] hover:bg-[#1a1a1d] transition-colors">
+                          <TableCell className="pl-6">
+                            <p className="font-bold text-white text-sm">{camp.name}</p>
+                            {camp.message && <p className="text-[10px] text-slate-500 truncate max-w-[200px] mt-0.5">{camp.message.substring(0, 60)}...</p>}
+                          </TableCell>
+                          <TableCell className="text-sm font-mono text-slate-300">{total}</TableCell>
+                          <TableCell>
+                            {isEditing ? (
+                              <div className="flex items-center gap-2">
+                                <Input type="datetime-local" value={editDate} onChange={e => setEditDate(e.target.value)} className="h-7 text-xs bg-[#121214] border-[#222225] w-44" />
+                                <Button size="sm" onClick={() => handleEditCampaignDate(camp.id)} className="h-7 text-[9px] bg-emerald-600 text-white">OK</Button>
+                                <Button size="sm" variant="ghost" onClick={() => setEditingCampaignId(null)} className="h-7 text-[9px] text-slate-400">X</Button>
+                              </div>
+                            ) : (
+                              <button onClick={() => { if (camp.status === 'pending') { setEditingCampaignId(camp.id); setEditDate(new Date(camp.scheduledAt).toISOString().slice(0,16)); }}} className={cn("text-xs font-mono flex items-center gap-1", camp.status === 'pending' ? "text-slate-300 hover:text-amber-400 cursor-pointer" : "text-slate-500 cursor-default")}>
+                                {camp.status === 'pending' && <Edit3 className="w-3 h-3" />}
+                                {new Date(camp.scheduledAt).toLocaleString('es-MX', { dateStyle: 'medium', timeStyle: 'short' })}
+                              </button>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-3">
+                              <div className="w-20 h-1.5 bg-[#222225] rounded-full overflow-hidden">
+                                <div className="h-full bg-amber-500 transition-all duration-500" style={{ width: `${pct}%` }}></div>
+                              </div>
+                              <span className="text-[10px] font-mono text-slate-400">{pct}%</span>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className={cn("text-[9px] uppercase font-bold tracking-widest border h-5 px-2",
+                              camp.status === 'completed' ? 'border-emerald-500/30 text-emerald-400 bg-emerald-900/10' :
+                              camp.status === 'processing' ? 'border-indigo-500/30 text-indigo-400 bg-indigo-900/10 animate-pulse' :
+                              'border-amber-500/30 text-amber-400 bg-amber-900/10'
+                            )}>
+                              {camp.status === 'completed' ? 'FINALIZADA' : camp.status === 'processing' ? 'PROCESANDO' : 'PROGRAMADA'}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-right pr-6">
+                            {camp.status !== 'processing' && (
+                              <Button variant="ghost" size="icon" onClick={() => handleDeleteCampaign(camp.id)} className="h-8 w-8 text-slate-500 hover:bg-red-900/20 hover:text-red-500 rounded-lg"><Trash2 className="w-4 h-4"/></Button>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </TabsContent>
 
           <TabsContent value="individual" className="mt-6 space-y-6">
 
