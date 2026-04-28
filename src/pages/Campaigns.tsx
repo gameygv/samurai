@@ -317,7 +317,7 @@ export const CampaignsContent = () => {
               Grupos de Curso
             </TabsTrigger>
             <TabsTrigger value="history" className="flex-1 rounded-lg text-[10px] font-bold uppercase tracking-widest data-[state=active]:bg-purple-600 data-[state=active]:text-white">
-              <History className="w-3 h-3 mr-1" /> Historial
+              <History className="w-3 h-3 mr-1" /> Historial de Campañas
             </TabsTrigger>
           </TabsList>
 
