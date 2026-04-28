@@ -52,6 +52,7 @@ NO_VERIFY_JWT=(
   "send-campaign-individual"
   "cron-sync-all-groups"
   "messenger-webhook"
+  "kommo-messenger-hook"
 
   # Sync de canales/grupos (E13 — cron + manual desde UI)
   "sync-channel-groups"
