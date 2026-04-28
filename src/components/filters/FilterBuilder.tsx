@@ -32,6 +32,7 @@ const FIELD_GROUPS = [
       { value: 'email', label: 'Email' },
       { value: 'ciudad', label: 'Ciudad' },
       { value: 'genero', label: 'Género' },
+      { value: 'tags', label: 'Etiquetas' },
     ],
   },
   {
@@ -69,7 +70,7 @@ const OPS = [
 
 // Fields that have fixed or fetchable suggestions
 const SUGGESTION_FIELDS = ['genero', 'nivel_curso', 'buying_intent'];
-const ASYNC_SUGGESTION_FIELDS = ['profesor', 'sede', 'grupo_whatsapp'];
+const ASYNC_SUGGESTION_FIELDS = ['profesor', 'sede', 'grupo_whatsapp', 'tags'];
 
 const FIXED_SUGGESTIONS: Record<string, string[]> = {
   genero: ['Hombre', 'Mujer', 'Otro'],
@@ -102,6 +103,19 @@ export const FilterBuilder = ({ onFilterChange, onLeadIds, clientSideOnly, exter
     const { data: groups } = await supabase.from('whatsapp_groups_cache').select('name').eq('is_active', true);
     if (groups) {
       newSuggestions.grupo_whatsapp = [...new Set(groups.map(g => g.name).filter(Boolean))] as string[];
+    }
+
+    // Fetch tags from app_config
+    const { data: tagConfigs } = await supabase.from('app_config').select('key, value').or('key.eq.global_tags,key.like.agent_tags_%');
+    if (tagConfigs) {
+      const allTags = new Set<string>();
+      tagConfigs.forEach(tc => {
+        try {
+          const parsed = JSON.parse(tc.value);
+          if (Array.isArray(parsed)) parsed.forEach((t: any) => { if (t.text) allTags.add(t.text); });
+        } catch {}
+      });
+      newSuggestions.tags = [...allTags];
     }
 
     setSuggestions(newSuggestions);

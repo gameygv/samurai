@@ -242,7 +242,7 @@ const Contacts = () => {
     const email = String(c.email || '').toLowerCase();
 
     const matchesSearch = term === '' || nombre.includes(term) || apellido.includes(term) || telefono.includes(term) || email.includes(term);
-    const matchesGroup = selectedGroup === 'ALL' || String(c.grupo || '') === selectedGroup;
+    const matchesGroup = true;
     const matchesCity = selectedCity === 'ALL' || String(c.ciudad || '') === selectedCity;
     const matchesTag = selectedTags.length === 0 || selectedTags.every(t => contactTags.includes(t));
 
@@ -280,7 +280,7 @@ const Contacts = () => {
     };
   }, [contacts]);
 
-  const hasActiveFilters = searchTerm !== '' || selectedGroup !== 'ALL' || selectedCity !== 'ALL' || selectedTags.length > 0 || selectedCourses.length > 0 || selectedSedes.length > 0 || selectedProfesores.length > 0 || dateFrom !== '' || dateTo !== '';
+  const hasActiveFilters = searchTerm !== '' || selectedCity !== 'ALL' || selectedTags.length > 0 || selectedCourses.length > 0 || selectedSedes.length > 0 || selectedProfesores.length > 0 || dateFrom !== '' || dateTo !== '';
 
   return (
     <Layout>
@@ -342,14 +342,6 @@ const Contacts = () => {
             <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-500" />
             <Input placeholder="Buscar por nombre, email o tel..." className="pl-10 h-10 bg-[#161618] border-[#222225] rounded-xl text-xs focus-visible:ring-indigo-500/50 text-white" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
           </div>
-
-          <Select value={selectedGroup} onValueChange={setSelectedGroup}>
-            <SelectTrigger className="w-[150px] h-10 bg-[#161618] border-[#222225] rounded-xl text-xs text-slate-300"><SelectValue placeholder="Grupo" /></SelectTrigger>
-            <SelectContent className="bg-slate-900 border-slate-800 text-white rounded-xl max-h-[300px]">
-              <SelectItem value="ALL">Cualquier Grupo</SelectItem>
-              {groups.map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}
-            </SelectContent>
-          </Select>
 
           <Select value={selectedCity} onValueChange={setSelectedCity}>
             <SelectTrigger className="w-[150px] h-10 bg-[#161618] border-[#222225] rounded-xl text-xs text-slate-300"><SelectValue placeholder="Ciudad" /></SelectTrigger>

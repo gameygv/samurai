@@ -52,6 +52,15 @@ function matchesRule(contact: any, rule: FilterRule, groupMembership: Map<string
     return op === 'eq' ? names.some(g => g.toLowerCase() === lv) : op === 'neq' ? !names.some(g => g.toLowerCase() === lv) : op === 'contains' ? names.some(g => g.toLowerCase().includes(lv)) : false;
   }
 
+  // Tags — search in array
+  if (field === 'tags') {
+    const contactTags: string[] = Array.isArray(contact.tags) ? contact.tags.map((t: any) => typeof t === 'string' ? t : t?.text || t?.label || String(t)).filter(Boolean) : [];
+    if (op === 'is_null') return contactTags.length === 0;
+    if (op === 'not_null') return contactTags.length > 0;
+    const lv = String(value).toLowerCase();
+    return op === 'eq' ? contactTags.some(t => t.toLowerCase() === lv) : op === 'neq' ? !contactTags.some(t => t.toLowerCase() === lv) : op === 'contains' ? contactTags.some(t => t.toLowerCase().includes(lv)) : false;
+  }
+
   let fv: any = contact[field] ?? null;
   if (op === 'is_null') return !fv || fv === '';
   if (op === 'not_null') return !!fv && fv !== '';
