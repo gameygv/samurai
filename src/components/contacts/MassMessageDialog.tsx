@@ -382,23 +382,9 @@ export const MassMessageDialog = ({ open, onOpenChange, targetContacts, onSchedu
                     )}
 
                     {sendMode === 'NOW' && (
-                       <div className="space-y-2 pt-2">
-                          <Label className="text-[10px] uppercase font-bold text-slate-500">Modo de Envío (Riesgo Ban)</Label>
-                          <Select value={speed} onValueChange={handleSpeedChange} disabled={sending || !isDev}>
-                             <SelectTrigger className={cn("bg-[#0a0a0c] border-[#222225] h-12 text-xs rounded-xl", !isDev && "opacity-80")}>
-                                <SelectValue />
-                             </SelectTrigger>
-                             <SelectContent className="bg-[#161618] border-[#222225] text-white rounded-xl">
-                                <SelectItem value="SAFE"><span className="text-emerald-400 font-bold">Seguro (Recomendado)</span> - Lento</SelectItem>
-                                {isDev && (
-                                   <>
-                                      <SelectItem value="NORMAL"><span className="text-amber-400 font-bold">Normal</span> - Moderado</SelectItem>
-                                      <SelectItem value="FAST"><span className="text-red-400 font-bold">Agresivo (Riesgo Alto)</span> - Rápido</SelectItem>
-                                   </>
-                                )}
-                             </SelectContent>
-                          </Select>
-                          {!isDev && <p className="text-[9px] text-amber-500 italic mt-1 pl-1 flex items-center gap-1"><Lock className="w-3 h-3"/> Solo Developers pueden cambiar la velocidad.</p>}
+                       <div className="flex items-center gap-2 text-[10px] text-emerald-400 bg-emerald-900/10 border border-emerald-500/20 p-3 rounded-xl">
+                          <ShieldAlert className="w-4 h-4 shrink-0" />
+                          <span className="font-bold uppercase tracking-widest">Modo seguro — envío lento con pausas aleatorias</span>
                        </div>
                     )}
                  </div>

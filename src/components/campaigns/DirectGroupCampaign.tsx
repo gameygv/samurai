@@ -70,7 +70,7 @@ export const DirectGroupCampaign = ({ onContinueToCampaign }: DirectGroupCampaig
   const [mediaType, setMediaType] = useState<'image' | 'video' | 'audio'>('image');
 
   // Member selection
-  const [sendMode, setSendMode] = useState<'group' | 'individual'>('group');
+  const [sendMode, setSendMode] = useState<'group' | 'individual'>('individual');
   const [expandedGroupId, setExpandedGroupId] = useState<string | null>(null);
   const [groupMembers, setGroupMembers] = useState<Map<string, GroupMember[]>>(new Map());
   const [loadingMembers, setLoadingMembers] = useState<string | null>(null);
@@ -380,15 +380,15 @@ export const DirectGroupCampaign = ({ onContinueToCampaign }: DirectGroupCampaig
         {/* Send mode toggle */}
         {someSelected && (
           <div className="flex items-center gap-2 p-2 bg-[#121214] border border-[#222225] rounded-xl">
-            <Button variant={sendMode === 'group' ? 'default' : 'ghost'} size="sm"
-              onClick={() => setSendMode('group')} disabled={sending}
-              className={cn("text-[10px] uppercase tracking-widest font-bold h-8 rounded-lg flex-1", sendMode === 'group' ? "bg-indigo-600 text-white" : "text-slate-400")}>
-              <Users className="w-3 h-3 mr-1.5" /> Enviar al grupo
-            </Button>
             <Button variant={sendMode === 'individual' ? 'default' : 'ghost'} size="sm"
               onClick={() => setSendMode('individual')} disabled={sending}
               className={cn("text-[10px] uppercase tracking-widest font-bold h-8 rounded-lg flex-1", sendMode === 'individual' ? "bg-amber-600 text-slate-900" : "text-slate-400")}>
               <UserX className="w-3 h-3 mr-1.5" /> Individual a miembros
+            </Button>
+            <Button variant={sendMode === 'group' ? 'default' : 'ghost'} size="sm"
+              onClick={() => setSendMode('group')} disabled={sending}
+              className={cn("text-[10px] uppercase tracking-widest font-bold h-8 rounded-lg flex-1", sendMode === 'group' ? "bg-indigo-600 text-white" : "text-slate-400")}>
+              <Users className="w-3 h-3 mr-1.5" /> Enviar al grupo
             </Button>
           </div>
         )}
@@ -403,19 +403,19 @@ export const DirectGroupCampaign = ({ onContinueToCampaign }: DirectGroupCampaig
           </div>
         )}
 
-        {/* Botón para continuar al Campaign Manager (con plantillas, variantes, programación) */}
-        {someSelected && sendMode === 'individual' && onContinueToCampaign && (
+        {/* Botón para continuar al Campaign Manager (plantillas, variantes, programación) */}
+        {someSelected && onContinueToCampaign && (
           <Button onClick={() => {
             const members = collectSelectedMembers();
             if (members.length === 0) { toast.error('No hay miembros seleccionados. Expande los grupos para cargar miembros.'); return; }
             onContinueToCampaign(members);
-          }} className="w-full h-12 rounded-xl font-bold uppercase tracking-widest text-[10px] bg-amber-600 hover:bg-amber-500 text-slate-900">
-            <Megaphone className="w-4 h-4 mr-2" /> Continuar al Campaign Manager ({getSelectedMemberCount()} miembros)
+          }} className={cn("w-full h-12 rounded-xl font-bold uppercase tracking-widest text-[10px]", sendMode === 'individual' ? "bg-amber-600 hover:bg-amber-500 text-slate-900" : "bg-indigo-600 hover:bg-indigo-500 text-white")}>
+            <Megaphone className="w-4 h-4 mr-2" /> {sendMode === 'individual' ? `Crear Campaña Individual (${getSelectedMemberCount()} miembros)` : `Crear Campaña a ${selectedGroupIds.length} Grupo${selectedGroupIds.length > 1 ? 's' : ''}`}
           </Button>
         )}
 
-        {/* Editor directo para envío a grupo (no individual) */}
-        {someSelected && (sendMode === 'group' || !onContinueToCampaign) && (
+        {/* Editor directo fallback (sin callback) */}
+        {someSelected && !onContinueToCampaign && (
           <>
             <label className="text-[10px] uppercase font-bold text-slate-500 tracking-widest">
               Mensaje para {sendMode === 'group' ? `${selectedGroupIds.length} grupo${selectedGroupIds.length > 1 ? 's' : ''}` : `${getSelectedMemberCount()} miembros`}
