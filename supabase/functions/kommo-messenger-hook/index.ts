@@ -15,19 +15,117 @@ serve(async (req: Request): Promise<Response> => {
   const supabase = createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '');
 
   try {
-    // Parse form-urlencoded payload from Kommo
-    const text = await req.text();
-    const params = new URLSearchParams(text);
-    const payload: Record<string, string> = {};
-    for (const [key, value] of params.entries()) {
-      payload[key] = value;
+    // Parse payload — can be JSON (from Salesbot widget_request) or form-urlencoded (from webhook)
+    const rawText = await req.text();
+    let payload: Record<string, any> = {};
+    let isSalesbotWidget = false;
+
+    try {
+      payload = JSON.parse(rawText);
+      isSalesbotWidget = true;
+    } catch {
+      const params = new URLSearchParams(rawText);
+      for (const [key, value] of params.entries()) {
+        payload[key] = value;
+      }
     }
 
-    // Extract key fields from Kommo webhook
-    // Kommo sends: unsorted[update][0][source_data][data][0][text] for message text
+    // --- Salesbot widget_request path ---
+    // Kommo Salesbot sends: { lead_id, contact_id, talk_id, message: { text, ... }, ... }
+    if (isSalesbotWidget) {
+      const msg = payload.message?.text || payload.last_message?.text || '';
+      const leadId = payload.lead_id || payload.leads_id || '';
+      const contactId = payload.contact_id || payload.contacts_id || '';
+      const contactName = payload.contact_name || payload.name || '';
+      const talkId = payload.talk_id || '';
+
+      console.log(`[kommo-hook] Salesbot widget: lead=${leadId} msg="${msg?.substring(0, 50)}"`);
+
+      if (!msg) {
+        return new Response(JSON.stringify({ reply: 'No se recibió mensaje.' }), {
+          status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      // Find lead by kommo_id
+      let { data: lead } = await supabase.from('leads')
+        .select('*')
+        .eq('kommo_id', parseInt(leadId))
+        .maybeSingle();
+
+      if (!lead) {
+        // Create minimal lead
+        const { data: newLead } = await supabase.from('leads').insert({
+          nombre: contactName || 'Lead Messenger',
+          telefono: `messenger:kommo-${leadId}`,
+          kommo_id: parseInt(leadId) || null,
+          origen_contacto: 'messenger',
+          buying_intent: 'BAJO',
+          confidence_score: 0,
+          ai_paused: false,
+          estado_emocional_actual: 'NEUTRO',
+        }).select('*').single();
+        lead = newLead;
+      }
+
+      if (!lead) {
+        return new Response(JSON.stringify({ reply: 'Error interno.' }), {
+          status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      // Store message
+      await supabase.from('conversaciones').insert({
+        lead_id: lead.id, emisor: 'CLIENTE', mensaje: msg, platform: 'MESSENGER',
+        metadata: { source: 'kommo_salesbot', kommo_lead_id: leadId, talk_id: talkId },
+      });
+
+      await supabase.from('leads').update({ last_message_at: new Date().toISOString() }).eq('id', lead.id);
+
+      // Generate AI response
+      const openaiKey = Deno.env.get('OPENAI_API_KEY');
+      let aiReply = '¡Hola! Gracias por tu mensaje. En un momento te atendemos.';
+
+      if (openaiKey && !lead.ai_paused) {
+        const contextResult = await invokeFunction({
+          functionName: 'get-lead-context', body: { lead_id: lead.id },
+          supabase, errorContext: `kommo-salesbot lead=${lead.id}`, await: true,
+        });
+        const context = contextResult?.data?.context || 'Eres un asistente de ventas amable para The Elephant Bowl.';
+
+        const aiRes = await fetch('https://api.openai.com/v1/chat/completions', {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${openaiKey}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: 'gpt-4o-mini', temperature: 0.7, max_tokens: 500,
+            messages: [
+              { role: 'system', content: context + '\n\nIMPORTANTE: Este lead llegó por Facebook Messenger, NO por WhatsApp. No tienes su número de teléfono. Si es natural, pídele su WhatsApp para atenderlo mejor.' },
+              { role: 'user', content: msg },
+            ],
+          }),
+        });
+
+        if (aiRes.ok) {
+          const aiData = await aiRes.json();
+          aiReply = aiData.choices?.[0]?.message?.content || aiReply;
+        }
+      }
+
+      // Store AI response
+      await supabase.from('conversaciones').insert({
+        lead_id: lead.id, emisor: 'IA', mensaje: aiReply, platform: 'MESSENGER',
+      });
+
+      // Return reply to Salesbot — it will send it to the client
+      return new Response(JSON.stringify({ reply: aiReply }), {
+        status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // --- Generic webhook path (unsorted/leads update) ---
     const messageText = payload['unsorted[update][0][source_data][data][0][text]'] || '';
     const senderName = payload['unsorted[update][0][source_data][name]'] || payload['unsorted[update][0][data][contacts][0][name]'] || '';
-    const service = payload['unsorted[update][0][source_data][service]'] || ''; // 'facebook' or 'instagram'
+    const service = payload['unsorted[update][0][source_data][service]'] || '';
     const sourceName = payload['unsorted[update][0][source_data][source_name]'] || '';
     const chatId = payload['unsorted[update][0][source_data][origin][chat_id]'] || '';
     const clientPsid = payload['unsorted[update][0][source_data][client][id]'] || '';
@@ -36,12 +134,10 @@ serve(async (req: Request): Promise<Response> => {
     const talkId = payload['unsorted[update][0][data][contacts][0][talk_id]'] || '';
     const kommoAccountId = payload['account[id]'] || '';
 
-    // Skip if no message text (could be a lead update, not a message)
     if (!messageText) {
       return new Response('OK', { status: 200 });
     }
 
-    // Skip messages from manager (manager field = non-zero means outgoing)
     const managerId = payload['unsorted[update][0][source_data][data][0][manager]'] || '0';
     if (managerId !== '0') {
       return new Response('OK', { status: 200 });
