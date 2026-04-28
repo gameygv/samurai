@@ -51,6 +51,7 @@ NO_VERIFY_JWT=(
   "generate-message-variants"
   "send-campaign-individual"
   "cron-sync-all-groups"
+  "messenger-webhook"
 
   # Sync de canales/grupos (E13 — cron + manual desde UI)
   "sync-channel-groups"
