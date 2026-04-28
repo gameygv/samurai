@@ -51,19 +51,21 @@ export const MassMessageDialog = ({ open, onOpenChange, targetContacts, onSchedu
 
   const pauseRef = React.useRef(paused);
   const abortRef = React.useRef(false);
+  // Freeze contacts at open time — prevents parent re-renders from changing audience mid-session
+  const frozenContactsRef = React.useRef<any[]>([]);
 
   useEffect(() => { pauseRef.current = paused; }, [paused]);
   const prevOpenRef = React.useRef(false);
   useEffect(() => {
-    // Only reset state when dialog OPENS (not on every targetContacts change)
     if (open && !prevOpenRef.current) {
+      frozenContactsRef.current = [...targetContacts];
       fetchTemplates();
-      setProgress({ current: 0, total: targetContacts.length, success: 0, failed: 0 });
+      setProgress({ current: 0, total: frozenContactsRef.current.length, success: 0, failed: 0 });
       setSending(false);
       setPaused(false);
       abortRef.current = false;
       setSpeed('SAFE');
-      calculateEta(targetContacts.length, 'SAFE');
+      calculateEta(frozenContactsRef.current.length, 'SAFE');
 
       setMediaFile(null);
       setMediaPreview(null);
@@ -167,7 +169,7 @@ export const MassMessageDialog = ({ open, onOpenChange, targetContacts, onSchedu
               channel_id: alertCfg?.value || null,
               scheduledAt: new Date(scheduledDate).toISOString(),
               status: 'pending',
-              contacts: targetContacts.map(c => ({
+              contacts: audience.map(c => ({
                   id: c.id, lead_id: c.lead_id, telefono: c.telefono, nombre: c.nombre, ciudad: c.ciudad, status: 'pending'
               })),
           };
@@ -197,7 +199,7 @@ export const MassMessageDialog = ({ open, onOpenChange, targetContacts, onSchedu
 
           if (error) throw error;
 
-          await logActivity({ action: 'CREATE', resource: 'SYSTEM', description: `Campaña programada: ${campaignTitle} (${targetContacts.length} leads)`, status: 'OK' });
+          await logActivity({ action: 'CREATE', resource: 'SYSTEM', description: `Campaña programada: ${campaignTitle} (${audience.length} leads)`, status: 'OK' });
 
           toast.success("Campaña programada exitosamente. Puedes cerrar esta ventana.", { id: tid });
           setSending(false);
@@ -211,7 +213,7 @@ export const MassMessageDialog = ({ open, onOpenChange, targetContacts, onSchedu
 
   const handleStartNow = async () => {
      if (!message.trim() && !mediaFile) return toast.error("Añade un mensaje o una imagen.");
-     if (targetContacts.length === 0) return toast.error("No hay contactos seleccionados.");
+     if (audience.length === 0) return toast.error("No hay contactos seleccionados.");
 
      setSending(true);
      setPaused(false);
@@ -282,7 +284,7 @@ export const MassMessageDialog = ({ open, onOpenChange, targetContacts, onSchedu
      let failCount = progress.failed;
      let startIndex = progress.current;
 
-     for (let i = startIndex; i < targetContacts.length; i++) {
+     for (let i = startIndex; i < audience.length; i++) {
          if (abortRef.current) break;
 
          while (pauseRef.current) {
@@ -291,7 +293,7 @@ export const MassMessageDialog = ({ open, onOpenChange, targetContacts, onSchedu
          }
          if (abortRef.current) break;
 
-         const contact = targetContacts[i];
+         const contact = audience[i];
 
          if (contact.telefono) {
              try {
@@ -319,10 +321,10 @@ export const MassMessageDialog = ({ open, onOpenChange, targetContacts, onSchedu
              } catch(e) { failCount++; }
          } else { failCount++; }
 
-         setProgress({ current: i + 1, total: targetContacts.length, success: successCount, failed: failCount });
-         calculateEta(targetContacts.length - (i + 1), speed);
-         
-         if (i < targetContacts.length - 1) {
+         setProgress({ current: i + 1, total: audience.length, success: successCount, failed: failCount });
+         calculateEta(audience.length - (i + 1), speed);
+
+         if (i < audience.length - 1) {
              let minDelay = 8000, maxDelay = 15000;
              if (speed === 'SAFE') { minDelay = 15000; maxDelay = 35000; }
              if (speed === 'FAST') { minDelay = 3000; maxDelay = 8000; }
@@ -333,7 +335,7 @@ export const MassMessageDialog = ({ open, onOpenChange, targetContacts, onSchedu
      
      if (!abortRef.current) {
         toast.success(`Campaña finalizada: ${successCount} entregados, ${failCount} fallidos.`);
-        await logActivity({ action: 'UPDATE', resource: 'LEADS', description: `📣 Campaña Manual enviada a ${targetContacts.length} contactos.`, status: failCount > 0 ? 'ERROR' : 'OK' });
+        await logActivity({ action: 'UPDATE', resource: 'LEADS', description: `📣 Campaña Manual enviada a ${audience.length} contactos.`, status: failCount > 0 ? 'ERROR' : 'OK' });
 
         // Registrar en historial de campañas
         const completedCampaign = {
@@ -365,7 +367,7 @@ export const MassMessageDialog = ({ open, onOpenChange, targetContacts, onSchedu
      toast.info("Campaña abortada.");
   };
 
-  const handleSpeedChange = (val: string) => { setSpeed(val); calculateEta(targetContacts.length, val); };
+  const handleSpeedChange = (val: string) => { setSpeed(val); calculateEta(audience.length, val); };
 
   const handleGenerateAiVariants = async () => {
     if (!message.trim() || message.trim().length < 5) return toast.error('Escribe un mensaje base de al menos 5 caracteres.');
@@ -396,7 +398,9 @@ export const MassMessageDialog = ({ open, onOpenChange, targetContacts, onSchedu
     setGeneratingVariants(false);
   };
 
-  const previewContact = targetContacts.length > 0 ? targetContacts[0] : { nombre: 'Juan Pérez', ciudad: 'Monterrey' };
+  // Use frozen contacts for all reads — prevents parent re-render from resetting audience
+  const audience = frozenContactsRef.current.length > 0 ? frozenContactsRef.current : targetContacts;
+  const previewContact = audience.length > 0 ? audience[0] : { nombre: 'Juan Pérez', ciudad: 'Monterrey' };
   const previewMessage = message.replace(/{nombre}/g, previewContact.nombre?.split(' ')[0] || 'amigo').replace(/{ciudad}/g, previewContact.ciudad || 'tu ciudad');
   const progressPercent = progress.total > 0 ? Math.round((progress.current / progress.total) * 100) : 0;
 
@@ -422,7 +426,7 @@ export const MassMessageDialog = ({ open, onOpenChange, targetContacts, onSchedu
              </div>
              
              {!sending && (
-                <Tabs value={sendMode} onValueChange={(v: any) => { setSendMode(v); calculateEta(targetContacts.length, speed); }} className="w-[280px]">
+                <Tabs value={sendMode} onValueChange={(v: any) => { setSendMode(v); calculateEta(audience.length, speed); }} className="w-[280px]">
                   <TabsList className="grid grid-cols-2 bg-[#0a0a0c] border border-[#222225] h-11 p-1 rounded-xl">
                     <TabsTrigger value="NOW" className="rounded-lg text-[10px] font-bold uppercase tracking-widest data-[state=active]:bg-indigo-600 data-[state=active]:text-white">En Vivo</TabsTrigger>
                     <TabsTrigger value="SCHEDULE" className="rounded-lg text-[10px] font-bold uppercase tracking-widest data-[state=active]:bg-amber-600 data-[state=active]:text-slate-900"><CalendarClock className="w-3.5 h-3.5 mr-1"/> Programar</TabsTrigger>
@@ -440,7 +444,7 @@ export const MassMessageDialog = ({ open, onOpenChange, targetContacts, onSchedu
                  <div className="space-y-4">
                     <div className="flex justify-between items-center bg-[#0a0a0c] p-4 rounded-2xl border border-[#222225] shadow-inner">
                        <span className="text-[11px] uppercase font-bold text-slate-500 flex items-center gap-2"><Users className="w-4 h-4 text-indigo-400"/> Audiencia Total:</span>
-                       <span className="text-2xl font-mono font-bold text-white">{targetContacts.length}</span>
+                       <span className="text-2xl font-mono font-bold text-white">{audience.length}</span>
                     </div>
 
                     {sendMode === 'SCHEDULE' && (
@@ -669,14 +673,14 @@ export const MassMessageDialog = ({ open, onOpenChange, targetContacts, onSchedu
            {sendMode === 'SCHEDULE' ? (
                <div className="w-full flex justify-between">
                   <Button variant="ghost" onClick={() => onOpenChange(false)} className="rounded-xl h-12 px-6 text-xs uppercase font-bold tracking-widest text-slate-400 hover:text-white hover:bg-[#222225]">Cancelar</Button>
-                  <Button onClick={handleScheduleCampaign} disabled={sending || !campaignTitle || (!message.trim() && !mediaFile) || targetContacts.length === 0} className="bg-amber-600 hover:bg-amber-500 text-slate-950 font-bold px-10 h-12 rounded-xl shadow-lg shadow-amber-900/20 uppercase tracking-widest text-[11px] transition-all active:scale-95">
+                  <Button onClick={handleScheduleCampaign} disabled={sending || !campaignTitle || (!message.trim() && !mediaFile) || audience.length === 0} className="bg-amber-600 hover:bg-amber-500 text-slate-950 font-bold px-10 h-12 rounded-xl shadow-lg shadow-amber-900/20 uppercase tracking-widest text-[11px] transition-all active:scale-95">
                      {sending ? <Loader2 className="w-4 h-4 mr-2 animate-spin"/> : <CalendarClock className="w-4 h-4 mr-2" />} Programar Campaña
                   </Button>
                </div>
            ) : !sending ? (
               <>
                  <Button variant="ghost" onClick={() => onOpenChange(false)} className="rounded-xl h-12 px-6 text-xs uppercase font-bold tracking-widest text-slate-400 hover:text-white hover:bg-[#222225]">Cancelar</Button>
-                 <Button onClick={handleStartNow} disabled={(!message.trim() && !mediaFile) || targetContacts.length === 0} className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-10 h-12 rounded-xl shadow-lg shadow-indigo-900/20 uppercase tracking-widest text-[11px] transition-all active:scale-95">
+                 <Button onClick={handleStartNow} disabled={(!message.trim() && !mediaFile) || audience.length === 0} className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-10 h-12 rounded-xl shadow-lg shadow-indigo-900/20 uppercase tracking-widest text-[11px] transition-all active:scale-95">
                     <Play className="w-4 h-4 mr-2" /> Iniciar Ahora
                  </Button>
               </>
