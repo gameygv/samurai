@@ -153,17 +153,17 @@ export const DirectGroupCampaign = ({ onContinueToCampaign }: DirectGroupCampaig
   };
 
   const getSelectedMemberCount = () => {
-    let total = 0;
+    const seen = new Set<string>();
     const selected = groups.filter(g => selectedGroupIds.includes(g.id));
     for (const g of selected) {
       const members = groupMembers.get(g.jid);
       if (members) {
-        total += members.filter(m => !deselectedMembers.has(m.contact_id) && !m.isAgent).length;
-      } else {
-        total += g.member_count;
+        members.forEach(m => {
+          if (!deselectedMembers.has(m.contact_id) && !m.isAgent) seen.add(m.contact_id);
+        });
       }
     }
-    return total;
+    return seen.size;
   };
 
   const filteredGroups = searchQuery

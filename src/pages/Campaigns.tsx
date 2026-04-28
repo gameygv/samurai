@@ -98,15 +98,18 @@ export const CampaignsContent = () => {
     const groupRules = rules.filter(r => r.field === 'grupo_whatsapp' && r.value);
 
     if (groupRules.length > 0) {
-      // Get contact IDs from contact_whatsapp_groups matching the group filter(s)
-      let gwQuery = supabase.from('contact_whatsapp_groups').select('contact_id, group_name');
+      // Get contact IDs from contact_whatsapp_groups — OR logic across multiple group rules
+      // (user wants contacts from group A + group B, not intersection)
+      const allContactIds = new Set<string>();
       for (const gr of groupRules) {
+        let gwQuery = supabase.from('contact_whatsapp_groups').select('contact_id');
         if (gr.op === 'eq') gwQuery = gwQuery.eq('group_name', gr.value);
         else if (gr.op === 'contains') gwQuery = gwQuery.ilike('group_name', `%${gr.value}%`);
         else if (gr.op === 'neq') gwQuery = gwQuery.neq('group_name', gr.value);
+        const { data: gwData } = await gwQuery;
+        (gwData || []).forEach(r => allContactIds.add(r.contact_id));
       }
-      const { data: gwData } = await gwQuery;
-      const contactIds = [...new Set((gwData || []).map(r => r.contact_id))];
+      const contactIds = [...allContactIds];
 
       if (contactIds.length === 0) {
         setContacts([]);
