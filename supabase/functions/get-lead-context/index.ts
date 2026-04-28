@@ -36,11 +36,12 @@ serve(async (req) => {
       });
     }
 
-    // --- 2. OBTENER HISTORIAL ---
+    // --- 2. OBTENER HISTORIAL (excluir mensajes de campaña) ---
     const { data: messages } = await supabaseClient
       .from('conversaciones')
       .select('emisor, mensaje')
       .eq('lead_id', lead.id)
+      .neq('emisor', 'CAMPAÑA')
       .order('created_at', { ascending: true })
       .limit(25);
 

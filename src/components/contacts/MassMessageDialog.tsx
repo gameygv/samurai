@@ -239,7 +239,25 @@ export const MassMessageDialog = ({ open, onOpenChange, targetContacts, onSchedu
          if (i < groupList.length - 1) await sleep(3000);
        }
        toast.success(`Campaña enviada a ${groupList.length} grupo${groupList.length > 1 ? 's' : ''}.`);
+
+       // Registrar en historial
+       const groupCampaign = {
+         id: `camp-${Date.now()}`,
+         name: campaignTitle || `Grupos ${new Date().toLocaleDateString('es-MX')}`,
+         message: message.substring(0, 200),
+         scheduledAt: new Date().toISOString(),
+         status: 'completed',
+         contacts: groupList.map((g: any) => ({ id: g.jid, nombre: g.name, telefono: g.jid, status: 'sent' })),
+       };
+       const { data: ed } = await supabase.from('app_config').select('value').eq('key', 'scheduled_campaigns').maybeSingle();
+       let el: any[] = [];
+       try { if (ed?.value) el = JSON.parse(ed.value); } catch {}
+       el.push(groupCampaign);
+       await supabase.from('app_config').upsert({ key: 'scheduled_campaigns', value: JSON.stringify(el), category: 'SYSTEM' }, { onConflict: 'key' });
+
        setSending(false);
+       if (onScheduled) onScheduled();
+       onOpenChange(false);
        return;
      }
 
@@ -290,9 +308,10 @@ export const MassMessageDialog = ({ open, onOpenChange, targetContacts, onSchedu
                  await sendEvolutionMessage(contact.telefono, personalizedMsg, contact.lead_id, uploadedMediaData, campaignChannelId);
                  
                  if (contact.lead_id) {
-                     await supabase.from('conversaciones').insert({ 
-                        lead_id: contact.lead_id, mensaje: personalizedMsg || (uploadedMediaData ? `[ARCHIVO ENVIADO]` : ''), 
-                        emisor: 'HUMANO', platform: 'PANEL'
+                     await supabase.from('conversaciones').insert({
+                        lead_id: contact.lead_id, mensaje: personalizedMsg || (uploadedMediaData ? `[ARCHIVO ENVIADO]` : ''),
+                        emisor: 'CAMPAÑA', platform: 'PANEL',
+                        metadata: { type: 'campaign', campaign_name: campaignTitle || 'Envío directo' }
                      });
                  }
 
@@ -315,7 +334,27 @@ export const MassMessageDialog = ({ open, onOpenChange, targetContacts, onSchedu
      if (!abortRef.current) {
         toast.success(`Campaña finalizada: ${successCount} entregados, ${failCount} fallidos.`);
         await logActivity({ action: 'UPDATE', resource: 'LEADS', description: `📣 Campaña Manual enviada a ${targetContacts.length} contactos.`, status: failCount > 0 ? 'ERROR' : 'OK' });
+
+        // Registrar en historial de campañas
+        const completedCampaign = {
+          id: `camp-${Date.now()}`,
+          name: campaignTitle || `Envío ${new Date().toLocaleDateString('es-MX')}`,
+          message: message.substring(0, 200),
+          scheduledAt: new Date().toISOString(),
+          status: 'completed',
+          contacts: targetContacts.map(c => ({
+            id: c.id, telefono: c.telefono, nombre: c.nombre, status: 'sent'
+          })),
+        };
+        const { data: existingData } = await supabase.from('app_config').select('value').eq('key', 'scheduled_campaigns').maybeSingle();
+        let existingList: any[] = [];
+        try { if (existingData?.value) existingList = JSON.parse(existingData.value); } catch {}
+        existingList.push(completedCampaign);
+        await supabase.from('app_config').upsert({ key: 'scheduled_campaigns', value: JSON.stringify(existingList), category: 'SYSTEM' }, { onConflict: 'key' });
+
         setSending(false);
+        if (onScheduled) onScheduled();
+        onOpenChange(false);
      }
   };
 
