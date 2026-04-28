@@ -69,12 +69,8 @@ Deno.serve(async (req) => {
 
     if (mediaData?.url) {
       // --- Envío con media (imagen/video/audio) ---
-      let downloadUrl = mediaData.url;
-      // Comprimir imágenes de Supabase Storage via transform API
-      if (mediaData.type === 'image' && downloadUrl.includes('/storage/v1/object/public/')) {
-        downloadUrl = downloadUrl.replace('/storage/v1/object/public/', '/storage/v1/render/image/public/');
-        downloadUrl += (downloadUrl.includes('?') ? '&' : '?') + 'width=1200&quality=85';
-      }
+      // Enviar imagen original sin transformar — WhatsApp comprime por su cuenta
+      const downloadUrl = mediaData.url;
 
       const fetchCtrl = new AbortController();
       const fetchTimeout = setTimeout(() => fetchCtrl.abort(), 15000); // 15s timeout

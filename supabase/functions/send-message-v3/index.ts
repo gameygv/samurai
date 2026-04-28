@@ -88,7 +88,7 @@ serve(async (req: Request): Promise<Response> => {
         let downloadUrl = mediaData.url;
         if (mediaData.type === 'image' && downloadUrl.includes('/storage/v1/object/public/')) {
             downloadUrl = downloadUrl.replace('/storage/v1/object/public/', '/storage/v1/render/image/public/');
-            downloadUrl += (downloadUrl.includes('?') ? '&' : '?') + 'width=1200&quality=85';
+            downloadUrl += (downloadUrl.includes('?') ? '&' : '?') + 'width=1200&quality=85&resize=contain';
         }
         const fileRes = await fetch(downloadUrl);
         const fileBlob = await fileRes.blob();
