@@ -68,20 +68,33 @@ REGLAS ESTRICTAS:
     let variants: string[] = [];
     try {
       const parsed = JSON.parse(content);
-      // Accept { variants: [...] } or { messages: [...] } or just [...]
-      variants = Array.isArray(parsed) ? parsed
-        : Array.isArray(parsed.variants) ? parsed.variants
-        : Array.isArray(parsed.messages) ? parsed.messages
-        : [];
+      // Try every possible key — OpenAI picks its own key name
+      if (Array.isArray(parsed)) {
+        variants = parsed;
+      } else if (typeof parsed === 'object' && parsed !== null) {
+        // Find the first array value in the object
+        for (const key of Object.keys(parsed)) {
+          if (Array.isArray(parsed[key])) {
+            variants = parsed[key];
+            break;
+          }
+        }
+      }
     } catch {
       console.error('[generate-message-variants] Parse error:', content);
-      return new Response(JSON.stringify({ error: 'No se pudieron parsear las variantes' }), {
-        status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+      // Try to extract lines as fallback
+      if (content && typeof content === 'string') {
+        variants = content.split('\n').filter((l: string) => l.trim().length > 10 && !l.startsWith('{') && !l.startsWith('"'));
+      }
+      if (variants.length === 0) {
+        return new Response(JSON.stringify({ error: 'No se pudieron parsear las variantes' }), {
+          status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
     }
 
     // Ensure we have strings
-    variants = variants.filter(v => typeof v === 'string' && v.trim().length > 0);
+    variants = variants.filter((v: unknown) => typeof v === 'string' && (v as string).trim().length > 0);
 
     return new Response(JSON.stringify({
       success: true,
