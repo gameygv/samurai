@@ -194,35 +194,8 @@ export const CampaignsContent = () => {
   return (
     <>
       <div className="space-y-8 pb-24 animate-in fade-in duration-500">
-        <Tabs value={campaignMode} onValueChange={(v: any) => setCampaignMode(v)}>
-          <TabsList className="bg-[#0a0a0c] border border-[#222225] h-11 p-1 rounded-xl w-full max-w-lg">
-            <TabsTrigger value="individual" className="flex-1 rounded-lg text-[10px] font-bold uppercase tracking-widest data-[state=active]:bg-amber-600 data-[state=active]:text-slate-900">
-              Difusión Individual
-            </TabsTrigger>
-            <TabsTrigger value="groups" className="flex-1 rounded-lg text-[10px] font-bold uppercase tracking-widest data-[state=active]:bg-indigo-600 data-[state=active]:text-white">
-              Grupos Directos
-            </TabsTrigger>
-            <TabsTrigger value="courses" className="flex-1 rounded-lg text-[10px] font-bold uppercase tracking-widest data-[state=active]:bg-emerald-600 data-[state=active]:text-white">
-              Grupos de Curso
-            </TabsTrigger>
-          </TabsList>
 
-          <TabsContent value="groups" className="mt-6"><DirectGroupCampaign /></TabsContent>
-          <TabsContent value="courses" className="mt-6"><GroupCampaignSection /></TabsContent>
-
-          <TabsContent value="individual" className="mt-6 space-y-6">
-
-        {/* HEADER con botón de enviar */}
-        <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
-          <p className="text-slate-400 text-sm">Filtra tu audiencia, selecciona contactos y lanza campañas.</p>
-          {selectedIds.length > 0 && (
-            <Button onClick={() => setIsMassMessageOpen(true)} className="bg-amber-600 hover:bg-amber-500 text-slate-950 h-11 px-8 rounded-xl shadow-lg shadow-amber-900/20 font-bold uppercase tracking-widest text-[10px] animate-in slide-in-from-right-4">
-              <Megaphone className="w-4 h-4 mr-2" /> Crear Campaña ({selectedIds.length} contactos)
-            </Button>
-          )}
-        </div>
-
-        {/* CAMPAÑAS PROGRAMADAS E HISTORIAL */}
+        {/* CAMPAÑAS PROGRAMADAS E HISTORIAL — siempre visible */}
         {scheduledCampaigns.length > 0 && (
           <Card className="bg-[#0f0f11] border-[#222225] shadow-2xl rounded-2xl border-l-4 border-l-amber-500">
             <CardHeader className="bg-[#161618] border-b border-[#222225] py-4 flex flex-row items-center justify-between">
@@ -294,6 +267,42 @@ export const CampaignsContent = () => {
             </CardContent>
           </Card>
         )}
+
+        <Tabs value={campaignMode} onValueChange={(v: any) => setCampaignMode(v)}>
+          <TabsList className="bg-[#0a0a0c] border border-[#222225] h-11 p-1 rounded-xl w-full max-w-lg">
+            <TabsTrigger value="individual" className="flex-1 rounded-lg text-[10px] font-bold uppercase tracking-widest data-[state=active]:bg-amber-600 data-[state=active]:text-slate-900">
+              Difusión Individual
+            </TabsTrigger>
+            <TabsTrigger value="groups" className="flex-1 rounded-lg text-[10px] font-bold uppercase tracking-widest data-[state=active]:bg-indigo-600 data-[state=active]:text-white">
+              Grupos Directos
+            </TabsTrigger>
+            <TabsTrigger value="courses" className="flex-1 rounded-lg text-[10px] font-bold uppercase tracking-widest data-[state=active]:bg-emerald-600 data-[state=active]:text-white">
+              Grupos de Curso
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="groups" className="mt-6">
+            <DirectGroupCampaign onContinueToCampaign={(members) => {
+              // Set members as selected contacts and open Campaign Manager
+              setContacts(members);
+              setTotalContacts(members.length);
+              setSelectedIds(members.map(m => m.id));
+              setIsMassMessageOpen(true);
+            }} />
+          </TabsContent>
+          <TabsContent value="courses" className="mt-6"><GroupCampaignSection /></TabsContent>
+
+          <TabsContent value="individual" className="mt-6 space-y-6">
+
+        {/* HEADER con botón de enviar */}
+        <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
+          <p className="text-slate-400 text-sm">Filtra tu audiencia, selecciona contactos y lanza campañas.</p>
+          {selectedIds.length > 0 && (
+            <Button onClick={() => setIsMassMessageOpen(true)} className="bg-amber-600 hover:bg-amber-500 text-slate-950 h-11 px-8 rounded-xl shadow-lg shadow-amber-900/20 font-bold uppercase tracking-widest text-[10px] animate-in slide-in-from-right-4">
+              <Megaphone className="w-4 h-4 mr-2" /> Crear Campaña ({selectedIds.length} contactos)
+            </Button>
+          )}
+        </div>
 
         {/* FILTROS */}
         <div className="space-y-4">

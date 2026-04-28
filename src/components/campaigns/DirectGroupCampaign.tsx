@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import {
   Loader2, Users, Wifi, Send, Search, Check, AlertCircle,
   CheckCircle2, XCircle, Image, Video, Music, X as XIcon,
-  ChevronDown, ChevronUp, UserX
+  ChevronDown, ChevronUp, UserX, Megaphone
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -51,7 +51,11 @@ const MEDIA_ACCEPT: Record<string, string> = {
   audio: 'audio/ogg,audio/mpeg,audio/mp4,audio/wav',
 };
 
-export const DirectGroupCampaign = () => {
+interface DirectGroupCampaignProps {
+  onContinueToCampaign?: (contacts: Array<{id: string; nombre: string; apellido?: string; telefono: string; ciudad?: string; lead_id?: string}>) => void;
+}
+
+export const DirectGroupCampaign = ({ onContinueToCampaign }: DirectGroupCampaignProps = {}) => {
   const [groups, setGroups] = useState<CachedGroup[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -264,6 +268,24 @@ export const DirectGroupCampaign = () => {
     else toast.warning(`${ok} enviados, ${fail} con error.`);
   };
 
+  const collectSelectedMembers = () => {
+    const selected = groups.filter(g => selectedGroupIds.includes(g.id));
+    const seen = new Set<string>();
+    const result: Array<{id: string; nombre: string; apellido?: string; telefono: string; ciudad?: string; lead_id?: string}> = [];
+    for (const g of selected) {
+      const members = groupMembers.get(g.jid);
+      if (members) {
+        for (const m of members) {
+          if (!m.isAgent && !deselectedMembers.has(m.contact_id) && !seen.has(m.contact_id)) {
+            seen.add(m.contact_id);
+            result.push({ id: m.contact_id, nombre: m.nombre, apellido: m.apellido, telefono: m.telefono });
+          }
+        }
+      }
+    }
+    return result;
+  };
+
   const someSelected = selectedGroupIds.length > 0;
   const canSend = someSelected && (message.trim() || media) && !sending;
   const sendComplete = sendResults.length > 0 && !sending;
@@ -381,8 +403,19 @@ export const DirectGroupCampaign = () => {
           </div>
         )}
 
-        {/* Editor */}
-        {someSelected && (
+        {/* Botón para continuar al Campaign Manager (con plantillas, variantes, programación) */}
+        {someSelected && sendMode === 'individual' && onContinueToCampaign && (
+          <Button onClick={() => {
+            const members = collectSelectedMembers();
+            if (members.length === 0) { toast.error('No hay miembros seleccionados. Expande los grupos para cargar miembros.'); return; }
+            onContinueToCampaign(members);
+          }} className="w-full h-12 rounded-xl font-bold uppercase tracking-widest text-[10px] bg-amber-600 hover:bg-amber-500 text-slate-900">
+            <Megaphone className="w-4 h-4 mr-2" /> Continuar al Campaign Manager ({getSelectedMemberCount()} miembros)
+          </Button>
+        )}
+
+        {/* Editor directo para envío a grupo (no individual) */}
+        {someSelected && (sendMode === 'group' || !onContinueToCampaign) && (
           <>
             <label className="text-[10px] uppercase font-bold text-slate-500 tracking-widest">
               Mensaje para {sendMode === 'group' ? `${selectedGroupIds.length} grupo${selectedGroupIds.length > 1 ? 's' : ''}` : `${getSelectedMemberCount()} miembros`}
