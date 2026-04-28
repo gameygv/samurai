@@ -51,7 +51,7 @@ function matchesRule(contact: any, rule: FilterRule, groupMembership: Map<string
     return op === 'eq' ? names.some(g => g.toLowerCase() === lv) : op === 'neq' ? !names.some(g => g.toLowerCase() === lv) : op === 'contains' ? names.some(g => g.toLowerCase().includes(lv)) : false;
   }
 
-  let fv: any = contact[field] ?? contact.leads?.[field] ?? (Array.isArray(contact.leads) ? contact.leads[0]?.[field] : null) ?? null;
+  let fv: any = contact[field] ?? null;
   if (op === 'is_null') return !fv || fv === '';
   if (op === 'not_null') return !!fv && fv !== '';
   const sv = String(fv || '').toLowerCase();
@@ -93,16 +93,12 @@ export const CampaignsContent = () => {
 
   const fetchContacts = async () => {
     setLoading(true);
-    // LEFT join leads — include contacts without leads too
-    let query = supabase
+    // Query contacts directly — no join to leads (avoids RLS/embed issues)
+    // For campaigns, we need: id, nombre, apellido, telefono, email, ciudad, academic_record, tags, lead_id
+    const query = supabase
       .from('contacts')
-      .select('*, leads(id, buying_intent, assigned_to, confidence_score, origen, estado_emocional_actual, ai_paused)', { count: 'exact' })
+      .select('id, nombre, apellido, telefono, email, ciudad, academic_record, tags, lead_id', { count: 'exact' })
       .order('updated_at', { ascending: false });
-
-    if (!isManager && user?.id) {
-      // For non-managers, show contacts assigned to them OR without lead (from group sync)
-      query = query.or(`leads.assigned_to.eq.${user.id},leads.is.null`);
-    }
 
     const from = (currentPage - 1) * pageSize;
     const to = from + pageSize - 1;
