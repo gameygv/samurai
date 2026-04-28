@@ -302,8 +302,6 @@ export const CampaignsContent = () => {
                   })}
                 </TableBody>
               </Table>
-                </TableBody>
-              </Table>
             </CardContent>
           </Card>}
 
