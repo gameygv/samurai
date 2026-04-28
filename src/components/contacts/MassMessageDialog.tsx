@@ -153,11 +153,15 @@ export const MassMessageDialog = ({ open, onOpenChange, targetContacts, onSchedu
               uploadedMediaData = await uploadMediaAsset();
           }
 
+          // Obtener canal de alertas para campañas
+          const { data: alertCfg } = await supabase.from('app_config').select('value').eq('key', 'default_notification_channel').maybeSingle();
+
           const newCampaign: Record<string, unknown> = {
               id: `camp-${Date.now()}`,
               name: campaignTitle,
               message,
               mediaData: uploadedMediaData,
+              channel_id: alertCfg?.value || null,
               scheduledAt: new Date(scheduledDate).toISOString(),
               status: 'pending',
               contacts: targetContacts.map(c => ({
@@ -212,6 +216,10 @@ export const MassMessageDialog = ({ open, onOpenChange, targetContacts, onSchedu
      
      let uploadedMediaData = undefined;
 
+     // Obtener canal de alertas para enviar campañas SIEMPRE desde ese canal
+     const { data: alertConfig } = await supabase.from('app_config').select('value').eq('key', 'default_notification_channel').maybeSingle();
+     const campaignChannelId = alertConfig?.value || undefined;
+
      if (mediaFile) {
          const tid = toast.loading("Subiendo archivo multimedia a la nube...");
          try {
@@ -251,7 +259,7 @@ export const MassMessageDialog = ({ open, onOpenChange, targetContacts, onSchedu
                     .replace(/{nombre}/g, contact.nombre?.split(' ')[0] || 'amigo')
                     .replace(/{ciudad}/g, contact.ciudad || '');
 
-                 await sendEvolutionMessage(contact.telefono, personalizedMsg, contact.lead_id, uploadedMediaData);
+                 await sendEvolutionMessage(contact.telefono, personalizedMsg, contact.lead_id, uploadedMediaData, campaignChannelId);
                  
                  if (contact.lead_id) {
                      await supabase.from('conversaciones').insert({ 
