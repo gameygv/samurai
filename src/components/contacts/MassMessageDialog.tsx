@@ -53,8 +53,10 @@ export const MassMessageDialog = ({ open, onOpenChange, targetContacts, onSchedu
   const abortRef = React.useRef(false);
 
   useEffect(() => { pauseRef.current = paused; }, [paused]);
+  const prevOpenRef = React.useRef(false);
   useEffect(() => {
-    if (open) {
+    // Only reset state when dialog OPENS (not on every targetContacts change)
+    if (open && !prevOpenRef.current) {
       fetchTemplates();
       setProgress({ current: 0, total: targetContacts.length, success: 0, failed: 0 });
       setSending(false);
@@ -62,7 +64,7 @@ export const MassMessageDialog = ({ open, onOpenChange, targetContacts, onSchedu
       abortRef.current = false;
       setSpeed('SAFE');
       calculateEta(targetContacts.length, 'SAFE');
-      
+
       setMediaFile(null);
       setMediaPreview(null);
       setCampaignTitle('');
@@ -70,14 +72,14 @@ export const MassMessageDialog = ({ open, onOpenChange, targetContacts, onSchedu
       setVariants([{ position: 0, label: 'Variante A', caption: '', media: null }]);
       setAiVariants([]);
       setGeneratingVariants(false);
-      
-      // Auto-set schedule date to 10 mins from now
+
       const d = new Date();
       d.setMinutes(d.getMinutes() + 10);
       d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
       setScheduledDate(d.toISOString().slice(0, 16));
     }
-  }, [open, targetContacts.length]);
+    prevOpenRef.current = open;
+  }, [open]);
 
   const fetchTemplates = async () => {
     const { data } = await supabase.from('app_config').select('value').eq('key', 'campaign_templates').maybeSingle();
@@ -214,18 +216,37 @@ export const MassMessageDialog = ({ open, onOpenChange, targetContacts, onSchedu
      setSending(true);
      setPaused(false);
      abortRef.current = false;
-     
+
      let uploadedMediaData = undefined;
 
-     // Canal de envío: grupo usa el canal del grupo, individual usa canal de alertas
-     let campaignChannelId: string | undefined;
+     // Modo grupo: enviar a cada grupo y terminar (no iterar por contacto)
      if (campaignMeta?.mode === 'group' && campaignMeta.groups?.length) {
-       // Modo grupo: se envía al grupo directamente via send-group-message
-       // (cada grupo tiene su propio channel_id)
-     } else {
-       const { data: alertConfig } = await supabase.from('app_config').select('value').eq('key', 'default_notification_channel').maybeSingle();
-       campaignChannelId = alertConfig?.value || undefined;
+       const groupList = campaignMeta.groups;
+       for (let i = 0; i < groupList.length; i++) {
+         if (abortRef.current) break;
+         const g = groupList[i];
+         try {
+           const body: Record<string, unknown> = { channel_id: g.channel_id, group_jid: g.jid, message: message.trim() };
+           if (mediaFile) {
+             if (!uploadedMediaData) uploadedMediaData = await uploadMediaAsset();
+             body.mediaData = { url: uploadedMediaData.url, type: uploadedMediaData.type, name: uploadedMediaData.name };
+           }
+           await supabase.functions.invoke('send-group-message', { body });
+           setProgress(p => ({ ...p, current: i + 1, success: p.success + 1 }));
+         } catch {
+           setProgress(p => ({ ...p, current: i + 1, failed: p.failed + 1 }));
+         }
+         if (i < groupList.length - 1) await sleep(3000);
+       }
+       toast.success(`Campaña enviada a ${groupList.length} grupo${groupList.length > 1 ? 's' : ''}.`);
+       setSending(false);
+       return;
      }
+
+     // Modo individual: canal de alertas
+     let campaignChannelId: string | undefined;
+     const { data: alertConfig } = await supabase.from('app_config').select('value').eq('key', 'default_notification_channel').maybeSingle();
+     campaignChannelId = alertConfig?.value || undefined;
 
      if (mediaFile) {
          const tid = toast.loading("Subiendo archivo multimedia a la nube...");
@@ -266,17 +287,7 @@ export const MassMessageDialog = ({ open, onOpenChange, targetContacts, onSchedu
                     .replace(/{nombre}/g, contact.nombre?.split(' ')[0] || 'amigo')
                     .replace(/{ciudad}/g, contact.ciudad || '');
 
-                 if (campaignMeta?.mode === 'group' && campaignMeta.groups) {
-                    // Modo grupo: enviar al grupo via send-group-message con el canal del grupo
-                    const groupInfo = campaignMeta.groups[i];
-                    if (groupInfo) {
-                      await supabase.functions.invoke('send-group-message', {
-                        body: { channel_id: groupInfo.channel_id, group_jid: groupInfo.jid, message: personalizedMsg }
-                      });
-                    }
-                 } else {
-                    await sendEvolutionMessage(contact.telefono, personalizedMsg, contact.lead_id, uploadedMediaData, campaignChannelId);
-                 }
+                 await sendEvolutionMessage(contact.telefono, personalizedMsg, contact.lead_id, uploadedMediaData, campaignChannelId);
                  
                  if (contact.lead_id) {
                      await supabase.from('conversaciones').insert({ 
