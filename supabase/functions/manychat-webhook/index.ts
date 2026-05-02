@@ -162,6 +162,19 @@ serve(async (req: Request): Promise<Response> => {
       await supabase.from('leads').update(updates).eq('id', lead.id);
     }
 
+    // Anti-eco: si el texto es idéntico a la última respuesta IA (dentro de 30s), ignorar
+    // ManyChat puede reenviar la respuesta del bot como si fuera un mensaje nuevo
+    if (text && lead.id) {
+      const { data: recentIA } = await supabase.from('conversaciones')
+        .select('mensaje').eq('lead_id', lead.id).eq('emisor', 'IA')
+        .gte('created_at', new Date(Date.now() - 30000).toISOString())
+        .order('created_at', { ascending: false }).limit(1).maybeSingle();
+      if (recentIA && recentIA.mensaje && text.trim() === recentIA.mensaje.trim()) {
+        return new Response(JSON.stringify({ status: 'ok', action: 'echo_skipped' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+    }
+
     // Guardar mensaje en conversaciones
     if (text) {
       await supabase.from('conversaciones').insert({

@@ -315,12 +315,18 @@ serve(async (req: Request): Promise<Response> => {
             });
         }
 
-        // LUEGO INSERTAR EN CONVERSACIONES — guardar texto limpio (sin tags)
+        // LUEGO INSERTAR EN CONVERSACIONES — guardar texto limpio (sin tags) + media metadata
         if (!sendFailed) {
-            const insertPayload: Record<string, string> = {
+            // deno-lint-ignore no-explicit-any
+            const insertPayload: Record<string, any> = {
                 lead_id: lead.id, emisor: 'IA', mensaje: cleanText || aiText, platform: 'WHATSAPP'
             };
             if (wamid) insertPayload.message_id = wamid;
+            // Guardar media URL en metadata para que el ChatView renderice la imagen
+            if (mediaMatch) {
+                const mediaUrl = mediaMatch[1];
+                insertPayload.metadata = { mediaUrl, mediaType: 'image' };
+            }
 
             const { error: convError } = await supabase.from('conversaciones').insert(insertPayload);
             if (convError) {
