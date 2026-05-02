@@ -28,9 +28,9 @@ const Index = () => {
   }, [user, isManager]);
 
   const fetchData = async () => {
-    let leadsQuery = supabase.from('leads').select('id, created_at, reminders, nombre, telefono, buying_intent, email, assigned_to');
+    let leadsQuery = supabase.from('leads').select('id, created_at, reminders, nombre, telefono, buying_intent, email, assigned_to', { count: 'exact' });
     if (!isManager) leadsQuery = leadsQuery.eq('assigned_to', user?.id);
-    const { data: leads } = await leadsQuery;
+    const { data: leads, count: leadsCount } = await leadsQuery;
     const { data: logs } = await supabase.from('activity_logs').select('*').order('created_at', { ascending: false }).limit(20);
     
     // Buscar Campañas Programadas para el Radar
@@ -98,7 +98,7 @@ const Index = () => {
 
       setChartData(formattedChartData);
       setStats({
-        totalLeads: leads.length,
+        totalLeads: leadsCount ?? leads.length,
         wonSales: leads.filter(l => l.buying_intent === 'COMPRADO').length,
         capiReady: leads.filter(l => l.email && l.email.includes('@')).length,
         recentLogs: logs || [],

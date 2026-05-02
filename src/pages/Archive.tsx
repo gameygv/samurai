@@ -6,10 +6,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   Archive as ArchiveIcon, Search, Loader2, MessageSquare,
-  RefreshCw, Sparkles, Mail, User as UserIcon, Bot, BotOff, ShieldCheck, Filter
+  RefreshCw, Sparkles, Mail, User as UserIcon, Bot, BotOff, ShieldCheck, Filter, Trash2
 } from 'lucide-react';
 import { toast } from 'sonner';
 import ChatViewer from '@/components/ChatViewer';
@@ -25,12 +26,14 @@ const Archive = () => {
   const [selectedLead, setSelectedLead] = useState<any>(null);
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [agentsMap, setAgentsMap] = useState<Record<string, string>>({});
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [deleting, setDeleting] = useState(false);
 
   // Paginación
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
   const [totalCount, setTotalCount] = useState(0);
-  
+
 
   useEffect(() => {
     if (user) fetchArchive(true, currentPage, pageSize);
@@ -83,6 +86,48 @@ const Archive = () => {
     setIsChatOpen(true);
   };
 
+  const toggleSelect = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === filtered.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filtered.map(l => l.id)));
+    }
+  };
+
+  const handleDeleteSelected = async () => {
+    if (selectedIds.size === 0) return;
+    const confirmed = window.confirm(`¿Eliminar ${selectedIds.size} lead(s) y todas sus conversaciones? Esta acción no se puede deshacer.`);
+    if (!confirmed) return;
+
+    setDeleting(true);
+    try {
+      const ids = Array.from(selectedIds);
+      // Borrar conversaciones primero (FK)
+      const { error: convError } = await supabase.from('conversaciones').delete().in('lead_id', ids);
+      if (convError) throw convError;
+      // Borrar leads
+      const { error: leadError } = await supabase.from('leads').delete().in('id', ids);
+      if (leadError) throw leadError;
+
+      toast.success(`${ids.length} lead(s) eliminados`);
+      setSelectedIds(new Set());
+      fetchArchive(false);
+    } catch (err: any) {
+      toast.error(`Error al eliminar: ${err.message}`);
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   const filtered = conversations.filter(l => {
     const matchesSearch = !searchTerm ||
       l.nombre?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -100,6 +145,18 @@ const Archive = () => {
              <ArchiveIcon className="w-8 h-8 text-indigo-400" /> Archivo de Chats
           </h1>
           <div className="flex items-center gap-3">
+            {selectedIds.size > 0 && (
+              <Button
+                size="sm"
+                variant="destructive"
+                onClick={handleDeleteSelected}
+                disabled={deleting}
+                className="h-10 px-4 text-xs font-bold uppercase tracking-wider"
+              >
+                {deleting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Trash2 className="w-4 h-4 mr-2" />}
+                Eliminar ({selectedIds.size})
+              </Button>
+            )}
             {isManager && (
               <Select value={agentFilter} onValueChange={setAgentFilter}>
                 <SelectTrigger className="w-48 h-10 rounded-xl bg-[#0f0f11] border-[#222225] text-slate-300 text-xs">
@@ -127,17 +184,31 @@ const Archive = () => {
             <Table>
               <TableHeader>
                 <TableRow className="border-[#222225] bg-[#0a0a0c]">
-                  <TableHead className="text-slate-500 text-[10px] uppercase font-bold py-4 pl-6">Cliente</TableHead>
+                  <TableHead className="w-10 pl-4">
+                    <Checkbox
+                      checked={filtered.length > 0 && selectedIds.size === filtered.length}
+                      onCheckedChange={toggleSelectAll}
+                      className="border-slate-600"
+                    />
+                  </TableHead>
+                  <TableHead className="text-slate-500 text-[10px] uppercase font-bold py-4">Cliente</TableHead>
                   {isManager && <TableHead className="text-slate-500 text-[10px] uppercase font-bold">Asignación</TableHead>}
                   <TableHead className="text-slate-500 text-[10px] uppercase font-bold">Resumen IA</TableHead>
                   <TableHead className="text-right pr-6"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {loading ? <TableRow><TableCell colSpan={4} className="h-48 text-center"><Loader2 className="animate-spin mx-auto text-indigo-500" /></TableCell></TableRow>
+                {loading ? <TableRow><TableCell colSpan={5} className="h-48 text-center"><Loader2 className="animate-spin mx-auto text-indigo-500" /></TableCell></TableRow>
                 : filtered.map((lead) => (
-                  <TableRow key={lead.id} className="border-[#222225] hover:bg-[#121214] transition-colors">
-                    <TableCell className="pl-6 font-bold">{lead.nombre || lead.telefono}</TableCell>
+                  <TableRow key={lead.id} className={cn("border-[#222225] hover:bg-[#121214] transition-colors", selectedIds.has(lead.id) && "bg-[#121218]")}>
+                    <TableCell className="pl-4">
+                      <Checkbox
+                        checked={selectedIds.has(lead.id)}
+                        onCheckedChange={() => toggleSelect(lead.id)}
+                        className="border-slate-600"
+                      />
+                    </TableCell>
+                    <TableCell className="font-bold">{lead.nombre || lead.telefono}</TableCell>
                     {isManager && <TableCell className="text-indigo-400 text-xs">{agentsMap[lead.assigned_to] || 'Sin asignar'}</TableCell>}
                     <TableCell className="text-xs text-slate-400 max-w-sm truncate">{lead.summary || 'Sin resumen'}</TableCell>
                     <TableCell className="text-right pr-6">
