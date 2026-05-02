@@ -247,6 +247,16 @@ serve(async (req: Request): Promise<Response> => {
     if (String(phone).includes('@g.us')) return new Response('ok', { status: 200 });
     let senderPhone = String(phone).split('@')[0].replace(/\D/g, '');
 
+    // Early-exit: si el canal está OFF, ignorar completamente (no crear lead ni guardar mensaje)
+    // Canales OFF se usan solo para envío de alertas (ej. Natalia)
+    if (actualChannelId) {
+        const { data: chMode } = await supabase.from('whatsapp_channels')
+            .select('ai_mode').eq('id', actualChannelId).maybeSingle();
+        if (chMode?.ai_mode === 'off') {
+            return new Response('ok', { status: 200, headers: corsHeaders });
+        }
+    }
+
     let { data: lead } = await supabase.from('leads').select('*').or(`telefono.ilike.%${senderPhone.slice(-10)}%`).limit(1).maybeSingle();
     
     if (!lead) {
@@ -465,12 +475,7 @@ serve(async (req: Request): Promise<Response> => {
     const { data: channelConfig } = actualChannelId
       ? await supabase.from('whatsapp_channels').select('ai_mode').eq('id', actualChannelId).maybeSingle()
       : { data: null };
-    const channelAiMode = channelConfig?.ai_mode || 'on'; // 'on' | 'monitor' | 'off'
-
-    // If channel is OFF, stop here (lead + message already saved above)
-    if (channelAiMode === 'off') {
-        return new Response('ok', { status: 200, headers: corsHeaders });
-    }
+    const channelAiMode = channelConfig?.ai_mode || 'on'; // 'on' | 'monitor'
 
     // ALWAYS run analyze-leads in 'on' and 'monitor' modes (extracts data + sends CAPI)
     // Skip analysis for empty/placeholder messages (no value for OpenAI tokens)
@@ -533,7 +538,15 @@ serve(async (req: Request): Promise<Response> => {
                 const dayCfg = schedule[dayId];
                 if (!dayCfg || !dayCfg.active) return true; // Day not active
                 if (dayCfg.ranges && Array.isArray(dayCfg.ranges)) {
-                    return !dayCfg.ranges.some((r: { start: string; end: string }) => hhmm >= r.start && hhmm <= r.end);
+                    return !dayCfg.ranges.some((r: { start: string; end: string }) => {
+                        if (r.start <= r.end) {
+                            // Same-day range (e.g. 09:00 → 21:00)
+                            return hhmm >= r.start && hhmm <= r.end;
+                        } else {
+                            // Overnight range (e.g. 21:00 → 08:00) — crosses midnight
+                            return hhmm >= r.start || hhmm <= r.end;
+                        }
+                    });
                 }
                 return false;
             } catch (_) { return false; }

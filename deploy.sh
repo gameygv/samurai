@@ -53,6 +53,7 @@ NO_VERIFY_JWT=(
   "cron-sync-all-groups"
   "messenger-webhook"
   "kommo-messenger-hook"
+  "manychat-webhook"
 
   # Sync de canales/grupos (E13 — cron + manual desde UI)
   "sync-channel-groups"

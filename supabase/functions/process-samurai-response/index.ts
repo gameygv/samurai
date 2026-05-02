@@ -96,7 +96,15 @@ serve(async (req: Request): Promise<Response> => {
                 const dayCfg = schedule[dayId];
                 if (!dayCfg || !dayCfg.active) return true;
                 if (dayCfg.ranges && Array.isArray(dayCfg.ranges)) {
-                    return !dayCfg.ranges.some((r: { start: string; end: string }) => hhmm >= r.start && hhmm <= r.end);
+                    return !dayCfg.ranges.some((r: { start: string; end: string }) => {
+                        if (r.start <= r.end) {
+                            // Same-day range (e.g. 09:00 → 21:00)
+                            return hhmm >= r.start && hhmm <= r.end;
+                        } else {
+                            // Overnight range (e.g. 21:00 → 08:00) — crosses midnight
+                            return hhmm >= r.start || hhmm <= r.end;
+                        }
+                    });
                 }
                 return false;
             } catch (_) { return false; }
@@ -182,10 +190,18 @@ serve(async (req: Request): Promise<Response> => {
 
     const msgs = [
         { role: 'system' as const, content: systemPrompt },
-        ...(history || []).map(h => ({
-            role: (['IA', 'SAMURAI', 'BOT'].includes(h.emisor) ? 'assistant' : 'user') as 'assistant' | 'user',
-            content: h.created_at ? `[${formatTs(h.created_at)}] ${h.mensaje}` : h.mensaje
-        })),
+        ...(history || []).map(h => {
+            // IA, SAMURAI, BOT, HUMANO, VENDEDOR → assistant (mismo lado que la IA)
+            // CLIENTE → user
+            const isAssistant = ['IA', 'SAMURAI', 'BOT', 'HUMANO', 'VENDEDOR'].includes(h.emisor);
+            const ts = h.created_at ? `[${formatTs(h.created_at)}] ` : '';
+            // Prefijo para que la IA distinga quién habló en su equipo
+            const prefix = h.emisor === 'HUMANO' || h.emisor === 'VENDEDOR' ? '[Vendedor humano]: ' : '';
+            return {
+                role: (isAssistant ? 'assistant' : 'user') as 'assistant' | 'user',
+                content: `${ts}${prefix}${h.mensaje}`
+            };
+        }),
         ...(!alreadyInHistory ? [{ role: 'user' as const, content: client_message }] : [])
     ];
 

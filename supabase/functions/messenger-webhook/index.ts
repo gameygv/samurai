@@ -37,6 +37,15 @@ serve(async (req: Request): Promise<Response> => {
 
     for (const entry of payload.entry) {
       const pageId = entry.id; // Facebook Page ID or Instagram account ID
+
+      // Si esta página está gestionada por ManyChat, ignorar (evita leads duplicados)
+      const { data: mcChannel } = await supabase.from('whatsapp_channels')
+        .select('id').eq('provider', 'manychat').eq('instance_id', String(pageId)).maybeSingle();
+      if (mcChannel) {
+        console.log(`[messenger-webhook] Page ${pageId} manejada por ManyChat, ignorando`);
+        continue;
+      }
+
       const messaging = entry.messaging || entry.messages || [];
 
       for (const event of messaging) {

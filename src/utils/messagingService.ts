@@ -36,7 +36,8 @@ export const sendMessage = async (
         channel_id: channelId,
         phone,
         message,
-        mediaData: mediaFile
+        mediaData: mediaFile,
+        lead_id: leadId
       }
     });
 

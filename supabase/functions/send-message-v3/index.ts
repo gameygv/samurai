@@ -56,7 +56,7 @@ serve(async (req: Request): Promise<Response> => {
     let endpoint = channel.api_url;
     if (endpoint?.endsWith('/')) endpoint = endpoint.slice(0, -1);
 
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    const headers: Record<string, string> = { 'Content-Type': 'application/json; charset=utf-8' };
     let bodyContent: string | FormData | undefined;
 
     if (provider === 'meta') {
@@ -110,6 +110,70 @@ serve(async (req: Request): Promise<Response> => {
         endpoint = `${endpoint}/send/message`;
         bodyContent = JSON.stringify({ phone: cleanPhone, message: message });
       }
+    }
+    else if (provider === 'manychat') {
+      // ManyChat: enviar via API usando subscriber_id del lead
+      // El lead debe tener manychat_subscriber_id vinculado
+      let mcSubscriberId: string | null = null;
+      if (lead_id) {
+        const { data: leadMc } = await supabaseClient.from('leads')
+          .select('manychat_subscriber_id').eq('id', lead_id).maybeSingle();
+        mcSubscriberId = leadMc?.manychat_subscriber_id || null;
+      }
+      // Fallback: buscar por teléfono mc_XXXXX → subscriber_id XXXXX
+      if (!mcSubscriberId && cleanPhone) {
+        const { data: leadByPhone } = await supabaseClient.from('leads')
+          .select('manychat_subscriber_id').or(`telefono.eq.mc_${cleanPhone},manychat_subscriber_id.eq.${cleanPhone}`)
+          .not('manychat_subscriber_id', 'is', null).limit(1).maybeSingle();
+        mcSubscriberId = leadByPhone?.manychat_subscriber_id || null;
+      }
+      if (!mcSubscriberId) {
+        return new Response(JSON.stringify({ success: false, error: 'Lead sin manychat_subscriber_id' }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+
+      // Obtener API key de ManyChat
+      const { data: mcKeyCfg } = await supabaseClient.from('app_config')
+        .select('value').eq('key', 'manychat_api_key').maybeSingle();
+      const mcApiKey = mcKeyCfg?.value;
+      if (!mcApiKey) {
+        return new Response(JSON.stringify({ success: false, error: 'ManyChat API key no configurada' }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+
+      // Determinar endpoint: /fb/ para Messenger, /ig/ para Instagram
+      // Usar instance_id del canal para distinguir (page_id de FB)
+      const mcPrefix = channel.name?.toLowerCase().includes('instagram') ? 'ig' : 'fb';
+      endpoint = `https://api.manychat.com/${mcPrefix}/sending/sendContent`;
+      headers['Authorization'] = `Bearer ${mcApiKey}`;
+
+      // Construir payload ManyChat Dynamic Content v2
+      // deno-lint-ignore no-explicit-any
+      const messages: any[] = [];
+      if (message) {
+        messages.push({ type: 'text', text: message });
+      }
+      if (mediaData?.url) {
+        if (mediaData.type === 'image') {
+          messages.push({ type: 'image', url: mediaData.url });
+        } else {
+          messages.push({ type: 'file', url: mediaData.url });
+        }
+      }
+
+      // subscriber_id debe ser numérico en el JSON, pero puede exceder Number.MAX_SAFE_INTEGER
+      // (ej: 26575005885494958 > 9007199254740991). Number() pierde precisión.
+      // Solución: construir JSON con placeholder y reemplazar como string raw.
+      const mcPayload = JSON.stringify({
+        subscriber_id: 0,
+        data: {
+          version: 'v2',
+          content: {
+            messages,
+          },
+        },
+      });
+      bodyContent = mcPayload.replace('"subscriber_id":0', `"subscriber_id":${mcSubscriberId}`);
     }
     else {
       headers['apikey'] = channel.api_key ?? '';
