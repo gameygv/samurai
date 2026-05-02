@@ -14,6 +14,13 @@ serve(async (req: Request): Promise<Response> => {
 
   const supabase = createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '');
 
+  // GUARD: Si hay canales ManyChat, Kommo no debe procesar Messenger/IG (evita duplicados)
+  const { count: mcCount } = await supabase.from('whatsapp_channels')
+    .select('id', { count: 'exact', head: true }).eq('provider', 'manychat');
+  if (mcCount && mcCount > 0) {
+    return new Response('OK', { status: 200 });
+  }
+
   try {
     // Parse payload — can be JSON (from Salesbot widget_request) or form-urlencoded (from webhook)
     const rawText = await req.text();
