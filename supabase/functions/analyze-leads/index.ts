@@ -129,8 +129,11 @@ ${chatContext}
 
 RESUMEN (summary): Escribe 1 frase corta (máximo 15 palabras) que resuma el estado actual de la conversación. Ejemplos: "Interesada en taller Guadalajara mayo, pidió precios", "Preguntó por cuencos nivel 2, vive en CDMX", "Solo saludó, sin interés claro aún". Sé específico sobre qué curso/servicio le interesa.
 
+TELÉFONO / WHATSAPP:
+- "whatsapp": Si el cliente comparte un número de teléfono o WhatsApp, extraerlo como string de solo dígitos (ej: "5215528627999"). Incluir código de país si lo da. Si dice "mi cel es 55 2862 7999", normalizar a "5215528627999" (agregar 521 para México). Solo extraer si el cliente da un número explícitamente.
+
 Responde UNICAMENTE con este JSON exacto (sin acentos en las claves):
-{"nombre": null, "apellido": null, "email": null, "ciudad": null, "estado": null, "cp": null, "genero": null, "fecha_nacimiento": null, "direccion": null, "rfc": null, "uso_cfdi": null, "regimen_fiscal": null, "servicio_interes": null, "summary": null, "intent": "BAJO", "lead_score": 10}`;
+{"nombre": null, "apellido": null, "email": null, "ciudad": null, "estado": null, "cp": null, "genero": null, "fecha_nacimiento": null, "direccion": null, "rfc": null, "uso_cfdi": null, "regimen_fiscal": null, "whatsapp": null, "servicio_interes": null, "summary": null, "intent": "BAJO", "lead_score": 10}`;
 
     const aiRes = await fetch("https://api.openai.com/v1/chat/completions", {
       method: 'POST',
@@ -209,6 +212,18 @@ Responde UNICAMENTE con este JSON exacto (sin acentos en las claves):
       if (parsed.direccion && parsed.direccion.length > 5 && !lead.direccion) updates.direccion = parsed.direccion;
       if (parsed.uso_cfdi && /^[A-Z]{1,2}\d{2}$/.test(String(parsed.uso_cfdi)) && !lead.uso_cfdi) updates.uso_cfdi = String(parsed.uso_cfdi).toUpperCase();
       if (parsed.regimen_fiscal && /^\d{3}$/.test(String(parsed.regimen_fiscal)) && !lead.regimen_fiscal) updates.regimen_fiscal = String(parsed.regimen_fiscal);
+
+      // WhatsApp: actualizar teléfono si el lead viene de Messenger/IG y da su número
+      if (parsed.whatsapp) {
+        const waNormalized = String(parsed.whatsapp).replace(/\D/g, '');
+        if (waNormalized.length >= 10) {
+          const currentPhone = lead.telefono || '';
+          // Solo actualizar si el teléfono actual es sintético (mc_, messenger:, ig_)
+          if (currentPhone.startsWith('mc_') || currentPhone.startsWith('messenger:') || currentPhone.startsWith('ig_')) {
+            updates.telefono = waNormalized;
+          }
+        }
+      }
 
       // GEO FALLBACK: si tenemos ciudad pero falta CP o estado
       // Nivel 1: mapa determinístico (instantáneo, sin costo)

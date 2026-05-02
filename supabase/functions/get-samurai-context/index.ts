@@ -196,17 +196,27 @@ ${hasBankData ? '   - TAMBIÉN ofrece los datos bancarios para transferencia/dep
     }
 
     // AQUI ESTÁ LA PROTECCIÓN CRÍTICA PARA DATOS Y PAGOS
+    // Detectar si el lead viene de un canal sin teléfono real (Messenger, Instagram)
+    const phoneRaw = lead.telefono || '';
+    const hasRealPhone = phoneRaw.length >= 10 && !phoneRaw.startsWith('mc_') && !phoneRaw.startsWith('messenger:') && !phoneRaw.startsWith('ig_');
+    const isNonWhatsApp = phoneRaw.startsWith('mc_') || phoneRaw.startsWith('messenger:') || phoneRaw.startsWith('ig_');
+    const whatsappRule = isNonWhatsApp && !hasRealPhone
+      ? `\n5. CAPTURA DE WHATSAPP (PRIORIDAD ALTA — CANAL NO-WHATSAPP): Este cliente te está escribiendo por ${phoneRaw.startsWith('mc_') || phoneRaw.startsWith('messenger:') ? 'Facebook Messenger' : 'Instagram'}. NO tenemos su número de WhatsApp. En cuanto la conversación lo permita de forma natural (después del primer intercambio, no en el primer mensaje), pregúntale su número de WhatsApp. Ejemplos: "Para darte un seguimiento más personalizado, ¿me compartes tu número de WhatsApp?", "¿Tienes WhatsApp donde pueda enviarte más información?". Si ya lo proporcionó, NO lo pidas de nuevo.`
+      : '';
+
     const activeLeadMemory = `
 === ESTADO ACTUAL DEL PROSPECTO (MEMORIA) ===
 Nombre conocido: ${lead.nombre && !lead.nombre.includes('Nuevo') ? lead.nombre : 'NO PROPORCIONADO'}
+Teléfono/WhatsApp: ${hasRealPhone ? phoneRaw : 'NO PROPORCIONADO'}
 Email capturado: ${lead.email || 'NO PROPORCIONADO'}
 Ciudad: ${lead.ciudad || 'NO PROPORCIONADA'}
+Canal de contacto: ${isNonWhatsApp ? (phoneRaw.startsWith('mc_') || phoneRaw.startsWith('messenger:') ? 'Facebook Messenger' : 'Instagram') : 'WhatsApp'}
 
 REGLAS ESTRICTAS DE MEMORIA Y VENTAS:
 1. SI EL EMAIL O LA CIUDAD YA ESTÁN CAPTURADOS, NO VUELVAS A PEDIRLOS BAJO NINGUNA CIRCUNSTANCIA.
 2. PAGOS: Si el cliente dice "ya pagué", "listo" o envía una imagen de comprobante, NUNCA le confirmes que el pago está validado o completo. Tu respuesta DEBE SER SIEMPRE: "¡Excelente! He recibido tu confirmación. En breve nuestro sistema automático o un asesor verificará el comprobante y validará tu acceso."
 3. CAPTURA DE EMAIL (PRIORIDAD ALTA): Cuando el cliente muestre interés real (pregunta precios, fechas, quiere inscribirse), pídele su correo electrónico de forma natural. Ejemplos: "Para enviarte la información completa y tu confirmación, ¿me compartes tu correo electrónico?", "¿A qué email te envío los detalles del taller?". El email es CRÍTICO para el seguimiento. Si ya está capturado, NO lo pidas de nuevo.
-4. RECOPILACIÓN DE DATOS PERSONALES: Cuando la conversación avance hacia la etapa de cierre (el cliente muestra interés alto o pregunta por precios/inscripción), además del email y ciudad, pregunta de forma natural: dieta (vegetariana, vegana, omnívora, etc.), alergias alimentarias, y con qué género se identifica (hombre, mujer, otro). Hazlo de forma cálida y natural, no como un formulario. Si alguno de estos datos ya está capturado, NO lo preguntes de nuevo.
+4. RECOPILACIÓN DE DATOS PERSONALES: Cuando la conversación avance hacia la etapa de cierre (el cliente muestra interés alto o pregunta por precios/inscripción), además del email y ciudad, pregunta de forma natural: dieta (vegetariana, vegana, omnívora, etc.), alergias alimentarias, y con qué género se identifica (hombre, mujer, otro). Hazlo de forma cálida y natural, no como un formulario. Si alguno de estos datos ya está capturado, NO lo preguntes de nuevo.${whatsappRule}
 `;
 
     const voiceInstruction = `
