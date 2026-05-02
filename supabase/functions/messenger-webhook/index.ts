@@ -29,6 +29,14 @@ serve(async (req: Request): Promise<Response> => {
   try {
     const payload = await req.json();
 
+    // GUARD: Si hay CUALQUIER canal ManyChat configurado, este webhook se desactiva
+    // ManyChat maneja Messenger/IG — este webhook solo sirve para páginas SIN ManyChat
+    const { count: mcCount } = await supabase.from('whatsapp_channels')
+      .select('id', { count: 'exact', head: true }).eq('provider', 'manychat');
+    if (mcCount && mcCount > 0) {
+      return new Response('OK', { status: 200 });
+    }
+
     // Meta sends { object: 'page' | 'instagram', entry: [...] }
     const objectType = payload.object; // 'page' for Messenger, 'instagram' for IG
     if (!payload.entry || !Array.isArray(payload.entry)) {
@@ -37,14 +45,6 @@ serve(async (req: Request): Promise<Response> => {
 
     for (const entry of payload.entry) {
       const pageId = entry.id; // Facebook Page ID or Instagram account ID
-
-      // Si esta página está gestionada por ManyChat, ignorar (evita leads duplicados)
-      const { data: mcChannel } = await supabase.from('whatsapp_channels')
-        .select('id').eq('provider', 'manychat').eq('instance_id', String(pageId)).maybeSingle();
-      if (mcChannel) {
-        console.log(`[messenger-webhook] Page ${pageId} manejada por ManyChat, ignorando`);
-        continue;
-      }
 
       const messaging = entry.messaging || entry.messages || [];
 
