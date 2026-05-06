@@ -38,7 +38,15 @@ serve(async (req) => {
     if (eventData.user_data?.ct) userData.ct = [await normalizeAndHash(eventData.user_data.ct)];
     if (eventData.user_data?.st) userData.st = [await normalizeAndHash(eventData.user_data.st)];
     if (eventData.user_data?.zp) userData.zp = [await normalizeAndHash(eventData.user_data.zp)];
-    if (eventData.user_data?.ge) userData.ge = [await normalizeAndHash(eventData.user_data.ge)];
+    if (eventData.user_data?.ge) {
+      // Meta espera solo 'f' o 'm' — normalizar desde cualquier formato
+      const rawGe = String(eventData.user_data.ge).toLowerCase().trim();
+      const normalizedGe = rawGe === 'f' || rawGe === 'mujer' || rawGe === 'femenino' ? 'f' :
+                           rawGe === 'm' || rawGe === 'hombre' || rawGe === 'masculino' ? 'm' : rawGe;
+      if (normalizedGe === 'f' || normalizedGe === 'm') {
+        userData.ge = [await normalizeAndHash(normalizedGe)];
+      }
+    }
     if (eventData.user_data?.db) userData.db = [await normalizeAndHash(eventData.user_data.db)];
     userData.country = [await normalizeAndHash(eventData.user_data?.country || 'mx')];
     if (eventData.user_data?.external_id) userData.external_id = [await normalizeAndHash(eventData.user_data.external_id)];
@@ -53,8 +61,7 @@ serve(async (req) => {
     if (eventData.user_data?.client_ip_address) userData.client_ip_address = eventData.user_data.client_ip_address;
     if (eventData.user_data?.client_user_agent) userData.client_user_agent = eventData.user_data.client_user_agent;
 
-    const payload = {
-      data: [{
+    const eventPayload: Record<string, unknown> = {
         event_name: eventData.event_name,
         event_time: Math.floor(Date.now() / 1000),
         event_id: eventData.event_id || `samurai_ev_${Date.now()}`,
@@ -63,8 +70,15 @@ serve(async (req) => {
            source: 'samurai_auto',
            ...eventData.custom_data,
         },
-        action_source: 'chat',
-      }],
+        action_source: eventData.action_source || 'chat',
+    };
+    // event_source_url requerido cuando action_source=website
+    if (eventData.event_source_url) {
+      eventPayload.event_source_url = eventData.event_source_url;
+    }
+
+    const payload = {
+      data: [eventPayload],
       ...(test_event_code && { test_event_code }),
     };
 

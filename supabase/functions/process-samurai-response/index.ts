@@ -143,7 +143,19 @@ serve(async (req: Request): Promise<Response> => {
         return new Response('no_key', { headers: corsHeaders });
     }
 
-    // Protección contra race condition: si ya hay una respuesta IA en los últimos 5s para este lead, no duplicar
+    // Protección contra race condition: lock optimista + check reciente
+    // 1. Intentar adquirir lock en app_config (atomic upsert)
+    const lockKey = `ai_lock_${lead.id}`;
+    const lockTs = Date.now().toString();
+    const { data: existingLock } = await supabase.from('app_config')
+        .select('value').eq('key', lockKey).maybeSingle();
+    if (existingLock && (Date.now() - Number(existingLock.value)) < 8000) {
+        // Otra instancia está procesando este lead ahora mismo
+        return new Response('locked', { headers: corsHeaders });
+    }
+    await supabase.from('app_config').upsert({ key: lockKey, value: lockTs }, { onConflict: 'key' });
+
+    // 2. Check si ya hay respuesta IA reciente (5s window)
     const { data: recentAi } = await supabase.from('conversaciones')
         .select('id')
         .eq('lead_id', lead.id)
@@ -151,6 +163,7 @@ serve(async (req: Request): Promise<Response> => {
         .gte('created_at', new Date(Date.now() - 5000).toISOString())
         .limit(1);
     if (recentAi && recentAi.length > 0) {
+        await supabase.from('app_config').delete().eq('key', lockKey);
         await supabase.from('activity_logs').insert({ action: 'INFO', resource: 'BRAIN', description: `🛡️ Race condition prevenida: ya hay respuesta IA reciente para ${lead.nombre}`, status: 'OK' });
         return new Response('duplicate_prevented', { headers: corsHeaders });
     }
@@ -255,7 +268,11 @@ serve(async (req: Request): Promise<Response> => {
         // S4.2: Extraer media tags de la respuesta IA
         const mediaRegex = /<<MEDIA:(https?:\/\/[^>]+)>>/;
         const mediaMatch = aiText.match(mediaRegex);
-        const cleanText = aiText.replace(/<<MEDIA:https?:\/\/[^>]+>>/g, '').trim();
+        const cleanText = aiText.replace(/<<MEDIA:https?:\/\/[^>]+>>/g, '')
+            .replace(/:\s*\.\s*$/gm, '.') // "poster: ." → "poster."
+            .replace(/:\s*\./g, '.')       // mid-sentence ": ." artifacts
+            .replace(/\n{3,}/g, '\n\n')    // collapse excess newlines
+            .trim();
 
         // ENVIAR A WHATSAPP PRIMERO — obtener wamid antes de insertar (S2.2-D2)
         let wamid = null;
@@ -345,11 +362,16 @@ serve(async (req: Request): Promise<Response> => {
         });
     }
 
+    // Liberar lock
+    await supabase.from('app_config').delete().eq('key', `ai_lock_${lead.id}`);
+
     return new Response(JSON.stringify({ aiText: aiText || '' }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
   } catch (err: unknown) {
     const errMsg = err instanceof Error ? err.message : String(err);
+    // Liberar lock en caso de error
+    try { await supabase.from('app_config').delete().match({ key: `ai_lock_${lead?.id}` }); } catch (_) {}
     await supabase.from('activity_logs').insert({
         action: 'ERROR', resource: 'SYSTEM',
         description: `🚨 CRASH en IA: ${errMsg}`,

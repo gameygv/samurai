@@ -511,7 +511,14 @@ Responde UNICAMENTE con este JSON exacto (sin acentos en las claves):
 
       // S5.2: Routing — assign agent to lead if not yet assigned
       // Priority: 1) channel→agent direct link, 2) auto-routing by city/territory
-      if (!lead.assigned_to) {
+      // Skip auto-routing for ManyChat leads — they stay unassigned so AI handles them 24/7
+      let skipRouting = false;
+      if (lead.channel_id) {
+        const { data: chProvider } = await supabase.from('whatsapp_channels')
+          .select('provider').eq('id', lead.channel_id).maybeSingle();
+        if (chProvider?.provider === 'manychat') skipRouting = true;
+      }
+      if (!lead.assigned_to && !skipRouting) {
         try {
           let wasAssignedByChannel = false;
 

@@ -141,10 +141,10 @@ serve(async (req: Request): Promise<Response> => {
           { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
 
-      // Determinar endpoint: /fb/ para Messenger, /ig/ para Instagram
-      // Usar instance_id del canal para distinguir (page_id de FB)
-      const mcPrefix = channel.name?.toLowerCase().includes('instagram') ? 'ig' : 'fb';
-      endpoint = `https://api.manychat.com/${mcPrefix}/sending/sendContent`;
+      // ManyChat: siempre usa /fb/sending/sendContent (incluso para Instagram)
+      // La distinción de canal se hace via content.type en el payload
+      const isInstagram = channel.name?.toLowerCase().includes('instagram') || channel.instance_id?.includes('_ig');
+      endpoint = 'https://api.manychat.com/fb/sending/sendContent';
       headers['Authorization'] = `Bearer ${mcApiKey}`;
 
       // Construir payload ManyChat Dynamic Content v2
@@ -164,13 +164,13 @@ serve(async (req: Request): Promise<Response> => {
       // subscriber_id debe ser numérico en el JSON, pero puede exceder Number.MAX_SAFE_INTEGER
       // (ej: 26575005885494958 > 9007199254740991). Number() pierde precisión.
       // Solución: construir JSON con placeholder y reemplazar como string raw.
+      const contentObj: Record<string, unknown> = { messages };
+      if (isInstagram) contentObj.type = 'instagram';
       const mcPayload = JSON.stringify({
         subscriber_id: 0,
         data: {
           version: 'v2',
-          content: {
-            messages,
-          },
+          content: contentObj,
         },
       });
       bodyContent = mcPayload.replace('"subscriber_id":0', `"subscriber_id":${mcSubscriberId}`);

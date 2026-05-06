@@ -29,9 +29,9 @@ const Login = () => {
   const checkDbConnection = async () => {
     setDbStatus('checking');
     try {
-      const { error } = await supabase.from('app_config').select('count', { count: 'exact', head: true });
-      if (error && error.code !== 'PGRST116') setDbStatus('error');
-      else setDbStatus('ok');
+      // Usa auth.getSession() que no requiere RLS ni tablas — solo que Supabase responda
+      const { error } = await supabase.auth.getSession();
+      setDbStatus(error ? 'error' : 'ok');
     } catch (err) {
       setDbStatus('error');
     }

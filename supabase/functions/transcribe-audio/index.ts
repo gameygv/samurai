@@ -121,9 +121,19 @@ serve(async (req) => {
       return new Response('audio_too_large', { headers: corsHeaders });
     }
 
+    // S4.4: Verificar que el blob es realmente audio (no HTML de error ni JSON)
+    if (audioBlob.size < 500) {
+      await logAndFallback(supabase, lead_id, message_id, `Audio sospechosamente pequeño (${audioBlob.size} bytes), posible error de descarga`, shouldInvokeAI);
+      return new Response('audio_too_small', { headers: corsHeaders });
+    }
+
     // 5. Transcribir con OpenAI Whisper
+    // Detectar extensión correcta desde el tipo del blob
+    const blobType = (audioBlob.type || 'audio/ogg').split(';')[0].trim();
+    const extMap: Record<string, string> = { 'audio/ogg': 'audio.ogg', 'audio/mpeg': 'audio.mp3', 'audio/mp4': 'audio.m4a', 'audio/webm': 'audio.webm', 'audio/wav': 'audio.wav', 'audio/x-wav': 'audio.wav', 'audio/opus': 'audio.ogg', 'audio/aac': 'audio.m4a' };
+    const fileName = extMap[blobType] || 'audio.ogg';
     const form = new FormData();
-    form.append('file', audioBlob, 'audio.ogg');
+    form.append('file', audioBlob, fileName);
     form.append('model', 'whisper-1');
     form.append('language', 'es');
 
@@ -138,10 +148,18 @@ serve(async (req) => {
       return new Response('whisper_error', { headers: corsHeaders });
     }
     const whisperData = await whisperRes.json();
-    const transcription = whisperData.text;
-    if (!transcription) {
-      await logAndFallback(supabase, lead_id, message_id, 'Whisper devolvio transcripcion vacia', shouldInvokeAI);
+    const transcription = whisperData.text?.trim();
+    if (!transcription || transcription.length < 2) {
+      await logAndFallback(supabase, lead_id, message_id, 'Whisper devolvio transcripcion vacia o muy corta', shouldInvokeAI);
       return new Response('empty_transcription', { headers: corsHeaders });
+    }
+
+    // Validar calidad: detectar artefactos de subtítulos/OCR que indican audio mal procesado
+    const garbagePatterns = ['subtítulos realizados', 'amara.org', 'suscríbete', 'subscribe', 'like and share'];
+    const lowerTranscription = transcription.toLowerCase();
+    if (garbagePatterns.some(p => lowerTranscription.includes(p))) {
+      await logAndFallback(supabase, lead_id, message_id, `Transcripcion contiene artefactos de subtítulos/OCR: "${transcription.substring(0, 80)}"`, shouldInvokeAI);
+      return new Response('garbage_transcription', { headers: corsHeaders });
     }
 
     // 6. Actualizar conversacion con transcripcion real

@@ -39,7 +39,6 @@ serve(async (req: Request): Promise<Response> => {
 
     const {
       type,              // 'message' | 'instagram_comment' | 'fb_comment'
-      subscriber_id,     // ManyChat subscriber ID (string)
       first_name,
       last_name,
       last_input_text,   // Texto del mensaje o comentario
@@ -49,6 +48,9 @@ serve(async (req: Request): Promise<Response> => {
       profile_pic,
       page_id,           // ManyChat page ID (identifica qué página/canal)
     } = body;
+
+    // ManyChat usa "subscriber_id" para Messenger pero "id" para Instagram (Full Contact Data)
+    const subscriber_id = body.subscriber_id || body.id;
 
     if (!subscriber_id) {
       return new Response(JSON.stringify({ status: 'error', message: 'subscriber_id required' }),
@@ -60,25 +62,35 @@ serve(async (req: Request): Promise<Response> => {
     const name = [first_name, last_name].filter(Boolean).join(' ') || 'Lead ManyChat';
 
     // Determinar plataforma
+    // Detección: ?platform=instagram en URL, body.platform, body.channel, o type
+    const urlPlatform = new URL(req.url).searchParams.get('platform');
     let platform = 'MESSENGER';
     if (msgType === 'instagram_comment') platform = 'INSTAGRAM_COMMENT';
     else if (msgType === 'fb_comment') platform = 'FB_COMMENT';
-    else if (msgType === 'message') {
-      // ManyChat no envía platform explícito, pero podemos inferir desde page_id
-      // Por ahora dejamos MESSENGER como default; si se necesita distinguir IG DMs,
-      // el Flow de ManyChat puede enviar un campo extra "platform": "instagram"
-      if (body.platform === 'instagram') platform = 'INSTAGRAM';
+    else if (urlPlatform === 'instagram' || body.platform === 'instagram' || body.channel === 'ig') {
+      platform = 'INSTAGRAM';
     }
 
     // Buscar canal ManyChat en whatsapp_channels (por page_id en instance_id)
+    // Instagram usa instance_id = "{page_id}_ig" para distinguir del canal Messenger
     let channelId: string | null = null;
     if (page_id) {
+      const instanceId = platform === 'INSTAGRAM' ? `${page_id}_ig` : String(page_id);
       const { data: ch } = await supabase.from('whatsapp_channels')
-        .select('id, ai_mode').eq('instance_id', String(page_id)).eq('provider', 'manychat').maybeSingle();
+        .select('id, ai_mode').eq('instance_id', instanceId).eq('provider', 'manychat').maybeSingle();
       if (ch) {
         channelId = ch.id;
-        // Si canal está OFF, ignorar
-        if (ch.ai_mode === 'off') {
+      } else if (platform === 'INSTAGRAM') {
+        // Fallback: si no hay canal IG específico, usar el canal Messenger
+        const { data: fbCh } = await supabase.from('whatsapp_channels')
+          .select('id, ai_mode').eq('instance_id', String(page_id)).eq('provider', 'manychat').maybeSingle();
+        if (fbCh) channelId = fbCh.id;
+      }
+      // Verificar ai_mode del canal encontrado
+      if (channelId) {
+        const { data: chMode } = await supabase.from('whatsapp_channels')
+          .select('ai_mode').eq('id', channelId).maybeSingle();
+        if (chMode?.ai_mode === 'off') {
           return new Response(JSON.stringify({ status: 'ok', action: 'channel_off' }),
             { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
         }

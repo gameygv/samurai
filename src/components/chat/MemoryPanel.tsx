@@ -169,14 +169,15 @@ export const MemoryPanel = ({
 
   const handleAgentChange = async (agentId: string) => {
       const newAgent = agentId === 'unassigned' ? null : agentId;
-      try {
-          await supabase.from('leads').update({ assigned_to: newAgent }).eq('id', currentAnalysis.id);
-          setMemoryForm({ ...memoryForm, assigned_to: newAgent });
-          if (onAnalysisComplete) onAnalysisComplete();
-          toast.success("Agente reasignado exitosamente.");
-      } catch (err: any) {
-          toast.error("Error al reasignar agente.");
+      const { error } = await supabase.from('leads').update({ assigned_to: newAgent }).eq('id', currentAnalysis.id);
+      if (error) {
+          console.error('Error al reasignar agente:', error);
+          toast.error(`Error al reasignar: ${error.message}`);
+          return;
       }
+      setMemoryForm({ ...memoryForm, assigned_to: newAgent });
+      if (onAnalysisComplete) onAnalysisComplete();
+      toast.success("Agente reasignado exitosamente.");
   };
 
   const handleRunAnalysis = () => {

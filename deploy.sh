@@ -34,6 +34,7 @@ NO_VERIFY_JWT=(
   "process-samurai-response"
   "transcribe-audio"
   "media-proxy"
+  "meta-capi-sender"
 
   # Cron jobs
   "health-check-pipeline"
@@ -70,6 +71,9 @@ NO_VERIFY_JWT=(
   "test-wc-connection"
   "scrape-website"
   "scrape-main-website"
+
+  # Webhooks WordPress
+  "form-webhook"
 
   # Utilidades de emergencia
   "recover-lost-messages"

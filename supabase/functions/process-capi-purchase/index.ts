@@ -35,14 +35,29 @@ serve(async (req: Request): Promise<Response> => {
         const capiEventName = isPurchase ? 'Purchase' : 'LeadLost';
         const funnelStage = isPurchase ? 'COMPRADO' : 'PERDIDO';
 
+        // Dedup: si ya se envió un Purchase OK desde form-webhook (últimos 5 min), skip
+        if (isPurchase && data.lead_id) {
+          const { data: recentPurchase } = await supabase.from('meta_capi_events')
+            .select('id').eq('lead_id', data.lead_id).eq('event_name', 'Purchase').eq('status', 'OK')
+            .gte('created_at', new Date(Date.now() - 300000).toISOString()).limit(1);
+          if (recentPurchase && recentPurchase.length > 0) {
+            await supabase.from('activity_logs').update({ status: 'OK', description: event.description + ' [SKIPPED: form-webhook already sent Purchase]' }).eq('id', event.id);
+            processed++;
+            continue;
+          }
+        }
+
         // Fetch lead completo para obtener campos de atribución (fbc, fbp, ctwa_clid)
         // que el trigger SQL no incluye en el JSON del activity_log
         let leadFbc: string | undefined;
         let leadFbp: string | undefined;
         let leadCtwaClid: string | undefined;
+        let purchaseValue = 0;
+        let actionSource = 'chat';
+        let eventSourceUrl: string | undefined;
         if (data.lead_id) {
           const { data: leadFull } = await supabase.from('leads')
-            .select('fbc, fbp, ctwa_clid, is_test_lead')
+            .select('fbc, fbp, ctwa_clid, is_test_lead, genero, apellido, fecha_nacimiento')
             .eq('id', data.lead_id).maybeSingle();
           if (leadFull) {
             // Skip test leads — never send to Meta CAPI
@@ -52,9 +67,51 @@ serve(async (req: Request): Promise<Response> => {
               processed++;
               continue;
             }
+
+            // Skip Purchase para leads que pasaron por el sitio web (tienen fbp)
+            // Facebook for WooCommerce ya envía Purchase via Pixel + CAPI con deduplicación correcta.
+            // Enviar otro Purchase desde Samurai causaría duplicación en Meta.
+            if (isPurchase && leadFull.fbp) {
+              console.log(`[process-capi-purchase] Skipping Purchase for web lead ${data.lead_id} — Facebook for WooCommerce already sent it`);
+              await supabase.from('activity_logs').update({ status: 'OK', description: event.description + ' [SKIPPED: web lead, WooCommerce handles Purchase CAPI]' }).eq('id', event.id);
+              processed++;
+              continue;
+            }
+
             leadFbc = leadFull.fbc || undefined;
             leadFbp = leadFull.fbp || undefined;
             leadCtwaClid = leadFull.ctwa_clid || undefined;
+
+            // Enriquecer user_data con campos extra del lead
+            if (leadFull.genero) data._genero = leadFull.genero;
+            if (leadFull.apellido) data._apellido = leadFull.apellido;
+            if (leadFull.fecha_nacimiento) data._fecha_nacimiento = leadFull.fecha_nacimiento;
+          }
+
+          // Buscar precio del curso más probable (match por ciudad del lead)
+          if (isPurchase) {
+            const today = new Date().toISOString().slice(0, 10);
+            const { data: course } = await supabase.from('courses')
+              .select('normal_price, presale_price, presale_ends_at')
+              .eq('ai_enabled', true)
+              .or(`valid_until.is.null,valid_until.gte.${today}`)
+              .ilike('sede', `%${data.ciudad || ''}%`)
+              .order('created_at', { ascending: false })
+              .limit(1).maybeSingle();
+            if (course) {
+              const usePresale = course.presale_price && course.presale_ends_at && course.presale_ends_at >= today;
+              purchaseValue = Number(usePresale ? course.presale_price : course.normal_price) || 0;
+            }
+            // Fallback: buscar receipt amount
+            if (purchaseValue === 0) {
+              const { data: receipt } = await supabase.from('receipts')
+                .select('amount_detected')
+                .eq('lead_id', data.lead_id)
+                .eq('is_valid', true)
+                .order('created_at', { ascending: false })
+                .limit(1).maybeSingle();
+              if (receipt?.amount_detected) purchaseValue = Number(receipt.amount_detected) || 0;
+            }
           }
         }
 
@@ -70,14 +127,18 @@ serve(async (req: Request): Promise<Response> => {
               event_name: capiEventName,
               event_id: `samurai_${data.lead_id}_${capiEventName}_${eventTimestamp}`,
               lead_id: data.lead_id,
+              action_source: actionSource,
+              event_source_url: eventSourceUrl,
               user_data: {
                 ph: data.telefono,
                 fn: data.nombre?.split(' ')[0],
-                ln: data.nombre?.split(' ').slice(1).join(' ') || undefined,
+                ln: data._apellido || data.nombre?.split(' ').slice(1).join(' ') || undefined,
                 em: data.email || undefined,
                 ct: data.ciudad || undefined,
                 st: data.estado || undefined,
                 zp: data.cp || undefined,
+                ge: data._genero || undefined,
+                db: data._fecha_nacimiento || undefined,
                 country: 'mx',
                 external_id: data.lead_id,
                 fbc: leadFbc,
@@ -89,7 +150,7 @@ serve(async (req: Request): Promise<Response> => {
                 content_name: data.servicio_interes || 'taller_cuencoterapia',
                 content_category: 'talleres_cuencoterapia',
                 currency: isPurchase ? 'MXN' : undefined,
-                value: isPurchase ? 0 : undefined,
+                value: isPurchase ? purchaseValue : undefined,
                 funnel_stage: funnelStage,
                 previous_stage: data.previous_intent || undefined,
                 origin_channel: 'whatsapp',

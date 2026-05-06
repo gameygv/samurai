@@ -204,6 +204,34 @@ ${hasBankData ? '   - TAMBIÉN ofrece los datos bancarios para transferencia/dep
       ? `\n5. CAPTURA DE WHATSAPP (PRIORIDAD ALTA — CANAL NO-WHATSAPP): Este cliente te está escribiendo por ${phoneRaw.startsWith('mc_') || phoneRaw.startsWith('messenger:') ? 'Facebook Messenger' : 'Instagram'}. NO tenemos su número de WhatsApp. En cuanto la conversación lo permita de forma natural (después del primer intercambio, no en el primer mensaje), pregúntale su número de WhatsApp. Ejemplos: "Para darte un seguimiento más personalizado, ¿me compartes tu número de WhatsApp?", "¿Tienes WhatsApp donde pueda enviarte más información?". Si ya lo proporcionó, NO lo pidas de nuevo.`
       : '';
 
+    // Generar URL de registro prellenada con datos conocidos del lead
+    const regParams = new URLSearchParams();
+    if (lead.nombre && !lead.nombre.includes('Nuevo')) {
+      const parts = lead.nombre.split(' ');
+      regParams.set('nombre', parts[0] || '');
+      if (parts.length > 1) regParams.set('apellido', parts.slice(1).join(' '));
+    }
+    if (lead.apellido) regParams.set('apellido', lead.apellido);
+    if (lead.email) regParams.set('email', lead.email);
+    if (hasRealPhone) regParams.set('telefono', phoneRaw);
+    if (lead.ciudad) regParams.set('sede', lead.ciudad);
+    if (lead.genero === 'm') regParams.set('genero', 'Hombre');
+    else if (lead.genero === 'f') regParams.set('genero', 'Mujer');
+
+    // Buscar fecha del curso más probable (match por ciudad del lead)
+    if (lead.ciudad) {
+      const cityNorm = lead.ciudad.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      const matchedCourse = courses?.find(c =>
+        c.sede && c.sede.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').includes(cityNorm)
+      );
+      if (matchedCourse?.session_dates && Array.isArray(matchedCourse.session_dates) && matchedCourse.session_dates.length > 0) {
+        regParams.set('fecha', matchedCourse.session_dates[0].date);
+      }
+    }
+
+    const regParamStr = regParams.toString();
+    const registrationUrl = `https://theelephantbowl.com/inscripciones-completa-tu-registro/${regParamStr ? '?' + regParamStr : ''}`;
+
     const activeLeadMemory = `
 === ESTADO ACTUAL DEL PROSPECTO (MEMORIA) ===
 Nombre conocido: ${lead.nombre && !lead.nombre.includes('Nuevo') ? lead.nombre : 'NO PROPORCIONADO'}
@@ -214,7 +242,8 @@ Canal de contacto: ${isNonWhatsApp ? (phoneRaw.startsWith('mc_') || phoneRaw.sta
 
 REGLAS ESTRICTAS DE MEMORIA Y VENTAS:
 1. SI EL EMAIL O LA CIUDAD YA ESTÁN CAPTURADOS, NO VUELVAS A PEDIRLOS BAJO NINGUNA CIRCUNSTANCIA.
-2. PAGOS: Si el cliente dice "ya pagué", "listo" o envía una imagen de comprobante, NUNCA le confirmes que el pago está validado o completo. Tu respuesta DEBE SER SIEMPRE: "¡Excelente! He recibido tu confirmación. En breve nuestro sistema automático o un asesor verificará el comprobante y validará tu acceso."
+2. PAGOS: Si el cliente dice "ya pagué", "listo" o envía una imagen de comprobante, NUNCA le confirmes que el pago está validado o completo. Tu respuesta DEBE SER SIEMPRE: "¡Excelente! He recibido tu confirmación. En breve nuestro sistema automático o un asesor verificará el comprobante y validará tu acceso. Mientras tanto, por favor completa tu registro de estudiante en este enlace: ${registrationUrl} — es rápido y nos ayuda a tener todo listo para tu experiencia."
+IMPORTANTE: El link del formulario de registro SIEMPRE debe enviarse después de que el cliente confirme su pago. Es obligatorio para completar la inscripción. USA SIEMPRE el link exacto proporcionado arriba (ya incluye los datos del cliente prellenados).
 3. CAPTURA DE EMAIL (PRIORIDAD ALTA): Cuando el cliente muestre interés real (pregunta precios, fechas, quiere inscribirse), pídele su correo electrónico de forma natural. Ejemplos: "Para enviarte la información completa y tu confirmación, ¿me compartes tu correo electrónico?", "¿A qué email te envío los detalles del taller?". El email es CRÍTICO para el seguimiento. Si ya está capturado, NO lo pidas de nuevo.
 4. RECOPILACIÓN DE DATOS PERSONALES: Cuando la conversación avance hacia la etapa de cierre (el cliente muestra interés alto o pregunta por precios/inscripción), además del email y ciudad, pregunta de forma natural: dieta (vegetariana, vegana, omnívora, etc.), alergias alimentarias, y con qué género se identifica (hombre, mujer, otro). Hazlo de forma cálida y natural, no como un formulario. Si alguno de estos datos ya está capturado, NO lo preguntes de nuevo.${whatsappRule}
 `;
