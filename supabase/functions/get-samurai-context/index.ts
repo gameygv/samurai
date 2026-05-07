@@ -55,7 +55,7 @@ serve(async (req: Request): Promise<Response> => {
 
     // --- CARGAR CATÁLOGO DE CURSOS Y TALLERES ---
     const { data: courses } = await supabaseClient.from('courses').select('*').eq('ai_enabled', true).or(`valid_until.is.null,valid_until.gte.${today}`);
-    let coursesContext = "\n=== CATÁLOGO DE CURSOS Y TALLERES ===\nINSTRUCCIÓN: Para enviar el poster de un curso usa <<MEDIA:url_del_poster>>. Ofrece cursos activos basándote en las fechas y precios. Si la preventa está vigente, menciona el precio de preventa y la urgencia. Si sale_closes_at ya pasó, NO ofrezcas ese curso.\n";
+    let coursesContext = "\n=== CATÁLOGO DE CURSOS Y TALLERES ===\nINSTRUCCIÓN: Para enviar el poster de un curso usa <<MEDIA:url_del_poster>>. Ofrece cursos activos basándote en las fechas y precios. Si la preventa está vigente, menciona el precio de preventa y la urgencia. Si sale_closes_at ya pasó, NO ofrezcas ese curso.\n⚠️ REGLA CRÍTICA: SOLO puedes ofrecer cursos que aparecen en este catálogo. NUNCA inventes cursos, fechas, sedes ni niveles que no estén listados aquí. Si el cliente pregunta por una ciudad donde NO hay curso registrado, dile honestamente que por ahora no hay taller en esa ciudad y recomienda la sede más cercana usando el mapa de proximidad. NUNCA asocies el poster de una ciudad con información de otra ciudad.\n";
     courses?.forEach(c => {
       // Skip courses past their sale closing date
       if (c.sale_closes_at && c.sale_closes_at < today) return;
@@ -302,6 +302,7 @@ INSTRUCCIÓN CRÍTICA TEMPORAL: NO debes mencionar precios específicos de curso
 ### REGLA DE POSTER (OBLIGATORIO):
 - SIEMPRE envía el poster del curso con <<MEDIA:url_del_poster>> cuando recomiendes un curso específico. Es OBLIGATORIO. No digas "te comparto el poster" sin incluir el tag <<MEDIA:url>>.
 - El poster se envía como imagen adjunta automáticamente al incluir el tag.
+- NUNCA envíes el poster de una sede diferente a la que estás recomendando. Si recomiendas Aguascalientes, envía el poster de Aguascalientes. Si no hay poster para esa sede, no envíes poster de otra ciudad.
 
 ### MAPA DE PROXIMIDAD GEOGRÁFICA (SEDES ACTIVAS):
 Usa esta guía para recomendar la sede MÁS CERCANA al cliente. SIEMPRE prioriza la ciudad más cercana, luego la segunda más cercana como alternativa.
@@ -321,6 +322,8 @@ Desde MÉRIDA → 1° Mérida (misma ciudad), 2° Cancún (310km)
 Para cualquier otra ciudad: busca la sede más lógicamente cercana por región geográfica.
 
 NUNCA sugieras una sede lejana si hay una más cercana con fechas próximas. Si la sede más cercana tiene el curso próximo, recomiéndala primero. Si la segunda opción tiene una fecha más próxima, menciónala como alternativa.
+
+IMPORTANTE: Si NO existe un curso en la ciudad exacta que pide el cliente, NO inventes uno. Sé honesto: "Por ahora no tenemos un taller programado en [ciudad], pero la sede más cercana es [sede] con fechas [fechas]." y envía el poster de ESA sede cercana, no el de otra ciudad.
 
 ${getConfig('prompt_alma_samurai')}
 ${getConfig('prompt_adn_core')}
