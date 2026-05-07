@@ -236,6 +236,7 @@ serve(async (req) => {
           const paymentStatus = isConfirmedValid ? 'VALID' : 'PENDING_VERIFICATION';
           await supabase.from('leads').update({
              buying_intent: 'COMPRADO',
+             lead_score: 95,
              payment_status: paymentStatus,
              followup_stage: 100
           }).eq('id', lead_id);

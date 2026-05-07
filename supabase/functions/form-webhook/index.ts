@@ -229,8 +229,12 @@ serve(async (req: Request): Promise<Response> => {
     if (lead.buying_intent !== 'COMPRADO') {
       await supabase.from('leads').update({
         buying_intent: 'COMPRADO',
+        lead_score: 95,
         capi_lead_event_sent_at: new Date().toISOString(), // Flag para que analyze-leads/process-capi no re-envíe
       }).eq('id', lead.id);
+    } else if ((lead.lead_score || 0) < 50) {
+      // Lead ya COMPRADO pero score bajo (canal monitor nunca re-analizó)
+      await supabase.from('leads').update({ lead_score: 95 }).eq('id', lead.id);
     }
 
     await supabase.from('activity_logs').insert({

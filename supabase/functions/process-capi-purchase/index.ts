@@ -102,7 +102,7 @@ serve(async (req: Request): Promise<Response> => {
               const usePresale = course.presale_price && course.presale_ends_at && course.presale_ends_at >= today;
               purchaseValue = Number(usePresale ? course.presale_price : course.normal_price) || 0;
             }
-            // Fallback: buscar receipt amount
+            // Fallback 1: buscar receipt amount
             if (purchaseValue === 0) {
               const { data: receipt } = await supabase.from('receipts')
                 .select('amount_detected')
@@ -112,6 +112,18 @@ serve(async (req: Request): Promise<Response> => {
                 .limit(1).maybeSingle();
               if (receipt?.amount_detected) purchaseValue = Number(receipt.amount_detected) || 0;
             }
+            // Fallback 2: cualquier curso activo (sin filtro de ciudad)
+            if (purchaseValue === 0) {
+              const { data: anyCourse } = await supabase.from('courses')
+                .select('normal_price')
+                .eq('ai_enabled', true)
+                .or(`valid_until.is.null,valid_until.gte.${today}`)
+                .order('created_at', { ascending: false })
+                .limit(1).maybeSingle();
+              if (anyCourse?.normal_price) purchaseValue = Number(anyCourse.normal_price) || 0;
+            }
+            // Fallback 3: valor mínimo para que Meta no rechace (el taller más barato es $3,900)
+            if (purchaseValue === 0) purchaseValue = 3900;
           }
         }
 
@@ -161,6 +173,12 @@ serve(async (req: Request): Promise<Response> => {
           supabase,
           errorContext: `${event.action} lead=${data.lead_id}`,
         });
+
+        // Asegurar que lead_score refleje el estado real (COMPRADO=95, PERDIDO=5)
+        if (data.lead_id) {
+          const scoreValue = isPurchase ? 95 : 5;
+          await supabase.from('leads').update({ lead_score: scoreValue }).eq('id', data.lead_id).lt('lead_score', isPurchase ? 50 : 100);
+        }
 
         await supabase.from('activity_logs').update({ status: 'OK' }).eq('id', event.id);
         processed++;
