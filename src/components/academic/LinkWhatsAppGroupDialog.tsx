@@ -3,7 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Users, Wifi, Check, Unlink, RefreshCw } from 'lucide-react';
+import { Loader2, Users, Wifi, Check, Unlink, RefreshCw, Search } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -52,6 +52,7 @@ export const LinkWhatsAppGroupDialog = ({
   const [unlinking, setUnlinking] = useState(false);
   const [syncResult, setSyncResult] = useState<SyncResult | null>(null);
   const [syncing, setSyncing] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     if (open) {
@@ -99,8 +100,13 @@ export const LinkWhatsAppGroupDialog = ({
 
   const handleChannelChange = (channelId: string) => {
     setSelectedChannel(channelId);
+    setSearchQuery('');
     fetchGroups(channelId);
   };
+
+  const filteredGroups = searchQuery
+    ? groups.filter(g => g.name.toLowerCase().includes(searchQuery.toLowerCase()))
+    : groups;
 
   const handleLink = async (group: WhatsAppGroup) => {
     setLinking(true);
@@ -253,10 +259,29 @@ export const LinkWhatsAppGroupDialog = ({
               {/* Groups list */}
               {selectedChannel && (
                 <div className="space-y-2">
-                  <label className="text-[10px] uppercase font-bold text-slate-500 tracking-widest">
-                    Grupos disponibles
-                    {groups.length > 0 && <span className="text-slate-600 ml-2">({groups.length})</span>}
-                  </label>
+                  <div className="flex items-center justify-between">
+                    <label className="text-[10px] uppercase font-bold text-slate-500 tracking-widest">
+                      Grupos disponibles
+                      {groups.length > 0 && <span className="text-slate-600 ml-2">({filteredGroups.length})</span>}
+                    </label>
+                    {searchQuery && filteredGroups.length !== groups.length && (
+                      <span className="text-[10px] text-slate-600">de {groups.length} total</span>
+                    )}
+                  </div>
+
+                  {/* Search input */}
+                  {groups.length > 0 && (
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500" />
+                      <input
+                        type="text"
+                        value={searchQuery}
+                        onChange={e => setSearchQuery(e.target.value)}
+                        placeholder="Buscar grupo..."
+                        className="w-full pl-9 pr-3 py-2.5 bg-[#121214] border border-[#222225] rounded-xl text-xs text-slate-300 placeholder:text-slate-600 focus:outline-none focus:border-emerald-500/50 transition-colors"
+                      />
+                    </div>
+                  )}
 
                   {loadingGroups ? (
                     <div className="flex items-center gap-2 text-xs text-slate-500 py-8 justify-center">
@@ -264,9 +289,11 @@ export const LinkWhatsAppGroupDialog = ({
                     </div>
                   ) : groups.length === 0 ? (
                     <p className="text-center text-slate-600 text-xs py-8 italic">Este canal no tiene grupos.</p>
+                  ) : filteredGroups.length === 0 ? (
+                    <p className="text-center text-slate-600 text-xs py-6 italic">No se encontraron grupos con "{searchQuery}"</p>
                   ) : (
                     <div className="max-h-[300px] overflow-y-auto space-y-1.5 custom-scrollbar pr-1">
-                      {groups.map(g => (
+                      {filteredGroups.map(g => (
                         <button
                           key={g.jid}
                           onClick={() => handleLink(g)}
