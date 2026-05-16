@@ -91,6 +91,9 @@ serve(async (req: Request): Promise<Response> => {
             downloadUrl += (downloadUrl.includes('?') ? '&' : '?') + 'width=1200&quality=85&resize=contain';
         }
         const fileRes = await fetch(downloadUrl);
+        if (!fileRes.ok) {
+            return new Response(JSON.stringify({ success: false, error: `Media download failed: HTTP ${fileRes.status}` }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
         const fileBlob = await fileRes.blob();
         const formData = new FormData();
         formData.append('phone', cleanPhone);

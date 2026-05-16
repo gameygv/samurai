@@ -149,7 +149,7 @@ serve(async (req: Request): Promise<Response> => {
     const lockTs = Date.now().toString();
     const { data: existingLock } = await supabase.from('app_config')
         .select('value').eq('key', lockKey).maybeSingle();
-    if (existingLock && (Date.now() - Number(existingLock.value)) < 8000) {
+    if (existingLock && (Date.now() - Number(existingLock.value)) < 30000) {
         // Otra instancia está procesando este lead ahora mismo
         return new Response('locked', { headers: corsHeaders });
     }
@@ -160,13 +160,86 @@ serve(async (req: Request): Promise<Response> => {
         .select('id')
         .eq('lead_id', lead.id)
         .eq('emisor', 'IA')
-        .gte('created_at', new Date(Date.now() - 5000).toISOString())
+        .gte('created_at', new Date(Date.now() - 15000).toISOString())
         .limit(1);
     if (recentAi && recentAi.length > 0) {
         await supabase.from('app_config').delete().eq('key', lockKey);
         await supabase.from('activity_logs').insert({ action: 'INFO', resource: 'BRAIN', description: `🛡️ Race condition prevenida: ya hay respuesta IA reciente para ${lead.nombre}`, status: 'OK' });
         return new Response('duplicate_prevented', { headers: corsHeaders });
     }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // PROTECCIONES ANTI-SPAM (prevención de ban de WhatsApp)
+    // ═══════════════════════════════════════════════════════════════════
+
+    // 3. Rate limit por canal: ralentizar cuando hay mucha actividad
+    //    0-30 msgs/hora → sin delay (normal)
+    //    30-50 msgs/hora → delay progresivo (2s por cada msg arriba de 30)
+    //    50+ msgs/hora  → bloqueo total (posible loop/bug)
+    const oneHourAgo = new Date(Date.now() - 3600000).toISOString();
+    const { data: channelLeads } = await supabase.from('leads')
+        .select('id').eq('channel_id', lead.channel_id);
+    const channelLeadIds = (channelLeads || []).map((l: { id: string }) => l.id);
+    let chCount = 0;
+    if (channelLeadIds.length > 0) {
+        const { count: channelHourlyCount } = await supabase.from('conversaciones')
+            .select('id', { count: 'exact', head: true })
+            .eq('emisor', 'IA')
+            .gte('created_at', oneHourAgo)
+            .in('lead_id', channelLeadIds);
+        chCount = channelHourlyCount ?? 0;
+    }
+    if (chCount >= 50) {
+        // Bloqueo total: algo está muy mal (loop, bug, avalancha)
+        await supabase.from('app_config').delete().eq('key', lockKey);
+        await supabase.from('activity_logs').insert({
+            action: 'ERROR', resource: 'BRAIN',
+            description: `🛡️ Anti-spam: BLOQUEO de canal — ${chCount} msgs IA en última hora (límite: 50). Lead ${lead.nombre} no respondido. Posible loop.`,
+            status: 'ERROR'
+        });
+        return new Response('channel_rate_limit', { headers: corsHeaders });
+    }
+    if (chCount >= 30) {
+        // Ralentizar: delay progresivo (2s por cada mensaje arriba de 30)
+        const delaySec = (chCount - 30) * 2;
+        await supabase.from('activity_logs').insert({
+            action: 'INFO', resource: 'BRAIN',
+            description: `🐢 Anti-spam: canal con ${chCount} msgs/hora, ralentizando ${delaySec}s antes de responder a ${lead.nombre}`,
+            status: 'OK'
+        });
+        await new Promise(r => setTimeout(r, delaySec * 1000));
+    }
+
+    // 4. Límite por lead: máx 5 mensajes IA por día por lead (ralentiza a partir de 3)
+    const oneDayAgo = new Date(Date.now() - 86400000).toISOString();
+    const { count: leadDailyCount } = await supabase.from('conversaciones')
+        .select('id', { count: 'exact', head: true })
+        .eq('lead_id', lead.id)
+        .eq('emisor', 'IA')
+        .gte('created_at', oneDayAgo);
+    const ldCount = leadDailyCount ?? 0;
+    if (ldCount >= 5) {
+        // Bloqueo: 5+ mensajes IA al mismo lead en un día es acoso
+        await supabase.from('app_config').delete().eq('key', lockKey);
+        await supabase.from('activity_logs').insert({
+            action: 'INFO', resource: 'BRAIN',
+            description: `🛡️ Anti-spam: límite diario por lead alcanzado (${ldCount}/5 msgs IA en 24h). Lead ${lead.nombre} no respondido.`,
+            status: 'OK'
+        });
+        return new Response('lead_daily_limit', { headers: corsHeaders });
+    }
+    if (ldCount >= 3) {
+        // Ralentizar: delay de 10s por cada mensaje arriba de 3
+        const delaySec = (ldCount - 3) * 10;
+        await supabase.from('activity_logs').insert({
+            action: 'INFO', resource: 'BRAIN',
+            description: `🐢 Anti-spam: lead ${lead.nombre} ya recibió ${ldCount} msgs hoy, ralentizando ${delaySec}s`,
+            status: 'OK'
+        });
+        await new Promise(r => setTimeout(r, delaySec * 1000));
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
 
     // Obtener historial de conversación RECIENTE (desc + reverse para traer los últimos, no los primeros)
     const { data: rawHistory } = await supabase.from('conversaciones')
@@ -207,7 +280,9 @@ serve(async (req: Request): Promise<Response> => {
             // IA, SAMURAI, BOT, HUMANO, VENDEDOR → assistant (mismo lado que la IA)
             // CLIENTE → user
             const isAssistant = ['IA', 'SAMURAI', 'BOT', 'HUMANO', 'VENDEDOR'].includes(h.emisor);
-            const ts = h.created_at ? `[${formatTs(h.created_at)}] ` : '';
+            // Timestamps SOLO en mensajes del cliente — si se ponen en assistant,
+            // GPT imita el patrón y responde con fecha/hora al inicio del mensaje
+            const ts = !isAssistant && h.created_at ? `[${formatTs(h.created_at)}] ` : '';
             // Prefijo para que la IA distinga quién habló en su equipo
             const prefix = h.emisor === 'HUMANO' || h.emisor === 'VENDEDOR' ? '[Vendedor humano]: ' : '';
             return {
@@ -263,6 +338,29 @@ serve(async (req: Request): Promise<Response> => {
     }
 
     const aiText = aiData.choices?.[0]?.message?.content || '';
+
+    // 5. Anti-spam: detección de contenido duplicado entre leads del mismo canal
+    if (aiText) {
+        const snippet = aiText.substring(0, 80);
+        const { data: similarMsgs } = await supabase.from('conversaciones')
+            .select('id, lead_id')
+            .eq('emisor', 'IA')
+            .gte('created_at', oneHourAgo)
+            .neq('lead_id', lead.id)
+            .ilike('mensaje', `${snippet.replace(/%/g, '\\%').replace(/_/g, '\\_')}%`)
+            .limit(6);
+        // Si el mismo texto (primeros 80 chars) se envió a 5+ leads distintos en 1 hora → posible loop
+        const uniqueLeads = new Set((similarMsgs || []).map(m => m.lead_id));
+        if (uniqueLeads.size >= 5) {
+            await supabase.from('app_config').delete().eq('key', lockKey);
+            await supabase.from('activity_logs').insert({
+                action: 'ERROR', resource: 'BRAIN',
+                description: `🛡️ Anti-spam: contenido duplicado detectado. Mismo texto enviado a ${uniqueLeads.size} leads en 1h. Lead ${lead.nombre} bloqueado. Snippet: "${snippet.substring(0, 50)}..."`,
+                status: 'ERROR'
+            });
+            return new Response('duplicate_content_blocked', { headers: corsHeaders });
+        }
+    }
 
     if (aiText) {
         // S4.2: Extraer media tags de la respuesta IA

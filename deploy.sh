@@ -112,6 +112,20 @@ deploy_function() {
     return 1
   fi
 
+  # PROTECCIÓN: Verificar que no hay cambios uncommitted en la función
+  # INCIDENTE 2026-05-14: deploy desde working tree sin commit causó 36h de IA caída
+  local uncommitted
+  uncommitted=$(git diff --name-only HEAD -- "$fn_dir" 2>/dev/null)
+  uncommitted+=$(git diff --name-only --cached -- "$fn_dir" 2>/dev/null)
+  if [ -n "$uncommitted" ] && [ "${FORCE_DEPLOY:-}" != "1" ]; then
+    echo "⚠️  ADVERTENCIA: $fn tiene cambios sin commit:"
+    echo "    $uncommitted"
+    echo ""
+    echo "    Haz commit primero, o usa FORCE_DEPLOY=1 ./deploy.sh $fn"
+    echo "    (Incidente 2026-05-14: deploy sin commit → 36h IA caída, 319 msgs perdidos)"
+    return 1
+  fi
+
   if is_no_verify "$fn"; then
     echo "🔓 Deploying $fn (--no-verify-jwt)"
     PYTHONIOENCODING=utf-8 npx supabase functions deploy "$fn" --no-verify-jwt --project-ref "$PROJECT_REF"

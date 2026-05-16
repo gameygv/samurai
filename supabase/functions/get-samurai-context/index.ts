@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0'
 import { corsHeaders } from '../_shared/cors.ts'
+import { PROMPT_DEFAULTS, isRealPromptValue } from '../_shared/prompt-defaults.ts'
 
 interface LeadData {
   id?: string | number;
@@ -23,7 +24,11 @@ serve(async (req: Request): Promise<Response> => {
     const { data: configs } = await supabaseClient.from('app_config').select('key, value');
     const getConfig = (key: string, def = ""): string => {
       const found = configs?.find((c: { key: string; value: unknown }) => c.key === key);
-      return (found?.value as string) || def;
+      const dbValue = found?.value as string | undefined;
+      // BD tiene prioridad si tiene contenido real (no "..." ni vacío)
+      if (isRealPromptValue(dbValue)) return dbValue!;
+      // Fallback: defaults hardcodeados → def
+      return PROMPT_DEFAULTS[key] || def;
     };
 
     // --- FECHA DE HOY (usada en filtros y prompt) ---
@@ -53,9 +58,15 @@ serve(async (req: Request): Promise<Response> => {
       if (m.ocr_content) mediaContext += `  DETALLE: ${m.ocr_content.substring(0, 500)}\n`;
     });
 
+    // --- TOGGLE: OCULTAR PRECIOS ---
+    const hidePrices = getConfig('toggle_hide_prices', 'false').toLowerCase() === 'true';
+
     // --- CARGAR CATÁLOGO DE CURSOS Y TALLERES ---
     const { data: courses } = await supabaseClient.from('courses').select('*').eq('ai_enabled', true).or(`valid_until.is.null,valid_until.gte.${today}`);
-    let coursesContext = "\n=== CATÁLOGO DE CURSOS Y TALLERES ===\nINSTRUCCIÓN: Para enviar el poster de un curso usa <<MEDIA:url_del_poster>>. Ofrece cursos activos basándote en las fechas y precios. Si la preventa está vigente, menciona el precio de preventa y la urgencia. Si sale_closes_at ya pasó, NO ofrezcas ese curso.\n⚠️ REGLA CRÍTICA: SOLO puedes ofrecer cursos que aparecen en este catálogo. NUNCA inventes cursos, fechas, sedes ni niveles que no estén listados aquí. Si el cliente pregunta por una ciudad donde NO hay curso registrado, dile honestamente que por ahora no hay taller en esa ciudad y recomienda la sede más cercana usando el mapa de proximidad. NUNCA asocies el poster de una ciudad con información de otra ciudad.\n";
+    const priceInstruction = hidePrices
+      ? 'NO menciones precios, preventas ni montos. Si preguntan por precio, deriva al asesor humano.'
+      : 'Ofrece cursos activos basándote en las fechas y precios. Si la preventa está vigente, menciona el precio de preventa.';
+    let coursesContext = `\n=== CATÁLOGO DE CURSOS Y TALLERES ===\nINSTRUCCIÓN: Para enviar el poster de un curso usa <<MEDIA:url_del_poster>>. ${priceInstruction} Si sale_closes_at ya pasó, NO ofrezcas ese curso.\n⚠️ REGLA CRÍTICA: SOLO puedes ofrecer cursos que aparecen en este catálogo. NUNCA inventes cursos, fechas, sedes ni niveles que no estén listados aquí. Si el cliente pregunta por una ciudad donde NO hay curso registrado, dile honestamente que por ahora no hay taller en esa ciudad y recomienda la sede más cercana usando el mapa de proximidad. NUNCA asocies el poster de una ciudad con información de otra ciudad.\n`;
     courses?.forEach(c => {
       // Skip courses past their sale closing date
       if (c.sale_closes_at && c.sale_closes_at < today) return;
@@ -65,10 +76,10 @@ serve(async (req: Request): Promise<Response> => {
       if (c.sede) meta += ` | Sede: ${c.sede}`;
       if (c.nivel) meta += ` | Nivel: ${c.nivel}`;
       if (c.profesor) meta += ` | Profesor: ${c.profesor}`;
-      if (c.presale_price && c.presale_ends_at && c.presale_ends_at >= today) {
-        meta += ` | PREVENTA: $${c.presale_price} (hasta ${c.presale_ends_at}). Anticipo de $1500 disponible.`;
-      } else if (c.normal_price) {
-        meta += ` | Precio: $${c.normal_price}`;
+      // Precios: incluir solo si el toggle está OFF
+      if (!hidePrices) {
+        if (c.precio) meta += ` | Precio: $${c.precio}`;
+        if (c.precio_preventa) meta += ` | Preventa: $${c.precio_preventa}`;
       }
       if (c.sale_closes_at) meta += ` | Cierre de venta: ${c.sale_closes_at}`;
       if (c.extras) meta += ` | Extras: ${c.extras}`;
@@ -143,7 +154,17 @@ serve(async (req: Request): Promise<Response> => {
     const hasBankData = getConfig('bank_name') || (lead.assigned_to && getConfig(`agent_bank_${lead.assigned_to}`));
     const hasWcProducts = wcContext.length > 100;
 
-    handoffRule = `
+    handoffRule = hidePrices
+      ? `
+### REGLA DE CIERRE DE VENTA (PRECIOS OCULTOS):
+Tu objetivo es generar interés y entusiasmo. Cuando el cliente pregunte por precios, inversión o costos:
+1. Responde: "¡Con gusto! Para darte los detalles de inversión y opciones de pago, permíteme conectarte con ${agentName} que te dará toda la información."
+2. SÍ puedes mencionar que pueden apartar su lugar con un anticipo (sin decir el monto exacto).
+3. NO envíes links de pago WooCommerce ni datos bancarios.
+4. SÍ puedes dar toda la información del curso: descripción, fechas, sede, profesor, nivel, extras.
+5. Si el cliente pide hablar con un humano → "¡Con gusto! En breve ${agentName} te atenderá personalmente por aquí."
+`
+      : `
 ### REGLA DE CIERRE DE VENTA:
 Tu objetivo es CERRAR la venta tú mismo. NUNCA derives al humano excepto si el cliente lo pide o si no tienes los datos necesarios.
 
@@ -169,9 +190,12 @@ ${hasBankData ? '   - TAMBIÉN ofrece los datos bancarios para transferencia/dep
         .maybeSingle();
 
       if (contactData?.academic_record) {
-        const records = Array.isArray(contactData.academic_record)
-          ? contactData.academic_record
-          : JSON.parse(contactData.academic_record as string);
+        let records: Array<{ course?: string; nivel?: string; location?: string; date?: string }> = [];
+        try {
+          records = Array.isArray(contactData.academic_record)
+            ? contactData.academic_record
+            : JSON.parse(contactData.academic_record as string);
+        } catch (_) { /* malformed JSON — skip academic context */ }
 
         if (records.length > 0) {
           academicContext = '\n=== HISTORIAL ACADÉMICO DEL CLIENTE ===\n';
@@ -248,87 +272,29 @@ IMPORTANTE: El link del formulario de registro SIEMPRE debe enviarse después de
 4. RECOPILACIÓN DE DATOS PERSONALES: Cuando la conversación avance hacia la etapa de cierre (el cliente muestra interés alto o pregunta por precios/inscripción), además del email y ciudad, pregunta de forma natural: dieta (vegetariana, vegana, omnívora, etc.), alergias alimentarias, y con qué género se identifica (hombre, mujer, otro). Hazlo de forma cálida y natural, no como un formulario. Si alguno de estos datos ya está capturado, NO lo preguntes de nuevo.${whatsappRule}
 `;
 
-    const voiceInstruction = `
-### REGLA DE OJO DE HALCÓN (AUDICIÓN):
-1. Cuentas con un módulo de transcripción avanzada (OpenAI Whisper).
-2. Si ves un mensaje que empieza con "[TRANSCRIPCIÓN DE NOTA DE VOZ]:", significa que el cliente te envió un audio y ya fue procesado para ti.
-3. RESPONDE como si hubieras escuchado el audio perfectamente.
+    // voiceInstruction + memoryRule + identity + city rule + poster rule
+    // → Ahora viven en BD: getConfig('prompt_behavior_rules') + getConfig('prompt_alma_samurai')
+    // Editables desde Neural Core Control → Laboratorio IA
 
-### REGLA DE CONTINUIDAD (NUNCA PARAR):
-1. Si ves mensajes de HUMANO en el historial, eso puede ser un vendedor que escribió algo desde el teléfono. Eso NO significa que tomó control de la conversación.
-2. TÚ SIGUES SIENDO EL RESPONSABLE de la conversación. Continúa atendiendo al cliente normalmente.
-3. Solo dejas de responder si el sistema te desactiva — eso no es tu decisión, es del sistema.
-4. Si un vendedor escribió algo útil (como datos de pago o confirmaciones), puedes complementar su mensaje pero NUNCA dejes de atender.
-`;
-
-    const memoryRule = `
-### REGLA DE MEMORIA Y CONTINUIDAD (ANTI-REPETICIÓN):
-1. REVISA TODO EL HISTORIAL antes de responder. Cada mensaje tiene fecha y hora entre corchetes — úsalas para entender la línea temporal.
-2. NUNCA saludes como si fuera la primera vez si ya existe conversación previa. Si ya hablaste con el cliente antes, ve directo al tema o di "¡Hola de nuevo!" brevemente.
-3. NUNCA repitas información que ya compartiste (cursos, descripciones, posters, instrucciones de pago). Si ya enviaste un poster o recomendaste un curso, no lo vuelvas a hacer salvo que el cliente lo pida.
-4. Si el cliente ya respondió una pregunta (nombre, ciudad, email, interés), NO la vuelvas a hacer.
-5. Si han pasado varios días desde el último mensaje, puedes retomar con un saludo breve pero NO repitas el pitch completo.
-6. Mantén coherencia: si en un mensaje anterior dijiste algo, no te contradigas en el siguiente.
-7. Si en el historial ves que PROMETISTE enviar un poster o información específica PERO NO LO HICISTE (el poster no fue adjuntado), discúlpate brevemente: "Disculpa, hubo un problema técnico. Aquí te envío el poster:" y ahora sí inclúyelo con <<MEDIA:url>>.
-8. Si el historial muestra que el cliente escribió algo y NO recibió respuesta (gap largo sin mensaje IA), empieza con: "Disculpa la demora en responder." y atiende su pregunta directamente.
-
-### PRIMER CONTACTO — REGLA DE EFICIENCIA:
-Cuando un lead nuevo escribe por primera vez (generalmente "¡Hola! Quiero más información."):
-1. Salúdalo cálidamente usando su nombre si lo tienes.
-2. Preséntate como asistente de Tepoz Cuencos brevemente (1 línea).
-3. Pregunta SOLO su ciudad para poder recomendarle el taller más cercano. NO pidas nombre si ya lo tienes del contacto de WhatsApp.
-4. NO hagas un pitch genérico de "tenemos talleres en varias ciudades". Sé directo: "¿En qué ciudad te encuentras para recomendarte el taller más cercano?"
-`;
-
+    // ═══════════════════════════════════════════════════════════════════
+    // ENSAMBLAJE DEL SYSTEM PROMPT
+    // Prompts editables via Laboratorio IA / #CIA → BD tiene prioridad
+    // Fallbacks hardcodeados en _shared/prompt-defaults.ts
+    // ═══════════════════════════════════════════════════════════════════
     const systemPrompt = `
-${voiceInstruction}
-${memoryRule}
+${getConfig('prompt_behavior_rules')}
+
+${getConfig('prompt_alma_samurai')}
+
 ${activeLeadMemory}
 ${handoffRule}
 
 ### REGLA TEMPORAL ESTRICTA:
 La fecha de hoy es ${today}. NUNCA menciones, ofrezcas ni recomiendes talleres, cursos o eventos cuya fecha ya pasó. Si el cliente pregunta por un evento pasado, responde que ese ya ocurrió y ofrécele las próximas fechas disponibles. Si no hay próximas fechas, invítalo a dejar sus datos para avisarle cuando se abran nuevas fechas.
 
-### ⚠️ REGLA TEMPORAL — NO MENCIONAR PRECIOS (PENDIENTE DE REVERTIR)
-INSTRUCCIÓN CRÍTICA TEMPORAL: NO debes mencionar precios específicos de cursos, talleres ni productos bajo NINGUNA circunstancia.
-- NO digas el precio normal, ni el precio de preventa.
-- SÍ menciona que pueden apartar su lugar con un anticipo (sin decir el monto exacto). Ejemplo: "Puedes apartar tu lugar con un anticipo y pagar el resto el día del taller."
-- SÍ puedes dar información del curso: descripción, fechas, sede, profesor, nivel, extras.
-- SÍ puedes generar interés y entusiasmo por el curso.
-- Si el cliente pregunta por el precio, responde: "¡Con gusto! Para darte los detalles de inversión y opciones de pago, permíteme conectarte con un asesor que te dará toda la información." y luego indica que un asesor lo contactará en breve.
-- NO envíes links de pago WooCommerce ni datos bancarios hasta que se revierta esta regla.
-- Esta regla tiene PRIORIDAD sobre cualquier otra instrucción de cierre de venta o precios.
-
-### REGLA DE POSTER (OBLIGATORIO):
-- SIEMPRE envía el poster del curso con <<MEDIA:url_del_poster>> cuando recomiendes un curso específico. Es OBLIGATORIO. No digas "te comparto el poster" sin incluir el tag <<MEDIA:url>>.
-- El poster se envía como imagen adjunta automáticamente al incluir el tag.
-- NUNCA envíes el poster de una sede diferente a la que estás recomendando. Si recomiendas Aguascalientes, envía el poster de Aguascalientes. Si no hay poster para esa sede, no envíes poster de otra ciudad.
-
-### MAPA DE PROXIMIDAD GEOGRÁFICA (SEDES ACTIVAS):
-Usa esta guía para recomendar la sede MÁS CERCANA al cliente. SIEMPRE prioriza la ciudad más cercana, luego la segunda más cercana como alternativa.
-
-Desde LEÓN, GTO → 1° Aguascalientes (120km), 2° Juriquilla/Querétaro (180km)
-Desde QUERÉTARO → 1° Juriquilla (misma zona), 2° Aguascalientes (220km)
-Desde CDMX/DF → 1° Coyoacán (misma ciudad), 2° Toluca (70km), 3° Puebla (130km)
-Desde GUADALAJARA → 1° Aguascalientes (250km), 2° León/Juriquilla (300km)
-Desde MONTERREY → 1° Monterrey (misma ciudad)
-Desde AGUASCALIENTES → 1° Aguascalientes (misma ciudad), 2° León/Juriquilla (120km)
-Desde SAN LUIS POTOSÍ → 1° Aguascalientes (190km), 2° Juriquilla (200km)
-Desde MORELIA → 1° Toluca (250km), 2° Juriquilla (290km)
-Desde PUEBLA → 1° Puebla (misma ciudad), 2° Coyoacán/CDMX (130km)
-Desde OAXACA → 1° Oaxaca (misma ciudad), 2° Puebla (340km)
-Desde CANCÚN/RIVIERA MAYA → 1° Cancún/Playa del Carmen (zona), 2° Mérida (310km)
-Desde MÉRIDA → 1° Mérida (misma ciudad), 2° Cancún (310km)
-Para cualquier otra ciudad: busca la sede más lógicamente cercana por región geográfica.
-
-NUNCA sugieras una sede lejana si hay una más cercana con fechas próximas. Si la sede más cercana tiene el curso próximo, recomiéndala primero. Si la segunda opción tiene una fecha más próxima, menciónala como alternativa.
-
-IMPORTANTE: Si NO existe un curso en la ciudad exacta que pide el cliente, NO inventes uno. Sé honesto: "Por ahora no tenemos un taller programado en [ciudad], pero la sede más cercana es [sede] con fechas [fechas]." y envía el poster de ESA sede cercana, no el de otra ciudad.
-
-${getConfig('prompt_alma_samurai')}
-${getConfig('prompt_adn_core')}
 ${getConfig('prompt_estrategia_cierre')}
-${getConfig('prompt_behavior_rules')}
+
+${getConfig('prompt_adn_core')}
 
 ${getConfig('prompt_relearning')}
 
@@ -336,10 +302,8 @@ ${masterTruth}
 ${kbContext}
 ${mediaContext}
 ${coursesContext}
-${wcContext}
-
-=== DATOS DE PAGO BANCARIO ===
-${bankInfo}
+${hidePrices ? '' : wcContext}
+${hidePrices ? '' : `\n=== DATOS DE PAGO BANCARIO ===\n${bankInfo}`}
 ${academicContext}${profileContext}`;
 
     return new Response(JSON.stringify({ system_prompt: systemPrompt }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });

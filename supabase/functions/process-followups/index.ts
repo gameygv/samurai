@@ -25,7 +25,8 @@ serve(async (req) => {
 
     const { data: activeLeads } = await supabase.from('leads')
       .select('id, nombre, buying_intent, last_message_at, created_at, origen')
-      .not('buying_intent', 'in', '("PERDIDO","COMPRADO")');
+      .not('buying_intent', 'in', '("PERDIDO","COMPRADO")')
+      .limit(2000);
 
     if (!activeLeads || activeLeads.length === 0) {
       return new Response(JSON.stringify({ message: 'No active leads' }), { headers: corsHeaders });

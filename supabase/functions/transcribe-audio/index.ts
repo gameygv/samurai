@@ -75,7 +75,10 @@ serve(async (req) => {
 
       // Actualizar metadata en conversacion con URL real para playback en chatview
       const realUrl = `${baseUrl}/${filePath}`;
-      await supabase.from('conversaciones').update({ metadata: { mediaUrl: realUrl, mediaType: 'audio', gowaAuth: true } }).eq('message_id', message_id);
+      // Merge con metadata existente para no sobreescribir campos previos (psid, page_id, etc.)
+      const { data: existingMsg } = await supabase.from('conversaciones').select('metadata').eq('message_id', message_id).maybeSingle();
+      const mergedMeta = { ...(existingMsg?.metadata || {}), mediaUrl: realUrl, mediaType: 'audio', gowaAuth: true };
+      await supabase.from('conversaciones').update({ metadata: mergedMeta }).eq('message_id', message_id);
 
     } else if (media_url && !media_id) {
       // Evolution/otro: URL directa
